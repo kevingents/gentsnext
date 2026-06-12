@@ -51,4 +51,24 @@
       bg-transparent px-6 py-3 font-sans text-sm font-medium text-ink transition-colors
       duration-200 hover:bg-ink hover:text-canvas;
   }
+
+  /* Gemigreerde content (Shopify-pagina's): nette redactionele typografie. */
+  .prose-gents {
+    @apply font-sans text-[0.95rem] leading-relaxed text-ink-soft;
+  }
+  .prose-gents h1, .prose-gents h2, .prose-gents h3, .prose-gents h4 {
+    @apply font-display font-light text-ink;
+  }
+  .prose-gents h2 { @apply mt-10 text-2xl; }
+  .prose-gents h3 { @apply mt-8 text-xl; }
+  .prose-gents h4 { @apply mt-6 text-lg; }
+  .prose-gents p { @apply my-4; }
+  .prose-gents a { @apply text-ink underline underline-offset-2; }
+  .prose-gents ul { @apply my-4 list-disc space-y-1 pl-5; }
+  .prose-gents ol { @apply my-4 list-decimal space-y-1 pl-5; }
+  .prose-gents img { @apply my-6 h-auto max-w-full rounded-card; }
+  .prose-gents table { @apply my-6 w-full border-collapse text-sm; }
+  .prose-gents th, .prose-gents td { @apply border border-line px-3 py-2 text-left; }
+  .prose-gents strong { @apply text-ink; }
+  .prose-gents hr { @apply my-8 border-line; }
 }

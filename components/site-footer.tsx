@@ -12,20 +12,30 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
     ],
   },
   {
+    title: "Juridisch",
+    links: [
+      { label: "Algemene voorwaarden", href: "/pages/algemene-voorwaarden" },
+      { label: "Privacyverklaring", href: "/pages/privacyverklaring" },
+      { label: "Cookies", href: "/pages/cookies" },
+    ],
+  },
+  {
     title: "Service",
     links: [
+      { label: "Klantenservice", href: "/pages/service" },
       { label: "Maatadvies", href: "/maatadvies" },
-      { label: "Winkels", href: "/winkels" },
-      { label: "Retourneren", href: "/retourneren" },
-      { label: "Veelgestelde vragen", href: "/faq" },
+      { label: "Bezorging & levertijd", href: "/pages/bezorgkosten-levertijden" },
+      { label: "Retourneren", href: "/pages/retourneren" },
+      { label: "Onze winkels", href: "/pages/winkels" },
     ],
   },
   {
     title: "GENTS",
     links: [
-      { label: "Over GENTS", href: "/over-gents" },
-      { label: "Dresscode-hulp", href: "/dresscode" },
-      { label: "Contact", href: "/contact" },
+      { label: "Over GENTS", href: "/pages/over-gents" },
+      { label: "Etiquette & dresscodes", href: "/pages/etiquette" },
+      { label: "Trouwen met GENTS", href: "/pages/trouwen-met-gents" },
+      { label: "Werken bij GENTS", href: "/pages/werken-bij-gents" },
     ],
   },
 ];
@@ -34,7 +44,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-24 bg-ink text-canvas">
       <div className="mx-auto max-w-page px-gutter py-14">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-[1.6fr_repeat(4,1fr)]">
           <div>
             <Image
               src="/brand/brand-logo-wit.png"

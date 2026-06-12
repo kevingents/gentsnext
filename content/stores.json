@@ -1,0 +1,344 @@
+[
+  {
+    "pageHandle": "gents-almere",
+    "title": "GENTS Almere",
+    "city": "Almere",
+    "address": "Stadhuisstraat 4 ",
+    "phone": "036 533 7509",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-20:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-amersfoort",
+    "title": "GENTS Amersfoort",
+    "city": "Amersfoort",
+    "address": "Langestraat 71",
+    "phone": "033 750 1762",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-amsterdam",
+    "title": "GENTS Amsterdam",
+    "city": "Amsterdam",
+    "address": "Van Woustraat 68",
+    "phone": "020 334 8951",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "13:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-18:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-antwerpen-herenpakken-trouwpakken-herenmode",
+    "title": "GENTS Antwerpen",
+    "city": "Antwerpen",
+    "address": "Nationalestraat 15",
+    "phone": "+3233534688",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "gesloten",
+      "maandag": "10:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-18:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-18:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-arnhem",
+    "title": "GENTS Arnhem",
+    "city": "Arnhem",
+    "address": "Bakkerstraat 28",
+    "phone": "026 702 3029",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-20:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-breda",
+    "title": "GENTS Breda",
+    "city": "Breda",
+    "address": "Karrestraat 1",
+    "phone": "076 737 0322",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-delft",
+    "title": "GENTS Delft",
+    "city": "Delft",
+    "address": "Oude Langendijk 10",
+    "phone": "015 750 0848",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "gesloten",
+      "maandag": "12:00-17:30",
+      "dinsdag": "10:00-17:30",
+      "woensdag": "10:00-17:30",
+      "donderdag": "10:00-17:30",
+      "vrijdag": "10:00-17:30",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–17:30"
+  },
+  {
+    "pageHandle": "gents-den-bosch",
+    "title": "GENTS Den Bosch",
+    "city": "Den Bosch",
+    "address": "Schapenmarkt 22",
+    "phone": "073 699 0360",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-enschede",
+    "title": "GENTS Enschede",
+    "city": "Enschede",
+    "address": "Langestraat 8",
+    "phone": "053 436 8649",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-groningen",
+    "title": "GENTS Groningen",
+    "city": "Groningen",
+    "address": "Zwanenstraat 41",
+    "phone": "050 313 8896",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-hilversum",
+    "title": "GENTS Hilversum",
+    "city": "Hilversum",
+    "address": "Gijsbrecht van Amstelstraat 127",
+    "phone": "035 621 2323",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "gesloten",
+      "maandag": "gesloten",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-18:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-leiden",
+    "title": "GENTS Leiden",
+    "city": "Leiden",
+    "address": "Haarlemmerstraat 149",
+    "phone": "071 750 5727",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-18:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-maastricht",
+    "title": "GENTS Maastricht",
+    "city": "Maastricht",
+    "address": "Sint Amorsplein 8",
+    "phone": "043 750 2631",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "13:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-20:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-nijmegen",
+    "title": "GENTS Nijmegen",
+    "city": "Nijmegen",
+    "address": "Molenstraat 56",
+    "phone": "024 750 2965",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-rotterdam",
+    "title": "GENTS Rotterdam",
+    "city": "Rotterdam",
+    "address": "Oude Binnenweg 102A",
+    "phone": "010 226 6535",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-18:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-tilburg",
+    "title": "GENTS Tilburg",
+    "city": "Tilburg",
+    "address": "Emmapassage 30",
+    "phone": "013 785 7810",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "13:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-utrecht",
+    "title": "GENTS Utrecht",
+    "city": "Utrecht",
+    "address": "Steenweg 43",
+    "phone": "030 785 8664",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-18:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  },
+  {
+    "pageHandle": "gents-zoetermeer",
+    "title": "GENTS Zoetermeer",
+    "city": "Zoetermeer",
+    "address": "Noordwaarts 212",
+    "phone": "079 750 2096",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-17:30",
+      "dinsdag": "10:00-17:30",
+      "woensdag": "10:00-17:30",
+      "donderdag": "10:00-17:30",
+      "vrijdag": "10:00-20:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–20:00"
+  },
+  {
+    "pageHandle": "gents-zwolle",
+    "title": "GENTS Zwolle",
+    "city": "Zwolle",
+    "address": "Luttekestraat 42",
+    "phone": "038 458 1575",
+    "mapsUrl": "",
+    "hours": {
+      "zondag": "12:00-17:00",
+      "maandag": "12:00-18:00",
+      "dinsdag": "10:00-18:00",
+      "woensdag": "10:00-18:00",
+      "donderdag": "10:00-21:00",
+      "vrijdag": "10:00-18:00",
+      "zaterdag": "10:00-17:00"
+    },
+    "today": "vrijdag: 10:00–18:00"
+  }
+]
