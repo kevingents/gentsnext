@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/json-ld";
 import { getProductByHandle } from "@/lib/catalog";
 import { formatEuro, getReferencePrices } from "@/lib/pricing";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function ProductPage({ params }: Props) {
   const { product, variants, images, collections } = data;
   if (!variants.length) notFound();
 
-  const siteUrl = process.env.PUBLIC_SITE_URL || "https://gents.nl";
+  const siteUrl = getSiteUrl();
   const attrs = (product.attributes ?? {}) as Record<string, unknown>;
   const minPrice = Math.min(...variants.map((v) => v.priceCents));
   const maxPrice = Math.max(...variants.map((v) => v.priceCents));

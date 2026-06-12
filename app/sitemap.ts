@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { listCollections, listProductHandles } from "@/lib/catalog";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const revalidate = 3600;
 
@@ -9,7 +10,7 @@ export const revalidate = 3600;
  * bereikbaar is, zodat een build zonder DATABASE_URL niet breekt.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const siteUrl = (process.env.PUBLIC_SITE_URL || "https://gents.nl").replace(/\/$/, "");
+  const siteUrl = getSiteUrl();
   const base: MetadataRoute.Sitemap = [
     { url: siteUrl, changeFrequency: "daily", priority: 1 },
     { url: `${siteUrl}/collections`, changeFrequency: "weekly", priority: 0.6 },

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const indexable = process.env.SITE_INDEXABLE === "true";
-const siteUrl = process.env.PUBLIC_SITE_URL || "https://gents.nl";
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

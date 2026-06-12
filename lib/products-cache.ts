@@ -1,5 +1,6 @@
 import { asc } from "drizzle-orm";
 import { getDb } from "@/db";
+import { getSiteUrl } from "@/lib/site-url";
 import {
   products,
   productVariants,
@@ -96,7 +97,7 @@ function attrsOf(value: unknown): Record<string, unknown> {
 
 export async function buildProductsCachePayload(): Promise<ProductsCachePayload> {
   const db = getDb();
-  const siteBase = (process.env.PUBLIC_SITE_URL || "https://gents.nl").replace(/\/$/, "");
+  const siteBase = getSiteUrl();
 
   const [allProducts, allVariants, allImages, allLinks, allCollections] = await Promise.all([
     db.select().from(products),
