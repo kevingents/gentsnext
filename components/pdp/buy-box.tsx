@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
+import { SizeMatrix } from "@/components/pdp/size-matrix";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
 export type BuySize = { size: string; priceCents: number; qty: number; known: boolean };
@@ -11,6 +12,7 @@ export type BuySize = { size: string; priceCents: number; qty: number; known: bo
 type Props = {
   title: string;
   vendor: string;
+  hoofdgroep: string;
   colors: BuyColor[];
   minPriceCents: number;
   maxPriceCents: number;
@@ -21,6 +23,7 @@ type Props = {
 export function BuyBox({
   title,
   vendor,
+  hoofdgroep,
   colors,
   minPriceCents,
   maxPriceCents,
@@ -98,34 +101,14 @@ export function BuyBox({
             Vind mijn maat
           </Link>
         </div>
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {active?.sizes.map((s) => {
-            const out = s.known && s.qty <= 0;
-            const low = s.known && s.qty > 0 && s.qty <= 3;
-            const on = size === s.size;
-            return (
-              <li key={s.size}>
-                <button
-                  type="button"
-                  disabled={out}
-                  onClick={() => setSize(s.size)}
-                  aria-pressed={on}
-                  title={out ? "Niet op voorraad" : low ? `Nog ${s.qty} op voorraad` : undefined}
-                  className={`flex min-w-[3rem] flex-col items-center border px-3 py-2 text-center font-sans text-sm transition-colors ${
-                    out
-                      ? "cursor-not-allowed border-line text-muted line-through decoration-muted"
-                      : on
-                        ? "border-ink bg-ink text-canvas"
-                        : "border-line text-ink hover:border-ink"
-                  }`}
-                >
-                  {s.size}
-                  {low ? <span className="mt-0.5 text-[0.6rem] text-danger no-underline">nog {s.qty}</span> : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {active ? (
+          <SizeMatrix
+            sizes={active.sizes}
+            hoofdgroep={hoofdgroep}
+            selected={size}
+            onSelect={setSize}
+          />
+        ) : null}
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (

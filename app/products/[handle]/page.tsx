@@ -222,6 +222,7 @@ export default async function ProductPage({ params }: Props) {
           <BuyBox
             title={product.title}
             vendor={String(attrs.merk || product.vendor || "")}
+            hoofdgroep={String(attrs.hoofdgroep_omschrijving || "")}
             colors={colors}
             minPriceCents={minPrice}
             maxPriceCents={maxPrice}
