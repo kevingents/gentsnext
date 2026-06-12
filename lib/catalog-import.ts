@@ -1,6 +1,7 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { colorFamily } from "@/lib/colors";
+import { sizeRowLabel } from "@/lib/size-taxonomy";
 import {
   products,
   productVariants,
@@ -324,6 +325,7 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
         barcode: v.barcode,
         position: v.position,
         size: v.size,
+        sizeLabel: v.size ? sizeRowLabel(v.size) : "",
         color: v.color,
         colorFamily: v.color ? colorFamily(v.color) : "",
         priceCents: v.priceCents,
@@ -350,6 +352,7 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
           barcode: sql`excluded.barcode`,
           position: sql`excluded.position`,
           size: sql`excluded.size`,
+          sizeLabel: sql`excluded.size_label`,
           color: sql`excluded.color`,
           colorFamily: sql`excluded.color_family`,
           priceCents: sql`excluded.price_cents`,

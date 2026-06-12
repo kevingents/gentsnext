@@ -80,7 +80,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
         </FilterGroup>
       ) : null}
 
-      {/* Maat */}
+      {/* Maat (lettermaat-buckets) */}
       {facets.sizes.length > 0 ? (
         <FilterGroup title="Maat">
           <div className="flex flex-wrap gap-2">
@@ -92,11 +92,12 @@ export function PlpFilters({ facets, selection, total }: Props) {
                   type="button"
                   onClick={() => apply({ sizes: toggle(selection.sizes, s.value) })}
                   aria-pressed={active}
+                  title={`${s.label} (${s.count})`}
                   className={`min-w-[3rem] border px-2 py-1.5 text-center font-sans text-xs transition-colors ${
                     active ? "border-ink bg-ink text-canvas" : "border-line hover:border-muted"
                   }`}
                 >
-                  {s.value}
+                  {s.label}
                 </button>
               );
             })}

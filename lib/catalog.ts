@@ -7,8 +7,8 @@ import {
   productCollections,
   collections,
 } from "@/db/schema";
-import { sizeSortKey } from "@/lib/sizing";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
+import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
 
 /** Leeslaag voor de storefront — alle catalogus-queries op één plek. */
 
@@ -190,7 +190,7 @@ export type ProductFilters = {
 
 export type Facets = {
   colors: { key: ColorFamily; label: string; hex: string; count: number }[];
-  sizes: { value: string; count: number }[];
+  sizes: { value: string; label: string; count: number }[];
   fits: { value: string; count: number }[];
   priceMinCents: number;
   priceMaxCents: number;
@@ -227,7 +227,7 @@ function variantExists(f: ProductFilters): SQL | null {
     active = true;
   }
   if (f.sizes?.length) {
-    parts.push(inList(sql`v.size`, f.sizes));
+    parts.push(inList(sql`v.size_label`, f.sizes));
     active = true;
   }
   if (typeof f.priceMinCents === "number") {
@@ -315,10 +315,10 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
       where ${ctx} and v.color_family <> ''
       group by v.color_family`),
     db.execute<{ size: string; n: number }>(sql`
-      select v.size as size, count(distinct ${products.id})::int as n
+      select v.size_label as size, count(distinct ${products.id})::int as n
       from ${products} join ${productVariants} v on v.product_id = ${products.id}
-      where ${ctx} and v.size <> ''
-      group by v.size`),
+      where ${ctx} and v.size_label <> ''
+      group by v.size_label`),
     db.execute<{ fit: string; n: number }>(sql`
       select ${products.attributes} ->> 'pasvorm' as fit, count(*)::int as n
       from ${products}
@@ -336,9 +336,11 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
     count: colorCount.get(c.key) ?? 0,
   }));
 
+  // Lettermaat-buckets (XS/M/L/…) in natuurlijke volgorde — nette filter i.p.v.
+  // een platte lijst van 44/46/98/25/One door elkaar.
   const sizes = sizeRows.rows
-    .map((r) => ({ value: r.size, count: r.n }))
-    .sort((a, b) => sizeSortKey(a.value) - sizeSortKey(b.value));
+    .map((r) => ({ value: r.size, label: rowDisplayLabel(r.size), count: r.n }))
+    .sort((a, b) => rowSortIndex(a.value) - rowSortIndex(b.value));
 
   const fits = fitRows.rows
     .map((r) => ({ value: r.fit, count: r.n }))

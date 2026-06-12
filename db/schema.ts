@@ -70,6 +70,8 @@ export const productVariants = pgTable(
     barcode: text("barcode").notNull().default(""),
     position: integer("position").notNull().default(0),
     size: text("size").notNull().default(""),
+    /** Lettermaat-bucket (XS/M/L/…) voor het maatfilter — afgeleid van size. */
+    sizeLabel: text("size_label").notNull().default(""),
     color: text("color").notNull().default(""),
     /** Kleurfamilie (blauw/grijs/…) voor PLP-facetten — afgeleid van color. */
     colorFamily: text("color_family").notNull().default(""),
@@ -93,6 +95,7 @@ export const productVariants = pgTable(
     index("variants_srs_artikel_idx").on(t.srsArtikelId),
     index("variants_color_family_idx").on(t.colorFamily),
     index("variants_size_idx").on(t.size),
+    index("variants_size_label_idx").on(t.sizeLabel),
   ]
 );
 
