@@ -26,3 +26,6 @@ Thumbs.db
 
 # Lokale data-dumps (Shopify-exports e.d.)
 /data/
+
+.vercel
+.env*.local

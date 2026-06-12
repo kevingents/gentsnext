@@ -59,9 +59,12 @@ npm run dev
    niet live is — dubbel slot bovenop de noindex.
 5. **Géén domein koppelen.** gents.nl blijft op Shopify tot de geplande
    atomische DNS-cutover; eventueel `next.gents.nl` als preview-domein.
-6. **Cron controleren** na de eerste deploy: Settings → Cron Jobs toont
-   `/api/cron/publish-products-cache` (dagelijks 04:00 UTC). Vercel stuurt
-   `CRON_SECRET` automatisch mee als Bearer-token.
+6. **Cache-cron staat bewust UIT** (`vercel.json` heeft een lege crons-lijst).
+   De dagelijkse publicatie naar de storegents-blob is de "bronwissel" uit de
+   blauwdruk: pas inschakelen wanneer er een doorlopende catalogus-sync naar
+   deze database draait, anders veroudert de portal-cache. Tot die tijd:
+   handmatig publiceren kan met `npm run cache:publish`. De route weigert
+   bovendien te publiceren bij een (bijna) lege catalogus.
 
 ## Launch-checklist (pas bij cutover — NIET nu)
 

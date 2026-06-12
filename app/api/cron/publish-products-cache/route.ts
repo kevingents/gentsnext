@@ -26,6 +26,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   const payload = await buildProductsCachePayload();
+  // Noodrem: nooit een (bijna) lege catalogus over de productie-cache van het
+  // portaal heen publiceren — daar leunen ~44 storegents-modules op.
+  if (payload.productCount < 100) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `catalogus bevat maar ${payload.productCount} producten — publicatie geweigerd`,
+      },
+      { status: 412 }
+    );
+  }
   await writeJsonBlobCompat(CACHE_PATH, payload);
   return NextResponse.json({
     ok: true,
