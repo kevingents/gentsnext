@@ -184,3 +184,64 @@ export const stockLevels = pgTable(
   },
   (t) => [primaryKey({ columns: [t.sku, t.branchId] })]
 );
+
+/**
+ * Bestellingen — eigen ordermodel (commerce-core), bron van waarheid voor de
+ * checkout. Bedragen in integer centen. Statusmachine:
+ *   open → paid | failed | expired | canceled ; paid → shipped | refunded.
+ * paymentStatus spiegelt de Mollie-betaalstatus (webhook = bron van waarheid).
+ */
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderNumber: text("order_number").notNull(),
+    status: text("status").notNull().default("open"),
+    email: text("email").notNull(),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    street: text("street").notNull().default(""),
+    houseNumber: text("house_number").notNull().default(""),
+    postalCode: text("postal_code").notNull().default(""),
+    city: text("city").notNull().default(""),
+    country: text("country").notNull().default("NL"),
+    subtotalCents: integer("subtotal_cents").notNull(),
+    shippingCents: integer("shipping_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull(),
+    currency: text("currency").notNull().default("EUR"),
+    /** Mollie */
+    molliePaymentId: text("mollie_payment_id"),
+    paymentStatus: text("payment_status"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    /** SRS-weborder-push-status (na betaling) — voor de latere koppeling. */
+    srsPushedAt: timestamp("srs_pushed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("orders_order_number_unique").on(t.orderNumber),
+    uniqueIndex("orders_mollie_payment_unique").on(t.molliePaymentId),
+    index("orders_status_idx").on(t.status),
+  ]
+);
+
+export const orderLines = pgTable(
+  "order_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    sku: text("sku").notNull(),
+    productHandle: text("product_handle").notNull().default(""),
+    title: text("title").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    groupId: text("group_id"),
+    roleLabel: text("role_label"),
+  },
+  (t) => [index("order_lines_order_idx").on(t.orderId)]
+);

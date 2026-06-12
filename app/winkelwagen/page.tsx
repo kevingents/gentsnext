@@ -86,9 +86,9 @@ export default function WinkelwagenPage() {
               <span className="font-sans text-sm">Totaal</span>
               <span className="font-display text-xl">{formatEuro(cart.subtotalCents)}</span>
             </div>
-            <button type="button" disabled className="btn-primary mt-5 w-full">
-              Afrekenen met iDEAL — binnenkort
-            </button>
+            <Link href="/afrekenen" className="btn-primary mt-5 w-full">
+              Afrekenen
+            </Link>
             <Link href="/collections/pakken" className="btn-ghost mt-2 w-full">
               Verder winkelen
             </Link>

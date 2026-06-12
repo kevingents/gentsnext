@@ -165,9 +165,9 @@ export function CartDrawer() {
                 <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
               </div>
               <p className="mt-1 font-sans text-xs text-muted">Incl. btw, excl. verzendkosten</p>
-              <button type="button" disabled className="btn-primary mt-3 w-full">
-                Afrekenen met iDEAL — binnenkort
-              </button>
+              <Link href="/afrekenen" onClick={cart.close} className="btn-primary mt-3 w-full">
+                Afrekenen
+              </Link>
               <Link href="/winkelwagen" onClick={cart.close} className="btn-ghost mt-2 w-full">
                 Bekijk winkelwagen
               </Link>
