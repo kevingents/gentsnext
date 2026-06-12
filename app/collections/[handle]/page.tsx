@@ -41,16 +41,17 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   if (pageNum > totalPages) notFound();
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-      <h1 className="text-3xl font-semibold">{collection.title}</h1>
-      <p className="mt-1 text-sm text-slate">
+    <div className="mx-auto max-w-page px-gutter py-12">
+      <p className="label-brand">Collectie</p>
+      <h1 className="mt-2 text-display-md">{collection.title}</h1>
+      <p className="mt-1 font-sans text-sm text-muted">
         {total} {total === 1 ? "artikel" : "artikelen"}
       </p>
 
       {items.length === 0 ? (
-        <p className="mt-8 text-slate">Geen artikelen in deze collectie.</p>
+        <p className="mt-8 font-sans text-ink-soft">Geen artikelen in deze collectie.</p>
       ) : (
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {items.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
@@ -58,28 +59,25 @@ export default async function CollectionPage({ params, searchParams }: Props) {
       )}
 
       {totalPages > 1 ? (
-        <nav className="mt-10 flex items-center justify-center gap-4 text-sm" aria-label="Paginering">
+        <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
           {pageNum > 1 ? (
             <Link
-              className="rounded bg-white px-4 py-2 shadow-card hover:shadow-md"
+              className="btn-ghost !px-4 !py-2"
               href={`/collections/${handle}${pageNum - 1 > 1 ? `?page=${pageNum - 1}` : ""}`}
             >
               Vorige
             </Link>
           ) : null}
-          <span className="text-slate">
+          <span className="text-muted">
             Pagina {pageNum} van {totalPages}
           </span>
           {pageNum < totalPages ? (
-            <Link
-              className="rounded bg-white px-4 py-2 shadow-card hover:shadow-md"
-              href={`/collections/${handle}?page=${pageNum + 1}`}
-            >
+            <Link className="btn-ghost !px-4 !py-2" href={`/collections/${handle}?page=${pageNum + 1}`}>
               Volgende
             </Link>
           ) : null}
         </nav>
       ) : null}
-    </main>
+    </div>
   );
 }

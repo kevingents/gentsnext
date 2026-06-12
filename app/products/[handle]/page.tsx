@@ -6,6 +6,7 @@ import { JsonLd } from "@/components/json-ld";
 import { getProductByHandle } from "@/lib/catalog";
 import { formatEuro, getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
+import { sortSizes } from "@/lib/sizing";
 
 export const dynamic = "force-dynamic";
 
@@ -56,13 +57,19 @@ export default async function ProductPage({ params }: Props) {
   const referencePrices = await getReferencePrices(variants.map((v) => v.id));
   const referenceCents = referencePrices.get(cheapest.id);
 
-  // Maten gegroepeerd per kleur (alleen weergave; bestellen volgt in fase 3).
+  // Maten gegroepeerd per kleur, in natuurlijke maatvolgorde.
   const sizesByColor = new Map<string, string[]>();
   for (const v of variants) {
     const color = v.color || "Standaard";
     const list = sizesByColor.get(color) || [];
     if (v.size && !list.includes(v.size)) list.push(v.size);
     sizesByColor.set(color, list);
+  }
+  for (const [color, sizes] of sizesByColor) {
+    sizesByColor.set(
+      color,
+      sortSizes(sizes.map((s) => ({ size: s }))).map((x) => x.size)
+    );
   }
 
   const specs = SPEC_LABELS.map(([key, label]) => ({
@@ -87,15 +94,6 @@ export default async function ProductPage({ params }: Props) {
       highPrice: (maxPrice / 100).toFixed(2),
       offerCount: variants.length,
       availability: "https://schema.org/InStock",
-      offers: variants.slice(0, 50).map((v) => ({
-        "@type": "Offer",
-        sku: v.sku || undefined,
-        gtin13: /^\d{13}$/.test(v.barcode) ? v.barcode : undefined,
-        price: (v.priceCents / 100).toFixed(2),
-        priceCurrency: "EUR",
-        availability: "https://schema.org/InStock",
-        itemCondition: "https://schema.org/NewCondition",
-      })),
     },
   };
 
@@ -124,24 +122,24 @@ export default async function ProductPage({ params }: Props) {
   };
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-page px-gutter py-10">
       <JsonLd data={productJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
 
-      <nav className="text-sm text-slate" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-navy">
+      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
+        <Link href="/" className="hover:text-ink">
           Home
         </Link>
         {breadcrumb ? (
           <>
             {" / "}
-            <Link href={`/collections/${breadcrumb.handle}`} className="hover:text-navy">
+            <Link href={`/collections/${breadcrumb.handle}`} className="hover:text-ink">
               {breadcrumb.title}
             </Link>
           </>
         ) : null}
         {" / "}
-        <span className="text-navy">{product.title}</span>
+        <span className="text-ink">{product.title}</span>
       </nav>
 
       <div className="mt-6 grid gap-10 lg:grid-cols-2">
@@ -151,7 +149,7 @@ export default async function ProductPage({ params }: Props) {
             images.slice(0, 6).map((img, i) => (
               <div
                 key={img.id}
-                className={`relative overflow-hidden rounded-lg bg-white ${i === 0 ? "col-span-2 aspect-[4/5]" : "aspect-[3/4]"}`}
+                className={`relative overflow-hidden rounded-card bg-surface ${i === 0 ? "col-span-2 aspect-[4/5]" : "aspect-[3/4]"}`}
               >
                 <Image
                   src={img.url}
@@ -164,44 +162,52 @@ export default async function ProductPage({ params }: Props) {
               </div>
             ))
           ) : (
-            <div className="col-span-2 flex aspect-[4/5] items-center justify-center rounded-lg bg-white text-sm text-slate">
+            <div className="col-span-2 flex aspect-[4/5] items-center justify-center rounded-card bg-surface font-sans text-sm text-muted">
               Geen afbeeldingen
             </div>
           )}
         </div>
 
         {/* Productinfo */}
-        <div>
-          {product.vendor ? (
-            <p className="text-xs uppercase tracking-widest text-slate">{product.vendor}</p>
-          ) : null}
-          <h1 className="mt-1 text-3xl font-semibold">{product.title}</h1>
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          {product.vendor ? <p className="label-brand">{product.vendor}</p> : null}
+          <h1 className="mt-2 text-display-md">{product.title}</h1>
 
           <div className="mt-4 flex items-baseline gap-3">
             {referenceCents ? (
-              <span className="text-lg text-slate line-through">{formatEuro(referenceCents)}</span>
+              <span className="font-sans text-lg text-muted line-through">
+                {formatEuro(referenceCents)}
+              </span>
             ) : null}
-            <span className="text-2xl font-semibold">
+            <span className="font-display text-2xl">
               {minPrice !== maxPrice ? "vanaf " : ""}
               {formatEuro(minPrice)}
             </span>
           </div>
           {referenceCents ? (
-            <p className="mt-1 text-xs text-slate">
-              Doorgestreepte prijs: laagste prijs in 30 dagen voorafgaand aan de korting.
+            <p className="mt-1 font-sans text-xs text-muted">
+              Doorgestreepte prijs: laagste prijs in de 30 dagen vóór de korting.
             </p>
           ) : null}
 
-          <div className="mt-6 space-y-4">
+          <div className="mt-7 space-y-5">
             {[...sizesByColor.entries()].map(([color, sizes]) => (
               <div key={color}>
-                <p className="text-sm font-medium">{color}</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-sans text-sm font-medium">{color}</p>
+                  <Link
+                    href="/maatadvies"
+                    className="font-sans text-xs text-ink underline underline-offset-4"
+                  >
+                    Vind mijn maat
+                  </Link>
+                </div>
                 {sizes.length ? (
                   <ul className="mt-2 flex flex-wrap gap-2">
                     {sizes.map((size) => (
                       <li
                         key={size}
-                        className="rounded border border-navy-100 bg-white px-3 py-1.5 text-sm"
+                        className="min-w-[3rem] border border-line bg-canvas px-3 py-2 text-center font-sans text-sm"
                       >
                         {size}
                       </li>
@@ -212,31 +218,25 @@ export default async function ProductPage({ params }: Props) {
             ))}
           </div>
 
-          <button
-            type="button"
-            disabled
-            className="mt-8 w-full cursor-not-allowed rounded-lg bg-navy px-6 py-3 font-medium text-white opacity-60"
-          >
+          <button type="button" disabled className="btn-primary mt-8 w-full">
             Online bestellen volgt binnenkort
           </button>
 
           {product.descriptionHtml ? (
             <div
-              className="prose-sm mt-8 max-w-none text-slate [&_a]:underline [&_h3]:font-medium [&_h3]:text-navy"
+              className="mt-8 max-w-none font-sans text-sm leading-relaxed text-ink-soft [&_a]:underline [&_h3]:mt-4 [&_h3]:font-medium [&_h3]:text-ink"
               dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
             />
           ) : null}
 
           {specs.length ? (
             <section className="mt-8">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-slate">
-                Specificaties
-              </h2>
-              <dl className="mt-3 divide-y divide-navy-50 rounded-lg bg-white px-4 shadow-card">
+              <p className="label-brand">Specificaties</p>
+              <dl className="mt-3 divide-y divide-line border-y border-line">
                 {specs.map((spec) => (
-                  <div key={spec.label} className="flex justify-between gap-4 py-2.5 text-sm">
-                    <dt className="text-slate">{spec.label}</dt>
-                    <dd className="text-right">{spec.value}</dd>
+                  <div key={spec.label} className="flex justify-between gap-4 py-2.5 font-sans text-sm">
+                    <dt className="text-muted">{spec.label}</dt>
+                    <dd className="text-right text-ink">{spec.value}</dd>
                   </div>
                 ))}
               </dl>
@@ -244,6 +244,6 @@ export default async function ProductPage({ params }: Props) {
           ) : null}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

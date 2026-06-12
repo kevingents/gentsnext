@@ -1,3 +1,54 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --font-display: "Source Sans 3", system-ui, sans-serif;
+    --font-body: "Montserrat", system-ui, sans-serif;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Editorial koppen: licht gewicht, strakke tracking — sluit aan op het
+     dunne GENTS-woordmerk. */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    color: theme("colors.ink.DEFAULT");
+  }
+
+  /* Toegankelijke focus-stijl (EAA/WCAG 2.1 AA) — overal zichtbaar. */
+  :focus-visible {
+    outline: 2px solid theme("colors.ink.DEFAULT");
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Klein hoofdletter-label met merk-tracking (USP-bar, ooglabels). */
+  .label-brand {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: theme("letterSpacing.brand");
+    font-size: 0.7rem;
+    color: theme("colors.muted");
+  }
+
+  /* Primaire knop — ingetogen, formeel. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-control bg-ink px-6 py-3
+      font-sans text-sm font-medium text-canvas transition-colors duration-200
+      hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-control border border-ink
+      bg-transparent px-6 py-3 font-sans text-sm font-medium text-ink transition-colors
+      duration-200 hover:bg-ink hover:text-canvas;
+  }
+}

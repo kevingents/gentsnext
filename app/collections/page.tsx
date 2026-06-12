@@ -13,20 +13,22 @@ export default async function CollectionsPage() {
   const collections = await listCollections();
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-      <h1 className="text-3xl font-semibold">Collecties</h1>
-      <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="mx-auto max-w-page px-gutter py-14">
+      <p className="label-brand">Het assortiment</p>
+      <h1 className="mt-2 text-display-md">Alle collecties</h1>
+      <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {collections.map((c) => (
           <li key={c.id}>
             <Link
               href={`/collections/${c.handle}`}
-              className="block rounded-lg bg-white p-4 text-sm font-medium shadow-card transition hover:shadow-md"
+              className="flex items-center justify-between border border-line bg-canvas px-5 py-4 font-sans text-sm transition-colors hover:border-ink"
             >
-              {c.title}
+              <span>{c.title}</span>
+              <span aria-hidden className="text-muted">→</span>
             </Link>
           </li>
         ))}
       </ul>
-    </main>
+    </div>
   );
 }
