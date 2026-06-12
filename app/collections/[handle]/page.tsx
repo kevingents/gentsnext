@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
-import { getCollectionByHandle, getCollectionProducts } from "@/lib/catalog";
+import { PlpFilters } from "@/components/plp/filters";
+import { SortSelect } from "@/components/plp/sort-select";
+import { getCollectionByHandle, getFilteredProducts, getFacets } from "@/lib/catalog";
+import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 
 export const dynamic = "force-dynamic";
 
@@ -10,74 +13,109 @@ const PER_PAGE = 24;
 
 type Props = {
   params: Promise<{ handle: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { handle } = await params;
-  const { page } = await searchParams;
+  const sel = parsePlpParams(await searchParams);
   const collection = await getCollectionByHandle(handle);
   if (!collection) return {};
-  const pageNum = Math.max(1, Math.floor(Number(page)) || 1);
   return {
     title: collection.seoTitle || collection.title,
     description: collection.seoDescription || undefined,
-    // Eigen canonical per pagina — paginering NIET naar pagina 1 canonicaliseren.
+    // Gefilterde/gepagineerde views niet als aparte canonical indexeren.
     alternates: {
-      canonical: pageNum > 1 ? `/collections/${handle}?page=${pageNum}` : `/collections/${handle}`,
+      canonical:
+        sel.page > 1 ? `/collections/${handle}?page=${sel.page}` : `/collections/${handle}`,
     },
   };
 }
 
 export default async function CollectionPage({ params, searchParams }: Props) {
   const { handle } = await params;
-  const { page } = await searchParams;
+  const sp = await searchParams;
+  const sel = parsePlpParams(sp);
   const collection = await getCollectionByHandle(handle);
   if (!collection) notFound();
 
-  const pageNum = Math.max(1, Math.floor(Number(page)) || 1);
-  const { items, total } = await getCollectionProducts(collection.id, pageNum, PER_PAGE);
+  const filters = selectionToFilters(sel, { collectionId: collection.id });
+  const [{ items, total }, facets] = await Promise.all([
+    getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE),
+    getFacets({ collectionId: collection.id }),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
-  if (pageNum > totalPages) notFound();
+
+  function pageHref(p: number): string {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      if (typeof v === "string" && k !== "page") params.set(k, v);
+    }
+    if (p > 1) params.set("page", String(p));
+    const qs = params.toString();
+    return qs ? `/collections/${handle}?${qs}` : `/collections/${handle}`;
+  }
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-12">
-      <p className="label-brand">Collectie</p>
-      <h1 className="mt-2 text-display-md">{collection.title}</h1>
-      <p className="mt-1 font-sans text-sm text-muted">
-        {total} {total === 1 ? "artikel" : "artikelen"}
-      </p>
+    <div className="mx-auto max-w-page px-gutter py-10">
+      <div className="border-b border-line pb-6">
+        <p className="label-brand">Collectie</p>
+        <h1 className="mt-2 text-display-md">{collection.title}</h1>
+        {collection.descriptionHtml ? (
+          <div
+            className="mt-2 max-w-2xl font-sans text-sm text-ink-soft"
+            dangerouslySetInnerHTML={{ __html: collection.descriptionHtml }}
+          />
+        ) : null}
+      </div>
 
-      {items.length === 0 ? (
-        <p className="mt-8 font-sans text-ink-soft">Geen artikelen in deze collectie.</p>
-      ) : (
-        <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
+      <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        {/* Sidebar / mobiele drawer */}
+        <aside className="lg:sticky lg:top-24 lg:h-fit">
+          <PlpFilters facets={facets} selection={sel} total={total} />
+        </aside>
+
+        {/* Grid */}
+        <div>
+          <div className="mb-6 hidden items-center justify-between lg:flex">
+            <span className="font-sans text-sm text-muted">{total} artikelen</span>
+            <SortSelect value={sel.sort} />
+          </div>
+          <div className="mb-6 lg:hidden">
+            <SortSelect value={sel.sort} />
+          </div>
+
+          {items.length === 0 ? (
+            <p className="py-16 text-center font-sans text-ink-soft">
+              Geen artikelen gevonden met deze filters.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
+              {items.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          )}
+
+          {totalPages > 1 ? (
+            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
+              {sel.page > 1 ? (
+                <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
+                  Vorige
+                </Link>
+              ) : null}
+              <span className="text-muted">
+                Pagina {sel.page} van {totalPages}
+              </span>
+              {sel.page < totalPages ? (
+                <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
+                  Volgende
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
         </div>
-      )}
-
-      {totalPages > 1 ? (
-        <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
-          {pageNum > 1 ? (
-            <Link
-              className="btn-ghost !px-4 !py-2"
-              href={`/collections/${handle}${pageNum - 1 > 1 ? `?page=${pageNum - 1}` : ""}`}
-            >
-              Vorige
-            </Link>
-          ) : null}
-          <span className="text-muted">
-            Pagina {pageNum} van {totalPages}
-          </span>
-          {pageNum < totalPages ? (
-            <Link className="btn-ghost !px-4 !py-2" href={`/collections/${handle}?page=${pageNum + 1}`}>
-              Volgende
-            </Link>
-          ) : null}
-        </nav>
-      ) : null}
+      </div>
     </div>
   );
 }

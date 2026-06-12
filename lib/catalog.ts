@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   products,
@@ -7,6 +7,8 @@ import {
   productCollections,
   collections,
 } from "@/db/schema";
+import { sizeSortKey } from "@/lib/sizing";
+import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 
 /** Leeslaag voor de storefront — alle catalogus-queries op één plek. */
 
@@ -170,4 +172,194 @@ export async function listProductHandles(limit = 50000) {
     .from(products)
     .where(eq(products.status, "active"))
     .limit(limit);
+}
+
+/* ───────────────────────── Gefilterde PLP + facetten ───────────────────── */
+
+export type ProductSort = "nieuw" | "prijs-op" | "prijs-af" | "naam";
+
+export type ProductFilters = {
+  collectionId?: string;
+  category?: string; // hoofdgroep_omschrijving
+  colorFamilies?: string[];
+  sizes?: string[];
+  fits?: string[];
+  priceMinCents?: number;
+  priceMaxCents?: number;
+};
+
+export type Facets = {
+  colors: { key: ColorFamily; label: string; hex: string; count: number }[];
+  sizes: { value: string; count: number }[];
+  fits: { value: string; count: number }[];
+  priceMinCents: number;
+  priceMaxCents: number;
+};
+
+/** Product-niveau condities (collectie/categorie) — bepalen de facet-context. */
+function contextConditions(f: ProductFilters): SQL[] {
+  const conds: SQL[] = [eq(products.status, "active")];
+  if (f.collectionId) {
+    conds.push(
+      sql`exists (select 1 from ${productCollections} pc where pc.product_id = ${products.id} and pc.collection_id = ${f.collectionId})`
+    );
+  }
+  if (f.category) {
+    conds.push(sql`${products.attributes} ->> 'hoofdgroep_omschrijving' = ${f.category}`);
+  }
+  return conds;
+}
+
+/** Bouwt `col in ('a','b')` met correcte placeholders (drizzle expandeert arrays niet in ruwe sql). */
+function inList(col: SQL, values: string[]): SQL {
+  return sql`${col} in (${sql.join(
+    values.map((v) => sql`${v}`),
+    sql`, `
+  )})`;
+}
+
+/** Variant-niveau EXISTS — één variant moet aan álle gekozen variant-filters voldoen. */
+function variantExists(f: ProductFilters): SQL | null {
+  const parts: SQL[] = [sql`v.product_id = ${products.id}`];
+  let active = false;
+  if (f.colorFamilies?.length) {
+    parts.push(inList(sql`v.color_family`, f.colorFamilies));
+    active = true;
+  }
+  if (f.sizes?.length) {
+    parts.push(inList(sql`v.size`, f.sizes));
+    active = true;
+  }
+  if (typeof f.priceMinCents === "number") {
+    parts.push(sql`v.price_cents >= ${f.priceMinCents}`);
+    active = true;
+  }
+  if (typeof f.priceMaxCents === "number") {
+    parts.push(sql`v.price_cents <= ${f.priceMaxCents}`);
+    active = true;
+  }
+  if (!active) return null;
+  return sql`exists (select 1 from ${productVariants} v where ${sql.join(parts, sql` and `)})`;
+}
+
+function allConditions(f: ProductFilters): SQL[] {
+  const conds = contextConditions(f);
+  if (f.fits?.length) {
+    conds.push(inList(sql`${products.attributes} ->> 'pasvorm'`, f.fits));
+  }
+  const ve = variantExists(f);
+  if (ve) conds.push(ve);
+  return conds;
+}
+
+const SORT_ORDER: Record<ProductSort, SQL> = {
+  nieuw: sql`${products.sourceCreatedAt} desc nulls last`,
+  "prijs-op": sql`mp asc nulls last`,
+  "prijs-af": sql`mp desc nulls last`,
+  naam: sql`${products.title} asc`,
+};
+
+export async function getFilteredProducts(
+  f: ProductFilters,
+  sort: ProductSort,
+  page: number,
+  perPage: number
+): Promise<{ items: ProductCardData[]; total: number }> {
+  const db = getDb();
+  const conds = allConditions(f);
+  const whereSql = sql.join(conds, sql` and `);
+  const offset = (page - 1) * perPage;
+
+  // Pagineer op product-id met min-prijs voor de prijs-sortering.
+  const idRows = await db.execute<{ id: string }>(sql`
+    select ${products.id} as id,
+           (select min(v2.price_cents) from ${productVariants} v2 where v2.product_id = ${products.id}) as mp
+    from ${products}
+    where ${whereSql}
+    order by ${SORT_ORDER[sort]}
+    limit ${perPage} offset ${offset}
+  `);
+  const totalRes = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from ${products} where ${whereSql}
+  `);
+  const total = Number(totalRes.rows[0]?.n ?? 0);
+
+  const ids = idRows.rows.map((r) => r.id);
+  if (!ids.length) return { items: [], total };
+
+  // Hydrateer kaarten in dezelfde volgorde.
+  const base = await db
+    .select({
+      id: products.id,
+      handle: products.handle,
+      title: products.title,
+      vendor: products.vendor,
+    })
+    .from(products)
+    .where(inArray(products.id, ids));
+  const byId = new Map(base.map((p) => [p.id, p]));
+  const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as typeof base;
+  return { items: await buildProductCards(ordered), total };
+}
+
+export async function getFacets(f: ProductFilters): Promise<Facets> {
+  const db = getDb();
+  // Facetten binnen de context (collectie/categorie), onafhankelijk van de
+  // gekozen kleur/maat/pasvorm — zo blijven alle opties met telling zichtbaar.
+  const ctx = sql.join(contextConditions(f), sql` and `);
+
+  const [colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
+    db.execute<{ fam: string; n: number }>(sql`
+      select v.color_family as fam, count(distinct ${products.id})::int as n
+      from ${products} join ${productVariants} v on v.product_id = ${products.id}
+      where ${ctx} and v.color_family <> ''
+      group by v.color_family`),
+    db.execute<{ size: string; n: number }>(sql`
+      select v.size as size, count(distinct ${products.id})::int as n
+      from ${products} join ${productVariants} v on v.product_id = ${products.id}
+      where ${ctx} and v.size <> ''
+      group by v.size`),
+    db.execute<{ fit: string; n: number }>(sql`
+      select ${products.attributes} ->> 'pasvorm' as fit, count(*)::int as n
+      from ${products}
+      where ${ctx} and ${products.attributes} ->> 'pasvorm' is not null and ${products.attributes} ->> 'pasvorm' <> ''
+      group by ${products.attributes} ->> 'pasvorm'`),
+    db.execute<{ lo: number; hi: number }>(sql`
+      select min(v.price_cents)::int as lo, max(v.price_cents)::int as hi
+      from ${products} join ${productVariants} v on v.product_id = ${products.id}
+      where ${ctx}`),
+  ]);
+
+  const colorCount = new Map(colorRows.rows.map((r) => [r.fam, r.n]));
+  const colors = COLOR_FAMILIES.filter((c) => colorCount.has(c.key)).map((c) => ({
+    ...c,
+    count: colorCount.get(c.key) ?? 0,
+  }));
+
+  const sizes = sizeRows.rows
+    .map((r) => ({ value: r.size, count: r.n }))
+    .sort((a, b) => sizeSortKey(a.value) - sizeSortKey(b.value));
+
+  const fits = fitRows.rows
+    .map((r) => ({ value: r.fit, count: r.n }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    colors,
+    sizes,
+    fits,
+    priceMinCents: Number(priceRow.rows[0]?.lo ?? 0),
+    priceMaxCents: Number(priceRow.rows[0]?.hi ?? 0),
+  };
+}
+
+/** Lijst van categorieën (hoofdgroep) met telling — voor nav/landing. */
+export async function listCategories(): Promise<{ name: string; count: number }[]> {
+  const db = getDb();
+  const rows = await db.execute<{ name: string; n: number }>(sql`
+    select attributes ->> 'hoofdgroep_omschrijving' as name, count(*)::int as n
+    from ${products}
+    where status = 'active' and attributes ->> 'hoofdgroep_omschrijving' is not null
+    group by 1 order by n desc`);
+  return rows.rows.map((r) => ({ name: r.name, count: r.n }));
 }

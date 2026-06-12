@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "import:cache": "tsx scripts/import-from-cache.ts",
     "import:shopify": "tsx scripts/import-shopify-bulk.ts",
-    "cache:publish": "tsx scripts/publish-cache.ts"
+    "cache:publish": "tsx scripts/publish-cache.ts",
+    "backfill:colorfamily": "tsx scripts/backfill-color-family.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

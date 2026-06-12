@@ -1,5 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
+import { colorFamily } from "@/lib/colors";
 import {
   products,
   productVariants,
@@ -324,6 +325,7 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
         position: v.position,
         size: v.size,
         color: v.color,
+        colorFamily: v.color ? colorFamily(v.color) : "",
         priceCents: v.priceCents,
         compareAtCents: v.compareAtCents,
         srsArtikelId: v.srsArtikelId,
@@ -349,6 +351,7 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
           position: sql`excluded.position`,
           size: sql`excluded.size`,
           color: sql`excluded.color`,
+          colorFamily: sql`excluded.color_family`,
           priceCents: sql`excluded.price_cents`,
           compareAtCents: sql`excluded.compare_at_cents`,
           srsArtikelId: sql`excluded.srs_artikel_id`,

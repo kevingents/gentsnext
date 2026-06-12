@@ -71,6 +71,8 @@ export const productVariants = pgTable(
     position: integer("position").notNull().default(0),
     size: text("size").notNull().default(""),
     color: text("color").notNull().default(""),
+    /** Kleurfamilie (blauw/grijs/…) voor PLP-facetten — afgeleid van color. */
+    colorFamily: text("color_family").notNull().default(""),
     priceCents: integer("price_cents").notNull(),
     compareAtCents: integer("compare_at_cents"),
     /** SRS-koppelvelden (uit SRSERP.* metafields / SRS-connector). */
@@ -89,6 +91,8 @@ export const productVariants = pgTable(
     index("variants_sku_idx").on(t.sku),
     index("variants_barcode_idx").on(t.barcode),
     index("variants_srs_artikel_idx").on(t.srsArtikelId),
+    index("variants_color_family_idx").on(t.colorFamily),
+    index("variants_size_idx").on(t.size),
   ]
 );
 
