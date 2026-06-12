@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Source_Sans_3, Montserrat } from "next/font/google";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { CartProvider } from "@/components/cart/cart-context";
+import { CartDrawer } from "@/components/cart/cart-drawer";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -37,9 +39,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="nl" className={`${display.variable} ${body.variable}`}>
       <body className="flex min-h-screen flex-col bg-canvas font-sans text-ink antialiased">
-        <SiteHeader />
-        <main className="flex-1">{children}</main>
-        <SiteFooter />
+        <CartProvider>
+          <SiteHeader />
+          <main className="flex-1">{children}</main>
+          <SiteFooter />
+          <CartDrawer />
+        </CartProvider>
       </body>
     </html>
   );

@@ -5,14 +5,17 @@ import { useMemo, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { useCart } from "@/components/cart/cart-context";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
-export type BuySize = { size: string; priceCents: number; qty: number; known: boolean };
+export type BuySize = { size: string; sku: string; priceCents: number; qty: number; known: boolean };
 
 type Props = {
   title: string;
   vendor: string;
   hoofdgroep: string;
+  productHandle: string;
+  image: string;
   colors: BuyColor[];
   minPriceCents: number;
   maxPriceCents: number;
@@ -24,12 +27,15 @@ export function BuyBox({
   title,
   vendor,
   hoofdgroep,
+  productHandle,
+  image,
   colors,
   minPriceCents,
   maxPriceCents,
   referenceCents,
   hasStock,
 }: Props) {
+  const cart = useCart();
   const [colorIdx, setColorIdx] = useState(0);
   const [size, setSize] = useState<string | null>(null);
   const active = colors[Math.min(colorIdx, colors.length - 1)];
@@ -40,6 +46,21 @@ export function BuyBox({
   );
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? "vanaf " : "") + formatEuro(priceCents);
+  const soldOut = Boolean(selectedSize && selectedSize.known && selectedSize.qty <= 0);
+
+  function addToCart() {
+    if (!selectedSize || !active || soldOut) return;
+    cart.add({
+      sku: selectedSize.sku,
+      productHandle,
+      title,
+      size: selectedSize.size,
+      color: active.color === "Standaard" ? "" : active.color,
+      priceCents: selectedSize.priceCents,
+      imageUrl: image,
+      qty: 1,
+    });
+  }
 
   return (
     <div>
@@ -120,13 +141,17 @@ export function BuyBox({
         ) : null}
       </div>
 
-      {/* Bestelknop (winkelwagen volgt in fase 3) */}
-      <button type="button" disabled className="btn-primary mt-7 w-full">
-        {size ? `In winkelwagen — maat ${size}` : "Kies een maat"}
+      {/* Bestelknop */}
+      <button
+        type="button"
+        onClick={addToCart}
+        disabled={!size || soldOut}
+        className="btn-primary mt-7 w-full"
+      >
+        {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : `In winkelwagen — maat ${size}`}
       </button>
       <p className="mt-3 font-sans text-xs text-muted">
-        Online bestellen en afrekenen met iDEAL volgt binnenkort. Gratis retour
-        binnen 14 dagen.
+        Gratis retour binnen 14 dagen. Afrekenen met iDEAL volgt binnenkort.
       </p>
 
       {/* Sticky mobiele bestelbalk */}
@@ -136,8 +161,13 @@ export function BuyBox({
             <p className="truncate font-sans text-xs text-muted">{title}</p>
             <p className="font-display text-base">{priceLabel}</p>
           </div>
-          <button type="button" disabled className="btn-primary !px-5">
-            {size ? "In winkelwagen" : "Kies maat"}
+          <button
+            type="button"
+            onClick={addToCart}
+            disabled={!size || soldOut}
+            className="btn-primary !px-5"
+          >
+            {!size ? "Kies maat" : soldOut ? "Uitverkocht" : "In winkelwagen"}
           </button>
         </div>
       </div>

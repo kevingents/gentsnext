@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import type { SuitDetail, SuitPieceDetail, SuitRole } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
+import { useCart } from "@/components/cart/cart-context";
 
 const ROLE_LABEL: Record<SuitRole, string> = {
   colbert: "Colbert",
@@ -25,10 +26,12 @@ function sizeIndex(piece: SuitPieceDetail) {
 }
 
 export function SuitBuilder({ suit }: { suit: SuitDetail }) {
+  const cart = useCart();
   const colbert = suit.pieces.find((p) => p.role === "colbert")!;
   const broek = suit.pieces.find((p) => p.role === "broek")!;
   const gilet = suit.pieces.find((p) => p.role === "gilet") ?? null;
 
+  const pakTitle = colbert.title.replace(/^colbert[\s-]*/i, "").trim() || colbert.title;
   const [withGilet, setWithGilet] = useState(false);
   const [sizeLabel, setSizeLabel] = useState<string | null>(null);
 
@@ -61,6 +64,28 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
     () => activePieces.reduce((sum, p) => sum + Math.min(...p.sizes.map((s) => s.priceCents)), 0),
     [activePieces]
   );
+
+  const canAdd = Boolean(selection && selection.every((s) => s.variant));
+
+  function addPak() {
+    if (!selection || !canAdd) return;
+    const groupId = `pak-${suit.code}-${sizeLabel}-${withGilet ? "3d" : "2d"}`;
+    cart.addMany(
+      selection.map((s) => ({
+        sku: s.variant!.sku,
+        productHandle: s.piece.handle,
+        title: s.piece.title,
+        size: s.variant!.size,
+        color: "",
+        priceCents: s.variant!.priceCents,
+        imageUrl: s.piece.image,
+        qty: 1,
+        groupId,
+        groupLabel: `Pak — ${pakTitle}`,
+        roleLabel: ROLE_LABEL[s.piece.role],
+      }))
+    );
+  }
 
   return (
     <div className="grid gap-10 lg:grid-cols-2">
@@ -186,12 +211,12 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
           <span className="font-sans text-sm text-muted">Totaalprijs</span>
           <span className="font-display text-2xl">{selection ? formatEuro(totalCents) : "—"}</span>
         </div>
-        <button type="button" disabled className="btn-primary mt-4 w-full">
+        <button type="button" onClick={addPak} disabled={!canAdd} className="btn-primary mt-4 w-full">
           {sizeLabel ? "Pak in winkelwagen" : "Kies een maat"}
         </button>
         <p className="mt-3 font-sans text-xs text-muted">
           De onderdelen worden als compleet pak toegevoegd in dezelfde maat.
-          Online bestellen volgt binnenkort; gratis retour binnen 14 dagen.
+          Gratis retour binnen 14 dagen; afrekenen met iDEAL volgt binnenkort.
         </p>
       </div>
     </div>

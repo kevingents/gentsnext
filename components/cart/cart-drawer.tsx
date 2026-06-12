@@ -1,0 +1,185 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect } from "react";
+import { useCart, type CartLine } from "@/components/cart/cart-context";
+import { formatEuro } from "@/lib/pricing";
+
+const FREE_SHIPPING_CENTS = 5000; // €50 — instelbaar; gratis verzending-drempel
+
+type Group = { groupId?: string; groupLabel?: string; lines: CartLine[] };
+
+function groupLines(lines: CartLine[]): Group[] {
+  const groups: Group[] = [];
+  const byId = new Map<string, Group>();
+  for (const line of lines) {
+    if (line.groupId) {
+      let g = byId.get(line.groupId);
+      if (!g) {
+        g = { groupId: line.groupId, groupLabel: line.groupLabel, lines: [] };
+        byId.set(line.groupId, g);
+        groups.push(g);
+      }
+      g.lines.push(line);
+    } else {
+      groups.push({ lines: [line] });
+    }
+  }
+  return groups;
+}
+
+export function CartDrawer() {
+  const cart = useCart();
+
+  useEffect(() => {
+    document.body.style.overflow = cart.isOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [cart.isOpen]);
+
+  if (!cart.isOpen) return null;
+
+  const remaining = Math.max(0, FREE_SHIPPING_CENTS - cart.subtotalCents);
+  const pct = Math.min(100, Math.round((cart.subtotalCents / FREE_SHIPPING_CENTS) * 100));
+  const groups = groupLines(cart.lines);
+
+  return (
+    <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Winkelwagen" aria-modal="true">
+      <div className="absolute inset-0 bg-ink/40" onClick={cart.close} />
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer">
+        {/* Kop */}
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <p className="font-display text-lg">Winkelwagen ({cart.count})</p>
+          <button type="button" onClick={cart.close} aria-label="Sluiten" className="font-sans text-sm underline">
+            Sluiten
+          </button>
+        </div>
+
+        {cart.lines.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+            <p className="font-display text-xl font-light">Je winkelwagen is leeg</p>
+            <p className="font-sans text-sm text-muted">Ontdek onze pakken, overhemden en accessoires.</p>
+            <Link href="/collections/pakken" onClick={cart.close} className="btn-primary mt-2">
+              Begin met shoppen
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* Gratis verzending-balk */}
+            <div className="border-b border-line px-5 py-3">
+              {remaining > 0 ? (
+                <p className="font-sans text-xs text-ink-soft">
+                  Nog <strong>{formatEuro(remaining)}</strong> tot gratis verzending
+                </p>
+              ) : (
+                <p className="font-sans text-xs text-success">✓ Je komt in aanmerking voor gratis verzending</p>
+              )}
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
+                <div className="h-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+
+            {/* Regels */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <ul className="space-y-5">
+                {groups.map((g, gi) => (
+                  <li key={g.groupId ?? g.lines[0].id} className={g.groupId ? "border border-line p-3" : ""}>
+                    {g.groupId ? (
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="label-brand">{g.groupLabel ?? "Pak"}</p>
+                        <button
+                          type="button"
+                          onClick={() => cart.removeGroup(g.groupId!)}
+                          className="font-sans text-xs text-muted underline hover:text-ink"
+                        >
+                          Verwijder pak
+                        </button>
+                      </div>
+                    ) : null}
+                    <ul className={g.groupId ? "space-y-3" : ""}>
+                      {g.lines.map((line) => (
+                        <CartLineRow key={line.id} line={line} grouped={Boolean(g.groupId)} />
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Voettekst */}
+            <div className="border-t border-line px-5 py-4">
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-sm text-muted">Subtotaal</span>
+                <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
+              </div>
+              <p className="mt-1 font-sans text-xs text-muted">Incl. btw, excl. verzendkosten</p>
+              <button type="button" disabled className="btn-primary mt-3 w-full">
+                Afrekenen met iDEAL — binnenkort
+              </button>
+              <Link href="/winkelwagen" onClick={cart.close} className="btn-ghost mt-2 w-full">
+                Bekijk winkelwagen
+              </Link>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
+  const cart = useCart();
+  return (
+    <li className="flex gap-3">
+      <Link href={`/products/${line.productHandle}`} onClick={cart.close} className="shrink-0">
+        <div className="relative h-20 w-16 overflow-hidden rounded-card bg-surface">
+          {line.imageUrl ? <Image src={line.imageUrl} alt={line.title} fill sizes="64px" className="object-cover" /> : null}
+        </div>
+      </Link>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            {line.roleLabel ? <p className="font-sans text-[0.65rem] uppercase tracking-wide text-muted">{line.roleLabel}</p> : null}
+            <p className="truncate font-sans text-sm text-ink">{line.title}</p>
+            <p className="font-sans text-xs text-muted">
+              {[line.color, line.size && `maat ${line.size}`].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+          <p className="shrink-0 font-sans text-sm">{formatEuro(line.priceCents * line.qty)}</p>
+        </div>
+        <div className="mt-2 flex items-center gap-3">
+          <div className="flex items-center border border-line">
+            <button
+              type="button"
+              onClick={() => cart.setQty(line.id, line.qty - 1)}
+              aria-label="Minder"
+              className="px-2.5 py-1 font-sans text-sm hover:bg-surface"
+            >
+              −
+            </button>
+            <span className="min-w-[1.5rem] text-center font-sans text-sm">{line.qty}</span>
+            <button
+              type="button"
+              onClick={() => cart.setQty(line.id, line.qty + 1)}
+              aria-label="Meer"
+              className="px-2.5 py-1 font-sans text-sm hover:bg-surface"
+            >
+              +
+            </button>
+          </div>
+          {!grouped ? (
+            <button
+              type="button"
+              onClick={() => cart.remove(line.id)}
+              className="font-sans text-xs text-muted underline hover:text-ink"
+            >
+              Verwijder
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}

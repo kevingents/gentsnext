@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
+import { CartButton } from "@/components/cart/cart-button";
 
 export function SiteHeader() {
   return (
@@ -41,12 +42,7 @@ export function SiteHeader() {
           >
             Maatadvies
           </Link>
-          <Link
-            href="/winkelwagen"
-            className="font-sans text-sm text-ink-soft transition-colors hover:text-ink"
-          >
-            Winkelwagen
-          </Link>
+          <CartButton />
         </div>
       </div>
 

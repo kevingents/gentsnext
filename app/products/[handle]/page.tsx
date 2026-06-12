@@ -85,6 +85,7 @@ export default async function ProductPage({ params }: Props) {
     const st = v.sku ? stockMap.get(v.sku) : undefined;
     entry.sizes.push({
       size: v.size,
+      sku: v.sku,
       priceCents: v.priceCents,
       qty: st?.online ?? 0,
       known: hasStock && Boolean(v.sku),
@@ -223,6 +224,8 @@ export default async function ProductPage({ params }: Props) {
             title={product.title}
             vendor={String(attrs.merk || product.vendor || "")}
             hoofdgroep={String(attrs.hoofdgroep_omschrijving || "")}
+            productHandle={product.handle}
+            image={images[0]?.url || ""}
             colors={colors}
             minPriceCents={minPrice}
             maxPriceCents={maxPrice}
