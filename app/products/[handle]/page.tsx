@@ -7,6 +7,7 @@ import { getProductByHandle } from "@/lib/catalog";
 import { formatEuro, getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
+import { stockForSkus, stockAvailable } from "@/lib/stock";
 
 export const dynamic = "force-dynamic";
 
@@ -57,20 +58,30 @@ export default async function ProductPage({ params }: Props) {
   const referencePrices = await getReferencePrices(variants.map((v) => v.id));
   const referenceCents = referencePrices.get(cheapest.id);
 
-  // Maten gegroepeerd per kleur, in natuurlijke maatvolgorde.
-  const sizesByColor = new Map<string, string[]>();
+  // Voorraad uit de SRS-export (voorkeur boven Shopify). Per maat tonen we of
+  // hij leverbaar is; bij weinig voorraad een "laatste stuks"-hint.
+  const [stockMap, hasStock] = await Promise.all([
+    stockForSkus(variants.map((v) => v.sku).filter(Boolean)),
+    stockAvailable(),
+  ]);
+
+  type SizeCell = { size: string; qty: number; known: boolean };
+  // Maten gegroepeerd per kleur, in natuurlijke maatvolgorde, met voorraad.
+  const sizesByColor = new Map<string, SizeCell[]>();
   for (const v of variants) {
+    if (!v.size) continue;
     const color = v.color || "Standaard";
     const list = sizesByColor.get(color) || [];
-    if (v.size && !list.includes(v.size)) list.push(v.size);
+    if (list.some((c) => c.size === v.size)) continue;
+    const st = v.sku ? stockMap.get(v.sku) : undefined;
+    list.push({ size: v.size, qty: st?.online ?? 0, known: hasStock && Boolean(v.sku) });
     sizesByColor.set(color, list);
   }
-  for (const [color, sizes] of sizesByColor) {
-    sizesByColor.set(
-      color,
-      sortSizes(sizes.map((s) => ({ size: s }))).map((x) => x.size)
-    );
+  for (const [color, cells] of sizesByColor) {
+    sizesByColor.set(color, sortSizes(cells));
   }
+  const anyInStock =
+    !hasStock || [...sizesByColor.values()].some((cells) => cells.some((c) => !c.known || c.qty > 0));
 
   const specs = SPEC_LABELS.map(([key, label]) => ({
     label,
@@ -93,7 +104,9 @@ export default async function ProductPage({ params }: Props) {
       lowPrice: (minPrice / 100).toFixed(2),
       highPrice: (maxPrice / 100).toFixed(2),
       offerCount: variants.length,
-      availability: "https://schema.org/InStock",
+      availability: anyInStock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
     },
   };
 
@@ -191,10 +204,13 @@ export default async function ProductPage({ params }: Props) {
           ) : null}
 
           <div className="mt-7 space-y-5">
-            {[...sizesByColor.entries()].map(([color, sizes]) => (
+            {[...sizesByColor.entries()].map(([color, cells]) => (
               <div key={color}>
                 <div className="flex items-center justify-between">
-                  <p className="font-sans text-sm font-medium">{color}</p>
+                  <p className="font-sans text-sm font-medium">
+                    {color}
+                    {sizesByColor.size === 1 ? "" : ""}
+                  </p>
                   <Link
                     href="/maatadvies"
                     className="font-sans text-xs text-ink underline underline-offset-4"
@@ -202,23 +218,56 @@ export default async function ProductPage({ params }: Props) {
                     Vind mijn maat
                   </Link>
                 </div>
-                {sizes.length ? (
+                {cells.length ? (
                   <ul className="mt-2 flex flex-wrap gap-2">
-                    {sizes.map((size) => (
-                      <li
-                        key={size}
-                        className="min-w-[3rem] border border-line bg-canvas px-3 py-2 text-center font-sans text-sm"
-                      >
-                        {size}
-                      </li>
-                    ))}
+                    {cells.map((cell) => {
+                      const out = cell.known && cell.qty <= 0;
+                      const low = cell.known && cell.qty > 0 && cell.qty <= 3;
+                      return (
+                        <li key={cell.size}>
+                          <span
+                            aria-disabled={out || undefined}
+                            title={
+                              out
+                                ? "Niet op voorraad"
+                                : low
+                                  ? `Nog ${cell.qty} op voorraad`
+                                  : undefined
+                            }
+                            className={`flex min-w-[3rem] flex-col items-center border px-3 py-2 text-center font-sans text-sm ${
+                              out
+                                ? "border-line text-muted line-through decoration-muted"
+                                : "border-line text-ink hover:border-ink"
+                            }`}
+                          >
+                            {cell.size}
+                            {low ? (
+                              <span className="mt-0.5 text-[0.6rem] not-italic text-danger no-underline">
+                                nog {cell.qty}
+                              </span>
+                            ) : null}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : null}
               </div>
             ))}
           </div>
 
-          <button type="button" disabled className="btn-primary mt-8 w-full">
+          {hasStock ? (
+            <p className="mt-4 font-sans text-xs text-muted">
+              {anyInStock ? (
+                <span className="text-success">● Op voorraad</span>
+              ) : (
+                <span>Tijdelijk uitverkocht — vraag naar beschikbaarheid in de winkel.</span>
+              )}{" "}
+              Voorraad op basis van onze winkel- en magazijnvoorraad (SRS).
+            </p>
+          ) : null}
+
+          <button type="button" disabled className="btn-primary mt-6 w-full">
             Online bestellen volgt binnenkort
           </button>
 
