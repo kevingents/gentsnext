@@ -12,6 +12,7 @@ export type CartLine = {
   priceCents: number;
   imageUrl: string;
   qty: number;
+  hoofdgroep?: string; // categorie (voor slimme bijverkoop)
   groupId?: string; // pak-onderdelen delen een groupId
   groupLabel?: string; // bv. "Pak — Stretch zwart"
   roleLabel?: string; // bv. "Colbert"

@@ -355,6 +355,71 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
   };
 }
 
+/* ─────────────────────────── Bijverkoop / cross-sell ──────────────────── */
+
+// Slimme categorie-regels: wat past bij wat ("maak de look compleet").
+const CROSS_SELL: Record<string, string[]> = {
+  Pakken: ["Overhemden", "Stropdassen", "Schoenen", "Pochet"],
+  Colberts: ["Overhemden", "Stropdassen", "Pochet"],
+  Broeken: ["Riemen", "Overhemden", "Schoenen"],
+  Overhemden: ["Stropdassen", "Manchetknopen", "Colberts"],
+  Stropdassen: ["Pochet", "Overhemden", "Dasspelden"],
+  Strikken: ["Pochet", "Overhemden", "Manchetknopen"],
+  Gilets: ["Overhemden", "Stropdassen"],
+  Schoenen: ["Riemen", "Sokken"],
+  Truien: ["Overhemden", "Broeken"],
+  "Polo-shirts": ["Broeken", "Riemen"],
+};
+const DEFAULT_CROSS = ["Overhemden", "Stropdassen", "Pochet"];
+
+/**
+ * Aanbevelingen om "de look compleet te maken": producten uit complementaire
+ * categorieën, met afbeelding, gebalanceerd over de doelcategorieën.
+ */
+export async function getRecommendations(
+  hoofdgroep: string,
+  excludeProductId: string | null,
+  limit = 4
+): Promise<ProductCardData[]> {
+  const db = getDb();
+  const targets = CROSS_SELL[hoofdgroep] || DEFAULT_CROSS;
+  const exclude = excludeProductId || "00000000-0000-0000-0000-000000000000";
+
+  const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string; hg: string }>(sql`
+    select p.id, p.handle, p.title, p.vendor, p.attributes ->> 'hoofdgroep_omschrijving' as hg
+    from ${products} p
+    where p.status = 'active'
+      and p.attributes ->> 'hoofdgroep_omschrijving' in (${sql.join(targets.map((t) => sql`${t}`), sql`, `)})
+      and p.id <> ${exclude}
+      and exists (select 1 from ${productImages} pi where pi.product_id = p.id)
+    order by p.source_created_at desc nulls last
+    limit 60
+  `);
+
+  // Round-robin over de doelcategorieën → variatie (niet 4× hetzelfde type).
+  const byCat = new Map<string, typeof rows.rows>();
+  for (const r of rows.rows) {
+    if (!byCat.has(r.hg)) byCat.set(r.hg, []);
+    byCat.get(r.hg)!.push(r);
+  }
+  const ordered: typeof rows.rows = [];
+  let added = true;
+  while (ordered.length < limit && added) {
+    added = false;
+    for (const t of targets) {
+      const list = byCat.get(t);
+      if (list && list.length) {
+        ordered.push(list.shift()!);
+        added = true;
+        if (ordered.length >= limit) break;
+      }
+    }
+  }
+  return buildProductCards(
+    ordered.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor }))
+  );
+}
+
 /** Lijst van categorieën (hoofdgroep) met telling — voor nav/landing. */
 export async function listCategories(): Promise<{ name: string; count: number }[]> {
   const db = getDb();

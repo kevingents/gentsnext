@@ -59,6 +59,7 @@ export function BuyBox({
       priceCents: selectedSize.priceCents,
       imageUrl: image,
       qty: 1,
+      hoofdgroep,
     });
   }
 

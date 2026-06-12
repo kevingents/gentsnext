@@ -5,7 +5,8 @@ import { JsonLd } from "@/components/json-ld";
 import { Gallery } from "@/components/pdp/gallery";
 import { BuyBox, type BuyColor } from "@/components/pdp/buy-box";
 import { Accordion } from "@/components/pdp/accordion";
-import { getProductByHandle } from "@/lib/catalog";
+import { ProductCard } from "@/components/product-card";
+import { getProductByHandle, getRecommendations } from "@/lib/catalog";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -104,6 +105,8 @@ export default async function ProductPage({ params }: Props) {
   })).filter((s) => s.value);
 
   const breadcrumb = collections.find((c) => !c.handle.includes("all-products")) ?? collections[0];
+  const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
+  const recommendations = await getRecommendations(hoofdgroep, product.id, 4);
 
   const productJsonLd = {
     "@context": "https://schema.org",
@@ -249,6 +252,19 @@ export default async function ProductPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Maak de look compleet — slimme bijverkoop */}
+      {recommendations.length > 0 ? (
+        <section className="mt-20">
+          <p className="label-brand">Maak de look compleet</p>
+          <h2 className="mt-2 text-display-md">Hier draag je het bij</h2>
+          <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+            {recommendations.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

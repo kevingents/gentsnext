@@ -2,9 +2,53 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
 import { formatEuro } from "@/lib/pricing";
+
+type Suggestion = { id: string; handle: string; title: string; imageUrl: string; minPriceCents: number };
+
+function CartSuggestions({ hoofdgroepen, onNavigate }: { hoofdgroepen: string[]; onNavigate: () => void }) {
+  const [items, setItems] = useState<Suggestion[]>([]);
+  const key = hoofdgroepen.join(",");
+
+  useEffect(() => {
+    if (!key) return;
+    let active = true;
+    fetch(`/api/cart-suggestions?hg=${encodeURIComponent(key)}`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => {
+        if (active) setItems((d.items || []).slice(0, 3));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [key]);
+
+  if (!items.length) return null;
+  return (
+    <div className="border-t border-line px-5 py-4">
+      <p className="label-brand mb-3">Maak je outfit af</p>
+      <ul className="space-y-3">
+        {items.map((s) => (
+          <li key={s.id}>
+            <Link href={`/products/${s.handle}`} onClick={onNavigate} className="flex items-center gap-3 group">
+              <div className="relative h-14 w-11 shrink-0 overflow-hidden rounded-card bg-surface">
+                {s.imageUrl ? <Image src={s.imageUrl} alt={s.title} fill sizes="44px" className="object-cover" /> : null}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-sans text-sm text-ink group-hover:underline">{s.title}</p>
+                <p className="font-sans text-xs text-muted">{formatEuro(s.minPriceCents)}</p>
+              </div>
+              <span aria-hidden className="text-muted">+</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 const FREE_SHIPPING_CENTS = 5000; // €50 — instelbaar; gratis verzending-drempel
 
@@ -107,6 +151,12 @@ export function CartDrawer() {
                 ))}
               </ul>
             </div>
+
+            {/* Bijverkoop */}
+            <CartSuggestions
+              hoofdgroepen={[...new Set(cart.lines.map((l) => l.hoofdgroep).filter(Boolean) as string[])]}
+              onNavigate={cart.close}
+            />
 
             {/* Voettekst */}
             <div className="border-t border-line px-5 py-4">

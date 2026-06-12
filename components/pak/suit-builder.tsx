@@ -14,6 +14,12 @@ const ROLE_LABEL: Record<SuitRole, string> = {
   gilet: "Gilet",
 };
 
+const ROLE_HG: Record<SuitRole, string> = {
+  colbert: "Colberts",
+  broek: "Broeken",
+  gilet: "Gilets",
+};
+
 /** Per maat-bucket de (eerst beschikbare) variant van een onderdeel. */
 function sizeIndex(piece: SuitPieceDetail) {
   const map = new Map<string, SuitPieceDetail["sizes"][number]>();
@@ -80,6 +86,7 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
         priceCents: s.variant!.priceCents,
         imageUrl: s.piece.image,
         qty: 1,
+        hoofdgroep: ROLE_HG[s.piece.role],
         groupId,
         groupLabel: `Pak — ${pakTitle}`,
         roleLabel: ROLE_LABEL[s.piece.role],
