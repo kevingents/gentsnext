@@ -7,6 +7,11 @@ import { upsertCatalog, type ImportProduct, type ImportVariant } from "@/lib/cat
  * Dit is de gezaghebbende export (de dagelijkse cache is een lossy index):
  * producten + varianten + ALLE metafields + media + collecties + SEO-velden.
  *
+ * Shopify staat maximaal 5 connections per bulk-query toe, daarom draaien er
+ * TWEE opeenvolgende bulk-operaties die op product-GID worden samengevoegd:
+ *   run 1 (core):  products → metafields + variants → variant-metafields
+ *   run 2 (media): products → media (afbeeldingen + video's) + collections
+ *
  * Vereist env: SHOPIFY_STORE_DOMAIN, SHOPIFY_ADMIN_ACCESS_TOKEN
  * Optioneel: SHOPIFY_API_VERSION (default 2025-01), SHOPIFY_SRS_METAFIELD_NS
  *
@@ -22,7 +27,7 @@ const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || process.env.SHOPIFY_ADMI
 const VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 const SRS_NS = (process.env.SHOPIFY_SRS_METAFIELD_NS || "SRSERP").toLowerCase();
 
-const BULK_QUERY = `
+const BULK_QUERY_CORE = `
 {
   products {
     edges {
@@ -40,12 +45,6 @@ const BULK_QUERY = `
         metafields {
           edges { node { id namespace key value } }
         }
-        media {
-          edges { node { id ... on MediaImage { image { url altText } } } }
-        }
-        collections {
-          edges { node { id handle title } }
-        }
         variants {
           edges {
             node {
@@ -62,6 +61,29 @@ const BULK_QUERY = `
               }
             }
           }
+        }
+      }
+    }
+  }
+}`;
+
+const BULK_QUERY_MEDIA = `
+{
+  products {
+    edges {
+      node {
+        id
+        media {
+          edges {
+            node {
+              id
+              ... on MediaImage { image { url altText } }
+              ... on Video { sources { url } preview { image { url } } }
+            }
+          }
+        }
+        collections {
+          edges { node { id handle title } }
         }
       }
     }
@@ -86,21 +108,19 @@ async function adminGraphql(query: string): Promise<any> {
   return json.data;
 }
 
-async function startBulkOperation(): Promise<void> {
+async function runBulkOperation(label: string, bulkQuery: string): Promise<string> {
   const mutation = `
     mutation {
-      bulkOperationRunQuery(query: """${BULK_QUERY}""") {
+      bulkOperationRunQuery(query: """${bulkQuery}""") {
         bulkOperation { id status }
         userErrors { field message }
       }
     }`;
-  const data = await adminGraphql(mutation);
-  const errors = data?.bulkOperationRunQuery?.userErrors || [];
-  if (errors.length) throw new Error(`bulkOperationRunQuery: ${JSON.stringify(errors)}`);
-  console.log(`Bulk-operatie gestart: ${data.bulkOperationRunQuery.bulkOperation.id}`);
-}
+  const start = await adminGraphql(mutation);
+  const errors = start?.bulkOperationRunQuery?.userErrors || [];
+  if (errors.length) throw new Error(`bulkOperationRunQuery (${label}): ${JSON.stringify(errors)}`);
+  console.log(`Bulk-operatie '${label}' gestart: ${start.bulkOperationRunQuery.bulkOperation.id}`);
 
-async function waitForBulkOperation(): Promise<string> {
   const started = Date.now();
   const MAX_MS = 60 * 60 * 1000;
   for (;;) {
@@ -110,15 +130,17 @@ async function waitForBulkOperation(): Promise<string> {
     const op = data?.currentBulkOperation;
     if (!op) throw new Error("Geen lopende bulk-operatie gevonden.");
     if (op.status === "COMPLETED") {
-      console.log(`Bulk-export klaar: ${op.objectCount} objecten.`);
+      console.log(`Bulk-export '${label}' klaar: ${op.objectCount} objecten.`);
       if (!op.url) throw new Error("Bulk-operatie leverde geen download-URL (lege dataset?).");
-      return op.url;
+      const res = await fetch(op.url);
+      if (!res.ok) throw new Error(`JSONL-download mislukte: HTTP ${res.status}`);
+      return res.text();
     }
     if (op.status === "FAILED" || op.status === "CANCELED") {
-      throw new Error(`Bulk-operatie ${op.status}: ${op.errorCode || "onbekend"}`);
+      throw new Error(`Bulk-operatie '${label}' ${op.status}: ${op.errorCode || "onbekend"}`);
     }
-    if (Date.now() - started > MAX_MS) throw new Error("Bulk-operatie timeout (60 min).");
-    process.stdout.write(`  status: ${op.status} (${op.objectCount} objecten)\r`);
+    if (Date.now() - started > MAX_MS) throw new Error(`Bulk-operatie '${label}' timeout (60 min).`);
+    process.stdout.write(`  ${label}: ${op.status} (${op.objectCount} objecten)\r`);
     await new Promise((r) => setTimeout(r, 5000));
   }
 }
@@ -172,61 +194,74 @@ function gidType(gid: string): string {
 }
 
 async function main() {
-  await startBulkOperation();
-  const url = await waitForBulkOperation();
-
-  console.log("JSONL downloaden…");
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`JSONL-download mislukte: HTTP ${res.status}`);
-  const text = await res.text();
+  /* Bulk-operaties draaien per shop één tegelijk — sequentieel uitvoeren. */
+  const coreText = await runBulkOperation("core", BULK_QUERY_CORE);
+  const mediaText = await runBulkOperation("media", BULK_QUERY_MEDIA);
 
   if (process.argv.includes("--save")) {
     mkdirSync("data", { recursive: true });
-    const file = `data/shopify-bulk-${new Date().toISOString().slice(0, 10)}.jsonl`;
-    writeFileSync(file, text, "utf8");
-    console.log(`Ruwe export bewaard: ${file}`);
+    const stamp = new Date().toISOString().slice(0, 10);
+    writeFileSync(`data/shopify-bulk-core-${stamp}.jsonl`, coreText, "utf8");
+    writeFileSync(`data/shopify-bulk-media-${stamp}.jsonl`, mediaText, "utf8");
+    console.log("Ruwe exports bewaard in ./data/");
   }
 
-  /* ── JSONL parsen: regels routeren op GID-type + __parentId ──────────── */
+  /* ── Run 1 parsen: producten, varianten, metafields ──────────────────── */
   type RawProduct = {
     node: any;
     metafields: Metafield[];
     images: { url: string; alt: string }[];
+    videos: { url: string; preview: string }[];
     collections: { id: string; handle: string; title: string }[];
     variants: { node: any; metafields: Metafield[] }[];
   };
   const productsById = new Map<string, RawProduct>();
-  const variantsById = new Map<string, { product: RawProduct; entry: { node: any; metafields: Metafield[] } }>();
+  const variantsById = new Map<string, { node: any; metafields: Metafield[] }>();
 
-  for (const line of text.split("\n")) {
+  for (const line of coreText.split("\n")) {
     if (!line.trim()) continue;
     const obj = JSON.parse(line);
     const type = gidType(obj.id || "");
     const parentId: string | undefined = obj.__parentId;
 
     if (type === "Product") {
-      productsById.set(obj.id, { node: obj, metafields: [], images: [], collections: [], variants: [] });
-      continue;
-    }
-    if (!parentId) continue;
-
-    if (type === "ProductVariant") {
+      productsById.set(obj.id, {
+        node: obj,
+        metafields: [],
+        images: [],
+        videos: [],
+        collections: [],
+        variants: [],
+      });
+    } else if (type === "ProductVariant" && parentId) {
       const product = productsById.get(parentId);
       if (!product) continue;
       const entry = { node: obj, metafields: [] as Metafield[] };
       product.variants.push(entry);
-      variantsById.set(obj.id, { product, entry });
-    } else if (type === "Metafield") {
+      variantsById.set(obj.id, entry);
+    } else if (type === "Metafield" && parentId) {
       const asVariant = variantsById.get(parentId);
-      if (asVariant) asVariant.entry.metafields.push(obj);
+      if (asVariant) asVariant.metafields.push(obj);
       else productsById.get(parentId)?.metafields.push(obj);
-    } else if (type === "MediaImage") {
-      const product = productsById.get(parentId);
-      if (product && obj.image?.url) {
-        product.images.push({ url: obj.image.url, alt: obj.image.altText || "" });
-      }
+    }
+  }
+
+  /* ── Run 2 parsen: media + collecties, merge op product-GID ──────────── */
+  for (const line of mediaText.split("\n")) {
+    if (!line.trim()) continue;
+    const obj = JSON.parse(line);
+    const type = gidType(obj.id || "");
+    const parentId: string | undefined = obj.__parentId;
+    if (!parentId) continue;
+    const product = productsById.get(parentId);
+    if (!product) continue;
+
+    if (type === "MediaImage" && obj.image?.url) {
+      product.images.push({ url: obj.image.url, alt: obj.image.altText || "" });
+    } else if (type === "Video" && Array.isArray(obj.sources) && obj.sources[0]?.url) {
+      product.videos.push({ url: obj.sources[0].url, preview: obj.preview?.image?.url || "" });
     } else if (type === "Collection") {
-      productsById.get(parentId)?.collections.push({ id: obj.id, handle: obj.handle, title: obj.title });
+      product.collections.push({ id: obj.id, handle: obj.handle, title: obj.title });
     }
   }
 
@@ -234,7 +269,9 @@ async function main() {
   const items: ImportProduct[] = [];
   for (const raw of productsById.values()) {
     const node = raw.node;
-    const attrs = metafieldMap(raw.metafields);
+    const attrs: Record<string, unknown> = metafieldMap(raw.metafields);
+    if (raw.videos.length) attrs._videos = raw.videos;
+
     const variants: ImportVariant[] = raw.variants.map((v, i) => {
       const variantAttrs = metafieldMap(v.metafields);
       const { color, size } = detectColorSize(v.node.selectedOptions || []);
@@ -248,8 +285,9 @@ async function main() {
         size,
         position: Number(v.node.position) || i,
         imageUrl: v.node.image?.url || "",
-        srsArtikelId: variantAttrs["artikel_id"] || attrs["artikel_id"] || "",
-        srsRveArtikelnummer: variantAttrs["rve_artikelnummer"] || attrs["rve_artikelnummer"] || "",
+        srsArtikelId: variantAttrs["artikel_id"] || (attrs["artikel_id"] as string) || "",
+        srsRveArtikelnummer:
+          variantAttrs["rve_artikelnummer"] || (attrs["rve_artikelnummer"] as string) || "",
         attributes: variantAttrs,
       };
     });

@@ -1,4 +1,4 @@
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   products,
@@ -11,12 +11,14 @@ import {
 
 /**
  * Gedeelde upsert-logica voor de twee importpaden:
- *  - scripts/import-from-cache.ts  (bootstrap vanuit de storegents-cache, lossy)
- *  - scripts/import-shopify-bulk.ts (volledige GraphQL Bulk-export)
+ *  - scripts/import-from-cache.ts  (bootstrap vanuit de storegents-cache, lossy
+ *    → draait met preserveExisting zodat rijkere bulk-data nooit degradeert)
+ *  - scripts/import-shopify-bulk.ts (volledige GraphQL Bulk-export, gezaghebbend)
  *
  * Idempotent: opnieuw draaien werkt alles bij op basis van de bevroren
- * Shopify-ID's. Prijswijzigingen leveren automatisch een price_history-rij op
- * (Omnibus 30-dagen-laagste).
+ * Shopify-ID's. Alleen échte prijswijzigingen leveren een price_history-rij op
+ * (Omnibus 30-dagen-laagste) — compareAt-wijzigingen niet, anders verschuift
+ * het vensteranker.
  */
 
 export type ImportVariant = {
@@ -60,6 +62,15 @@ export type ImportProduct = {
   variants: ImportVariant[];
 };
 
+export type UpsertOptions = {
+  /**
+   * true voor het lossy bootstrap-pad: bestaande (rijkere) data wint —
+   * status, SEO-velden en attribute-keys van een eerdere bulk-import worden
+   * niet overschreven of gewist.
+   */
+  preserveExisting?: boolean;
+};
+
 const CHUNK = 100;
 
 function chunked<T>(items: T[], size: number): T[][] {
@@ -83,14 +94,16 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export async function upsertCatalog(items: ImportProduct[]) {
+export async function upsertCatalog(items: ImportProduct[], options: UpsertOptions = {}) {
   const db = getDb();
+  const preserve = options.preserveExisting === true;
   const stats = {
     products: 0,
     variants: 0,
     collections: 0,
     images: 0,
     priceHistoryRows: 0,
+    archivedStaleHandles: 0,
   };
 
   /* ── 1. Collecties ───────────────────────────────────────────────────── */
@@ -102,8 +115,40 @@ export async function upsertCatalog(items: ImportProduct[]) {
       }
     }
   }
+
+  // Pre-pass: handle-renames in Shopify (zelfde GID, nieuwe handle) eerst
+  // bijwerken, anders botst de kale insert op de unique shopify_collection_id.
+  const incomingCollections = [...collectionByHandle.values()];
+  const incomingGids = incomingCollections
+    .map((c) => c.shopifyCollectionId)
+    .filter((v): v is string => Boolean(v));
+  if (incomingGids.length) {
+    const byGid = new Map(
+      incomingCollections.filter((c) => c.shopifyCollectionId).map((c) => [c.shopifyCollectionId!, c])
+    );
+    for (const batch of chunked(incomingGids, 500)) {
+      const existing = await db
+        .select({
+          id: collections.id,
+          handle: collections.handle,
+          shopifyCollectionId: collections.shopifyCollectionId,
+        })
+        .from(collections)
+        .where(inArray(collections.shopifyCollectionId, batch));
+      for (const row of existing) {
+        const incoming = row.shopifyCollectionId ? byGid.get(row.shopifyCollectionId) : undefined;
+        if (incoming && incoming.handle !== row.handle) {
+          await db
+            .update(collections)
+            .set({ handle: incoming.handle, title: incoming.title, updatedAt: sql`now()` })
+            .where(eq(collections.id, row.id));
+        }
+      }
+    }
+  }
+
   const collectionIdByHandle = new Map<string, string>();
-  for (const batch of chunked([...collectionByHandle.values()], CHUNK)) {
+  for (const batch of chunked(incomingCollections, CHUNK)) {
     const rows = await db
       .insert(collections)
       .values(
@@ -119,7 +164,9 @@ export async function upsertCatalog(items: ImportProduct[]) {
         target: collections.handle,
         set: {
           title: sql`excluded.title`,
-          shopifyCollectionId: sql`excluded.shopify_collection_id`,
+          // Bevroren GID's (Squeezely category_ids) nooit wissen met null
+          // uit het bootstrap-pad.
+          shopifyCollectionId: sql`coalesce(excluded.shopify_collection_id, "collections"."shopify_collection_id")`,
           updatedAt: sql`now()`,
         },
       })
@@ -129,6 +176,62 @@ export async function upsertCatalog(items: ImportProduct[]) {
   }
 
   /* ── 2. Producten ────────────────────────────────────────────────────── */
+  // Pre-pass: stale rijen die de binnenkomende handle bezetten onder een
+  // ANDER Shopify-GID (product verwijderd + handle hergebruikt) archiveren,
+  // anders botst de insert op de unique handle-index.
+  const gidByHandle = new Map(items.map((p) => [p.handle, p.shopifyProductId]));
+  for (const batch of chunked([...gidByHandle.keys()], 500)) {
+    const existing = await db
+      .select({ id: products.id, handle: products.handle, shopifyProductId: products.shopifyProductId })
+      .from(products)
+      .where(inArray(products.handle, batch));
+    for (const row of existing) {
+      const incomingGid = gidByHandle.get(row.handle);
+      if (incomingGid && row.shopifyProductId !== incomingGid) {
+        await db
+          .update(products)
+          .set({
+            handle: `${row.handle}-verwijderd-${row.id.slice(0, 8)}`,
+            status: "archived",
+            updatedAt: sql`now()`,
+          })
+          .where(eq(products.id, row.id));
+        stats.archivedStaleHandles += 1;
+      }
+    }
+  }
+
+  const productSet = preserve
+    ? {
+        handle: sql`excluded.handle`,
+        title: sql`excluded.title`,
+        descriptionHtml: sql`excluded.description_html`,
+        vendor: sql`excluded.vendor`,
+        productType: sql`excluded.product_type`,
+        status: sql`"products"."status"`,
+        seoTitle: sql`coalesce(nullif(excluded.seo_title, ''), "products"."seo_title")`,
+        seoDescription: sql`coalesce(nullif(excluded.seo_description, ''), "products"."seo_description")`,
+        // Bestaande (rijkere) attribute-keys winnen; nieuwe keys vullen aan.
+        attributes: sql`excluded.attributes || "products"."attributes"`,
+        sourceCreatedAt: sql`coalesce(excluded.source_created_at, "products"."source_created_at")`,
+        publishedAt: sql`coalesce(excluded.published_at, "products"."published_at")`,
+        updatedAt: sql`now()`,
+      }
+    : {
+        handle: sql`excluded.handle`,
+        title: sql`excluded.title`,
+        descriptionHtml: sql`excluded.description_html`,
+        vendor: sql`excluded.vendor`,
+        productType: sql`excluded.product_type`,
+        status: sql`excluded.status`,
+        seoTitle: sql`excluded.seo_title`,
+        seoDescription: sql`excluded.seo_description`,
+        attributes: sql`excluded.attributes`,
+        sourceCreatedAt: sql`excluded.source_created_at`,
+        publishedAt: sql`excluded.published_at`,
+        updatedAt: sql`now()`,
+      };
+
   const productIdByShopifyId = new Map<string, string>();
   for (const batch of chunked(items, CHUNK)) {
     const rows = await db
@@ -149,23 +252,7 @@ export async function upsertCatalog(items: ImportProduct[]) {
           publishedAt: toDate(p.publishedAt),
         }))
       )
-      .onConflictDoUpdate({
-        target: products.shopifyProductId,
-        set: {
-          handle: sql`excluded.handle`,
-          title: sql`excluded.title`,
-          descriptionHtml: sql`excluded.description_html`,
-          vendor: sql`excluded.vendor`,
-          productType: sql`excluded.product_type`,
-          status: sql`excluded.status`,
-          seoTitle: sql`excluded.seo_title`,
-          seoDescription: sql`excluded.seo_description`,
-          attributes: sql`excluded.attributes`,
-          sourceCreatedAt: sql`excluded.source_created_at`,
-          publishedAt: sql`excluded.published_at`,
-          updatedAt: sql`now()`,
-        },
-      })
+      .onConflictDoUpdate({ target: products.shopifyProductId, set: productSet })
       .returning({ id: products.id, shopifyProductId: products.shopifyProductId });
     for (const row of rows) {
       if (row.shopifyProductId) productIdByShopifyId.set(row.shopifyProductId, row.id);
@@ -182,6 +269,7 @@ export async function upsertCatalog(items: ImportProduct[]) {
 
   const imageRows: (typeof productImages.$inferInsert)[] = [];
   const linkRows: (typeof productCollections.$inferInsert)[] = [];
+  const seenLinks = new Set<string>();
   for (const item of items) {
     const productId = productIdByShopifyId.get(item.shopifyProductId);
     if (!productId) continue;
@@ -190,7 +278,12 @@ export async function upsertCatalog(items: ImportProduct[]) {
     });
     item.collections.forEach((col, i) => {
       const collectionId = collectionIdByHandle.get(col.handle);
-      if (collectionId) linkRows.push({ productId, collectionId, position: i });
+      if (!collectionId) return;
+      // Twee collecties met dezelfde geslugificeerde handle → één koppeling.
+      const key = `${productId}:${collectionId}`;
+      if (seenLinks.has(key)) return;
+      seenLinks.add(key);
+      linkRows.push({ productId, collectionId, position: i });
     });
   }
   for (const batch of chunked(imageRows, 500)) {
@@ -198,30 +291,24 @@ export async function upsertCatalog(items: ImportProduct[]) {
     stats.images += batch.length;
   }
   for (const batch of chunked(linkRows, 500)) {
-    await db.insert(productCollections).values(batch);
+    await db.insert(productCollections).values(batch).onConflictDoNothing();
   }
 
   /* ── 4. Varianten + prijshistorie ────────────────────────────────────── */
   const allVariantShopifyIds = items.flatMap((p) =>
     p.variants.map((v) => v.shopifyVariantId).filter(Boolean)
   );
-  const previousPrice = new Map<string, { priceCents: number; compareAtCents: number | null }>();
+  const previousPrice = new Map<string, number>();
   for (const batch of chunked(allVariantShopifyIds, 500)) {
     const rows = await db
       .select({
         shopifyVariantId: productVariants.shopifyVariantId,
         priceCents: productVariants.priceCents,
-        compareAtCents: productVariants.compareAtCents,
       })
       .from(productVariants)
       .where(inArray(productVariants.shopifyVariantId, batch));
     for (const row of rows) {
-      if (row.shopifyVariantId) {
-        previousPrice.set(row.shopifyVariantId, {
-          priceCents: row.priceCents,
-          compareAtCents: row.compareAtCents,
-        });
-      }
+      if (row.shopifyVariantId) previousPrice.set(row.shopifyVariantId, row.priceCents);
     }
   }
 
@@ -281,11 +368,9 @@ export async function upsertCatalog(items: ImportProduct[]) {
 
     for (const row of rows) {
       const prev = row.shopifyVariantId ? previousPrice.get(row.shopifyVariantId) : undefined;
-      const changed =
-        !prev ||
-        prev.priceCents !== row.priceCents ||
-        (prev.compareAtCents ?? null) !== (row.compareAtCents ?? null);
-      if (changed) {
+      // Alleen échte prijswijzigingen — compareAt-wijzigingen mogen het
+      // Omnibus-vensteranker niet verschuiven.
+      if (prev === undefined || prev !== row.priceCents) {
         historyRows.push({
           variantId: row.id,
           priceCents: row.priceCents,

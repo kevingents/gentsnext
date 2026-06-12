@@ -175,7 +175,8 @@ async function main() {
     `Cache gelezen: ${entries.size} varianten, ${items.length} producten` +
       (skipped ? ` (${skipped} varianten zonder handle/titel overgeslagen)` : "")
   );
-  const stats = await upsertCatalog(items);
+  // preserveExisting: dit lossy pad mag rijkere bulk-data nooit degraderen.
+  const stats = await upsertCatalog(items, { preserveExisting: true });
   console.log("Import klaar:", stats);
 }
 
