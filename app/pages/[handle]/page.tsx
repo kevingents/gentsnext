@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { StoreLocator, type LocatorStore } from "@/components/stores/store-locator";
 import { StorePage } from "@/components/stores/store-page";
+import { LandingPage } from "@/components/landing-page";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
+import { getLanding } from "@/lib/landings";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const { handle } = await params;
   const store = getStoreByPageHandle(handle);
   if (store) return { title: `GENTS ${store.city} — herenmode & pakken`, alternates: { canonical: `/pages/${handle}` } };
+  const landing = getLanding(handle);
+  if (landing)
+    return { title: landing.title, description: landing.seoDescription, alternates: { canonical: `/pages/${handle}` } };
   const mp = getMigratedPage(handle);
   if (mp) return { title: mp.title, alternates: { canonical: `/pages/${handle}` } };
   return { title: fallbackTitle(handle), robots: { index: false } };
@@ -66,7 +71,11 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
   const store = getStoreByPageHandle(handle);
   if (store) return <StorePage store={store} />;
 
-  // 3. Gemigreerde content (service, etiquette, juridisch, over-gents, …)
+  // 3. Storytelling-landingspagina (gelegenheid)
+  const landing = getLanding(handle);
+  if (landing) return <LandingPage landing={landing} />;
+
+  // 4. Gemigreerde content (service, etiquette, juridisch, over-gents, …)
   const mp = getMigratedPage(handle);
   if (mp) {
     return (
