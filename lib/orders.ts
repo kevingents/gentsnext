@@ -1,6 +1,7 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
+import { sendOrderConfirmation } from "@/lib/email";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -173,6 +174,36 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
   if (orderStatus) set.status = orderStatus;
   if (paymentStatus === "paid" || paymentStatus === "authorized") set.paidAt = sql`now()`;
   await db.update(orders).set(set).where(eq(orders.molliePaymentId, molliePaymentId));
+}
+
+/**
+ * Verstuurt de orderbevestiging precies één keer (idempotent t.o.v. dubbele
+ * webhooks). Claimt eerst de mail via een conditionele UPDATE, daarna pas
+ * versturen — zo wint bij een race maar één webhook-call.
+ */
+export async function sendOrderConfirmationOnce(molliePaymentId: string): Promise<void> {
+  const db = getDb();
+  const claimed = await db
+    .update(orders)
+    .set({ confirmationSentAt: sql`now()` })
+    .where(
+      and(
+        eq(orders.molliePaymentId, molliePaymentId),
+        eq(orders.status, "paid"),
+        isNull(orders.confirmationSentAt)
+      )
+    )
+    .returning({ id: orders.id });
+  if (!claimed.length) return; // al verstuurd of (nog) niet betaald
+
+  const orderId = claimed[0].id;
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
+  const ok = await sendOrderConfirmation(order, lines);
+  if (!ok) {
+    // Niet verstuurd → claim terugdraaien zodat een volgende webhook het opnieuw probeert.
+    await db.update(orders).set({ confirmationSentAt: null }).where(eq(orders.id, orderId));
+  }
 }
 
 export async function getOrderByNumber(orderNumber: string) {

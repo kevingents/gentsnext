@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMolliePayment, mollieConfigured } from "@/lib/mollie";
-import { applyPaymentStatus } from "@/lib/orders";
+import { applyPaymentStatus, sendOrderConfirmationOnce } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -32,8 +32,11 @@ export async function POST(req: Request) {
   try {
     const payment = await getMolliePayment(id);
     await applyPaymentStatus(payment.id, payment.status);
-    // TODO (na go-live): op 'paid' de order naar SRS si_weborder pushen
-    // (zelfde patroon als de Bol-pipeline) en voorraad afboeken.
+    if (payment.status === "paid" || payment.status === "authorized") {
+      await sendOrderConfirmationOnce(payment.id);
+      // TODO (na go-live): order naar SRS si_weborder pushen (Bol-patroon) +
+      // voorraad afboeken.
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     // 500 → Mollie retryt later opnieuw (tot 10x over ~26u).
