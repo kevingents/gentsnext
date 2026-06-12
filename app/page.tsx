@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { UspBar } from "@/components/usp-bar";
 import { listCollections } from "@/lib/catalog";
+import { CATEGORIES } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function Home() {
   } catch {
     // DB nog niet bereikbaar — hero + USP tonen, rest valt weg.
   }
-  const featured = collections.slice(0, 8);
+  const featured = CATEGORIES.slice(0, 8);
 
   return (
     <>
@@ -58,7 +59,7 @@ export default async function Home() {
               de dresscode-experts van GENTS.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link href="/collections/pakken" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
+              <Link href="/categorie/pakken" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
                 Shop pakken
               </Link>
               <Link href="/pak-samenstellen" className="btn-ghost !border-canvas !text-canvas hover:!bg-canvas hover:!text-ink">
@@ -144,11 +145,11 @@ export default async function Home() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {featured.map((c) => (
               <Link
-                key={c.id}
-                href={`/collections/${c.handle}`}
+                key={c.slug}
+                href={`/categorie/${c.slug}`}
                 className="flex items-center justify-between border border-line bg-canvas px-5 py-4 font-sans text-sm transition-colors hover:border-ink"
               >
-                <span>{c.title}</span>
+                <span>{c.label}</span>
                 <span aria-hidden className="text-muted">→</span>
               </Link>
             ))}

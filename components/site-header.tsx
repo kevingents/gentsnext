@@ -1,15 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
+import { NAV_CATEGORIES } from "@/lib/categories";
 
-/** Hoofdcategorieën — afgeleid van hoofdgroep_omschrijving in de catalogus. */
-const NAV: { label: string; href: string }[] = [
-  { label: "Pakken", href: "/collections/pakken" },
-  { label: "Colberts", href: "/collections/colberts" },
-  { label: "Pantalons", href: "/collections/broeken" },
-  { label: "Overhemden", href: "/collections/overhemden" },
-  { label: "Smoking", href: "/collections/smoking" },
-  { label: "Accessoires", href: "/collections/accessoires" },
-];
+/** Hoofdcategorieën — volledige listings op hoofdgroep (/categorie/<slug>). */
+const NAV = NAV_CATEGORIES.map((c) => ({ label: c.label, href: `/categorie/${c.slug}` }));
 
 export function SiteHeader() {
   return (

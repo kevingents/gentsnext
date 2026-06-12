@@ -5,8 +5,8 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Shoppen",
     links: [
-      { label: "Pakken", href: "/collections/pakken" },
-      { label: "Overhemden", href: "/collections/overhemden" },
+      { label: "Pakken", href: "/categorie/pakken" },
+      { label: "Overhemden", href: "/categorie/overhemden" },
       { label: "Pak samenstellen", href: "/pak-samenstellen" },
       { label: "Alle collecties", href: "/collections" },
     ],
