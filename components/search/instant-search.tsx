@@ -115,11 +115,14 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
           ) : (
             <>
               <ul className="divide-y divide-line">
-                {items.map((p) => (
+                {items.map((p, i) => (
                   <li key={p.id}>
                     <Link
                       href={`/products/${p.handle}`}
-                      onClick={onClose}
+                      onClick={() => {
+                        track("search_click", { query: q, handle: p.handle, props: { position: i + 1 } });
+                        onClose();
+                      }}
                       className="flex items-center gap-4 py-3 transition-colors hover:bg-surface"
                     >
                       <div className="relative h-14 w-11 shrink-0 overflow-hidden rounded-card bg-surface">
@@ -132,6 +135,11 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
                           {p.hasPriceRange ? "vanaf " : ""}
                           {formatEuro(p.minPriceCents)}
                         </p>
+                        {p.availableSizes && p.availableSizes.length ? (
+                          <p className="mt-0.5 truncate font-sans text-[0.65rem] text-muted">
+                            Maten: {p.availableSizes.slice(0, 8).join(" · ")}
+                          </p>
+                        ) : null}
                       </div>
                     </Link>
                   </li>

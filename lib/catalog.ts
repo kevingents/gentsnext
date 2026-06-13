@@ -12,6 +12,7 @@ import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
+import { isSizeToken, expandSynonyms } from "@/lib/search-helpers";
 
 /** Leeslaag voor de storefront — alle catalogus-queries op één plek. */
 
@@ -46,6 +47,8 @@ export type ProductCardData = {
   colorCount?: number;
   /** Lage voorraad → eerlijke schaarste-badge ("Laatste exemplaren"). */
   lowStock?: boolean;
+  /** Beschikbare maten (op voorraad) — gevuld in zoekresultaten. */
+  availableSizes?: string[];
 };
 
 export async function listCollections() {
@@ -550,37 +553,80 @@ export async function getRecommendations(
   );
 }
 
+export type SearchFacets = {
+  category?: string;
+  colorFamilies?: string[];
+  sizeLabels?: string[];
+  priceMinCents?: number;
+  priceMaxCents?: number;
+};
+
 /**
- * Catalogus-zoek: matcht op titel, vendor, hoofdgroep en handle. Bewust
- * eenvoudig (ILIKE op meerdere woorden) — Meilisearch volgt later.
+ * Catalogus-zoek (Doofinder-stijl): zoekt op titel/vendor/categorie MÉT
+ * - maat-tokens ("overhemd 42" → alleen producten met maat 42 op voorraad),
+ * - typo-tolerantie via pg_trgm (word_similarity),
+ * - synoniemen (colbert=jasje, das=stropdas, broek=pantalon),
+ * - facetten (categorie/kleur/maat/prijs),
+ * - beschikbare maten per resultaat.
+ * Raw SQL met alias p./pv. (geen drizzle-kolomref-mix in subqueries).
  */
-export async function searchProducts(q: string, limit = 24): Promise<ProductCardData[]> {
-  const needle = q.trim();
-  if (!needle) return [];
+export async function searchProducts(q: string, limit = 24, facets: SearchFacets = {}): Promise<ProductCardData[]> {
   const db = getDb();
-  // Splits in woorden; elk woord moet ergens in titel/handle/vendor/hoofdgroep voorkomen.
-  const words = needle.split(/\s+/).filter((w) => w.length >= 2).slice(0, 6);
-  if (!words.length) return [];
-  const conds = words.map(
-    (w) => sql`(
-      ${products.title} ilike ${"%" + w + "%"} or
-      ${products.handle} ilike ${"%" + w + "%"} or
-      ${products.vendor} ilike ${"%" + w + "%"} or
-      ${products.attributes} ->> 'hoofdgroep_omschrijving' ilike ${"%" + w + "%"}
-    )`
-  );
-  const rows = await db
-    .select({
-      id: products.id,
-      handle: products.handle,
-      title: products.title,
-      vendor: products.vendor,
-    })
-    .from(products)
-    .where(and(...visibleProductConds(), ...conds))
-    .orderBy(desc(products.sourceCreatedAt))
-    .limit(limit);
-  return buildProductCards(rows);
+  const raw = q.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+  const sizeTokens = raw.filter(isSizeToken);
+  const wordTokens = raw.filter((t) => !isSizeToken(t) && t.length >= 2);
+  const hasFacets = Boolean(facets.category || facets.colorFamilies?.length || facets.sizeLabels?.length || facets.priceMinCents || facets.priceMaxCents);
+  if (!wordTokens.length && !sizeTokens.length && !hasFacets) return [];
+
+  const HAY = sql`lower(p.title || ' ' || p.vendor || ' ' || coalesce(p.attributes ->> 'hoofdgroep_omschrijving',''))`;
+  const conds: SQL[] = [sql`p.status='active' and p.has_image=true and p.in_stock=true and p.is_group_primary=true`];
+  const scoreParts: SQL[] = [];
+
+  for (const tok of wordTokens) {
+    const syns = expandSynonyms(tok);
+    const ors: SQL[] = [];
+    const scoreOrs: SQL[] = [];
+    for (const s of syns) {
+      ors.push(sql`${HAY} like ${"%" + s + "%"}`);
+      scoreOrs.push(sql`(case when ${HAY} like ${"%" + s + "%"} then 1.0 else 0 end)`);
+      if (s.length >= 4) {
+        ors.push(sql`word_similarity(${s}, ${HAY}) > 0.45`);
+        scoreOrs.push(sql`word_similarity(${s}, ${HAY})`);
+      }
+    }
+    conds.push(sql`(${sql.join(ors, sql` or `)})`);
+    scoreParts.push(sql`greatest(${sql.join(scoreOrs, sql`, `)})`);
+  }
+
+  for (const s of sizeTokens) {
+    conds.push(sql`exists (select 1 from product_variants v where v.product_id = p.id and v.stock_qty > 0 and (lower(v.size) = ${s} or lower(v.size_label) = ${s}))`);
+  }
+
+  if (facets.category) conds.push(sql`p.attributes ->> 'hoofdgroep_omschrijving' = ${facets.category}`);
+  if (facets.colorFamilies?.length)
+    conds.push(sql`exists (select 1 from product_variants v where v.product_id = p.id and v.color_family in (${sql.join(facets.colorFamilies.map((c) => sql`${c}`), sql`, `)}))`);
+  if (facets.sizeLabels?.length)
+    conds.push(sql`exists (select 1 from product_variants v where v.product_id = p.id and v.stock_qty > 0 and v.size_label in (${sql.join(facets.sizeLabels.map((c) => sql`${c}`), sql`, `)}))`);
+  if (facets.priceMinCents) conds.push(sql`exists (select 1 from product_variants v where v.product_id = p.id and v.price_cents >= ${facets.priceMinCents})`);
+  if (facets.priceMaxCents) conds.push(sql`exists (select 1 from product_variants v where v.product_id = p.id and v.price_cents <= ${facets.priceMaxCents})`);
+
+  const scoreExpr = scoreParts.length ? sql.join(scoreParts, sql` + `) : sql`0`;
+
+  const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string; sizes: string[] }>(sql`
+    select p.id, p.handle, p.title, p.vendor,
+      array(select distinct v.size_label from product_variants v where v.product_id = p.id and v.stock_qty > 0 and v.size_label <> '') as sizes
+    from products p
+    where ${sql.join(conds, sql` and `)}
+    order by (${scoreExpr}) desc, p.stock_qty desc
+    limit ${limit}
+  `);
+
+  const cards = await buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
+  const sizesById = new Map(rows.rows.map((r) => [r.id, r.sizes || []]));
+  return cards.map((c) => ({
+    ...c,
+    availableSizes: [...new Set(sizesById.get(c.id) || [])].sort((a, b) => rowSortIndex(a) - rowSortIndex(b)),
+  }));
 }
 
 /**
