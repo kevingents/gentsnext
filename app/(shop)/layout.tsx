@@ -8,6 +8,7 @@ import { CookieNotice } from "@/components/cookie-notice";
 import { SkipLink } from "@/components/skip-link";
 import { HelpButton } from "@/components/help-button";
 import { WelcomePopup } from "@/components/welcome-popup";
+import { Tracker } from "@/components/analytics/tracker";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <HelpButton />
           <CookieNotice />
           <WelcomePopup />
+          <Tracker />
         </div>
       </WishlistProvider>
     </CartProvider>

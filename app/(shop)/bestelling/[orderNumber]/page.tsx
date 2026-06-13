@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getOrderByNumber } from "@/lib/orders";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
+import { TrackPurchase } from "@/components/analytics/track-purchase";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function OrderPage({ params }: Props) {
   return (
     <div className="mx-auto max-w-2xl px-gutter py-16">
       {paid ? <ClearCart /> : null}
+      {paid ? <TrackPurchase orderNumber={order.orderNumber} totalCents={order.totalCents} /> : null}
 
       {paid ? (
         <>

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
+import { track } from "@/lib/track-client";
 import type { ProductCardData } from "@/lib/catalog";
 
 /**
@@ -43,8 +44,10 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
         .then((r) => (r.ok ? r.json() : { items: [] }))
         .then((d) => {
           if (active) {
-            setItems(d.items || []);
+            const results = d.items || [];
+            setItems(results);
             setLoading(false);
+            track(results.length ? "search" : "search_no_results", { query: q, props: { results: results.length } });
           }
         })
         .catch(() => {

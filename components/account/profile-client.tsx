@@ -72,7 +72,10 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
         </div>
         <div className="flex items-center gap-4">
           {customer.isAdmin ? (
-            <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">Instellingen (beheer)</a>
+            <>
+              <a href="/account/analytics" className="font-sans text-sm text-ink underline hover:text-ink">Analytics</a>
+              <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">Instellingen</a>
+            </>
           ) : null}
           <form action="/api/account/logout" method="post">
             <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">Uitloggen</button>

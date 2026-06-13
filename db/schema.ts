@@ -281,6 +281,32 @@ export const orderLines = pgTable(
 );
 
 /**
+ * Storefront-analytics (eigen, privacy-vriendelijk: anonieme session-id, geen
+ * PII). Events: pageview, product_view, search, filter, add_to_cart, purchase,
+ * stock_notify, … Voor trends/bestsellers en afhaak-analyse (Coolblue-stijl).
+ */
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: text("session_id").notNull().default(""),
+    type: text("type").notNull(),
+    path: text("path").notNull().default(""),
+    handle: text("handle").notNull().default(""),
+    query: text("query").notNull().default(""),
+    valueCents: integer("value_cents").notNull().default(0),
+    props: jsonb("props").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("events_type_time_idx").on(t.type, t.createdAt),
+    index("events_handle_idx").on(t.handle),
+    index("events_query_idx").on(t.query),
+    index("events_session_idx").on(t.sessionId),
+  ]
+);
+
+/**
  * Centrale instellingen-store (één rij, id='global'). Alle in de backend
  * instelbare knoppen (verzending, cutoffs, levertijd, toeslag, drempels,
  * veiligheidsvoorraad, …) staan hier als JSON. Zie lib/settings.

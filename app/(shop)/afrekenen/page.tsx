@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useCart } from "@/components/cart/cart-context";
 import { DeliveryOptions } from "@/components/cart/delivery-options";
+import { track } from "@/lib/track-client";
 import { formatEuro } from "@/lib/pricing";
 
 const FIELDS = [
@@ -79,6 +80,7 @@ export default function AfrekenenPage() {
       return;
     }
     setBusy(true);
+    track("checkout_start", { valueCents: totalCents, props: { items: cart.lines.length } });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",

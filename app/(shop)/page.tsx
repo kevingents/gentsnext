@@ -9,7 +9,8 @@ import { JsonLd } from "@/components/json-ld";
 import { getStores } from "@/lib/stores";
 import { getSiteUrl } from "@/lib/site-url";
 import { getSiteSettings } from "@/lib/site-settings";
-import { listCollections, getHighlights } from "@/lib/catalog";
+import { listCollections, getHighlights, getProductsByHandles } from "@/lib/catalog";
+import { getTrendingHandles } from "@/lib/analytics";
 import { CATEGORIES } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,15 @@ export default async function Home() {
   }
   const featured = CATEGORIES.slice(0, 8);
   const settings = await getSiteSettings();
+
+  // "Populair nu" — op basis van echte view/cart-data (analytics), met fallback.
+  let trending: Awaited<ReturnType<typeof getProductsByHandles>> = [];
+  try {
+    const handles = await getTrendingHandles(14, 8);
+    if (handles.length >= 4) trending = (await getProductsByHandles(handles)).slice(0, 4);
+  } catch {
+    /* analytics nog leeg */
+  }
   const siteUrl = getSiteUrl();
   const stores = getStores();
   const orgJsonLd = {
@@ -116,6 +126,21 @@ export default async function Home() {
           ))}
         </div>
       </section>
+
+      {/* ── Strip: Populair nu (uit analytics) ──────────────────────────── */}
+      {trending.length >= 4 ? (
+        <section className="mx-auto max-w-page px-gutter py-16">
+          <header className="mb-8">
+            <p className="label-brand">Trending</p>
+            <h2 className="mt-2 text-display-md">Populair nu</h2>
+          </header>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+            {trending.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── Strip: Pakken (nieuwste) ────────────────────────────────────── */}
       {pakHighlights.length > 0 ? (

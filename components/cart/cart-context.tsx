@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { track } from "@/lib/track-client";
 
 export type CartLine = {
   id: string; // uniek per variant (+ groep): sku of sku::groupId
@@ -67,6 +68,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const add = useCallback((line: Omit<CartLine, "id">) => {
     const id = lineId(line);
+    track("add_to_cart", { handle: line.productHandle, valueCents: line.priceCents * line.qty });
     setLines((prev) => {
       const existing = prev.find((l) => l.id === id);
       if (existing) return prev.map((l) => (l.id === id ? { ...l, qty: l.qty + line.qty } : l));
