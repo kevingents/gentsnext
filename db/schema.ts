@@ -285,7 +285,10 @@ export const stockNotifications = pgTable(
   "stock_notifications",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
+    email: text("email").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    /** 'email' | 'whatsapp' | 'both'. */
+    channel: text("channel").notNull().default("email"),
     productHandle: text("product_handle").notNull(),
     productTitle: text("product_title").notNull().default(""),
     /** Specifieke variant/maat; leeg = elke maat van het product. */
@@ -297,7 +300,7 @@ export const stockNotifications = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("stock_notifications_unique").on(t.email, t.productHandle, t.sku),
+    uniqueIndex("stock_notifications_unique").on(t.email, t.phone, t.productHandle, t.sku),
     index("stock_notifications_status_idx").on(t.status),
     index("stock_notifications_sku_idx").on(t.sku),
     index("stock_notifications_handle_idx").on(t.productHandle),

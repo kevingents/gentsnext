@@ -13,6 +13,8 @@ export async function POST(req: Request) {
   }
   const res = await createStockNotification({
     email: String(body.email || ""),
+    phone: String(body.phone || ""),
+    channel: String(body.channel || "email"),
     productHandle: String(body.productHandle || ""),
     productTitle: String(body.productTitle || ""),
     sku: String(body.sku || ""),

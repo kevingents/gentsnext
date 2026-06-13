@@ -1,8 +1,9 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockNotifications, products, productVariants } from "@/db/schema";
 import { emailConfigured } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
+import { sendBackInStockWhatsApp, normalizePhone } from "@/lib/whatsapp";
 
 /**
  * Terug-op-voorraad-notificaties. Klant laat e-mail achter op een uitverkocht
@@ -11,22 +12,34 @@ import { getSiteUrl } from "@/lib/site-url";
  */
 
 export async function createStockNotification(input: {
-  email: string;
+  email?: string;
+  phone?: string;
+  channel?: string; // 'email' | 'whatsapp' | 'both'
   productHandle: string;
   productTitle?: string;
   sku?: string;
   size?: string;
   color?: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const email = input.email.trim().toLowerCase();
-  if (!/.+@.+\..+/.test(email)) return { ok: false, error: "ongeldig e-mailadres" };
   if (!input.productHandle) return { ok: false, error: "geen product" };
+  const channel = input.channel === "whatsapp" || input.channel === "both" ? input.channel : "email";
+
+  const email = (input.email || "").trim().toLowerCase();
+  const phone = normalizePhone(input.phone || "") || "";
+
+  const wantsEmail = channel === "email" || channel === "both";
+  const wantsWhats = channel === "whatsapp" || channel === "both";
+  if (wantsEmail && !/.+@.+\..+/.test(email)) return { ok: false, error: "ongeldig e-mailadres" };
+  if (wantsWhats && !phone) return { ok: false, error: "ongeldig telefoonnummer" };
+
   const db = getDb();
-  // Idempotent: zelfde e-mail + product + sku → niet dubbel.
+  // Idempotent: zelfde contact + product + sku → niet dubbel.
   await db
     .insert(stockNotifications)
     .values({
       email,
+      phone,
+      channel,
       productHandle: input.productHandle,
       productTitle: input.productTitle || "",
       sku: input.sku || "",
@@ -79,8 +92,18 @@ export async function processStockNotifications(): Promise<number> {
     const backInStock = n.sku ? (skuStock.get(n.sku) ?? 0) > 0 : productInStock.get(n.productHandle) === true;
     if (!backInStock) continue;
 
-    const ok = await sendBackInStockEmail(n, site);
-    if (ok) {
+    const wantsEmail = (n.channel === "email" || n.channel === "both") && n.email;
+    const wantsWhats = (n.channel === "whatsapp" || n.channel === "both") && n.phone;
+    const url = `${site}/products/${n.productHandle}`;
+    const title = n.productTitle || "Je product";
+
+    let any = false;
+    if (wantsEmail) any = (await sendBackInStockEmail(n, site)) || any;
+    if (wantsWhats) {
+      any = (await sendBackInStockWhatsApp(n.phone, { productTitle: title, size: n.size || undefined, url })) || any;
+    }
+
+    if (any) {
       await db
         .update(stockNotifications)
         .set({ status: "notified", notifiedAt: sql`now()` })
