@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-type Branch = { store: string; qty: number };
+type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: string };
 
 /**
  * "Vandaag afhalen in winkel X". Toont aantal winkels met voorraad voor de
@@ -13,7 +13,11 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
   const [open, setOpen] = useState(false);
   const available = branches.filter((b) => b.qty > 0);
   if (!available.length) return null;
-  const sorted = [...branches].sort((a, b) => b.qty - a.qty);
+  const openNow = available.filter((b) => b.openNow).length;
+  // Open + op voorraad eerst.
+  const sorted = [...branches].sort(
+    (a, b) => Number(b.openNow) - Number(a.openNow) || b.qty - a.qty
+  );
 
   return (
     <>
@@ -31,7 +35,8 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
             <span className="flex flex-col gap-0.5">
               <span className="font-medium text-ink">Ophalen in een winkel</span>
               <span className="text-xs text-success">
-                ● Vandaag op voorraad in {available.length} {available.length === 1 ? "winkel" : "winkels"}
+                ● Op voorraad in {available.length} {available.length === 1 ? "winkel" : "winkels"}
+                {openNow > 0 ? <span className="text-muted"> · {openNow} nu open</span> : null}
               </span>
             </span>
           </span>
@@ -58,13 +63,18 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
                 const inStock = b.qty > 0;
                 return (
                   <li key={b.store} className="flex items-center justify-between gap-3 px-5 py-3 font-sans text-sm">
-                    <span className="text-ink">{b.store}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-ink">{b.store}</span>
+                      {b.openLabel ? (
+                        <span className={`text-xs ${b.openNow ? "text-success" : "text-muted"}`}>{b.openLabel}</span>
+                      ) : null}
+                    </span>
                     {inStock ? (
-                      <span className="text-xs text-success">
+                      <span className="shrink-0 text-xs text-success">
                         ● {b.qty > 5 ? "Op voorraad" : `Nog ${b.qty}`}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted">Niet op voorraad</span>
+                      <span className="shrink-0 text-xs text-muted">Niet op voorraad</span>
                     )}
                   </li>
                 );

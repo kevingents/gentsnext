@@ -57,6 +57,30 @@ export function openStatus(store: Store): { open: boolean; today: string; todayR
   return { open, today: day, todayRange };
 }
 
+/**
+ * Afhaal-info voor een winkel (op stad): is 'ie nu open, en een kort label
+ * ("Open tot 18:00" / "Opent om 10:00" / "Vandaag gesloten"). Voor click &
+ * collect, zodat de klant weet of hij er vandaag nog terecht kan.
+ */
+export function pickupInfoByCity(city: string): { openNow: boolean; label: string } | null {
+  const store = (storesData as Store[]).find((s) => s.city.toLowerCase() === city.toLowerCase());
+  if (!store) return null;
+  const { day, minutes } = nowNL();
+  const range = (store.hours[day] || "").trim();
+  const parsed = parseRange(range);
+  if (!parsed) return { openNow: false, label: "Vandaag gesloten" };
+  const [start, end] = parsed;
+  if (minutes < start) return { openNow: false, label: `Opent om ${fmtMin(start)}` };
+  if (minutes >= end) return { openNow: false, label: "Vandaag gesloten" };
+  return { openNow: true, label: `Open tot ${fmtMin(end)}` };
+}
+
+function fmtMin(m: number): string {
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${h}:${String(mm).padStart(2, "0")}`;
+}
+
 export function mapsEmbedUrl(store: Store): string {
   const q = encodeURIComponent(`${store.address}, ${store.city}`);
   return `https://www.google.com/maps?q=${q}&output=embed`;

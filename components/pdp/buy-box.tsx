@@ -20,7 +20,7 @@ export type BuySize = {
   priceCents: number;
   qty: number;
   known: boolean;
-  branches?: { store: string; qty: number }[];
+  branches?: { store: string; qty: number; openNow?: boolean; openLabel?: string }[];
 };
 
 type Props = {

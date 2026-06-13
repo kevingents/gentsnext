@@ -16,6 +16,8 @@ import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
 import { categoryByHoofdgroep } from "@/lib/categories";
 import { parseRating } from "@/lib/reviews";
+import { pickupInfoByCity } from "@/lib/stores";
+import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -99,7 +101,18 @@ export default async function ProductPage({ params }: Props) {
       priceCents: v.priceCents,
       qty: st?.online ?? 0,
       known: hasStock && Boolean(v.sku),
-      branches: st?.byBranch.map((b) => ({ store: b.store, qty: b.qty })) ?? [],
+      // Alleen retail-winkels zijn afhaalbaar (geen magazijn); verrijk met
+      // openingstijden zodat de klant ziet of hij er vandaag nog terecht kan.
+      branches:
+        st?.byBranch
+          .filter((b) => Boolean(BRANCH_CITY[b.branchId]))
+          .map((b) => {
+            const city = BRANCH_CITY[b.branchId];
+            const info = pickupInfoByCity(city);
+            return { store: b.store, qty: b.qty, openNow: info?.openNow ?? false, openLabel: info?.label ?? "" };
+          })
+          // open winkels eerst, dan op voorraad
+          .sort((a, b) => Number(b.openNow) - Number(a.openNow) || b.qty - a.qty) ?? [],
     });
   }
   const colors: BuyColor[] = [...colorMap.values()].map((c) => ({
