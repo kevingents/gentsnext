@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getOrderForViewer } from "@/lib/orders";
+import { getOrderForViewer, getPostPurchase } from "@/lib/orders";
 import { getSessionCustomer } from "@/lib/account";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
 import { TrackPurchase } from "@/components/analytics/track-purchase";
+import { CareBlock } from "@/components/pdp/care-material";
+import { ProductCard } from "@/components/product-card";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,9 @@ export default async function OrderPage({ params, searchParams }: Props) {
   const paid = order.status === "paid";
   const pending = order.status === "open";
   const failed = ["failed", "expired", "canceled"].includes(order.status);
+
+  // Post-purchase: verzorgingstips + cross-sell (alleen bij een betaalde order).
+  const extras = paid ? await getPostPurchase(lines.map((l) => l.productHandle)) : null;
 
   return (
     <div className="mx-auto max-w-2xl px-gutter py-16">
@@ -91,7 +96,37 @@ export default async function OrderPage({ params, searchParams }: Props) {
         <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>Totaal</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
       </dl>
 
-      <Link href="/" className="btn-ghost mt-8">
+      {paid && extras?.careItems.length ? (
+        <section className="mt-12 border-t border-line pt-8">
+          <p className="label-brand">Zo geniet je er lang van</p>
+          <h2 className="mt-2 font-display text-xl">Verzorgingstips voor je aankoop</h2>
+          <div className="mt-4"><CareBlock items={extras.careItems} prose={[]} /></div>
+        </section>
+      ) : null}
+
+      {paid && !order.customerId ? (
+        <section className="mt-10 flex flex-col items-start gap-3 rounded-card bg-surface p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-display text-lg">Maak een account aan</p>
+            <p className="mt-1 font-sans text-sm text-ink-soft">Volg je bestelling, bewaar je maten en bestel een volgende keer sneller.</p>
+          </div>
+          <Link href="/account/login" className="btn-primary shrink-0">Account aanmaken</Link>
+        </section>
+      ) : null}
+
+      {paid && extras?.recommendations.length ? (
+        <section className="mt-12">
+          <p className="label-brand">Maak je outfit compleet</p>
+          <h2 className="mt-2 font-display text-xl">Hier draag je het bij</h2>
+          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+            {extras.recommendations.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <Link href="/" className="btn-ghost mt-12">
         Verder winkelen
       </Link>
     </div>

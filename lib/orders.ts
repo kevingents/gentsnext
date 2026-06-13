@@ -2,6 +2,8 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
+import { parseCare, type CareItem } from "@/lib/care";
+import { getRecommendations, type ProductCardData } from "@/lib/catalog";
 import { sendOrderConfirmation } from "@/lib/email";
 import { allocateOrder } from "@/lib/fulfillment";
 import { pushOrderToSRS } from "@/lib/srs";
@@ -353,4 +355,31 @@ export async function getOrderForViewer(
   const tokenOk = tokenEquals(opts.token, data.order.accessToken);
   const ownerOk = !!opts.customerId && data.order.customerId === opts.customerId;
   return tokenOk || ownerOk ? data : null;
+}
+
+/** Post-purchase extra's voor de bedankpagina: verzorgingstips + cross-sell. */
+export async function getPostPurchase(
+  handles: string[]
+): Promise<{ careItems: CareItem[]; recommendations: ProductCardData[] }> {
+  const uniq = [...new Set(handles.filter(Boolean))];
+  if (!uniq.length) return { careItems: [], recommendations: [] };
+  const db = getDb();
+  const rows = await db.execute<{ id: string; hg: string; was: string; mat: string }>(sql`
+    select id, attributes->>'hoofdgroep_omschrijving' hg, attributes->>'wasvoorschrift' was, attributes->>'materiaal' mat
+    from products where handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)})
+  `);
+  const seen = new Set<string>();
+  const careItems: CareItem[] = [];
+  for (const r of rows.rows) {
+    for (const ci of parseCare(r.was, { hoofdgroep_omschrijving: r.hg, materiaal: r.mat })) {
+      if (!seen.has(ci.key)) {
+        seen.add(ci.key);
+        careItems.push(ci);
+      }
+    }
+  }
+  const hg = rows.rows[0]?.hg || "";
+  const excludeId = rows.rows[0]?.id || "";
+  const recommendations = hg ? await getRecommendations(hg, excludeId, 4) : [];
+  return { careItems: careItems.slice(0, 6), recommendations };
 }
