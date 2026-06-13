@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLook, resolveLook, LOOKS } from "@/lib/looks";
+import { getLookBySlug, getAllLooks, resolveLook } from "@/lib/looks";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 
 export const dynamic = "force-dynamic";
@@ -10,17 +10,17 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const look = getLook(slug);
+  const look = await getLookBySlug(slug);
   if (!look) return {};
   return { title: `${look.title} — Shop the look`, description: look.subtitle, alternates: { canonical: `/looks/${slug}` } };
 }
 
 export default async function LookPage({ params }: Props) {
   const { slug } = await params;
-  const look = getLook(slug);
+  const look = await getLookBySlug(slug);
   if (!look) notFound();
   const resolved = await resolveLook(look);
-  const others = LOOKS.filter((l) => l.slug !== slug);
+  const others = (await getAllLooks()).filter((l) => l.slug !== slug);
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">

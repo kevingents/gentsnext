@@ -1,10 +1,12 @@
 import { getProductsByHandles, type ProductCardData } from "@/lib/catalog";
+import { getSanityLooks, getSanityLook, urlForImage } from "@/lib/sanity";
 
 /**
  * "Shop the look" — gecureerde outfits met klikbare hotspots op een modelfoto
  * (Mr Marvis-stijl, eigen GENTS-twist: gelegenheid-first + dresscode-laag).
- * Voorlopig statisch hier; klaar om naar een Sanity-singleton 'look' te
- * verhuizen (zelfde shape). Hotspot-posities zijn percentages op de foto.
+ * Bron: Sanity ('look'-documenten, beheerbaar op /studio); valt terug op de
+ * statische LOOKS hieronder als Sanity (nog) geen looks heeft. Hotspot-posities
+ * zijn percentages op de foto.
  */
 
 export type Hotspot = { x: number; y: number; handle: string; label?: string };
@@ -46,6 +48,44 @@ export const LOOKS: Look[] = [
   },
 ];
 
+/** Sanity-look → component-vorm (afbeelding via Sanity-CDN). */
+function fromSanity(s: {
+  title: string;
+  slug: string;
+  occasion?: string;
+  subtitle?: string;
+  image?: unknown;
+  hotspots?: { label?: string; handle?: string; x?: number; y?: number }[];
+}): Look | null {
+  const image = urlForImage(s.image, 1200);
+  if (!image) return null;
+  return {
+    slug: s.slug,
+    title: s.title,
+    subtitle: s.subtitle || "",
+    occasion: s.occasion || "",
+    image,
+    hotspots: (s.hotspots || [])
+      .filter((h) => h.handle)
+      .map((h) => ({ x: Number(h.x ?? 50), y: Number(h.y ?? 50), handle: h.handle!, label: h.label })),
+  };
+}
+
+/** Alle looks — uit Sanity (beheerbaar), met statische fallback. */
+export async function getAllLooks(): Promise<Look[]> {
+  const sanity = await getSanityLooks();
+  const fromCms = (sanity || []).map(fromSanity).filter(Boolean) as Look[];
+  return fromCms.length ? fromCms : LOOKS;
+}
+
+/** Eén look op slug — Sanity eerst, dan statisch. */
+export async function getLookBySlug(slug: string): Promise<Look | null> {
+  const s = await getSanityLook(slug);
+  const fromCms = s ? fromSanity(s) : null;
+  return fromCms ?? LOOKS.find((l) => l.slug === slug) ?? null;
+}
+
+/** Synchrone statische lookup (alleen fallback-data). */
 export function getLook(slug: string): Look | null {
   return LOOKS.find((l) => l.slug === slug) ?? null;
 }

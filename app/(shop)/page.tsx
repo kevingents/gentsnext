@@ -11,7 +11,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { getSiteSettings } from "@/lib/site-settings";
 import { listCollections, getHighlights, getProductsByHandles } from "@/lib/catalog";
 import { getTrendingHandles } from "@/lib/analytics";
-import { LOOKS } from "@/lib/looks";
+import { getAllLooks } from "@/lib/looks";
 import { CATEGORIES } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +51,8 @@ export default async function Home() {
   }
   const featured = CATEGORIES.slice(0, 8);
   const settings = await getSiteSettings();
+  const looks = await getAllLooks();
+  const heroLook = looks[0] ?? null;
 
   // "Populair nu" — op basis van echte view/cart-data (analytics), met fallback.
   let trending: Awaited<ReturnType<typeof getProductsByHandles>> = [];
@@ -268,10 +270,11 @@ export default async function Home() {
       ) : null}
 
       {/* ── Shop the look ───────────────────────────────────────────────── */}
+      {heroLook ? (
       <section className="relative my-4 overflow-hidden">
         <div className="mx-auto grid max-w-page items-center gap-8 px-gutter py-10 md:grid-cols-2">
           <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface md:max-h-[520px]">
-            <Image src={LOOKS[0].image} alt={LOOKS[0].title} fill sizes="(max-width:768px) 100vw, 50vw" className="object-cover" />
+            <Image src={heroLook.image} alt={heroLook.title} fill sizes="(max-width:768px) 100vw, 50vw" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
           </div>
           <div>
@@ -285,6 +288,7 @@ export default async function Home() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <RecentStrip />
       <TrustBlock />

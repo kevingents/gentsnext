@@ -80,3 +80,26 @@ export function getSanityPage(slug: string) {
     { slug }
   );
 }
+
+export type SanityLook = {
+  title: string;
+  slug: string;
+  occasion?: string;
+  subtitle?: string;
+  image?: any;
+  order?: number;
+  hotspots?: { label?: string; handle?: string; x?: number; y?: number }[];
+};
+
+const LOOK_PROJECTION = `{
+  title, "slug": slug.current, occasion, subtitle, image, order,
+  hotspots[]{label, handle, x, y}
+}`;
+
+export function getSanityLooks() {
+  return sanityFetch<SanityLook[]>(`*[_type == "look" && defined(slug.current)] | order(order asc, _createdAt desc) ${LOOK_PROJECTION}`);
+}
+
+export function getSanityLook(slug: string) {
+  return sanityFetch<SanityLook>(`*[_type == "look" && slug.current == $slug][0] ${LOOK_PROJECTION}`, { slug });
+}
