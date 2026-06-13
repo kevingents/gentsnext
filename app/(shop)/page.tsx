@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { UspBar } from "@/components/usp-bar";
-import { listCollections } from "@/lib/catalog";
+import { ProductCard } from "@/components/product-card";
+import { listCollections, getHighlights } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
@@ -28,8 +29,14 @@ function findCollection(
 
 export default async function Home() {
   let collections: Awaited<ReturnType<typeof listCollections>> = [];
+  let pakHighlights: Awaited<ReturnType<typeof getHighlights>> = [];
+  let overhemdHighlights: Awaited<ReturnType<typeof getHighlights>> = [];
   try {
-    collections = await listCollections();
+    [collections, pakHighlights, overhemdHighlights] = await Promise.all([
+      listCollections(),
+      getHighlights("Pakken", 4),
+      getHighlights("Overhemden", 4),
+    ]);
   } catch {
     // DB nog niet bereikbaar — hero + USP tonen, rest valt weg.
   }
@@ -103,6 +110,26 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* ── Strip: Pakken (nieuwste) ────────────────────────────────────── */}
+      {pakHighlights.length > 0 ? (
+        <section className="mx-auto max-w-page px-gutter py-16">
+          <header className="mb-8 flex items-end justify-between">
+            <div>
+              <p className="label-brand">Pakken</p>
+              <h2 className="mt-2 text-display-md">Nieuw binnen</h2>
+            </div>
+            <Link href="/collections/pakken" className="hidden font-sans text-sm text-ink underline underline-offset-4 sm:inline">
+              Alle pakken bekijken
+            </Link>
+          </header>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+            {pakHighlights.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {/* ── Pak samenstellen ──────────────────────────────────────────── */}
       <section className="bg-surface">
         <div className="mx-auto grid max-w-page items-center gap-10 px-gutter py-16 md:grid-cols-2">
@@ -132,6 +159,51 @@ export default async function Home() {
               </Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Strip: Overhemden ─────────────────────────────────────────── */}
+      {overhemdHighlights.length > 0 ? (
+        <section className="mx-auto max-w-page px-gutter py-16">
+          <header className="mb-8 flex items-end justify-between">
+            <div>
+              <p className="label-brand">Overhemden</p>
+              <h2 className="mt-2 text-display-md">De basis van elke outfit</h2>
+            </div>
+            <Link href="/collections/overhemden" className="hidden font-sans text-sm text-ink underline underline-offset-4 sm:inline">
+              Alle overhemden
+            </Link>
+          </header>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+            {overhemdHighlights.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── Etiquette-blok (dresscode-expert positionering) ───────────── */}
+      <section className="relative isolate overflow-hidden bg-ink text-canvas">
+        <Image
+          src="/brand/brand-model-tuxedo.jpg"
+          alt=""
+          fill
+          sizes="100vw"
+          className="object-cover opacity-40"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/30" />
+        <div className="relative mx-auto max-w-page px-gutter py-16">
+          <p className="label-brand !text-canvas/70">De GENTS-gids</p>
+          <h2 className="mt-2 max-w-xl text-display-md !text-canvas">
+            Twijfel je over de juiste dresscode?
+          </h2>
+          <p className="mt-4 max-w-lg font-sans text-canvas/85">
+            Black tie, white tie, smart casual of jacquet — onze stylisten leggen
+            elke dresscode uit, zodat je nooit hoeft te twijfelen wat je aantrekt.
+          </p>
+          <Link href="/pages/etiquette" className="btn-primary mt-7 !bg-canvas !text-ink hover:!bg-surface">
+            Bekijk de dresscode-gids
+          </Link>
         </div>
       </section>
 

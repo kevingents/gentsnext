@@ -420,6 +420,24 @@ export async function getRecommendations(
   );
 }
 
+/**
+ * Een "highlight"-strip voor de homepage: producten uit een hoofdgroep met
+ * beeld, gesorteerd op nieuwste eerst. Voor "nieuw binnen" en categorie-strips.
+ */
+export async function getHighlights(category: string, limit = 4): Promise<ProductCardData[]> {
+  const db = getDb();
+  const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
+    select p.id, p.handle, p.title, p.vendor
+    from ${products} p
+    where p.status = 'active'
+      and p.attributes ->> 'hoofdgroep_omschrijving' = ${category}
+      and exists (select 1 from ${productImages} pi where pi.product_id = p.id)
+    order by p.source_created_at desc nulls last
+    limit ${limit}
+  `);
+  return buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
+}
+
 /** Lijst van categorieën (hoofdgroep) met telling — voor nav/landing. */
 export async function listCategories(): Promise<{ name: string; count: number }[]> {
   const db = getDb();
