@@ -33,7 +33,10 @@ async function runVTON(modelImage: string, garmentImage: string, category: strin
   const start = await fetch(`${API}/run`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model_image: modelImage, garment_image: garmentImage, category }),
+    body: JSON.stringify({
+      model_name: "tryon-v1.6",
+      inputs: { model_image: modelImage, garment_image: garmentImage, category },
+    }),
   });
   if (!start.ok) {
     console.error("  FASHN start-fout:", start.status, (await start.text()).slice(0, 160));
@@ -80,12 +83,12 @@ async function main() {
   const db = getDb();
 
   // Zichtbare apparel-producten met flat-foto, nog zonder modelfoto.
-  const rows = await db.execute<{ id: string; handle: string; hg: string; img: string }>(sql`
-    select p.id, p.handle, p.attributes->>'hoofdgroep_omschrijving' hg,
+  const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
+    select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
       (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary and p.model_image_url=''
-      and p.attributes->>'hoofdgroep_omschrijving' = any(${Object.keys(CATEGORY)})
+      and p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(Object.keys(CATEGORY).map((k) => sql`${k}`), sql`, `)})
     order by p.stock_qty desc
     limit ${limit}
   `);
@@ -102,7 +105,7 @@ async function main() {
     if (reg) {
       const u = await toBlob(reg, `ai-models/${r.handle}-model.jpg`, blobToken);
       if (u) {
-        await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.handle} — model` }).where(eq(products.id, r.id));
+        await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.title} — op model` }).where(eq(products.id, r.id));
         done++;
       }
     }
@@ -114,7 +117,7 @@ async function main() {
         if (u) {
           await db
             .insert(productSizeMedia)
-            .values({ productId: r.id, threshold: "XXL", url: u, alt: `${r.handle} — grote maat` })
+            .values({ productId: r.id, threshold: "XXL", url: u, alt: `${r.title} — grote maat` })
             .onConflictDoUpdate({ target: productSizeMedia.productId, set: { url: u, updatedAt: sql`now()` } });
         }
       }
