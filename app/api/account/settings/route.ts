@@ -38,6 +38,24 @@ export async function POST(req: Request) {
     }
     patch.branchCutoffs = bc;
   }
+  if (body.modelLook && typeof body.modelLook === "object") {
+    const ml = body.modelLook as { enabled?: unknown; items?: unknown };
+    const items = (Array.isArray(ml.items) ? ml.items : [])
+      .slice(0, 8)
+      .map((raw) => {
+        const o = (raw || {}) as Record<string, unknown>;
+        const clamp = (n: unknown) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+        return {
+          handle: String(o.handle ?? "").trim().slice(0, 120),
+          label: String(o.label ?? "").trim().slice(0, 40),
+          hoofdgroep: String(o.hoofdgroep ?? "").trim().slice(0, 60),
+          x: clamp(o.x),
+          y: clamp(o.y),
+        };
+      })
+      .filter((it) => it.handle);
+    patch.modelLook = { enabled: ml.enabled !== false, items };
+  }
 
   const next = await updateSettings(patch);
   return NextResponse.json({ ok: true, settings: next });

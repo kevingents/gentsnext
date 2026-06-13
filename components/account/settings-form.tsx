@@ -18,6 +18,10 @@ type Settings = {
   warehouseSafetyStock: number;
   protectUnderstockedRetail: boolean;
   searchSynonyms: string;
+  modelLook: {
+    enabled: boolean;
+    items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
+  };
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan). */
@@ -66,6 +70,20 @@ export function SettingsForm({ initial }: { initial: Settings }) {
     if (!Number.isFinite(n)) return;
     const val = kind === "euro" ? Math.round(n * 100) : Math.round(n);
     setS((p) => ({ ...p, [key]: val }));
+  }
+
+  type LookItem = Settings["modelLook"]["items"][number];
+  function setLookItem(i: number, key: keyof LookItem, val: string | number) {
+    setS((p) => ({
+      ...p,
+      modelLook: { ...p.modelLook, items: p.modelLook.items.map((it, idx) => (idx === i ? { ...it, [key]: val } : it)) },
+    }));
+  }
+  function addLookItem() {
+    setS((p) => ({ ...p, modelLook: { ...p.modelLook, items: [...p.modelLook.items, { handle: "", label: "", hoofdgroep: "", x: 50, y: 50 }] } }));
+  }
+  function removeLookItem(i: number) {
+    setS((p) => ({ ...p, modelLook: { ...p.modelLook, items: p.modelLook.items.filter((_, idx) => idx !== i) } }));
   }
 
   async function save(e: React.FormEvent) {
@@ -144,6 +162,41 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           rows={8}
           className="w-full resize-y border border-line bg-canvas px-3 py-2.5 font-mono text-xs focus:border-ink focus:outline-none"
         />
+      </section>
+
+      <section>
+        <p className="label-brand mb-2">Shop de look (modelfoto)</p>
+        <p className="mb-3 font-sans text-xs text-muted">
+          De vaste basis-outfit die het AI-model draagt. Per modelfoto wordt het
+          getoonde product hieraan toegevoegd → een klikbare, shoppbare look op de
+          productpagina. <strong>x/y</strong> is de positie van het stipje op de
+          foto (in %). Stukken met dezelfde hoofdgroep als het product worden
+          automatisch weggelaten.
+        </p>
+        <label className="mb-3 flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={s.modelLook.enabled}
+            onChange={(e) => setS((p) => ({ ...p, modelLook: { ...p.modelLook, enabled: e.target.checked } }))}
+            className="accent-ink"
+          />
+          <span className="font-sans text-sm">Shop de look tonen op modelfoto's</span>
+        </label>
+        <div className="space-y-2">
+          {s.modelLook.items.map((it, i) => (
+            <div key={i} className="grid grid-cols-2 gap-2 border border-line p-2 sm:grid-cols-[1fr_1.4fr_1fr_3.5rem_3.5rem_auto] sm:items-center sm:border-0 sm:p-0">
+              <input value={it.label} onChange={(e) => setLookItem(i, "label", e.target.value)} placeholder="Label" className="border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+              <input value={it.handle} onChange={(e) => setLookItem(i, "handle", e.target.value.trim())} placeholder="product-handle" className="border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+              <input value={it.hoofdgroep} onChange={(e) => setLookItem(i, "hoofdgroep", e.target.value)} placeholder="Hoofdgroep" className="border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+              <input type="number" min="0" max="100" value={it.x} onChange={(e) => setLookItem(i, "x", Math.round(Number(e.target.value) || 0))} title="x %" className="border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+              <input type="number" min="0" max="100" value={it.y} onChange={(e) => setLookItem(i, "y", Math.round(Number(e.target.value) || 0))} title="y %" className="border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+              <button type="button" onClick={() => removeLookItem(i)} className="font-sans text-sm text-danger underline">Verwijder</button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addLookItem} className="mt-3 border border-line px-3 py-1.5 font-sans text-sm hover:border-ink">
+          Stuk toevoegen
+        </button>
       </section>
 
       {msg ? <p className={`font-sans text-sm ${state === "fail" ? "text-danger" : "text-success"}`}>{msg}</p> : null}

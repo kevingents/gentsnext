@@ -35,6 +35,13 @@ export type Settings = {
   protectUnderstockedRetail: boolean;
   // Zoeken
   searchSynonyms: string; // één groep per regel, komma-gescheiden
+  // Shop-the-look op AI-modelfoto's: de vaste basis-outfit die het canvas-model
+  // draagt (wit overhemd, zand pantalon, cognac derby). Per modelfoto wordt het
+  // getoonde product hieraan toegevoegd → klikbare, shoppbare outfit op de PDP.
+  modelLook: {
+    enabled: boolean;
+    items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
+  };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -55,6 +62,14 @@ export const DEFAULT_SETTINGS: Settings = {
   warehouseSafetyStock: num(process.env.GENTS_WAREHOUSE_SAFETY_STOCK, 0),
   protectUnderstockedRetail: (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0",
   searchSynonyms: DEFAULT_SYNONYMS,
+  modelLook: {
+    enabled: true,
+    items: [
+      { handle: "overhemd-nos-wit", label: "Overhemd", hoofdgroep: "Overhemden", x: 50, y: 21 },
+      { handle: "pantalon-stretchkatoen-zand", label: "Pantalon", hoofdgroep: "Broeken", x: 50, y: 71 },
+      { handle: "cognac-cap-toe", label: "Schoenen", hoofdgroep: "Schoenen", x: 50, y: 94 },
+    ],
+  },
 };
 
 let _cache: Settings | null = null;
@@ -67,7 +82,12 @@ export async function getSettings(): Promise<Settings> {
     const db = getDb();
     const rows = await db.select().from(appSettings).where(eq(appSettings.id, "global")).limit(1);
     const stored = (rows[0]?.data ?? {}) as Partial<Settings>;
-    _cache = { ...DEFAULT_SETTINGS, ...stored, branchCutoffs: { ...DEFAULT_SETTINGS.branchCutoffs, ...(stored.branchCutoffs || {}) } };
+    _cache = {
+      ...DEFAULT_SETTINGS,
+      ...stored,
+      branchCutoffs: { ...DEFAULT_SETTINGS.branchCutoffs, ...(stored.branchCutoffs || {}) },
+      modelLook: { ...DEFAULT_SETTINGS.modelLook, ...(stored.modelLook || {}) },
+    };
   } catch {
     _cache = DEFAULT_SETTINGS;
   }

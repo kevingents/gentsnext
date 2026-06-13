@@ -12,14 +12,14 @@ import { track } from "@/lib/track-client";
  * (Mr Marvis-stijl). Klik op een dot → het product licht op; "Shop de look" →
  * modal met alle losse producten uit de outfit.
  */
-export function ShopTheLook({ look }: { look: ResolvedLook }) {
+export function ShopTheLook({ look, aspectClass = "aspect-[4/5]" }: { look: ResolvedLook; aspectClass?: string }) {
   const [active, setActive] = useState<number | null>(null);
   const [modal, setModal] = useState(false);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
       {/* Modelfoto met hotspots */}
-      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface">
+      <div className={`relative ${aspectClass} overflow-hidden rounded-card bg-surface`}>
         <Image src={look.image} alt={look.title} fill priority sizes="(max-width:1024px) 100vw, 50vw" className="object-cover" />
         {look.products.map((h, i) =>
           h.product ? (

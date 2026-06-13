@@ -1,5 +1,6 @@
 import { getProductsByHandles, type ProductCardData } from "@/lib/catalog";
 import { getSanityLooks, getSanityLook, urlForImage } from "@/lib/sanity";
+import type { Settings } from "@/lib/settings";
 
 /**
  * "Shop the look" — gecureerde outfits met klikbare hotspots op een modelfoto
@@ -88,6 +89,42 @@ export async function getLookBySlug(slug: string): Promise<Look | null> {
 /** Synchrone statische lookup (alleen fallback-data). */
 export function getLook(slug: string): Look | null {
   return LOOKS.find((l) => l.slug === slug) ?? null;
+}
+
+/**
+ * Bouwt een "Shop de look" rond een AI-modelfoto: het canvas-model draagt een
+ * vaste basis-outfit (settings.modelLook); we plaatsen het getoonde product op de
+ * juiste hoogte voor zijn categorie en voegen de basis-stukken toe (behalve die
+ * van dezelfde hoofdgroep, om dubbeling te voorkomen). Hotspot-posities zijn
+ * percentages — vast, want het model staat altijd in dezelfde pose.
+ */
+const TARGET_Y: Record<string, number> = {
+  Overhemden: 24, "Polo-shirts": 30, "T-Shirts": 30, Truien: 33, Vesten: 33,
+  Gilets: 36, Colberts: 34, Broeken: 71, Pakken: 42,
+};
+
+export function buildModelLook(
+  p: { handle: string; hoofdgroep: string; modelImageUrl?: string | null; title?: string },
+  modelLook: Settings["modelLook"],
+): Look | null {
+  if (!modelLook?.enabled || !p.modelImageUrl) return null;
+  const y = TARGET_Y[p.hoofdgroep] ?? 36;
+  const base = (modelLook.items || []).filter(
+    (it) => it.handle && it.handle !== p.handle && it.hoofdgroep !== p.hoofdgroep,
+  );
+  const hotspots: Hotspot[] = [
+    { x: 50, y, handle: p.handle, label: "Dit item" },
+    ...base.map((it) => ({ x: it.x, y: it.y, handle: it.handle, label: it.label })),
+  ];
+  if (hotspots.length < 2) return null; // alleen het item zelf is geen "look"
+  return {
+    slug: p.handle,
+    title: "Compleet de look",
+    subtitle: "Zo style je dit item — shop de volledige outfit van het model.",
+    occasion: "Shop de look",
+    image: p.modelImageUrl,
+    hotspots,
+  };
 }
 
 export type ResolvedHotspot = Hotspot & { product: ProductCardData | null };

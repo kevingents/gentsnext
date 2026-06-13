@@ -11,7 +11,10 @@ import { ProductCard } from "@/components/product-card";
 import { TrackRecent } from "@/components/recent/track-recent";
 import { RecentStrip } from "@/components/recent/recent-strip";
 import { ShareRow } from "@/components/pdp/share-row";
+import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
+import { buildModelLook, resolveLook } from "@/lib/looks";
+import { getSettings } from "@/lib/settings";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
@@ -143,6 +146,15 @@ export default async function ProductPage({ params }: Props) {
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
   ]);
+  // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
+  // we maken die (samen met dit product) klikbaar/shoppbaar.
+  const settings = await getSettings();
+  const modelLook = buildModelLook(
+    { handle: product.handle, hoofdgroep, modelImageUrl: product.modelImageUrl, title: product.title },
+    settings.modelLook,
+  );
+  const resolvedModelLook = modelLook ? await resolveLook(modelLook) : null;
+
   // Voorkeur: kleurvarianten uit de titel-groepering (dekt o.a. de 235 dassen-
   // /pochet-/strik-groepen); val terug op Shopify group_data-metafield.
   const colorSiblings =
@@ -353,6 +365,20 @@ export default async function ProductPage({ params }: Props) {
         </div>
       </div>
       </PdpSizeProvider>
+
+      {/* Shop de look — de outfit van het model klikbaar/shoppbaar */}
+      {resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? (
+        <section className="mt-20">
+          <p className="label-brand">Shop de look</p>
+          <h2 className="mt-2 text-display-md">Zo draag je het</h2>
+          <p className="mt-2 max-w-prose font-sans text-ink-soft">
+            Gestyled op ons model. Klik op een onderdeel om het te shoppen — of shop de hele outfit in één keer.
+          </p>
+          <div className="mt-8">
+            <ShopTheLook look={resolvedModelLook} aspectClass="aspect-[2/3]" />
+          </div>
+        </section>
+      ) : null}
 
       {/* Maak de look compleet — slimme bijverkoop */}
       {recommendations.length > 0 ? (
