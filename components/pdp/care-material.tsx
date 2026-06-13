@@ -1,4 +1,4 @@
-import type { CareItem, CareKey, Composition } from "@/lib/care";
+import type { CareItem, CareKey, Composition, MaterialCat } from "@/lib/care";
 import { materialCategory } from "@/lib/care";
 
 /* Standaard wasvoorschrift-symbolen als schone SVG-lijniconen (geen emoji). */
@@ -49,17 +49,22 @@ function CareSymbol({ k }: { k: CareKey }) {
   }
 }
 
-function MaterialSymbol({ cat }: { cat: ReturnType<typeof materialCategory> }) {
+function MaterialSymbol({ cat }: { cat: MaterialCat }) {
   const wrap = (c: React.ReactNode) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 shrink-0 text-ink">{c}</svg>
   );
   switch (cat) {
     case "wol": return wrap(<><circle cx="12" cy="12" r="8" /><path d="M6 10c3 1 9 1 12 0M5 14c4 1 10 1 14 0M9 5c-1 4-1 10 0 14M15 5c1 4 1 10 0 14" /></>);
+    case "kasjmier": return wrap(<path d="M12 5a7 7 0 1 1-5.5 11.3A4.5 4.5 0 1 1 11 8.5 2.6 2.6 0 1 1 13 13" />);
     case "katoen": return wrap(<><circle cx="12" cy="12" r="2.5" /><path d="M12 9.5V4M12 14.5V20M9.5 12H4M14.5 12H20M10 10 6 6M14 10l4-4M10 14l-4 4M14 14l4 4" /></>);
     case "zijde": return wrap(<path d="M5 7c4 0 4 4 7 4s3-4 7-4M5 13c4 0 4 4 7 4s3-4 7-4" />);
     case "linnen": return wrap(<><path d="M12 21V8" /><path d="M12 8c0-3 2-5 5-5 0 3-2 5-5 5ZM12 11c0-3-2-5-5-5 0 3 2 5 5 5Z" /></>);
     case "leer": return wrap(<path d="M5 8c2-3 4-3 7-3s5 0 7 3c1 2 0 5-2 7-1 1-1 3-3 3s-2-2-3-2-1 2-3 2-2-2-3-3c-2-2-3-5-2-7Z" />);
-    case "synthetisch": return wrap(<path d="M12 3c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11Z" />);
+    case "polyester": return wrap(<path d="M12 3c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11Z" />);
+    case "viscose": return wrap(<><path d="M5 19C5 11 11 5 19 5c0 8-6 14-14 14Z" /><path d="M8 16c3-3 6-5 9-6" /></>);
+    case "elastaan": return wrap(<><path d="M5 6c3-3 5 3 7 0s4-3 7 0M5 12c3-3 5 3 7 0s4-3 7 0M5 18c3-3 5 3 7 0s4-3 7 0" /></>);
+    case "nylon": return wrap(<path d="M12 4 19 8 19 16 12 20 5 16 5 8Z" />);
+    case "acryl": return wrap(<><path d="M12 3c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11Z" /><path d="M9 15h6" /></>);
     default: return wrap(<><circle cx="12" cy="12" r="8" /><path d="M8 14c2-4 6-4 8 0" /></>);
   }
 }

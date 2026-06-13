@@ -38,15 +38,24 @@ function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
-/** Materiaalcategorie voor het icoon (wol/katoen/synthetisch/…). */
-export function materialCategory(name: string): "wol" | "katoen" | "zijde" | "linnen" | "leer" | "synthetisch" | "overig" {
+export type MaterialCat =
+  | "wol" | "kasjmier" | "katoen" | "zijde" | "linnen" | "leer"
+  | "polyester" | "viscose" | "elastaan" | "nylon" | "acryl" | "overig";
+
+/** Materiaalcategorie voor het icoon — fijnmazig zodat elke vezel een eigen symbool krijgt. */
+export function materialCategory(name: string): MaterialCat {
   const n = name.toLowerCase();
-  if (/(wol|merino|kasjmier|kasjmir|cashmere|alpaca|mohair|lamswol)/.test(n)) return "wol";
+  if (/(merino|lamswol|wol\b|wool|alpaca|mohair|scheerwol)/.test(n)) return "wol";
+  if (/(kasjmier|kasjmir|cashmere)/.test(n)) return "kasjmier";
   if (/(katoen|cotton|bamboe|denim)/.test(n)) return "katoen";
   if (/(zijde|silk)/.test(n)) return "zijde";
   if (/(linnen|linen|vlas)/.test(n)) return "linnen";
   if (/(leer|leder|suède|suede|nubuck)/.test(n)) return "leer";
-  if (/(polyester|polyamide|nylon|elastaan|elastane|spandex|viscose|acryl|polyacryl)/.test(n)) return "synthetisch";
+  if (/(elasta|spandex|lycra)/.test(n)) return "elastaan";
+  if (/(viscose|vicose|rayon|modal|lyocell|tencel)/.test(n)) return "viscose";
+  if (/(nylon|polyamide)/.test(n)) return "nylon";
+  if (/(acryl|polyacryl)/.test(n)) return "acryl";
+  if (/(polyester|polyster|poly\b)/.test(n)) return "polyester";
   return "overig";
 }
 
@@ -87,10 +96,26 @@ export function parseCare(wasvoorschrift: string | undefined | null, attrs?: Rec
   // Stomerij
   if (has(/stomerij|professioneel reinig|chemisch reinig|\bⓟ\b/)) add("dryclean", "Professioneel reinigen");
 
-  // Fallback uit attributen als er geen wasvoorschrift is.
-  if (!items.length && attrs) {
-    const strijkvrij = String(attrs.strijkvrij ?? "").toLowerCase() === "ja";
-    if (strijkvrij) add("ironlow", "Strijkvrij");
+  // Fallback als het wasvoorschrift geen symbolen oplevert: leid af uit materiaal + categorie.
+  if (!items.length) {
+    const mat = String(attrs?.materiaal ?? "").toLowerCase();
+    const hg = String(attrs?.hoofdgroep_omschrijving ?? "").toLowerCase();
+    const both = `${mat} ${hg}`;
+    if (/leer|leder|suède|suede|nubuck/.test(mat)) {
+      add("nowash", "Niet wassen");
+      add("dryclean", "Professioneel reinigen");
+    } else if (/pak|colbert|smoking|gilet|jacquet|rok|wol|kasjmier|zijde/.test(both)) {
+      add("dryclean", "Professioneel reinigen");
+      add("notumble", "Niet in de droger");
+      add("ironlow", "Strijken lage temp.");
+    } else if (String(attrs?.strijkvrij ?? "").toLowerCase() === "ja") {
+      add("ironlow", "Strijkvrij — nauwelijks strijken");
+      add("wash30", "Wassen 30°C");
+    } else {
+      add("wash30", "Wassen 30°C");
+      add("nobleach", "Niet bleken");
+      add("ironlow", "Strijken lage temp.");
+    }
   }
   return items.slice(0, 6);
 }

@@ -11,7 +11,7 @@ type Estimate = {
   isSplit: boolean;
   hasStoreSource: boolean;
   standard: Option;
-  express: Option;
+  express: Option | null;
 };
 
 /**
@@ -42,8 +42,10 @@ export function DeliveryOptions({
       .then((d) => {
         if (active && d?.estimate) {
           setEst(d.estimate);
-          // Reset toeslag als de keuze niet meer geldig is.
-          onChange(value, value === "express" ? d.estimate.express.surchargeCents : 0);
+          // Reset naar standaard als express niet (meer) sneller is.
+          const exp = d.estimate.express;
+          if (value === "express" && exp) onChange("express", exp.surchargeCents);
+          else onChange("standard", 0);
         }
       })
       .catch(() => {});
@@ -57,7 +59,7 @@ export function DeliveryOptions({
 
   const opts: { method: "standard" | "express"; title: string; option: Option }[] = [
     { method: "standard", title: "Standaard", option: est.standard },
-    { method: "express", title: "Sneller", option: est.express },
+    ...(est.express ? [{ method: "express" as const, title: "Sneller", option: est.express }] : []),
   ];
 
   return (

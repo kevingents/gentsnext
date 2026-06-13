@@ -342,7 +342,8 @@ export type DeliveryEstimate = {
   /** Uitleg waaróm het langer duurt (split/winkel) — logisch voor de klant. */
   note: string | null;
   standard: DeliveryOption;
-  express: DeliveryOption;
+  /** Express alleen aanwezig als het écht eerder is dan standaard. */
+  express: DeliveryOption | null;
 };
 
 /** Volgende bezorgdag-offset (kalenderdagen) na 'startK', n leverdagen verder (ma–za, geen feestdag NL). */
@@ -391,17 +392,20 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
 
   // Express: snelste werkdag na verzending.
   const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays);
+  const stdShownK = fromWarehouseOnly ? stdMinK : stdMaxK;
 
   const standard: DeliveryOption = {
-    dateLabel: dayLabel(n, fromWarehouseOnly ? stdMinK : stdMaxK),
+    dateLabel: dayLabel(n, stdShownK),
     rangeLabel: fromWarehouseOnly ? `${settings.warehouseTransitDays}-${settings.warehouseTransitDays + 1} werkdagen` : `${settings.standardMinDays}-${settings.standardMaxDays} werkdagen`,
     surchargeCents: 0,
   };
-  const express: DeliveryOption = {
-    dateLabel: dayLabel(n, expK),
-    rangeLabel: "Sneller",
-    surchargeCents: settings.expressSurchargeCents,
-  };
+  // Express alleen aanbieden als het ÉCHT eerder in huis is dan standaard —
+  // anders betaalt de klant voor niks (geen "Sneller · Sneller" op dezelfde dag).
+  const ed = settings.expressTransitDays;
+  const express: DeliveryOption | null =
+    expK < stdShownK
+      ? { dateLabel: dayLabel(n, expK), rangeLabel: `${ed} werkdag${ed === 1 ? "" : "en"}`, surchargeCents: settings.expressSurchargeCents }
+      : null;
 
   const note = isSplit
     ? "Je bestelling komt deels uit verschillende locaties; daarom kan een deel iets later aankomen."
