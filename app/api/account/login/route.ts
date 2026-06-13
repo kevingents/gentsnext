@@ -44,6 +44,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, sent: true });
   }
 
-  // Dev-modus: geen e-mailinfra → link direct teruggeven.
+  // Geen e-mailinfra. In dev geven we de link terug zodat de flow testbaar is;
+  // in productie NOOIT (anders kan iemand op elk e-mailadres inloggen).
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[account/login] RESEND niet geconfigureerd — login-link niet verstuurd voor", email);
+    return NextResponse.json({ ok: true, sent: false });
+  }
   return NextResponse.json({ ok: true, sent: false, devLink: link });
 }
