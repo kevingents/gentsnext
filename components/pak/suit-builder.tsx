@@ -290,7 +290,7 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
         </button>
         <p className="mt-3 font-sans text-xs text-muted">
           Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.
-          Gratis retour binnen 14 dagen; afrekenen met iDEAL volgt binnenkort.
+          Gratis retour binnen 14 dagen; veilig afrekenen met o.a. iDEAL.
         </p>
       </div>
 

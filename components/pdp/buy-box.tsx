@@ -249,7 +249,7 @@ export function BuyBox({
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
           <p className="mt-3 font-sans text-xs text-muted">
-            Gratis retour binnen 14 dagen. Afrekenen met iDEAL volgt binnenkort.
+            Gratis retour binnen 14 dagen. Veilig afrekenen met o.a. iDEAL.
           </p>
         </>
       )}
