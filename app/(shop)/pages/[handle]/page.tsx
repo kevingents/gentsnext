@@ -4,11 +4,14 @@ import { StoreLocator, type LocatorStore } from "@/components/stores/store-locat
 import { StorePage } from "@/components/stores/store-page";
 import { LandingPage } from "@/components/landing-page";
 import { EtiquetteHub } from "@/components/etiquette-hub";
+import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
+import { StudentsLanding } from "@/components/landings/students-landing";
 import { PortableContent } from "@/components/sanity/portable";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
 import { getLanding, type Landing } from "@/lib/landings";
 import { getSanityLanding, getSanityPage, urlForImage, type SanityLanding } from "@/lib/sanity";
+import { getHighlights, getCollectionByHandle, getCollectionProducts } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +43,17 @@ const KNOWN_TITLES: Record<string, string> = {
   "werken-bij-gents": "Werken bij GENTS",
 };
 
+async function getCollectionProductsSafe(handle: string, limit: number) {
+  try {
+    const c = await getCollectionByHandle(handle);
+    if (!c) return [];
+    const { items } = await getCollectionProducts(c.id, 1, limit);
+    return items;
+  } catch {
+    return [];
+  }
+}
+
 function fallbackTitle(handle: string): string {
   return KNOWN_TITLES[handle] || handle.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
@@ -67,6 +81,19 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
 
   // 0. Etiquette-hub — speciale overzichtspagina
   if (handle === "etiquette") return <EtiquetteHub />;
+
+  // 0b. Zakelijk / Students — rijke landings met productstrips + contactformulier
+  if (handle === "zakelijk") {
+    const [businessSuits, businessShirts] = await Promise.all([
+      getCollectionProductsSafe("mix-match-pakken", 4),
+      getCollectionProductsSafe("business-overhemden", 4),
+    ]);
+    return <ZakelijkLanding businessSuits={businessSuits} businessShirts={businessShirts} />;
+  }
+  if (handle === "students") {
+    const highlights = await getCollectionProductsSafe("gala", 8);
+    return <StudentsLanding highlights={highlights} />;
+  }
 
   // 1. Winkeloverzicht
   if (handle === "winkels") {

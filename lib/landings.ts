@@ -20,8 +20,13 @@ export type Landing = {
   seoDescription: string;
 };
 
+/**
+ * NB: 'zakelijk' en 'students' worden inmiddels door eigen rijke
+ * components (ZakelijkLanding/StudentsLanding) gerenderd in /pages/[handle].
+ * Deze entries blijven hier alleen voor uitvaart en als referentie-fallback.
+ */
 export const LANDINGS: Record<string, Landing> = {
-  zakelijk: {
+  _zakelijk_old: {
     handle: "zakelijk",
     eyebrow: "GENTS Zakelijk",
     title: "Professioneel voor de dag komen",
@@ -84,7 +89,7 @@ export const LANDINGS: Record<string, Landing> = {
       "Sobere, respectvolle uitvaartkleding bij GENTS. Donkere pakken, overhemden en accessoires, met rustig en deskundig advies — vaak dezelfde dag mee te nemen.",
   },
 
-  students: {
+  _students_old: {
     handle: "students",
     eyebrow: "Studenten & verenigingen",
     title: "Onmisbaar bij elke galaktie en dispuutsavond",

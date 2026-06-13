@@ -38,6 +38,8 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Over GENTS", href: "/pages/over-gents" },
       { label: "Etiquette & dresscodes", href: "/pages/etiquette" },
       { label: "Trouwen met GENTS", href: "/pages/trouwen-met-gents" },
+      { label: "Zakelijk", href: "/pages/zakelijk" },
+      { label: "Studenten & verenigingen", href: "/pages/students" },
       { label: "Werken bij GENTS", href: "/pages/werken-bij-gents" },
     ],
   },

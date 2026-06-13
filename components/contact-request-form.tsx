@@ -1,0 +1,177 @@
+"use client";
+
+import { useState } from "react";
+
+type Props = {
+  /** Type aanvraag — toegevoegd aan de mail-onderwerpregel en payload. */
+  channel: "zakelijk" | "students" | "trouw" | "uitvaart" | "algemeen";
+  title?: string;
+  intro?: string;
+  /** Extra velden zichtbaar (bv. 'aantal personen' voor zakelijk/students). */
+  showOrg?: boolean;
+  showGroupSize?: boolean;
+  showDate?: boolean;
+};
+
+/**
+ * Gedeeld contactformulier voor de zakelijke / studenten / trouw / uitvaart-
+ * landings. POSTt naar /api/contact — die routeert het bericht door (Resend
+ * naar het juiste team-e-mailadres) of logt het als stub als niet gekoppeld.
+ */
+export function ContactRequestForm({
+  channel,
+  title = "Vraag direct informatie aan",
+  intro,
+  showOrg = false,
+  showGroupSize = false,
+  showDate = false,
+}: Props) {
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
+  const [msg, setMsg] = useState("");
+
+  function set(k: string, v: string) {
+    setForm((p) => ({ ...p, [k]: v }));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name || !form.email || !form.message) {
+      setMsg("Vul je naam, e-mailadres en bericht in.");
+      setState("fail");
+      return;
+    }
+    setState("busy");
+    setMsg("");
+    try {
+      const r = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, ...form }),
+      });
+      if (r.ok) {
+        setState("done");
+        setMsg("Bedankt — we nemen binnen één werkdag contact met je op.");
+      } else {
+        const d = await r.json().catch(() => ({}));
+        setState("fail");
+        setMsg(d.error || "Er ging iets mis. Probeer het later opnieuw.");
+      }
+    } catch {
+      setState("fail");
+      setMsg("Er ging iets mis. Probeer het later opnieuw.");
+    }
+  }
+
+  if (state === "done") {
+    return (
+      <div className="border border-line bg-surface p-6">
+        <p className="label-brand">Verzonden</p>
+        <p className="mt-2 font-display text-xl font-light">{msg}</p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      id={`contact-${channel}`}
+      onSubmit={submit}
+      noValidate
+      className="border border-line bg-canvas p-6"
+    >
+      <p className="label-brand">{title}</p>
+      {intro ? <p className="mt-2 font-sans text-sm text-ink-soft">{intro}</p> : null}
+
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="font-sans text-sm">Naam</span>
+          <input
+            type="text"
+            required
+            value={form.name || ""}
+            onChange={(e) => set("name", e.target.value)}
+            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+        <label className="block">
+          <span className="font-sans text-sm">E-mailadres</span>
+          <input
+            type="email"
+            required
+            value={form.email || ""}
+            onChange={(e) => set("email", e.target.value)}
+            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+        <label className="block">
+          <span className="font-sans text-sm">Telefoon (optioneel)</span>
+          <input
+            type="tel"
+            value={form.phone || ""}
+            onChange={(e) => set("phone", e.target.value)}
+            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+        {showOrg ? (
+          <label className="block">
+            <span className="font-sans text-sm">Bedrijf of vereniging</span>
+            <input
+              type="text"
+              value={form.organisation || ""}
+              onChange={(e) => set("organisation", e.target.value)}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            />
+          </label>
+        ) : null}
+        {showGroupSize ? (
+          <label className="block">
+            <span className="font-sans text-sm">Aantal personen</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={form.groupSize || ""}
+              onChange={(e) => set("groupSize", e.target.value)}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            />
+          </label>
+        ) : null}
+        {showDate ? (
+          <label className="block">
+            <span className="font-sans text-sm">Gewenste datum</span>
+            <input
+              type="date"
+              value={form.eventDate || ""}
+              onChange={(e) => set("eventDate", e.target.value)}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            />
+          </label>
+        ) : null}
+        <label className="block sm:col-span-2">
+          <span className="font-sans text-sm">Vertel ons wat je nodig hebt</span>
+          <textarea
+            required
+            rows={4}
+            value={form.message || ""}
+            onChange={(e) => set("message", e.target.value)}
+            className="mt-1 w-full resize-y border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+      </div>
+
+      {msg && state !== "busy" ? (
+        <p role="alert" className={`mt-4 font-sans text-sm ${state === "fail" ? "text-danger" : "text-ink-soft"}`}>
+          {msg}
+        </p>
+      ) : null}
+
+      <button type="submit" disabled={state === "busy"} className="btn-primary mt-5 w-full sm:w-auto">
+        {state === "busy" ? "Bezig…" : "Verstuur aanvraag"}
+      </button>
+      <p className="mt-3 font-sans text-xs text-muted">
+        We reageren binnen één werkdag. Je gegevens worden uitsluitend gebruikt
+        om je aanvraag te beantwoorden.
+      </p>
+    </form>
+  );
+}
