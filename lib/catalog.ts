@@ -293,6 +293,8 @@ export type ProductFilters = {
   category?: string; // hoofdgroep_omschrijving
   types?: string[]; // subgroep (chino/pantalon/lange mouw/…)
   materials?: string[]; // materiaal
+  seasons?: string[]; // seizoen
+  ironFree?: boolean; // strijkvrij = Ja
   colorFamilies?: string[];
   sizes?: string[];
   fits?: string[];
@@ -303,12 +305,16 @@ export type ProductFilters = {
 export type Facets = {
   types: { value: string; label: string; count: number }[];
   materials: { value: string; count: number }[];
+  seasons: { value: string; count: number }[];
+  ironFreeCount: number;
   colors: { key: ColorFamily; label: string; hex: string; count: number }[];
   sizes: { value: string; label: string; count: number }[];
   fits: { value: string; count: number }[];
   priceMinCents: number;
   priceMaxCents: number;
 };
+
+const REAL_SEASONS = new Set(["Lente/Zomer", "Herfst/Winter", "Voorjaar", "Najaar", "Zomer", "Winter", "Lente", "Herfst"]);
 
 /** "MM" = mix & match — nettere weergave in het type-filter. */
 export function typeLabel(v: string): string {
@@ -415,6 +421,12 @@ function allConditions(f: ProductFilters): SQL[] {
   if (f.materials?.length) {
     conds.push(inList(sql`${products.attributes} ->> 'materiaal'`, f.materials));
   }
+  if (f.seasons?.length) {
+    conds.push(inList(sql`${products.attributes} ->> 'seizoen'`, f.seasons));
+  }
+  if (f.ironFree) {
+    conds.push(sql`${products.attributes} ->> 'strijkvrij' = 'Ja'`);
+  }
   const ve = variantExists(f);
   if (ve) conds.push(ve);
   return conds;
@@ -476,7 +488,7 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
   // gekozen kleur/maat/pasvorm — zo blijven alle opties met telling zichtbaar.
   const ctx = sql.join(contextConditions(f), sql` and `);
 
-  const [typeRows, materialRows, colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
+  const [typeRows, materialRows, seasonRows, ironRow, colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
     db.execute<{ v: string; n: number }>(sql`
       select ${products.attributes} ->> 'subgroep' as v, count(*)::int as n
       from ${products}
@@ -487,6 +499,14 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
       from ${products}
       where ${ctx} and coalesce(${products.attributes} ->> 'materiaal','') <> ''
       group by ${products.attributes} ->> 'materiaal'`),
+    db.execute<{ v: string; n: number }>(sql`
+      select ${products.attributes} ->> 'seizoen' as v, count(*)::int as n
+      from ${products}
+      where ${ctx} and coalesce(${products.attributes} ->> 'seizoen','') <> ''
+      group by ${products.attributes} ->> 'seizoen'`),
+    db.execute<{ n: number }>(sql`
+      select count(*)::int as n from ${products}
+      where ${ctx} and ${products.attributes} ->> 'strijkvrij' = 'Ja'`),
     db.execute<{ fam: string; n: number }>(sql`
       select v.color_family as fam, count(distinct ${products.id})::int as n
       from ${products} join ${productVariants} v on v.product_id = ${products.id}
@@ -535,9 +555,17 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
 
+  // Seizoen: alleen echte seizoenen (geen "NOS"/"Black friday"-ruis).
+  const seasons = seasonRows.rows
+    .filter((r) => REAL_SEASONS.has(r.v))
+    .map((r) => ({ value: r.v, count: r.n }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     types,
     materials,
+    seasons,
+    ironFreeCount: Number(ironRow.rows[0]?.n ?? 0),
     colors,
     sizes,
     fits,

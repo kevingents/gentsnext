@@ -43,6 +43,8 @@ export function PlpFilters({ facets, selection, total }: Props) {
   const activeCount =
     selection.types.length +
     selection.materials.length +
+    selection.seasons.length +
+    (selection.ironFree ? 1 : 0) +
     selection.colors.length +
     selection.sizes.length +
     selection.fits.length +
@@ -176,6 +178,45 @@ export function PlpFilters({ facets, selection, total }: Props) {
         </FilterGroup>
       ) : null}
 
+      {/* Seizoen */}
+      {facets.seasons.length > 1 ? (
+        <FilterGroup title="Seizoen">
+          <div className="space-y-1.5">
+            {facets.seasons.map((s) => {
+              const active = selection.seasons.includes(s.value);
+              return (
+                <label key={s.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => apply({ seasons: toggle(selection.seasons, s.value) })}
+                    className="h-4 w-4 accent-ink"
+                  />
+                  <span>{s.value}</span>
+                  <span className="text-muted">{s.count}</span>
+                </label>
+              );
+            })}
+          </div>
+        </FilterGroup>
+      ) : null}
+
+      {/* Strijkvrij (boolean) */}
+      {facets.ironFreeCount > 0 ? (
+        <div className="border-b border-line py-3">
+          <label className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+            <input
+              type="checkbox"
+              checked={selection.ironFree}
+              onChange={() => apply({ ironFree: !selection.ironFree })}
+              className="h-4 w-4 accent-ink"
+            />
+            <span className="label-brand !text-ink">Strijkvrij</span>
+            <span className="text-muted">{facets.ironFreeCount}</span>
+          </label>
+        </div>
+      ) : null}
+
       {/* Prijs */}
       <FilterGroup title="Prijs">
         <div className="flex flex-wrap gap-2">
@@ -203,7 +244,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
       {activeCount > 0 ? (
         <button
           type="button"
-          onClick={() => apply({ types: [], materials: [], colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
+          onClick={() => apply({ types: [], materials: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
           Wis alle filters ({activeCount})
