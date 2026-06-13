@@ -7,6 +7,7 @@ import { EtiquetteHub } from "@/components/etiquette-hub";
 import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
 import { StudentsLanding } from "@/components/landings/students-landing";
 import { KlantenserviceLanding } from "@/components/landings/klantenservice-landing";
+import { HerroepingLanding } from "@/components/landings/herroeping-landing";
 import { PortableContent } from "@/components/sanity/portable";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
@@ -68,6 +69,12 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       description: "Vragen over je bestelling, maat of retour? De GENTS-klantenservice helpt je snel en persoonlijk — via de assistent, per mail of in één van onze 19 winkels.",
       alternates: await localeAlternates(`/pages/${handle}`),
     };
+  if (handle === "herroepingsformulier")
+    return {
+      title: "Modelformulier voor herroeping",
+      description: "Het wettelijke modelformulier voor herroeping van je GENTS-bestelling — 14 dagen bedenktijd.",
+      alternates: await localeAlternates(`/pages/${handle}`),
+    };
   const store = getStoreByPageHandle(handle);
   if (store) return { title: `GENTS ${store.city} — herenmode & pakken`, alternates: await localeAlternates(`/pages/${handle}`) };
 
@@ -92,6 +99,9 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
 
   // 0a. Klantenservice — rijke servicepagina (AI-assistent + contact + FAQ)
   if (handle === "klantenservice" || handle === "service") return <KlantenserviceLanding />;
+
+  // 0a2. Wettelijk modelformulier voor herroeping
+  if (handle === "herroepingsformulier") return <HerroepingLanding />;
 
   // 0b. Zakelijk / Students — rijke landings met productstrips + contactformulier
   if (handle === "zakelijk") {

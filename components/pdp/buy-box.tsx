@@ -110,6 +110,7 @@ export function BuyBox({
           <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
+        <span className="font-sans text-xs text-muted">incl. btw</span>
       </div>
       {referenceCents ? (
         <p className="mt-1 font-sans text-xs text-muted">

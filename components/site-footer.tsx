@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { FooterPayments } from "@/components/footer-payments";
+import { CookieSettingsLink } from "@/components/cookie-settings-link";
 
 const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -21,6 +22,7 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Algemene voorwaarden", href: "/pages/algemene-voorwaarden" },
       { label: "Privacyverklaring", href: "/pages/privacyverklaring" },
       { label: "Cookies", href: "/pages/cookies" },
+      { label: "Herroepingsformulier", href: "/pages/herroepingsformulier" },
     ],
   },
   {
@@ -98,9 +100,18 @@ export function SiteFooter() {
             </nav>
           ))}
         </div>
-        <div className="mt-12 border-t border-canvas/15 pt-6">
-          <p className="font-sans text-xs text-canvas/50">
-            © {new Date().getFullYear()} GENTS — Suits You. Alle prijzen incl. btw.
+        <div className="mt-12 space-y-2 border-t border-canvas/15 pt-6">
+          <p className="font-sans text-xs text-canvas/55">
+            GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam · KvK 50187465
+            {process.env.GENTS_VAT ? ` · BTW ${process.env.GENTS_VAT}` : ""}
+            {" · "}
+            <CookieSettingsLink className="underline hover:text-canvas/80" />
+          </p>
+          <p className="font-sans text-xs text-canvas/45">
+            © {new Date().getFullYear()} GENTS — Suits You. Alle prijzen incl. btw. Een geschil los je samen op; lukt dat niet, dan kun je terecht bij de{" "}
+            <a href="https://www.sgc.nl" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">Geschillencommissie Thuiswinkel</a>{" "}
+            of het{" "}
+            <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">EU ODR-platform</a>.
           </p>
         </div>
       </div>

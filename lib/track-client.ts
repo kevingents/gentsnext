@@ -6,6 +6,8 @@
  * /api/track — met sendBeacon bij het verlaten van de pagina.
  */
 
+import { analyticsAllowed } from "@/lib/consent";
+
 const SID_KEY = "gents-sid";
 type Ev = { type: string; path?: string; handle?: string; query?: string; valueCents?: number; props?: Record<string, unknown> };
 
@@ -44,6 +46,7 @@ function flush(useBeacon = false) {
 
 export function track(type: string, props: Omit<Ev, "type"> = {}) {
   if (typeof window === "undefined") return;
+  if (!analyticsAllowed()) return; // geen tracking zonder analytics-toestemming (AVG)
   queue.push({ type, ...props });
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => flush(false), 2500);

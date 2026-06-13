@@ -2,55 +2,82 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-
-const KEY = "gents-cookie-v1";
+import { readConsent, writeConsent, OPEN_CONSENT_EVENT, type Consent } from "@/lib/consent";
 
 /**
- * Light-touch cookie-melding (essentiële cookies + functionele opslag). Bij de
- * cutover/EAA-compliance-check moet dit een echte CMP worden (Cookiebot/
- * CookieFirst) met categorieën en Google Consent Mode v2. Voor nu: één klik
- * weg, keuze in localStorage.
+ * Cookie-consent (AVG-conform): gelijkwaardige knoppen 'Alleen noodzakelijk' en
+ * 'Alles accepteren', plus granulaire voorkeuren (analytisch/marketing, geen
+ * pre-tick). Keuze is altijd te wijzigen via 'Cookie-instellingen' in de footer.
+ * Tracking gebeurt pas ná opt-in (zie lib/track-client + lib/consent).
  */
 export function CookieNotice() {
   const [visible, setVisible] = useState(false);
+  const [details, setDetails] = useState(false);
+  const [analytics, setAnalytics] = useState(false);
+  const [marketing, setMarketing] = useState(false);
+
   useEffect(() => {
-    try {
-      if (!localStorage.getItem(KEY)) setVisible(true);
-    } catch {
-      /* leeg */
-    }
+    if (!readConsent()) setVisible(true);
+    const open = () => {
+      const c = readConsent();
+      setAnalytics(c?.analytics ?? false);
+      setMarketing(c?.marketing ?? false);
+      setDetails(true);
+      setVisible(true);
+    };
+    window.addEventListener(OPEN_CONSENT_EVENT, open);
+    return () => window.removeEventListener(OPEN_CONSENT_EVENT, open);
   }, []);
-  function dismiss() {
-    try {
-      localStorage.setItem(KEY, "1");
-    } catch {
-      /* leeg */
-    }
+
+  function save(c: Consent) {
+    writeConsent(c);
     setVisible(false);
+    setDetails(false);
   }
+
   if (!visible) return null;
   return (
-    <div
-      role="dialog"
-      aria-label="Cookie-melding"
-      className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-2xl border border-line bg-canvas p-4 shadow-pop sm:p-5"
-    >
-      <p className="font-sans text-sm text-ink-soft">
-        We gebruiken cookies om de site te laten werken en je voorkeuren te
-        bewaren. Voor meer informatie zie onze{" "}
-        <Link href="/pages/cookies" className="text-ink underline underline-offset-4">
-          cookieverklaring
-        </Link>
-        .
+    <div role="dialog" aria-label="Cookievoorkeuren" className="fixed inset-x-3 bottom-3 z-[55] mx-auto max-w-2xl rounded-card border border-line bg-canvas p-4 shadow-pop sm:p-5">
+      <p className="font-display text-base">Cookies & jouw privacy</p>
+      <p className="mt-1 font-sans text-sm text-ink-soft">
+        Functionele cookies hebben we nodig om de site te laten werken. Voor anonieme statistieken en
+        gepersonaliseerde aanbiedingen vragen we eerst je toestemming. Meer in onze{" "}
+        <Link href="/pages/cookies" className="text-ink underline underline-offset-4">cookieverklaring</Link>.
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={dismiss} className="btn-primary !px-5 !py-2 text-xs">
-          Akkoord
+
+      {details ? (
+        <div className="mt-4 space-y-3 border-t border-line pt-4">
+          <Row label="Noodzakelijk" desc="Vereist voor winkelwagen, account en beveiliging. Altijd aan." checked disabled />
+          <Row label="Analytisch" desc="Anonieme statistieken om de winkel te verbeteren." checked={analytics} onChange={setAnalytics} />
+          <Row label="Marketing" desc="Relevante aanbiedingen en gepersonaliseerde content." checked={marketing} onChange={setMarketing} />
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={() => save({ analytics: false, marketing: false })} className="btn-ghost !px-5 !py-2 text-xs">
+          Alleen noodzakelijk
         </button>
-        <Link href="/pages/cookies" className="btn-ghost !px-5 !py-2 text-xs">
-          Meer informatie
-        </Link>
+        {details ? (
+          <button type="button" onClick={() => save({ analytics, marketing })} className="btn-ghost !px-5 !py-2 text-xs">Bewaar keuze</button>
+        ) : (
+          <button type="button" onClick={() => setDetails(true)} className="btn-ghost !px-5 !py-2 text-xs">Voorkeuren</button>
+        )}
+        <button type="button" onClick={() => save({ analytics: true, marketing: true })} className="btn-primary !px-5 !py-2 text-xs">
+          Alles accepteren
+        </button>
       </div>
     </div>
+  );
+}
+
+function Row({ label, desc, checked, disabled, onChange }: { label: string; desc: string; checked: boolean; disabled?: boolean; onChange?: (v: boolean) => void }) {
+  return (
+    <label className="flex items-start gap-3">
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange?.(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink disabled:opacity-50" />
+      <span>
+        <span className="block font-sans text-sm font-medium text-ink">{label}</span>
+        <span className="block font-sans text-xs text-muted">{desc}</span>
+      </span>
+    </label>
   );
 }
