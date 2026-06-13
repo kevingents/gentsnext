@@ -7,25 +7,27 @@ import { AnnouncementBar } from "@/components/announcement-bar";
 import { SearchTrigger } from "@/components/search/search-trigger";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getLocale } from "@/lib/locale-server";
+import { getMenu } from "@/lib/menu-server";
+import type { MenuItem } from "@/lib/main-menu";
 
 export async function SiteHeader() {
-  const locale = await getLocale();
+  const [locale, menu] = await Promise.all([getLocale(), getMenu()]);
   return (
     <>
       <AnnouncementBar />
-      <SiteHeaderInner locale={locale} />
+      <SiteHeaderInner locale={locale} menu={menu} />
     </>
   );
 }
 
-function SiteHeaderInner({ locale }: { locale: import("@/lib/i18n").Locale }) {
+function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale; menu: MenuItem[] }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
       {/* Bovenrij: hamburger (mobiel) · logo · utilities */}
       <div className="relative mx-auto flex max-w-page items-center justify-between gap-4 px-gutter py-4">
         <div className="flex items-center gap-4 lg:flex-1">
           <div className="lg:hidden">
-            <MegaMenuMobile />
+            <MegaMenuMobile items={menu} />
           </div>
         </div>
 
@@ -73,7 +75,7 @@ function SiteHeaderInner({ locale }: { locale: import("@/lib/i18n").Locale }) {
       {/* Onderrij: het volledige mega-menu (alleen desktop). */}
       <div className="hidden border-t border-line lg:block">
         <div className="mx-auto max-w-page px-gutter py-2.5">
-          <MegaMenuBar />
+          <MegaMenuBar items={menu} />
         </div>
       </div>
     </header>

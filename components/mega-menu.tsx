@@ -3,14 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { MAIN_MENU, type MenuItem } from "@/lib/main-menu";
+import type { MenuItem } from "@/lib/main-menu";
 
 /** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
-export function MegaMenuBar() {
+export function MegaMenuBar({ items }: { items: MenuItem[] }) {
   return (
     <nav aria-label="Hoofdmenu" className="relative">
       <ul className="flex items-center justify-center gap-x-8">
-        {MAIN_MENU.map((item) => (
+        {items.map((item) => (
           <DesktopItem key={item.label} item={item} />
         ))}
       </ul>
@@ -79,7 +79,7 @@ function DesktopItem({ item }: { item: MenuItem }) {
 }
 
 /** Mobiel: hamburger + uitklap-drawer met kolommen. */
-export function MegaMenuMobile() {
+export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <>
@@ -88,12 +88,12 @@ export function MegaMenuMobile() {
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
       </button>
-      {mobileOpen ? <MobileDrawer onClose={() => setMobileOpen(false)} /> : null}
+      {mobileOpen ? <MobileDrawer items={items} onClose={() => setMobileOpen(false)} /> : null}
     </>
   );
 }
 
-function MobileDrawer({ onClose }: { onClose: () => void }) {
+function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -104,7 +104,7 @@ function MobileDrawer({ onClose }: { onClose: () => void }) {
           <button type="button" onClick={onClose} aria-label="Menu sluiten" className="font-sans text-sm underline">Sluiten</button>
         </div>
         <ul className="px-2 py-2">
-          {MAIN_MENU.map((item) => {
+          {items.map((item) => {
             const hasMega = Boolean(item.columns?.length);
             const isOpen = open === item.label;
             return (

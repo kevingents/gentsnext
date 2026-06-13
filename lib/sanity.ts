@@ -103,3 +103,24 @@ export function getSanityLooks() {
 export function getSanityLook(slug: string) {
   return sanityFetch<SanityLook>(`*[_type == "look" && slug.current == $slug][0] ${LOOK_PROJECTION}`, { slug });
 }
+
+export type SanityMenu = {
+  items?: {
+    label: string;
+    href?: string;
+    columns?: { title?: string; links?: { label: string; href: string }[] }[];
+    feature?: { label?: string; caption?: string; href?: string; image?: any };
+  }[];
+};
+
+const MENU_PROJECTION = `{
+  items[]{
+    label, href,
+    columns[]{ title, links[]{ label, href } },
+    feature{ label, caption, href, image }
+  }
+}`;
+
+export function getSanityMenu() {
+  return sanityFetch<SanityMenu>(`*[_type == "navigation"][0] ${MENU_PROJECTION}`);
+}
