@@ -103,8 +103,19 @@ export function CartDrawer() {
 
         {cart.lines.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted" aria-hidden>
+              <path d="M3 6h2l3 12h10l3-9H7" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="9" cy="20" r="1.5" />
+              <circle cx="17" cy="20" r="1.5" />
+            </svg>
             <p className="font-display text-xl font-light">Je winkelwagen is leeg</p>
-            <p className="font-sans text-sm text-muted">Ontdek onze pakken, overhemden en accessoires.</p>
+            <p className="font-sans text-sm text-muted">
+              Ontdek onze pakken, overhemden en accessoires — of bekijk je{" "}
+              <Link href="/favorieten" onClick={cart.close} className="text-ink underline underline-offset-4">
+                favorieten
+              </Link>
+              .
+            </p>
             <Link href="/collections/pakken" onClick={cart.close} className="btn-primary mt-2">
               Begin met shoppen
             </Link>
