@@ -5,7 +5,7 @@ import { useState } from "react";
 const THRESHOLDS = ["XL", "XXL", "3XL", "4XL", "5XL"];
 
 export function SizeMediaForm() {
-  const [form, setForm] = useState({ handle: "", threshold: "XXL", url: "", alt: "" });
+  const [form, setForm] = useState({ handle: "", kind: "model", threshold: "XXL", url: "", alt: "" });
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
 
@@ -46,18 +46,38 @@ export function SizeMediaForm() {
         <span className="mt-1 block font-sans text-xs text-muted">Het laatste deel van de product-URL (/products/<strong>…</strong>).</span>
       </label>
 
-      <label className="block">
-        <span className="font-sans text-sm">Vanaf maat</span>
-        <select
-          value={form.threshold}
-          onChange={(e) => setForm((p) => ({ ...p, threshold: e.target.value }))}
-          className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
-        >
-          {THRESHOLDS.map((t) => (
-            <option key={t} value={t}>{t} en groter</option>
-          ))}
-        </select>
-      </label>
+      <div className="inline-flex overflow-hidden rounded-card border border-line text-sm">
+        {[
+          { v: "model", label: "Reguliere modelfoto" },
+          { v: "large", label: "Grote-maat-foto" },
+        ].map((k) => (
+          <button
+            key={k.v}
+            type="button"
+            onClick={() => setForm((p) => ({ ...p, kind: k.v }))}
+            className={`px-3 py-1.5 font-sans transition-colors ${form.kind === k.v ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
+          >
+            {k.label}
+          </button>
+        ))}
+      </div>
+
+      {form.kind === "large" ? (
+        <label className="block">
+          <span className="font-sans text-sm">Vanaf maat</span>
+          <select
+            value={form.threshold}
+            onChange={(e) => setForm((p) => ({ ...p, threshold: e.target.value }))}
+            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          >
+            {THRESHOLDS.map((t) => (
+              <option key={t} value={t}>{t} en groter</option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="font-sans text-xs text-muted">De reguliere modelfoto leidt de productgalerij (model eerst).</p>
+      )}
 
       <label className="block">
         <span className="font-sans text-sm">Afbeeldings-URL (grote maat)</span>

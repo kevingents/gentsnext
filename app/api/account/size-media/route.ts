@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const customer = await getSessionCustomer();
   if (!customer?.isAdmin) return NextResponse.json({ ok: false, error: "geen beheerrechten" }, { status: 403 });
 
-  let body: { handle?: string; threshold?: string; url?: string; alt?: string; remove?: boolean };
+  let body: { handle?: string; kind?: string; threshold?: string; url?: string; alt?: string; remove?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -19,25 +19,36 @@ export async function POST(req: Request) {
   }
   const handle = String(body.handle || "").trim();
   if (!handle) return NextResponse.json({ ok: false, error: "geen product-handle" }, { status: 400 });
+  const kind = body.kind === "model" ? "model" : "large";
 
   const db = getDb();
   const [p] = await db.select({ id: products.id }).from(products).where(eq(products.handle, handle)).limit(1);
   if (!p) return NextResponse.json({ ok: false, error: "product niet gevonden" }, { status: 404 });
 
+  // Reguliere AI-modelfoto (leidt de galerij) → kolom op products.
+  if (kind === "model") {
+    if (body.remove) {
+      await db.update(products).set({ modelImageUrl: "", modelImageAlt: "" }).where(eq(products.id, p.id));
+      return NextResponse.json({ ok: true, removed: true });
+    }
+    const url = String(body.url || "").trim();
+    if (!/^https?:\/\//.test(url)) return NextResponse.json({ ok: false, error: "ongeldige afbeeldings-URL" }, { status: 400 });
+    await db.update(products).set({ modelImageUrl: url, modelImageAlt: String(body.alt || "").trim() }).where(eq(products.id, p.id));
+    return NextResponse.json({ ok: true });
+  }
+
+  // Grote-maat-foto → product_size_media.
   if (body.remove) {
     await db.delete(productSizeMedia).where(eq(productSizeMedia.productId, p.id));
     return NextResponse.json({ ok: true, removed: true });
   }
-
   const url = String(body.url || "").trim();
   if (!/^https?:\/\//.test(url)) return NextResponse.json({ ok: false, error: "ongeldige afbeeldings-URL" }, { status: 400 });
   const threshold = String(body.threshold || "XXL").trim();
   const alt = String(body.alt || "").trim();
-
   await db
     .insert(productSizeMedia)
     .values({ productId: p.id, threshold, url, alt })
     .onConflictDoUpdate({ target: productSizeMedia.productId, set: { threshold, url, alt, updatedAt: sql`now()` } });
-
   return NextResponse.json({ ok: true });
 }

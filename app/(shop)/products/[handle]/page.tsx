@@ -303,7 +303,15 @@ export default async function ProductPage({ params }: Props) {
 
       <PdpSizeProvider>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
-        <Gallery images={images.map((i) => ({ url: i.url, alt: i.alt }))} title={product.title} sizeMedia={sizeMedia} />
+        <Gallery
+          images={[
+            // AI-modelfoto leidt de galerij ("model eerst"), echte foto's erna.
+            ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title }] : []),
+            ...images.map((i) => ({ url: i.url, alt: i.alt })),
+          ]}
+          title={product.title}
+          sizeMedia={sizeMedia}
+        />
 
         <div className="lg:sticky lg:top-24 lg:self-start">
           <BuyBox

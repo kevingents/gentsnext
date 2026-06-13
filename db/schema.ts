@@ -58,6 +58,9 @@ export const products = pgTable(
     inStock: boolean("in_stock").notNull().default(false),
     stockQty: integer("stock_qty").notNull().default(0),
     stockSyncedAt: timestamp("stock_synced_at", { withTimezone: true }),
+    /** AI-gegenereerde modelfoto (reguliere pasvorm) — leidt de galerij ("model eerst"). */
+    modelImageUrl: text("model_image_url").notNull().default(""),
+    modelImageAlt: text("model_image_alt").notNull().default(""),
     /** Kleurgroep-sleutel (uit titel afgeleid) voor het samenvoegen van kleurvarianten. */
     variantGroupKey: text("variant_group_key").notNull().default(""),
     /** Eén primair product per kleurgroep wordt in listings getoond. */

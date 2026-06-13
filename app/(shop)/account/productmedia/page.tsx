@@ -21,11 +21,12 @@ export default async function ProductMediaPage() {
   return (
     <div className="mx-auto max-w-2xl px-gutter py-10">
       <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Grote-maat-foto</h1>
+      <h1 className="mt-2 text-display-md">Modelfoto's</h1>
       <p className="mt-3 font-sans text-sm text-ink-soft">
-        Stel per product een alternatieve modelfoto in die getoond wordt zodra de
-        klant een grote maat kiest (vanaf de drempel). Zo zien klanten die grotere
-        maten dragen een passend model.
+        Stel per product een <strong>reguliere modelfoto</strong> in (die de galerij
+        leidt — model eerst) en een <strong>grote-maat-foto</strong> die getoond
+        wordt zodra de klant een grote maat kiest. AI-gegenereerd of echt — plak de
+        afbeeldings-URL.
       </p>
       <SizeMediaForm />
     </div>
