@@ -135,7 +135,7 @@ export function BuyBox({
                   }}
                   aria-pressed={on}
                   title={c.color}
-                  className={`h-8 w-8 rounded-full border-2 ${on ? "border-ink" : "border-line"}`}
+                  className={`h-8 w-8 rounded-card border-2 ${on ? "border-ink" : "border-line"}`}
                   style={{ background: sw.gradient ?? sw.hex }}
                 />
               );

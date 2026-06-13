@@ -4,6 +4,7 @@ import type { ProductFilters, ProductSort } from "@/lib/catalog";
 export type PlpSelection = {
   types: string[];
   materials: string[];
+  patterns: string[];
   seasons: string[];
   ironFree: boolean;
   colors: string[];
@@ -34,6 +35,7 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
   return {
     types: csv(get("type")),
     materials: csv(get("materiaal")),
+    patterns: csv(get("dessin")),
     seasons: csv(get("seizoen")),
     ironFree: get("strijkvrij") === "1",
     colors: csv(get("kleur")),
@@ -51,6 +53,7 @@ export function buildPlpQuery(sel: Partial<PlpSelection>): string {
   const p = new URLSearchParams();
   if (sel.types?.length) p.set("type", sel.types.join(","));
   if (sel.materials?.length) p.set("materiaal", sel.materials.join(","));
+  if (sel.patterns?.length) p.set("dessin", sel.patterns.join(","));
   if (sel.seasons?.length) p.set("seizoen", sel.seasons.join(","));
   if (sel.ironFree) p.set("strijkvrij", "1");
   if (sel.colors?.length) p.set("kleur", sel.colors.join(","));
@@ -71,6 +74,7 @@ export function selectionToFilters(
     ...base,
     types: sel.types,
     materials: sel.materials,
+    patterns: sel.patterns,
     seasons: sel.seasons,
     ironFree: sel.ironFree,
     colorFamilies: sel.colors,

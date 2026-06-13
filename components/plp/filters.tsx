@@ -43,6 +43,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
   const activeCount =
     selection.types.length +
     selection.materials.length +
+    selection.patterns.length +
     selection.seasons.length +
     (selection.ironFree ? 1 : 0) +
     selection.colors.length +
@@ -178,6 +179,29 @@ export function PlpFilters({ facets, selection, total }: Props) {
         </FilterGroup>
       ) : null}
 
+      {/* Dessin (print_design) */}
+      {facets.patterns.length > 1 ? (
+        <FilterGroup title="Dessin">
+          <div className="space-y-1.5">
+            {facets.patterns.map((pt) => {
+              const active = selection.patterns.includes(pt.value);
+              return (
+                <label key={pt.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => apply({ patterns: toggle(selection.patterns, pt.value) })}
+                    className="h-4 w-4 accent-ink"
+                  />
+                  <span>{pt.value}</span>
+                  <span className="text-muted">{pt.count}</span>
+                </label>
+              );
+            })}
+          </div>
+        </FilterGroup>
+      ) : null}
+
       {/* Seizoen */}
       {facets.seasons.length > 1 ? (
         <FilterGroup title="Seizoen">
@@ -244,7 +268,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
       {activeCount > 0 ? (
         <button
           type="button"
-          onClick={() => apply({ types: [], materials: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
+          onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
           Wis alle filters ({activeCount})

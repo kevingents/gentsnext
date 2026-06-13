@@ -293,6 +293,7 @@ export type ProductFilters = {
   category?: string; // hoofdgroep_omschrijving
   types?: string[]; // subgroep (chino/pantalon/lange mouw/…)
   materials?: string[]; // materiaal
+  patterns?: string[]; // print_design (dessin)
   seasons?: string[]; // seizoen
   ironFree?: boolean; // strijkvrij = Ja
   colorFamilies?: string[];
@@ -305,6 +306,7 @@ export type ProductFilters = {
 export type Facets = {
   types: { value: string; label: string; count: number }[];
   materials: { value: string; count: number }[];
+  patterns: { value: string; count: number }[];
   seasons: { value: string; count: number }[];
   ironFreeCount: number;
   colors: { key: ColorFamily; label: string; hex: string; count: number }[];
@@ -421,6 +423,9 @@ function allConditions(f: ProductFilters): SQL[] {
   if (f.materials?.length) {
     conds.push(inList(sql`${products.attributes} ->> 'materiaal'`, f.materials));
   }
+  if (f.patterns?.length) {
+    conds.push(inList(sql`${products.attributes} ->> 'print_design'`, f.patterns));
+  }
   if (f.seasons?.length) {
     conds.push(inList(sql`${products.attributes} ->> 'seizoen'`, f.seasons));
   }
@@ -488,7 +493,7 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
   // gekozen kleur/maat/pasvorm — zo blijven alle opties met telling zichtbaar.
   const ctx = sql.join(contextConditions(f), sql` and `);
 
-  const [typeRows, materialRows, seasonRows, ironRow, colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
+  const [typeRows, materialRows, patternRows, seasonRows, ironRow, colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
     db.execute<{ v: string; n: number }>(sql`
       select ${products.attributes} ->> 'subgroep' as v, count(*)::int as n
       from ${products}
@@ -499,6 +504,11 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
       from ${products}
       where ${ctx} and coalesce(${products.attributes} ->> 'materiaal','') <> ''
       group by ${products.attributes} ->> 'materiaal'`),
+    db.execute<{ v: string; n: number }>(sql`
+      select ${products.attributes} ->> 'print_design' as v, count(*)::int as n
+      from ${products}
+      where ${ctx} and coalesce(${products.attributes} ->> 'print_design','') <> ''
+      group by ${products.attributes} ->> 'print_design'`),
     db.execute<{ v: string; n: number }>(sql`
       select ${products.attributes} ->> 'seizoen' as v, count(*)::int as n
       from ${products}
@@ -561,9 +571,16 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
     .map((r) => ({ value: r.v, count: r.n }))
     .sort((a, b) => b.count - a.count);
 
+  const patterns = patternRows.rows
+    .map((r) => ({ value: r.v, count: r.n }))
+    .filter((p) => p.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12);
+
   return {
     types,
     materials,
+    patterns,
     seasons,
     ironFreeCount: Number(ironRow.rows[0]?.n ?? 0),
     colors,
