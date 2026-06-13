@@ -280,6 +280,22 @@ export const orderLines = pgTable(
   (t) => [index("order_lines_order_idx").on(t.orderId)]
 );
 
+/** AI-support-tickets: klantvraag + AI-antwoord; geëscaleerd als de AI er niet uitkomt. */
+export const supportTickets = pgTable(
+  "support_tickets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull().default(""),
+    question: text("question").notNull(),
+    aiAnswer: text("ai_answer").notNull().default(""),
+    confident: boolean("confident").notNull().default(false),
+    status: text("status").notNull().default("open"), // answered | escalated
+    handled: boolean("handled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("support_tickets_status_idx").on(t.status, t.createdAt)]
+);
+
 /**
  * Storefront-analytics (eigen, privacy-vriendelijk: anonieme session-id, geen
  * PII). Events: pageview, product_view, search, filter, add_to_cart, purchase,
