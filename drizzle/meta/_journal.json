@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1781252484094,
-      "tag": "0000_kind_morph",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1781272124776,
-      "tag": "0001_shiny_diamondback",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1781274359082,
-      "tag": "0002_absurd_dakota_north",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1781284584518,
-      "tag": "0003_condemned_star_brand",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1781286004364,
-      "tag": "0004_pink_jetstream",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1781390099222,
-      "tag": "0005_common_sage",
+      "when": 1781391677239,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]
