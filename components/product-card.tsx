@@ -2,10 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ProductCardData } from "@/lib/catalog";
 import { formatEuro } from "@/lib/pricing";
+import { WishlistButton } from "@/components/wishlist/wishlist-button";
 
 export function ProductCard({ product }: { product: ProductCardData }) {
   return (
-    <Link href={`/products/${product.handle}`} className="group flex flex-col gap-3">
+    <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
+      <WishlistButton handle={product.handle} />
       <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
         {product.imageUrl ? (
           <Image

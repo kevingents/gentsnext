@@ -210,6 +210,26 @@ function contextConditions(f: ProductFilters): SQL[] {
   return conds;
 }
 
+/** Productkaarten voor een lijst handles (favorieten/recent bekeken). */
+export async function getProductsByHandles(handles: string[]): Promise<ProductCardData[]> {
+  const list = [...new Set(handles)].slice(0, 60);
+  if (!list.length) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: products.id,
+      handle: products.handle,
+      title: products.title,
+      vendor: products.vendor,
+    })
+    .from(products)
+    .where(and(inArray(products.handle, list), eq(products.status, "active")));
+  // Volgorde van de invoer behouden.
+  const cards = await buildProductCards(rows);
+  const byHandle = new Map(cards.map((c) => [c.handle, c]));
+  return list.map((h) => byHandle.get(h)).filter(Boolean) as ProductCardData[];
+}
+
 /** Producten van een merk (uit het 'merk'-attribute), nieuwste eerst. */
 export async function getProductsByBrand(brand: string, limit = 48): Promise<ProductCardData[]> {
   const db = getDb();

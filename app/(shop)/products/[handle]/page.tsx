@@ -7,6 +7,8 @@ import { BuyBox, type BuyColor } from "@/components/pdp/buy-box";
 import { Accordion } from "@/components/pdp/accordion";
 import { ColorSiblings } from "@/components/pdp/color-siblings";
 import { ProductCard } from "@/components/product-card";
+import { TrackRecent } from "@/components/recent/track-recent";
+import { RecentStrip } from "@/components/recent/recent-strip";
 import { getProductByHandle, getRecommendations } from "@/lib/catalog";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { getReferencePrices } from "@/lib/pricing";
@@ -207,6 +209,7 @@ export default async function ProductPage({ params }: Props) {
     <div className="mx-auto max-w-page px-gutter py-8 pb-28 lg:pb-8">
       <JsonLd data={productJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
+      <TrackRecent handle={product.handle} />
 
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">
@@ -276,6 +279,8 @@ export default async function ProductPage({ params }: Props) {
           </div>
         </section>
       ) : null}
+
+      <RecentStrip exclude={product.handle} />
     </div>
   );
 }

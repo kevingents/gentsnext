@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
 import { CartButton } from "@/components/cart/cart-button";
+import { WishlistLink } from "@/components/wishlist/wishlist-link";
 
 export function SiteHeader() {
   return (
@@ -48,6 +49,7 @@ export function SiteHeader() {
               <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
             </svg>
           </Link>
+          <WishlistLink />
           <CartButton />
         </div>
       </div>

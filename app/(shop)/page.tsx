@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { UspBar } from "@/components/usp-bar";
 import { ProductCard } from "@/components/product-card";
+import { RecentStrip } from "@/components/recent/recent-strip";
 import { listCollections, getHighlights } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
 
@@ -233,6 +234,8 @@ export default async function Home() {
           </div>
         </section>
       ) : null}
+
+      <RecentStrip />
     </>
   );
 }

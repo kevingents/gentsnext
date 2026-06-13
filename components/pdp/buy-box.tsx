@@ -6,6 +6,7 @@ import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
+import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { useCart } from "@/components/cart/cart-context";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
@@ -145,15 +146,18 @@ export function BuyBox({
 
       <DeliveryPromise />
 
-      {/* Bestelknop */}
-      <button
-        type="button"
-        onClick={addToCart}
-        disabled={!size || soldOut}
-        className="btn-primary mt-7 w-full"
-      >
-        {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : `In winkelwagen — maat ${size}`}
-      </button>
+      {/* Bestelknop + bewaren */}
+      <div className="mt-7 grid grid-cols-[1fr_auto] gap-2">
+        <button
+          type="button"
+          onClick={addToCart}
+          disabled={!size || soldOut}
+          className="btn-primary w-full"
+        >
+          {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : `In winkelwagen — maat ${size}`}
+        </button>
+        <WishlistButton handle={productHandle} variant="pdp" />
+      </div>
       <p className="mt-3 font-sans text-xs text-muted">
         Gratis retour binnen 14 dagen. Afrekenen met iDEAL volgt binnenkort.
       </p>
