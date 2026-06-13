@@ -1,18 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 
-/** Taalkeuze — zet de locale-cookie en ververst de pagina (server hertaalt). */
+/** Taalkeuze — zet de locale-cookie en herlaadt (server + client hertalen). */
 export function LanguageSwitcher({ current }: { current: Locale }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   function choose(loc: Locale) {
     document.cookie = `gents-locale=${loc}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
     setOpen(false);
-    router.refresh();
+    if (loc !== current) window.location.reload();
   }
 
   return (

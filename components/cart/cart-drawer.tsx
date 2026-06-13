@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
 import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
+import { useT } from "@/components/i18n/locale-provider";
 import { formatEuro } from "@/lib/pricing";
 
 type Suggestion = { id: string; handle: string; title: string; imageUrl: string; minPriceCents: number };
@@ -76,6 +77,7 @@ function groupLines(lines: CartLine[]): Group[] {
 
 export function CartDrawer() {
   const cart = useCart();
+  const t = useT();
 
   useEffect(() => {
     document.body.style.overflow = cart.isOpen ? "hidden" : "";
@@ -96,7 +98,7 @@ export function CartDrawer() {
       <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer">
         {/* Kop */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <p className="font-display text-lg">Winkelwagen ({cart.count})</p>
+          <p className="font-display text-lg">{t("cart.title")} ({cart.count})</p>
           <button type="button" onClick={cart.close} aria-label="Sluiten" className="font-sans text-sm underline">
             Sluiten
           </button>
@@ -109,7 +111,7 @@ export function CartDrawer() {
               <circle cx="9" cy="20" r="1.5" />
               <circle cx="17" cy="20" r="1.5" />
             </svg>
-            <p className="font-display text-xl font-light">Je winkelwagen is leeg</p>
+            <p className="font-display text-xl font-light">{t("cart.empty")}</p>
             <p className="font-sans text-sm text-muted">
               Ontdek onze pakken, overhemden en accessoires — of bekijk je{" "}
               <Link href="/favorieten" onClick={cart.close} className="text-ink underline underline-offset-4">
@@ -177,12 +179,12 @@ export function CartDrawer() {
             {/* Voettekst */}
             <div className="border-t border-line px-5 py-4">
               <div className="flex items-center justify-between">
-                <span className="font-sans text-sm text-muted">Subtotaal</span>
+                <span className="font-sans text-sm text-muted">{t("cart.subtotal")}</span>
                 <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
               </div>
               <p className="mt-1 font-sans text-xs text-muted">Incl. btw, excl. verzendkosten</p>
               <Link href="/afrekenen" onClick={cart.close} className="btn-primary mt-3 w-full">
-                Afrekenen
+                {t("cart.checkout")}
               </Link>
               <Link href="/winkelwagen" onClick={cart.close} className="btn-ghost mt-2 w-full">
                 Bekijk winkelwagen

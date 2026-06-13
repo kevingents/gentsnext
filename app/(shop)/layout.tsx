@@ -9,10 +9,14 @@ import { SkipLink } from "@/components/skip-link";
 import { HelpButton } from "@/components/help-button";
 import { WelcomePopup } from "@/components/welcome-popup";
 import { Tracker } from "@/components/analytics/tracker";
+import { LocaleProvider } from "@/components/i18n/locale-provider";
+import { getLocale } from "@/lib/locale-server";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
-export default function ShopLayout({ children }: { children: React.ReactNode }) {
+export default async function ShopLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
+    <LocaleProvider locale={locale}>
     <CartProvider>
       <WishlistProvider>
         <div className="flex min-h-screen flex-col">
@@ -29,5 +33,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         </div>
       </WishlistProvider>
     </CartProvider>
+    </LocaleProvider>
   );
 }
