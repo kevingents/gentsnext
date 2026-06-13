@@ -21,9 +21,14 @@ export const CATEGORIES: Category[] = [
 ];
 
 const BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
+const BY_HG = new Map(CATEGORIES.map((c) => [c.hoofdgroep, c]));
 
 export function categoryBySlug(slug: string): Category | null {
   return BY_SLUG.get(slug) ?? null;
+}
+
+export function categoryByHoofdgroep(hg: string): Category | null {
+  return BY_HG.get(hg) ?? null;
 }
 
 /** De hoofd-navigatie (subset, in volgorde). */

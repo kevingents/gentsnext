@@ -104,9 +104,12 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           </div>
 
           {items.length === 0 ? (
-            <p className="py-16 text-center font-sans text-ink-soft">
-              Geen artikelen gevonden met deze filters.
-            </p>
+            <div className="py-16 text-center font-sans text-ink-soft">
+              <p>Geen artikelen gevonden met deze filters.</p>
+              <Link href={`/collections/${handle}`} className="mt-3 inline-block text-sm text-ink underline underline-offset-4">
+                Wis alle filters
+              </Link>
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
               {items.map((product) => (

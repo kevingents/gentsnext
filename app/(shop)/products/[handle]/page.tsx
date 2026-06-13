@@ -14,6 +14,7 @@ import { getProductByHandle, getRecommendations } from "@/lib/catalog";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
+import { categoryByHoofdgroep } from "@/lib/categories";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -112,8 +113,15 @@ export default async function ProductPage({ params }: Props) {
     value: String(attrs[key] ?? "").trim(),
   })).filter((s) => s.value);
 
-  const breadcrumb = collections.find((c) => !c.handle.includes("all-products")) ?? collections[0];
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
+  // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
+  const cat = categoryByHoofdgroep(hoofdgroep);
+  const breadcrumb = cat
+    ? { handle: `__cat__${cat.slug}`, title: cat.label }
+    : collections.find((c) => !c.handle.includes("all-products")) ?? collections[0];
+  const breadcrumbHref = cat
+    ? `/categorie/${cat.slug}`
+    : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
   const [recommendations, colorSiblings] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
@@ -148,7 +156,7 @@ export default async function ProductPage({ params }: Props) {
               "@type": "ListItem",
               position: 2,
               name: breadcrumb.title,
-              item: `${siteUrl}/collections/${breadcrumb.handle}`,
+              item: `${siteUrl}${breadcrumbHref}`,
             },
           ]
         : []),
@@ -246,7 +254,7 @@ export default async function ProductPage({ params }: Props) {
         {breadcrumb ? (
           <>
             {" / "}
-            <Link href={`/collections/${breadcrumb.handle}`} className="hover:text-ink">
+            <Link href={breadcrumbHref} className="hover:text-ink">
               {breadcrumb.title}
             </Link>
           </>
