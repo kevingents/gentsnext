@@ -1,78 +1,117 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { rowSortIndex } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 
 type SizeMedia = { threshold: string; url: string; alt: string };
+type Shot = { url: string; alt: string; badge?: boolean };
 
+/**
+ * Mr Marvis-stijl galerij: alle productfoto's in een 2-koloms grid ("2 om 2"),
+ * klik op een foto voor een schermvullende zoom (lightbox). De grote-maat-foto
+ * wordt vooraan gezet zodra een maat ≥ drempel gekozen is.
+ */
 export function Gallery({ images, title, sizeMedia }: { images: { url: string; alt: string }[]; title: string; sizeMedia?: SizeMedia | null }) {
-  const [active, setActive] = useState(0);
   const { sizeLabel } = usePdpSize();
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
-  // Grote-maat-foto tonen zodra een maat ≥ threshold gekozen is (passende
-  // fotografie). Als de klant zelf op een thumbnail klikt, respecteren we dat.
-  const [userPicked, setUserPicked] = useState(false);
-  const showLarge =
-    !!sizeMedia && !userPicked && !!sizeLabel && rowSortIndex(sizeLabel) >= rowSortIndex(sizeMedia.threshold);
+  const showLarge = !!sizeMedia && !!sizeLabel && rowSortIndex(sizeLabel) >= rowSortIndex(sizeMedia.threshold);
 
-  if (!images.length && !sizeMedia) {
+  // Alt-text: behoud Shopify-alt alleen als hij echt Nederlands is, anders schone NL-fallback.
+  function altFor(alt: string, index: number): string {
+    const trimmed = (alt || "").trim();
+    const looksEnglish = /\b(the|with|smiling|man|stylish|wearing|worn|outfit|shirt|trousers)\b/i.test(trimmed);
+    if (!trimmed || looksEnglish) return `${title} — afbeelding ${index + 1}`;
+    return trimmed;
+  }
+
+  const shots: Shot[] = [
+    ...(showLarge ? [{ url: sizeMedia!.url, alt: sizeMedia!.alt || `${title} — grote maat`, badge: true }] : []),
+    ...images.map((img, i) => ({ url: img.url, alt: altFor(img.alt, i) })),
+  ];
+
+  const close = useCallback(() => setLightbox(null), []);
+  const step = useCallback(
+    (dir: number) => setLightbox((cur) => (cur === null ? cur : (cur + dir + shots.length) % shots.length)),
+    [shots.length],
+  );
+  useEffect(() => {
+    if (lightbox === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+      if (e.key === "ArrowRight") step(1);
+      if (e.key === "ArrowLeft") step(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, close, step]);
+
+  if (!shots.length) {
     return (
       <div className="flex aspect-[4/5] items-center justify-center rounded-card bg-surface font-sans text-sm text-muted">
         Geen afbeeldingen
       </div>
     );
   }
-  const main = showLarge
-    ? { url: sizeMedia!.url, alt: sizeMedia!.alt || `${title} — grote maat` }
-    : images[Math.min(active, images.length - 1)] || { url: sizeMedia!.url, alt: title };
-
-  // Alt-text-strategie: behoud Shopify-alt alleen als hij echt Nederlands is.
-  // Anders gebruiken we een schone NL-fallback "<titel> — afbeelding N".
-  function altFor(alt: string, index: number): string {
-    const trimmed = (alt || "").trim();
-    const looksEnglish =
-      /\b(the|with|smiling|man|stylish|wearing|worn|outfit|shirt|trousers)\b/i.test(trimmed);
-    if (!trimmed || looksEnglish) return `${title} — afbeelding ${index + 1}`;
-    return trimmed;
-  }
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row-reverse lg:gap-4">
-      <div className="relative aspect-[4/5] flex-1 overflow-hidden rounded-card bg-surface">
-        <Image
-          src={main.url}
-          alt={showLarge ? main.alt : altFor(main.alt, Math.min(active, images.length - 1))}
-          fill
-          priority
-          sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-cover"
-        />
-        {showLarge ? (
-          <span className="absolute left-3 top-3 bg-ink/85 px-2.5 py-1 font-sans text-[0.65rem] uppercase tracking-wide text-canvas">
-            Getoond in grote maat
-          </span>
-        ) : null}
+    <>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+        {shots.map((shot, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setLightbox(i)}
+            aria-label={`Vergroot ${shot.alt}`}
+            className="group relative aspect-[4/5] overflow-hidden rounded-card bg-surface"
+          >
+            <Image
+              src={shot.url}
+              alt={shot.alt}
+              fill
+              priority={i === 0}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 30vw"
+              className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+            {shot.badge ? (
+              <span className="absolute left-3 top-3 bg-ink/85 px-2.5 py-1 font-sans text-[0.65rem] uppercase tracking-wide text-canvas">
+                Getoond in grote maat
+              </span>
+            ) : null}
+            <span className="pointer-events-none absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-canvas/80 opacity-0 shadow-pop transition-opacity group-hover:opacity-100">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3M11 8v6M8 11h6" strokeLinecap="round" />
+              </svg>
+            </span>
+          </button>
+        ))}
       </div>
-      {images.length > 1 ? (
-        <div className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-          {images.slice(0, 6).map((img, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => { setActive(i); setUserPicked(true); }}
-              aria-label={`Toon afbeelding ${i + 1} van ${title}`}
-              aria-current={!showLarge && i === active}
-              className={`relative aspect-[4/5] w-16 shrink-0 overflow-hidden rounded-card border lg:w-20 ${
-                !showLarge && i === active ? "border-ink" : "border-line hover:border-muted"
-              }`}
-            >
-              <Image src={img.url} alt="" fill sizes="80px" className="object-cover" />
-            </button>
-          ))}
+
+      {lightbox !== null ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4" role="dialog" aria-modal="true" aria-label="Foto vergroot">
+          <button type="button" onClick={close} aria-label="Sluiten" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" /></svg>
+          </button>
+          {shots.length > 1 ? (
+            <>
+              <button type="button" onClick={() => step(-1)} aria-label="Vorige" className="absolute left-3 flex h-11 w-11 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20 sm:left-6">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              <button type="button" onClick={() => step(1)} aria-label="Volgende" className="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20 sm:right-6">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            </>
+          ) : null}
+          <div className="relative h-[85vh] w-[92vw] max-w-3xl">
+            <Image src={shots[lightbox].url} alt={shots[lightbox].alt} fill sizes="92vw" className="object-contain" />
+          </div>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 font-sans text-sm text-canvas/80">
+            {lightbox + 1} / {shots.length}
+          </span>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
