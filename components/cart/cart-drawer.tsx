@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
+import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
 import { formatEuro } from "@/lib/pricing";
 
 type Suggestion = { id: string; handle: string; title: string; imageUrl: string; minPriceCents: number };
@@ -134,9 +135,10 @@ export function CartDrawer() {
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
                 <div className="h-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
               </div>
-              <p className="mt-2 font-sans text-[0.65rem] text-muted">
-                Vóór 16:00 besteld = vandaag verzonden.
-              </p>
+              <DeliveryEstimate
+                items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                className="mt-2 font-sans text-[0.65rem] text-muted"
+              />
             </div>
 
             {/* Regels */}

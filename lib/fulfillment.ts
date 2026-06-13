@@ -35,6 +35,7 @@ export type Shipment = {
   isWarehouse: boolean;
   canDispatchToday: boolean;
   dispatchLabel: string;
+  dispatchInDays: number;
   lines: ShipmentLine[];
   units: number;
 };
@@ -55,6 +56,7 @@ type Branch = {
   country: string;
   canDispatchToday: boolean;
   dispatchLabel: string;
+  dispatchInDays: number;
   avail: Map<string, number>; // sku → beschikbaar (na veiligheidsvoorraad/tekort)
 };
 
@@ -107,9 +109,9 @@ function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, 
     const iso = isoAtOffset(n, k);
     if (!openOn(branchId, day, iso, hoursByCity)) continue;
     if (k === 0 && n.minutes >= CARRIER_CUTOFF_HOUR * 60) continue;
-    return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day };
+    return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day, dispatchInDays: k };
   }
-  return { canDispatchToday: false, dispatchLabel: "z.s.m." };
+  return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: 9 };
 }
 
 /* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
@@ -148,6 +150,7 @@ async function buildBranches(skus: string[]): Promise<Branch[]> {
       country: branchCountry(branchId),
       canDispatchToday: d.canDispatchToday,
       dispatchLabel: d.dispatchLabel,
+      dispatchInDays: d.dispatchInDays,
       avail: rec.avail,
     });
   }
@@ -313,7 +316,50 @@ function toShipment(b: Branch, lines: ShipmentLine[]): Shipment {
     isWarehouse: b.isWarehouse,
     canDispatchToday: b.canDispatchToday,
     dispatchLabel: b.dispatchLabel,
+    dispatchInDays: b.dispatchInDays,
     lines,
     units: lines.reduce((s, l) => s + l.qty, 0),
   };
+}
+
+/* ── Levertijd-schatting (vóór de checkout) ──────────────────────────────── */
+export type DeliveryEstimate = {
+  inStock: boolean;
+  /** Werkdagen tot verzending (0 = vandaag). */
+  dispatchInDays: number;
+  /** Korte NL-belofte: "Voor 16:00 besteld, morgen in huis". */
+  promise: string;
+  /** Bezorgdatum-label: "morgen", "overmorgen", "woensdag 17 juni". */
+  deliveryLabel: string;
+};
+
+/**
+ * Schat de bezorging vóór de checkout, op basis van de echte allocatie
+ * (magazijn-eerst, openingstijden, cutoff). Bezorging = verzenddag + 1 werkdag
+ * transit. Bij een split telt de laatste zending (conservatief).
+ */
+export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOptions = {}): Promise<DeliveryEstimate | null> {
+  const plan = await allocateOrder(lines, opts);
+  if (!plan.shipments.length) return null;
+  const maxDispatch = Math.max(...plan.shipments.map((s) => s.dispatchInDays));
+
+  const n = nowNL();
+  // +1 werkdag transit; zondag overslaan (bezorgers leveren ma–za).
+  let deliveryK = maxDispatch + 1;
+  while (DAYS[(n.dayIndex + deliveryK) % 7] === "zondag") deliveryK++;
+
+  const deliveryLabel =
+    deliveryK === 1 ? "morgen" : deliveryK === 2 ? "overmorgen" : nlDateLabel(n, deliveryK);
+
+  const beforeCutoff = maxDispatch === 0;
+  const promise = beforeCutoff
+    ? `Voor ${CARRIER_CUTOFF_HOUR}:00 besteld, ${deliveryLabel} in huis`
+    : `Besteld vandaag, ${deliveryLabel} in huis`;
+
+  return { inStock: plan.fullyAllocated, dispatchInDays: maxDispatch, promise, deliveryLabel };
+}
+
+function nlDateLabel(base: { y: number; m: number; d: number }, k: number): string {
+  const dt = new Date(Date.UTC(base.y, base.m - 1, base.d) + k * 86400000);
+  return new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(dt);
 }

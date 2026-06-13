@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useCart } from "@/components/cart/cart-context";
+import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
 import { formatEuro } from "@/lib/pricing";
 
 const FIELDS = [
@@ -175,6 +176,9 @@ export default function AfrekenenPage() {
               <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{shippingCents === 0 ? "Gratis" : formatEuro(shippingCents)}</dd></div>
               <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>Totaal</dt><dd className="font-display text-lg">{formatEuro(totalCents)}</dd></div>
             </dl>
+            <div className="mt-4 border-t border-line pt-4">
+              <DeliveryEstimate items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))} />
+            </div>
           </div>
         </aside>
       </div>
