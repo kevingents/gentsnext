@@ -26,6 +26,8 @@ import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { parseComposition, parseCare, careProse } from "@/lib/care";
+import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { sortSizes } from "@/lib/sizing";
 import { stockForSkus, stockAvailable } from "@/lib/stock";
 
@@ -233,6 +235,12 @@ export default async function ProductPage({ params }: Props) {
     ],
   };
 
+  // Materiaal + Onderhoud automatisch uit de SRS-data (samenstelling + wasvoorschrift).
+  const composition = parseComposition(String(attrs.samenstelling_materiaal ?? attrs.samenstelling ?? ""));
+  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), attrs);
+  const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
+  const materiaal = String(attrs.materiaal ?? "").trim();
+
   const accordionItems = [
     ...(product.descriptionHtml
       ? [
@@ -246,6 +254,12 @@ export default async function ProductPage({ params }: Props) {
             ),
           },
         ]
+      : []),
+    ...(composition.length || materiaal
+      ? [{ title: "Materiaal", content: <MaterialBlock composition={composition} fallback={materiaal} /> }]
+      : []),
+    ...(careItems.length || careProseLines.length
+      ? [{ title: "Onderhoud", content: <CareBlock items={careItems} prose={careProseLines} /> }]
       : []),
     ...(specs.length
       ? [
