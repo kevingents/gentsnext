@@ -1,0 +1,64 @@
+import { getSiteUrl } from "@/lib/site-url";
+import { emailConfigured } from "@/lib/email";
+import { sendWhatsAppText } from "@/lib/whatsapp";
+
+/**
+ * Order-status-updates naar de klant via e-mail én WhatsApp. De
+ * orderbevestiging (betaald) heeft een eigen rijke HTML-mail (lib/email); hier
+ * zitten de statusovergangen 'verzonden' en 'klaar om af te halen'. WhatsApp en
+ * e-mail zijn env-gated (zonder koppeling: stub-log).
+ */
+
+type OrderForNotify = {
+  orderNumber: string;
+  email: string;
+  firstName: string;
+  phone: string;
+};
+
+const MESSAGES: Record<string, (o: OrderForNotify, url: string) => { subject: string; text: string }> = {
+  shipped: (o, url) => ({
+    subject: `Je GENTS-bestelling ${o.orderNumber} is verzonden`,
+    text: `Hoi ${o.firstName || "daar"}, goed nieuws! Je bestelling ${o.orderNumber} is onderweg. Volg 'm via ${url}`,
+  }),
+  ready_pickup: (o, url) => ({
+    subject: `Je GENTS-bestelling ${o.orderNumber} ligt klaar`,
+    text: `Hoi ${o.firstName || "daar"}, je bestelling ${o.orderNumber} ligt klaar om af te halen in de winkel. Tot snel!`,
+  }),
+  refunded: (o, url) => ({
+    subject: `Je GENTS-bestelling ${o.orderNumber} is terugbetaald`,
+    text: `Hoi ${o.firstName || "daar"}, je betaling voor ${o.orderNumber} is terugbetaald. Vragen? We helpen je graag.`,
+  }),
+};
+
+export async function notifyOrderStatus(order: OrderForNotify, status: string): Promise<void> {
+  const make = MESSAGES[status];
+  if (!make) return;
+  const url = `${getSiteUrl()}/bestelling/${order.orderNumber}`;
+  const { subject, text } = make(order, url);
+
+  // E-mail
+  if (emailConfigured() && order.email) {
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM,
+          to: [order.email],
+          subject,
+          html: `<p>${text}</p><p><a href="${url}" style="display:inline-block;background:#0A0A0A;color:#fff;padding:12px 20px;text-decoration:none">Bekijk je bestelling</a></p>`,
+        }),
+      });
+    } catch (e) {
+      console.error("[order-notify] mailfout:", e);
+    }
+  } else {
+    console.log(`[order-notify] (stub mail) ${order.email}: ${subject}`);
+  }
+
+  // WhatsApp (als de klant een nummer heeft achtergelaten)
+  if (order.phone) {
+    await sendWhatsAppText(order.phone, text);
+  }
+}

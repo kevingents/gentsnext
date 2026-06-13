@@ -287,6 +287,31 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
   }
 }
 
+/** Admin: zet de order-status en stuurt de klant een update (mail + WhatsApp). */
+export async function updateOrderStatus(orderId: string, status: string): Promise<boolean> {
+  const allowed = ["paid", "shipped", "ready_pickup", "refunded", "canceled"];
+  if (!allowed.includes(status)) return false;
+  const db = getDb();
+  const [order] = await db
+    .update(orders)
+    .set({ status, updatedAt: sql`now()` })
+    .where(eq(orders.id, orderId))
+    .returning();
+  if (!order) return false;
+  const { notifyOrderStatus } = await import("@/lib/order-notify");
+  await notifyOrderStatus(
+    { orderNumber: order.orderNumber, email: order.email, firstName: order.firstName, phone: order.phone },
+    status
+  );
+  return true;
+}
+
+/** Admin: recente orders voor het beheeroverzicht. */
+export async function listRecentOrders(limit = 50) {
+  const db = getDb();
+  return db.select().from(orders).orderBy(sql`created_at desc`).limit(limit);
+}
+
 export async function getOrderByNumber(orderNumber: string) {
   const db = getDb();
   const rows = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);

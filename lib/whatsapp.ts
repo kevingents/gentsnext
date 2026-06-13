@@ -27,6 +27,31 @@ export function normalizePhone(raw: string): string | null {
   return s;
 }
 
+/** Generiek tekstbericht (binnen 24u-venster of met opt-in). Env-gated. */
+export async function sendWhatsAppText(rawPhone: string, text: string): Promise<boolean> {
+  const to = normalizePhone(rawPhone);
+  if (!to) return false;
+  if (!whatsappConfigured()) {
+    console.log(`[whatsapp] (stub) → +${to}: ${text.slice(0, 120)}`);
+    return true;
+  }
+  try {
+    const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: text } }),
+    });
+    if (!res.ok) {
+      console.error("[whatsapp] fout:", res.status, (await res.text()).slice(0, 160));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[whatsapp] fetch-fout:", e);
+    return false;
+  }
+}
+
 type StockMsg = { productTitle: string; size?: string; url: string };
 
 /** Stuurt een terug-op-voorraad-WhatsApp. Retourneert of het gelukt is. */
