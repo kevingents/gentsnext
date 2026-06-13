@@ -40,6 +40,7 @@ export type Settings = {
   // getoonde product hieraan toegevoegd → klikbare, shoppbare outfit op de PDP.
   modelLook: {
     enabled: boolean;
+    minStock: number; // drempel "goed op voorraad" voor de slimme look-substitutie
     items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
   };
 };
@@ -64,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchSynonyms: DEFAULT_SYNONYMS,
   modelLook: {
     enabled: true,
+    minStock: 8,
     items: [
       { handle: "overhemd-nos-wit", label: "Overhemd", hoofdgroep: "Overhemden", x: 50, y: 21 },
       { handle: "pantalon-stretchkatoen-zand", label: "Pantalon", hoofdgroep: "Broeken", x: 50, y: 71 },

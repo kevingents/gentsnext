@@ -14,6 +14,7 @@ import { ShareRow } from "@/components/pdp/share-row";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { buildModelLook, resolveLook } from "@/lib/looks";
+import { smartModelLook } from "@/lib/model-styling";
 import { getSettings } from "@/lib/settings";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
@@ -149,10 +150,22 @@ export default async function ProductPage({ params }: Props) {
   // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
   // we maken die (samen met dit product) klikbaar/shoppbaar.
   const settings = await getSettings();
-  const modelLook = buildModelLook(
-    { handle: product.handle, hoofdgroep, modelImageUrl: product.modelImageUrl, title: product.title },
-    settings.modelLook,
-  );
+  const modelLook = product.modelImageUrl
+    ? await smartModelLook(
+        {
+          handle: product.handle,
+          hoofdgroep,
+          title: product.title,
+          colorLabel: product.variantColorLabel,
+          modelImageUrl: product.modelImageUrl,
+        },
+        settings.modelLook,
+        settings.modelLook.minStock,
+      ).catch(() =>
+        // Val terug op de statische config als de slimme query faalt.
+        buildModelLook({ handle: product.handle, hoofdgroep, modelImageUrl: product.modelImageUrl, title: product.title }, settings.modelLook),
+      )
+    : null;
   const resolvedModelLook = modelLook ? await resolveLook(modelLook) : null;
 
   // Voorkeur: kleurvarianten uit de titel-groepering (dekt o.a. de 235 dassen-

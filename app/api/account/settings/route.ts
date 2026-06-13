@@ -54,7 +54,11 @@ export async function POST(req: Request) {
         };
       })
       .filter((it) => it.handle);
-    patch.modelLook = { enabled: ml.enabled !== false, items };
+    patch.modelLook = {
+      enabled: ml.enabled !== false,
+      minStock: Math.max(0, Math.round(Number((ml as { minStock?: unknown }).minStock) || 8)),
+      items,
+    };
   }
 
   const next = await updateSettings(patch);

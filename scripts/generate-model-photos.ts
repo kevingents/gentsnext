@@ -13,6 +13,7 @@ import { and, eq, sql } from "drizzle-orm";
  * Env (secrets, in Vercel):
  *   FASHN_API_KEY                – FASHN.ai API-key
  *   GENTS_MODEL_BASE_REGULAR     – URL van het reguliere model (canvas)
+ *   GENTS_MODEL_BASE_FORMAL      – URL van het smoking/black-tie-model (optioneel)
  *   GENTS_MODEL_BASE_PLUS        – URL van het plus-size model (optioneel)
  *   STOREGENTS_BLOB_READ_WRITE_TOKEN – voor het opslaan van de output
  *
@@ -100,6 +101,7 @@ async function main() {
   const apiKey = process.env.FASHN_API_KEY;
   const baseRegular = process.env.GENTS_MODEL_BASE_REGULAR;
   const basePlus = process.env.GENTS_MODEL_BASE_PLUS;
+  const baseFormal = process.env.GENTS_MODEL_BASE_FORMAL; // black-tie/smoking-canvas (optioneel)
   const blobToken = process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey || !baseRegular || !blobToken) {
     console.error("Zet FASHN_API_KEY, GENTS_MODEL_BASE_REGULAR en een blob-token. Plus-size: GENTS_MODEL_BASE_PLUS.");
@@ -126,10 +128,15 @@ async function main() {
   for (const r of rows.rows) {
     const category = CATEGORY[r.hg];
     if (!category || !r.img) continue;
-    console.log(`• ${r.handle} (${r.hg})`);
+
+    // Slim model: black-tie/smoking-stukken op het smoking-canvas (als gezet),
+    // zodat de foto bij de zwarte-strik/lakschoen-look past. Anders het zakelijke model.
+    const blackTie = /smoking|tuxedo|vadermoord|pliss|rokkostuum|galadui/.test(`${r.title} ${r.handle}`.toLowerCase());
+    const canvas = blackTie && baseFormal ? baseFormal : baseRegular;
+    console.log(`• ${r.handle} (${r.hg})${blackTie && baseFormal ? " [smoking-canvas]" : ""}`);
 
     // Regulier
-    const reg = await runVTON(baseRegular, r.img, category, apiKey);
+    const reg = await runVTON(canvas, r.img, category, apiKey);
     if (reg) {
       const u = await toBlob(reg, `ai-models/${r.handle}-model.jpg`, blobToken);
       if (u) {

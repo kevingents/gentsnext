@@ -20,6 +20,7 @@ type Settings = {
   searchSynonyms: string;
   modelLook: {
     enabled: boolean;
+    minStock: number;
     items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
   };
 };
@@ -173,15 +174,32 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           foto (in %). Stukken met dezelfde hoofdgroep als het product worden
           automatisch weggelaten.
         </p>
-        <label className="mb-3 flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={s.modelLook.enabled}
-            onChange={(e) => setS((p) => ({ ...p, modelLook: { ...p.modelLook, enabled: e.target.checked } }))}
-            className="accent-ink"
-          />
-          <span className="font-sans text-sm">Shop de look tonen op modelfoto's</span>
-        </label>
+        <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={s.modelLook.enabled}
+              onChange={(e) => setS((p) => ({ ...p, modelLook: { ...p.modelLook, enabled: e.target.checked } }))}
+              className="accent-ink"
+            />
+            <span className="font-sans text-sm">Shop de look tonen op modelfoto's</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="font-sans text-sm">Drempel "goed op voorraad"</span>
+            <input
+              type="number"
+              min="0"
+              value={s.modelLook.minStock}
+              onChange={(e) => setS((p) => ({ ...p, modelLook: { ...p.modelLook, minStock: Math.max(0, Math.round(Number(e.target.value) || 0)) } }))}
+              className="w-20 border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none"
+            />
+            <span className="font-sans text-sm text-muted">stuks</span>
+          </label>
+        </div>
+        <p className="mb-3 font-sans text-xs text-muted">
+          Stukken onder deze drempel worden automatisch vervangen door een ruim
+          leverbaar alternatief van dezelfde rol, in een passende kleur.
+        </p>
         <div className="space-y-2">
           {s.modelLook.items.map((it, i) => (
             <div key={i} className="grid grid-cols-2 gap-2 border border-line p-2 sm:grid-cols-[1fr_1.4fr_1fr_3.5rem_3.5rem_auto] sm:items-center sm:border-0 sm:p-0">
