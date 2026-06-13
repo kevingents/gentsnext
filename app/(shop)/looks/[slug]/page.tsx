@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLookBySlug, getAllLooks, resolveLook } from "@/lib/looks";
+import { getLookBySlug, getAllLooks, resolveLook, getLookBuyData } from "@/lib/looks";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { localeAlternates } from "@/lib/seo";
 
@@ -21,6 +21,7 @@ export default async function LookPage({ params }: Props) {
   const look = await getLookBySlug(slug);
   if (!look) notFound();
   const resolved = await resolveLook(look);
+  const buy = await getLookBuyData(resolved.products.map((p) => p.handle));
   const others = (await getAllLooks()).filter((l) => l.slug !== slug);
 
   return (
@@ -32,7 +33,7 @@ export default async function LookPage({ params }: Props) {
       </nav>
 
       <div className="mt-6">
-        <ShopTheLook look={resolved} />
+        <ShopTheLook look={resolved} buy={buy} />
       </div>
 
       {others.length ? (

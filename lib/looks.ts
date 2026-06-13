@@ -1,6 +1,9 @@
 import { getProductsByHandles, type ProductCardData } from "@/lib/catalog";
 import { getSanityLooks, getSanityLook, urlForImage } from "@/lib/sanity";
 import type { Settings } from "@/lib/settings";
+import { getDb } from "@/db";
+import { sql } from "drizzle-orm";
+import { sortSizes } from "@/lib/sizing";
 
 /**
  * "Shop the look" — gecureerde outfits met klikbare hotspots op een modelfoto
@@ -129,6 +132,35 @@ export function buildModelLook(
 
 export type ResolvedHotspot = Hotspot & { product: ProductCardData | null };
 export type ResolvedLook = Look & { products: ResolvedHotspot[] };
+
+/** Koopgegevens per look-product: maten + voorraad + sku voor direct-in-winkelwagen. */
+export type LookBuySize = { size: string; sku: string; priceCents: number; qty: number };
+export type LookBuyData = { color: string; hoofdgroep: string; sizes: LookBuySize[] };
+
+export async function getLookBuyData(handles: string[]): Promise<Record<string, LookBuyData>> {
+  const uniq = [...new Set(handles.filter(Boolean))];
+  if (!uniq.length) return {};
+  const db = getDb();
+  const rows = await db.execute<{ handle: string; color: string; size: string; sku: string; price: number; qty: number; hg: string }>(sql`
+    select p.handle, coalesce(v.color,'') color, coalesce(v.size,'') size, coalesce(v.sku,'') sku,
+      v.price_cents price, v.stock_qty qty, p.attributes->>'hoofdgroep_omschrijving' hg
+    from products p join product_variants v on v.product_id = p.id
+    where p.handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)}) and coalesce(v.size,'') <> ''
+    order by p.handle, v.position asc
+  `);
+  const out: Record<string, LookBuyData> = {};
+  for (const r of rows.rows) {
+    let e = out[r.handle];
+    if (!e) {
+      e = { color: r.color, hoofdgroep: r.hg || "", sizes: [] };
+      out[r.handle] = e;
+    }
+    if (e.sizes.some((s) => s.size === r.size)) continue;
+    e.sizes.push({ size: r.size, sku: r.sku, priceCents: Number(r.price) || 0, qty: Number(r.qty) || 0 });
+  }
+  for (const handle of Object.keys(out)) out[handle].sizes = sortSizes(out[handle].sizes);
+  return out;
+}
 
 /** Look met opgehaalde productdata per hotspot (live uit de catalogus). */
 export async function resolveLook(look: Look): Promise<ResolvedLook> {
