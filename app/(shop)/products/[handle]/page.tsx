@@ -5,8 +5,10 @@ import { JsonLd } from "@/components/json-ld";
 import { Gallery } from "@/components/pdp/gallery";
 import { BuyBox, type BuyColor } from "@/components/pdp/buy-box";
 import { Accordion } from "@/components/pdp/accordion";
+import { ColorSiblings } from "@/components/pdp/color-siblings";
 import { ProductCard } from "@/components/product-card";
 import { getProductByHandle, getRecommendations } from "@/lib/catalog";
+import { getColorSiblings } from "@/lib/color-siblings";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -106,7 +108,10 @@ export default async function ProductPage({ params }: Props) {
 
   const breadcrumb = collections.find((c) => !c.handle.includes("all-products")) ?? collections[0];
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
-  const recommendations = await getRecommendations(hoofdgroep, product.id, 4);
+  const [recommendations, colorSiblings] = await Promise.all([
+    getRecommendations(hoofdgroep, product.id, 4),
+    getColorSiblings(attrs, product.handle),
+  ]);
 
   const productJsonLd = {
     "@context": "https://schema.org",
@@ -235,6 +240,12 @@ export default async function ProductPage({ params }: Props) {
             referenceCents={referenceCents}
             hasStock={hasStock}
           />
+
+          {colorSiblings.length > 0 ? (
+            <div className="mt-7">
+              <ColorSiblings siblings={colorSiblings} />
+            </div>
+          ) : null}
 
           <ul className="mt-8 space-y-1.5">
             {TRUST.map((t) => (

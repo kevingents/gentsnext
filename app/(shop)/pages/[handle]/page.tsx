@@ -3,6 +3,7 @@ import Link from "next/link";
 import { StoreLocator, type LocatorStore } from "@/components/stores/store-locator";
 import { StorePage } from "@/components/stores/store-page";
 import { LandingPage } from "@/components/landing-page";
+import { EtiquetteHub } from "@/components/etiquette-hub";
 import { PortableContent } from "@/components/sanity/portable";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
@@ -63,6 +64,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
 export default async function GenericPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
+
+  // 0. Etiquette-hub — speciale overzichtspagina
+  if (handle === "etiquette") return <EtiquetteHub />;
 
   // 1. Winkeloverzicht
   if (handle === "winkels") {
