@@ -13,6 +13,7 @@ import { listCollections, getHighlights, getProductsByHandles } from "@/lib/cata
 import { getTrendingHandles } from "@/lib/analytics";
 import { getAllLooks } from "@/lib/looks";
 import { CATEGORIES } from "@/lib/categories";
+import { Reveal } from "@/components/reveal";
 import { localeAlternates } from "@/lib/seo";
 import type { Metadata } from "next";
 
@@ -114,24 +115,25 @@ export default async function Home() {
           </div>
         </header>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {OCCASIONS.map((o) => (
-            <Link
-              key={o.label}
-              href={findCollection(collections, o.keyword)}
-              className="group relative aspect-[3/4] overflow-hidden rounded-card bg-surface"
-            >
-              <Image
-                src={o.img}
-                alt={o.label}
-                fill
-                sizes="(max-width: 1024px) 50vw, 25vw"
-                className="object-cover transition duration-500 ease-brand group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink/65 to-transparent" />
-              <span className="absolute bottom-4 left-4 font-display text-xl font-light text-canvas">
-                {o.label}
-              </span>
-            </Link>
+          {OCCASIONS.map((o, i) => (
+            <Reveal key={o.label} delay={i * 90}>
+              <Link
+                href={findCollection(collections, o.keyword)}
+                className="group relative block aspect-[3/4] overflow-hidden rounded-card bg-surface"
+              >
+                <Image
+                  src={o.img}
+                  alt={o.label}
+                  fill
+                  sizes="(max-width: 1024px) 50vw, 25vw"
+                  className="object-cover transition duration-500 ease-brand group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-ink/65 to-transparent" />
+                <span className="absolute bottom-4 left-4 font-display text-xl font-light text-canvas">
+                  {o.label}
+                </span>
+              </Link>
+            </Reveal>
           ))}
         </div>
       </section>
