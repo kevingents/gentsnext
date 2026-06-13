@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
-import { searchProducts } from "@/lib/catalog";
+import { searchProducts, suggestCorrection } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -10,19 +10,39 @@ export const metadata: Metadata = {
   alternates: { canonical: "/zoeken" },
 };
 
-type Props = { searchParams: Promise<{ q?: string; cat?: string; size?: string }> };
+type Props = { searchParams: Promise<{ q?: string; cat?: string; size?: string; exact?: string }> };
 
 export default async function ZoekenPage({ searchParams }: Props) {
   const sp = await searchParams;
   const query = String(sp.q || "").trim();
   const cat = String(sp.cat || "").trim();
   const size = String(sp.size || "").trim();
+  const exact = sp.exact === "1";
 
   // Basis-resultaten (zonder facet) → facet-opties; gefilterde resultaten → grid.
-  const base = query ? await searchProducts(query, 100) : [];
+  let base = query ? await searchProducts(query, 100) : [];
+
+  // "Bedoelde je …?" — bij weinig/geen resultaten een correctie zoeken.
+  let didYouMean: string | null = null;
+  let autoCorrected = false;
+  if (query && base.length < 3 && !exact) {
+    const correction = await suggestCorrection(query);
+    if (correction) {
+      const altBase = await searchProducts(correction, 100);
+      if (altBase.length > base.length) {
+        didYouMean = correction;
+        if (base.length === 0) {
+          // Geen resultaten → toon meteen de correctie (zoals Google/Doofinder).
+          base = altBase;
+          autoCorrected = true;
+        }
+      }
+    }
+  }
+  const effectiveQuery = autoCorrected && didYouMean ? didYouMean : query;
   const results = query
     ? cat || size
-      ? await searchProducts(query, 48, { category: cat || undefined, sizeLabels: size ? [size] : undefined })
+      ? await searchProducts(effectiveQuery, 48, { category: cat || undefined, sizeLabels: size ? [size] : undefined })
       : base.slice(0, 48)
     : [];
 
@@ -45,7 +65,25 @@ export default async function ZoekenPage({ searchParams }: Props) {
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
       <p className="label-brand">Zoeken</p>
-      <h1 className="mt-2 text-display-md">{query ? `Resultaten voor "${query}"` : "Wat zoek je?"}</h1>
+      <h1 className="mt-2 text-display-md">
+        {query ? `Resultaten voor "${autoCorrected && didYouMean ? didYouMean : query}"` : "Wat zoek je?"}
+      </h1>
+      {autoCorrected && didYouMean ? (
+        <p className="mt-2 font-sans text-sm text-muted">
+          In plaats van <em>{query}</em>.{" "}
+          <Link href={`/zoeken?q=${encodeURIComponent(query)}&exact=1`} className="text-ink underline underline-offset-4">
+            Toch zoeken op "{query}"
+          </Link>
+        </p>
+      ) : didYouMean ? (
+        <p className="mt-2 font-sans text-sm">
+          Bedoelde je{" "}
+          <Link href={`/zoeken?q=${encodeURIComponent(didYouMean)}`} className="text-ink underline underline-offset-4">
+            {didYouMean}
+          </Link>
+          ?
+        </p>
+      ) : null}
 
       <form action="/zoeken" method="get" className="mt-6 flex max-w-xl gap-2">
         <input

@@ -157,6 +157,23 @@ async function main() {
   }).length;
   console.log(`\n✓ Klaar. Zichtbaar in catalogus (foto+voorraad, primair): ${visible} van ${prods.length} actieve producten.`);
 
+  // Zoekwoorden-vocabulaire opnieuw opbouwen (voor "bedoelde je …?").
+  await db.execute(sql.raw(`create table if not exists search_terms (term text primary key, freq integer not null default 1)`));
+  await db.execute(sql.raw(`create index if not exists search_terms_trgm on search_terms using gin (term gin_trgm_ops)`));
+  await db.execute(sql.raw(`truncate search_terms`));
+  await db.execute(sql.raw(`
+    insert into search_terms (term, freq)
+    select w, count(*)::int from (
+      select unnest(regexp_split_to_array(
+        lower(coalesce(title,'')||' '||coalesce(vendor,'')||' '||coalesce(attributes->>'hoofdgroep_omschrijving','')||' '||coalesce(attributes->>'subgroep','')),
+        '[^a-z0-9]+')) w
+      from products where status='active' and has_image and in_stock and is_group_primary
+    ) s
+    where length(w) >= 3 and w ~ '^[a-z]+$'
+    group by w
+    on conflict (term) do update set freq = excluded.freq`));
+  console.log("✓ zoekwoorden-vocabulaire bijgewerkt.");
+
   // Terug-op-voorraad-mails versturen voor wat net weer leverbaar is.
   const notified = await processStockNotifications();
   if (notified) console.log(`✓ ${notified} terug-op-voorraad-notificatie(s) verstuurd.`);

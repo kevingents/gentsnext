@@ -647,6 +647,42 @@ export type SearchFacets = {
 };
 
 /**
+ * "Bedoelde je …?" — corrigeert typefouten tegen het zoekwoorden-vocabulaire
+ * (search_terms, pg_trgm). Retourneert een verbeterde query of null als er
+ * niets beters is. Bewaart maten/cijfers ongewijzigd.
+ */
+export async function suggestCorrection(q: string): Promise<string | null> {
+  const tokens = q.trim().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (!tokens.length) return null;
+  const db = getDb();
+  let changed = false;
+  const out: string[] = [];
+  for (const tok of tokens) {
+    const w = tok.toLowerCase();
+    if (w.length < 3 || !/^[a-z]+$/.test(w)) {
+      out.push(tok);
+      continue;
+    }
+    const exact = await db.execute(sql`select 1 from search_terms where term = ${w} limit 1`);
+    if (exact.rows.length) {
+      out.push(tok);
+      continue;
+    }
+    const sug = await db.execute<{ term: string; s: number }>(
+      sql`select term, similarity(term, ${w}) as s from search_terms where term % ${w} order by s desc, freq desc limit 1`
+    );
+    if (sug.rows[0] && Number(sug.rows[0].s) >= 0.4) {
+      out.push(sug.rows[0].term);
+      changed = true;
+    } else {
+      out.push(tok);
+    }
+  }
+  const corrected = out.join(" ");
+  return changed && corrected.toLowerCase() !== q.trim().toLowerCase() ? corrected : null;
+}
+
+/**
  * Catalogus-zoek (Doofinder-stijl): zoekt op titel/vendor/categorie MÉT
  * - maat-tokens ("overhemd 42" → alleen producten met maat 42 op voorraad),
  * - typo-tolerantie via pg_trgm (word_similarity),
