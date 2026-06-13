@@ -5,17 +5,20 @@ import { CartButton } from "@/components/cart/cart-button";
 import { WishlistLink } from "@/components/wishlist/wishlist-link";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { SearchTrigger } from "@/components/search/search-trigger";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { getLocale } from "@/lib/locale-server";
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const locale = await getLocale();
   return (
     <>
       <AnnouncementBar />
-      <SiteHeaderInner />
+      <SiteHeaderInner locale={locale} />
     </>
   );
 }
 
-function SiteHeaderInner() {
+function SiteHeaderInner({ locale }: { locale: import("@/lib/i18n").Locale }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
       {/* Bovenrij: hamburger (mobiel) · logo · utilities */}
@@ -54,6 +57,7 @@ function SiteHeaderInner() {
           >
             Maatadvies
           </Link>
+          <LanguageSwitcher current={locale} />
           <SearchTrigger />
           <Link href="/account" aria-label="Mijn account" className="text-ink-soft transition-colors hover:text-ink">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>

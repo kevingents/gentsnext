@@ -6,7 +6,10 @@ import {
   productImages,
   productCollections,
   collections,
+  productTranslations,
 } from "@/db/schema";
+import { DEFAULT_LOCALE } from "@/lib/i18n";
+import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
 
@@ -143,11 +146,23 @@ async function buildProductCards(
   const isEnglishish = (s: string) =>
     /\b(the|with|smiling|man|stylish|wearing|worn|outfit|shirt|trousers)\b/i.test(s);
 
+  // Vertaalde titels voor niet-NL locale (AI-vertaling, product_translations).
+  const locale = await getLocale();
+  const titleTl = new Map<string, string>();
+  if (locale !== DEFAULT_LOCALE) {
+    const tls = await db
+      .select({ productId: productTranslations.productId, title: productTranslations.title })
+      .from(productTranslations)
+      .where(and(inArray(productTranslations.productId, ids), eq(productTranslations.locale, locale)));
+    for (const t of tls) if (t.title) titleTl.set(t.productId, t.title);
+  }
+
   return base.map((p) => {
     const img = firstImage.get(p.id);
     const range = priceRange.get(p.id);
     const rawAlt = (img?.alt || "").trim();
     const cleanAlt = !rawAlt || isEnglishish(rawAlt) ? p.title : rawAlt;
+    const tl = titleTl.get(p.id);
     // Bij een kleurgroep tonen we de BASISnaam op de kaart (kleur weg uit titel),
     // zodat "Stropdas PE lichtblauw" → "Stropdas PE · In 19 kleuren".
     const cnt = colorCount.get(p.id) ?? 1;
@@ -156,6 +171,8 @@ async function buildProductCards(
     if (cnt > 1 && lbl && p.title.toLowerCase().endsWith(lbl.toLowerCase())) {
       displayTitle = p.title.slice(0, p.title.length - lbl.length).replace(/[\s,–-]+$/, "").trim() || p.title;
     }
+    // Vertaling (indien aanwezig) wint voor de weergavetitel.
+    if (tl) displayTitle = tl;
     return {
       id: p.id,
       handle: p.handle,

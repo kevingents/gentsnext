@@ -126,6 +126,23 @@ export const productVariants = pgTable(
  * de 30-dagen-laagste referentieprijs (Omnibus). Marketeers krijgen géén vrij
  * "van"-prijsveld.
  */
+/** AI-vertalingen van producten per locale (titel/omschrijving/SEO). */
+export const productTranslations = pgTable(
+  "product_translations",
+  {
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    locale: text("locale").notNull(),
+    title: text("title").notNull().default(""),
+    descriptionHtml: text("description_html").notNull().default(""),
+    seoTitle: text("seo_title").notNull().default(""),
+    seoDescription: text("seo_description").notNull().default(""),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.productId, t.locale] })]
+);
+
 export const priceHistory = pgTable(
   "price_history",
   {
