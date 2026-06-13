@@ -7,6 +7,7 @@ import {
   productCollections,
   collections,
   productTranslations,
+  productSizeMedia,
 } from "@/db/schema";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
@@ -247,7 +248,7 @@ export async function getProductByHandle(handle: string) {
   const product = rows[0];
   if (!product) return null;
 
-  const [variants, images, links] = await Promise.all([
+  const [variants, images, links, sizeMediaRows] = await Promise.all([
     db
       .select()
       .from(productVariants)
@@ -264,9 +265,14 @@ export async function getProductByHandle(handle: string) {
       .innerJoin(collections, eq(collections.id, productCollections.collectionId))
       .where(eq(productCollections.productId, product.id))
       .orderBy(asc(productCollections.position)),
+    db.select().from(productSizeMedia).where(eq(productSizeMedia.productId, product.id)).limit(1),
   ]);
 
-  return { product, variants, images, collections: links };
+  const sizeMedia = sizeMediaRows[0]
+    ? { threshold: sizeMediaRows[0].threshold, url: sizeMediaRows[0].url, alt: sizeMediaRows[0].alt }
+    : null;
+
+  return { product, variants, images, collections: links, sizeMedia };
 }
 
 export async function listProductHandles(limit = 50000) {

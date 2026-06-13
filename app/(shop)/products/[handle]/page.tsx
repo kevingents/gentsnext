@@ -7,6 +7,7 @@ import { BuyBox, type BuyColor } from "@/components/pdp/buy-box";
 import { Accordion } from "@/components/pdp/accordion";
 import { ColorSiblings } from "@/components/pdp/color-siblings";
 import { ColorDonut } from "@/components/pdp/color-donut";
+import { PdpSizeProvider } from "@/components/pdp/pdp-size-context";
 import { ProductCard } from "@/components/product-card";
 import { TrackRecent } from "@/components/recent/track-recent";
 import { RecentStrip } from "@/components/recent/recent-strip";
@@ -68,7 +69,7 @@ export default async function ProductPage({ params }: Props) {
   const { handle } = await params;
   const data = await getProductByHandle(handle);
   if (!data) notFound();
-  const { product, variants, images, collections } = data;
+  const { product, variants, images, collections, sizeMedia } = data;
   if (!variants.length) notFound();
 
   const siteUrl = getSiteUrl();
@@ -301,8 +302,9 @@ export default async function ProductPage({ params }: Props) {
         <span className="text-ink">{product.title}</span>
       </nav>
 
+      <PdpSizeProvider>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
-        <Gallery images={images.map((i) => ({ url: i.url, alt: i.alt }))} title={product.title} />
+        <Gallery images={images.map((i) => ({ url: i.url, alt: i.alt }))} title={product.title} sizeMedia={sizeMedia} />
 
         <div className="lg:sticky lg:top-24 lg:self-start">
           <BuyBox
@@ -349,6 +351,7 @@ export default async function ProductPage({ params }: Props) {
           <ShareRow title={product.title} />
         </div>
       </div>
+      </PdpSizeProvider>
 
       {/* Maak de look compleet — slimme bijverkoop */}
       {recommendations.length > 0 ? (

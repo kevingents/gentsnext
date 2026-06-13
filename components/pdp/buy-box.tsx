@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
+import { sizeRowLabel } from "@/lib/size-taxonomy";
+import { usePdpSize } from "@/components/pdp/pdp-size-context";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
@@ -53,9 +55,15 @@ export function BuyBox({
   hasStock,
 }: Props) {
   const cart = useCart();
+  const { setSizeLabel } = usePdpSize();
   const [colorIdx, setColorIdx] = useState(0);
   const [size, setSize] = useState<string | null>(null);
   const active = colors[Math.min(colorIdx, colors.length - 1)];
+
+  // Deel de gekozen maat-bucket met de galerij (foto aanpassen bij grote maten).
+  useEffect(() => {
+    setSizeLabel(size ? sizeRowLabel(size) : null);
+  }, [size, setSizeLabel]);
 
   const selectedSize = useMemo(
     () => active?.sizes.find((s) => s.size === size) ?? null,

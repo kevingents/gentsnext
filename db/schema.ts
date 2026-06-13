@@ -126,6 +126,20 @@ export const productVariants = pgTable(
  * de 30-dagen-laagste referentieprijs (Omnibus). Marketeers krijgen géén vrij
  * "van"-prijsveld.
  */
+/**
+ * Alternatieve modelfoto voor grote maten — getoond zodra een maat ≥ threshold
+ * gekozen wordt (inclusief passende fotografie). Per product instelbaar.
+ */
+export const productSizeMedia = pgTable("product_size_media", {
+  productId: uuid("product_id")
+    .primaryKey()
+    .references(() => products.id, { onDelete: "cascade" }),
+  threshold: text("threshold").notNull().default("XXL"),
+  url: text("url").notNull(),
+  alt: text("alt").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** AI-vertalingen van producten per locale (titel/omschrijving/SEO). */
 export const productTranslations = pgTable(
   "product_translations",
