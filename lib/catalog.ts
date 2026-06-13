@@ -425,7 +425,12 @@ function allConditions(f: ProductFilters): SQL[] {
     conds.push(inList(sql`${products.attributes} ->> 'materiaal'`, f.materials));
   }
   if (f.patterns?.length) {
-    conds.push(inList(sql`${products.attributes} ->> 'print_design'`, f.patterns));
+    // "Effen" = geen/leeg dessin; combineer met eventuele echte dessins via OR.
+    const real = f.patterns.filter((p) => p !== "Effen");
+    const ors: SQL[] = [];
+    if (real.length) ors.push(inList(sql`${products.attributes} ->> 'print_design'`, real));
+    if (f.patterns.includes("Effen")) ors.push(sql`coalesce(trim(${products.attributes} ->> 'print_design'), '') = ''`);
+    if (ors.length) conds.push(sql`(${sql.join(ors, sql` or `)})`);
   }
   if (f.seasons?.length) {
     conds.push(inList(sql`${products.attributes} ->> 'seizoen'`, f.seasons));
@@ -494,7 +499,7 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
   // gekozen kleur/maat/pasvorm — zo blijven alle opties met telling zichtbaar.
   const ctx = sql.join(contextConditions(f), sql` and `);
 
-  const [typeRows, materialRows, patternRows, seasonRows, ironRow, colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
+  const [typeRows, materialRows, patternRows, seasonRows, ironRow, colorRows, sizeRows, fitRows, priceRow, effenRow] = await Promise.all([
     db.execute<{ v: string; n: number }>(sql`
       select ${products.attributes} ->> 'subgroep' as v, count(*)::int as n
       from ${products}
@@ -537,6 +542,9 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
       select min(v.price_cents)::int as lo, max(v.price_cents)::int as hi
       from ${products} join ${productVariants} v on v.product_id = ${products.id}
       where ${ctx}`),
+    db.execute<{ n: number }>(sql`
+      select count(*)::int as n from ${products}
+      where ${ctx} and coalesce(trim(${products.attributes} ->> 'print_design'), '') = ''`),
   ]);
 
   const colorCount = new Map(colorRows.rows.map((r) => [r.fam, r.n]));
@@ -572,11 +580,16 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
     .map((r) => ({ value: r.v, count: r.n }))
     .sort((a, b) => b.count - a.count);
 
-  const patterns = patternRows.rows
-    .map((r) => ({ value: r.v, count: r.n }))
-    .filter((p) => p.count >= 2)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 12);
+  // "Effen" (geen dessin) als eerste optie — meestal de grootste groep.
+  const effenCount = Number(effenRow.rows[0]?.n ?? 0);
+  const patterns = [
+    ...(effenCount >= 2 ? [{ value: "Effen", count: effenCount }] : []),
+    ...patternRows.rows
+      .map((r) => ({ value: r.v, count: r.n }))
+      .filter((p) => p.count >= 2)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12),
+  ];
 
   return {
     types,
