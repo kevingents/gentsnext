@@ -10,7 +10,7 @@ type Order = {
 
 const STATUS_NL: Record<string, string> = {
   open: "Open", paid: "Betaald", shipped: "Verzonden", ready_pickup: "Klaar om af te halen",
-  refunded: "Terugbetaald", canceled: "Geannuleerd", failed: "Mislukt", expired: "Verlopen", review: "Review",
+  delivered: "Bezorgd", refunded: "Terugbetaald", canceled: "Geannuleerd", failed: "Mislukt", expired: "Verlopen", review: "Review",
 };
 
 export function OrdersAdmin({ orders }: { orders: Order[] }) {
@@ -51,6 +51,7 @@ export function OrdersAdmin({ orders }: { orders: Order[] }) {
           <div className="mt-3 flex flex-wrap gap-2">
             <Action label="Markeer verzonden" onClick={() => setStatus(o.id, "shipped")} busy={busy === o.id + "shipped"} disabled={o.status === "shipped"} />
             <Action label="Klaar om af te halen" onClick={() => setStatus(o.id, "ready_pickup")} busy={busy === o.id + "ready_pickup"} disabled={o.status === "ready_pickup"} />
+            <Action label="Markeer bezorgd" onClick={() => setStatus(o.id, "delivered")} busy={busy === o.id + "delivered"} disabled={o.status === "delivered"} />
             <span className="ml-auto self-center font-sans text-xs text-muted">Fulfilment: {o.fulfillmentStatus}</span>
           </div>
         </div>

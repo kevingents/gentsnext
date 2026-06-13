@@ -313,7 +313,7 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
 
 /** Admin: zet de order-status en stuurt de klant een update (mail + WhatsApp). */
 export async function updateOrderStatus(orderId: string, status: string): Promise<boolean> {
-  const allowed = ["paid", "shipped", "ready_pickup", "refunded", "canceled"];
+  const allowed = ["paid", "shipped", "ready_pickup", "delivered", "refunded", "canceled"];
   if (!allowed.includes(status)) return false;
   const db = getDb();
   const [order] = await db

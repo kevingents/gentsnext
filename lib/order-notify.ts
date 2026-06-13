@@ -5,8 +5,9 @@ import { sendWhatsAppText } from "@/lib/whatsapp";
 /**
  * Order-status-updates naar de klant via e-mail én WhatsApp. De
  * orderbevestiging (betaald) heeft een eigen rijke HTML-mail (lib/email); hier
- * zitten de statusovergangen 'verzonden' en 'klaar om af te halen'. WhatsApp en
- * e-mail zijn env-gated (zonder koppeling: stub-log).
+ * zitten de statusovergangen 'verzonden', 'klaar om af te halen', 'bezorgd'
+ * (met review-uitnodiging) en 'terugbetaald'. WhatsApp en e-mail zijn env-gated
+ * (zonder koppeling: stub-log).
  */
 
 type OrderForNotify = {
@@ -17,26 +18,46 @@ type OrderForNotify = {
   accessToken?: string | null;
 };
 
-const MESSAGES: Record<string, (o: OrderForNotify, url: string) => { subject: string; text: string }> = {
-  shipped: (o, url) => ({
+type Ctx = { orderUrl: string; reviewUrl: string };
+type Msg = { subject: string; text: string; ctaUrl: string; ctaLabel: string };
+
+const MESSAGES: Record<string, (o: OrderForNotify, c: Ctx) => Msg> = {
+  shipped: (o, c) => ({
     subject: `Je GENTS-bestelling ${o.orderNumber} is verzonden`,
-    text: `Hoi ${o.firstName || "daar"}, goed nieuws! Je bestelling ${o.orderNumber} is onderweg. Volg 'm via ${url}`,
+    text: `Hoi ${o.firstName || "daar"}, goed nieuws! Je bestelling ${o.orderNumber} is onderweg.`,
+    ctaUrl: c.orderUrl,
+    ctaLabel: "Volg je bestelling",
   }),
-  ready_pickup: (o, url) => ({
+  ready_pickup: (o, c) => ({
     subject: `Je GENTS-bestelling ${o.orderNumber} ligt klaar`,
     text: `Hoi ${o.firstName || "daar"}, je bestelling ${o.orderNumber} ligt klaar om af te halen in de winkel. Tot snel!`,
+    ctaUrl: c.orderUrl,
+    ctaLabel: "Bekijk je bestelling",
   }),
-  refunded: (o, url) => ({
+  delivered: (o, c) => ({
+    subject: "Hoe bevalt je GENTS-bestelling?",
+    text: `Hoi ${o.firstName || "daar"}, je bestelling ${o.orderNumber} is bezorgd. We zijn benieuwd wat je ervan vindt — een korte review helpt andere klanten enorm en kost je maar een minuutje.`,
+    ctaUrl: c.reviewUrl,
+    ctaLabel: "Schrijf een review",
+  }),
+  refunded: (o, c) => ({
     subject: `Je GENTS-bestelling ${o.orderNumber} is terugbetaald`,
     text: `Hoi ${o.firstName || "daar"}, je betaling voor ${o.orderNumber} is terugbetaald. Vragen? We helpen je graag.`,
+    ctaUrl: c.orderUrl,
+    ctaLabel: "Bekijk je bestelling",
   }),
 };
 
 export async function notifyOrderStatus(order: OrderForNotify, status: string): Promise<void> {
   const make = MESSAGES[status];
   if (!make) return;
-  const url = `${getSiteUrl()}/bestelling/${order.orderNumber}${order.accessToken ? `?t=${order.accessToken}` : ""}`;
-  const { subject, text } = make(order, url);
+  const base = getSiteUrl();
+  const q = order.accessToken ? `?t=${order.accessToken}` : "";
+  const ctx: Ctx = {
+    orderUrl: `${base}/bestelling/${order.orderNumber}${q}`,
+    reviewUrl: `${base}/review/${order.orderNumber}${q}`,
+  };
+  const { subject, text, ctaUrl, ctaLabel } = make(order, ctx);
 
   // E-mail
   if (emailConfigured() && order.email) {
@@ -48,7 +69,7 @@ export async function notifyOrderStatus(order: OrderForNotify, status: string): 
           from: process.env.RESEND_FROM,
           to: [order.email],
           subject,
-          html: `<p>${text}</p><p><a href="${url}" style="display:inline-block;background:#0A0A0A;color:#fff;padding:12px 20px;text-decoration:none">Bekijk je bestelling</a></p>`,
+          html: `<p>${text}</p><p><a href="${ctaUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;padding:12px 20px;text-decoration:none">${ctaLabel}</a></p>`,
         }),
       });
     } catch (e) {
@@ -60,6 +81,6 @@ export async function notifyOrderStatus(order: OrderForNotify, status: string): 
 
   // WhatsApp (als de klant een nummer heeft achtergelaten)
   if (order.phone) {
-    await sendWhatsAppText(order.phone, text);
+    await sendWhatsAppText(order.phone, `${text} ${ctaUrl}`);
   }
 }
