@@ -276,6 +276,34 @@ export const orderLines = pgTable(
   (t) => [index("order_lines_order_idx").on(t.orderId)]
 );
 
+/**
+ * "Mail me als het er weer is" — terug-op-voorraad-notificaties. Per product
+ * (sku leeg = elke maat) of per specifieke maat (sku gezet). De voorraad-sync
+ * (scripts/sync-catalog-flags) verstuurt de mail zodra de voorraad terug is.
+ */
+export const stockNotifications = pgTable(
+  "stock_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    productHandle: text("product_handle").notNull(),
+    productTitle: text("product_title").notNull().default(""),
+    /** Specifieke variant/maat; leeg = elke maat van het product. */
+    sku: text("sku").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    status: text("status").notNull().default("pending"), // pending | notified | cancelled
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("stock_notifications_unique").on(t.email, t.productHandle, t.sku),
+    index("stock_notifications_status_idx").on(t.status),
+    index("stock_notifications_sku_idx").on(t.sku),
+    index("stock_notifications_handle_idx").on(t.productHandle),
+  ]
+);
+
 /* ─────────────────────────── Klanten & loyaliteit ───────────────────────── */
 
 /**

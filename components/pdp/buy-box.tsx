@@ -7,6 +7,7 @@ import { formatEuro } from "@/lib/pricing";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
+import { StockNotify } from "@/components/pdp/stock-notify";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { RatingStars } from "@/components/rating-stars";
 import type { ProductRating } from "@/lib/reviews";
@@ -63,6 +64,10 @@ export function BuyBox({
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? "vanaf " : "") + formatEuro(priceCents);
   const soldOut = Boolean(selectedSize && selectedSize.known && selectedSize.qty <= 0);
+  // Hele kleur/product uitverkocht: geen enkele bekende maat heeft voorraad.
+  const allSoldOut = Boolean(
+    hasStock && active && active.sizes.length > 0 && active.sizes.every((s) => !s.known || s.qty <= 0)
+  );
 
   function addToCart() {
     if (!selectedSize || !active || soldOut) return;
@@ -168,6 +173,17 @@ export function BuyBox({
             )}
           </p>
         ) : null}
+        {/* Mail-me bij een uitverkochte gekozen maat (niet als het hele product op is). */}
+        {soldOut && !allSoldOut ? (
+          <StockNotify
+            productHandle={productHandle}
+            productTitle={title}
+            sku={selectedSize?.sku}
+            size={selectedSize?.size}
+            color={active?.color}
+            variant="compact"
+          />
+        ) : null}
         {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
           <ClickAndCollect branches={selectedSize.branches} />
         ) : null}
@@ -175,21 +191,40 @@ export function BuyBox({
 
       <DeliveryPromise />
 
-      {/* Bestelknop + bewaren */}
-      <div className="mt-7 grid grid-cols-[1fr_auto] gap-2">
-        <button
-          type="button"
-          onClick={addToCart}
-          disabled={!size || soldOut}
-          className="btn-primary w-full"
-        >
-          {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : `In winkelwagen — maat ${size}`}
-        </button>
-        <WishlistButton handle={productHandle} variant="pdp" />
-      </div>
-      <p className="mt-3 font-sans text-xs text-muted">
-        Gratis retour binnen 14 dagen. Afrekenen met iDEAL volgt binnenkort.
-      </p>
+      {/* Bestelknop + bewaren — of, als alles uitverkocht is, de mail-me-blok. */}
+      {allSoldOut ? (
+        <div className="mt-7">
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <button type="button" disabled className="btn-primary w-full opacity-60">
+              Uitverkocht
+            </button>
+            <WishlistButton handle={productHandle} variant="pdp" />
+          </div>
+          <StockNotify
+            productHandle={productHandle}
+            productTitle={title}
+            color={active?.color}
+            variant="block"
+          />
+        </div>
+      ) : (
+        <>
+          <div className="mt-7 grid grid-cols-[1fr_auto] gap-2">
+            <button
+              type="button"
+              onClick={addToCart}
+              disabled={!size || soldOut}
+              className="btn-primary w-full"
+            >
+              {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : `In winkelwagen — maat ${size}`}
+            </button>
+            <WishlistButton handle={productHandle} variant="pdp" />
+          </div>
+          <p className="mt-3 font-sans text-xs text-muted">
+            Gratis retour binnen 14 dagen. Afrekenen met iDEAL volgt binnenkort.
+          </p>
+        </>
+      )}
 
       {/* Sticky mobiele bestelbalk */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 backdrop-blur lg:hidden">

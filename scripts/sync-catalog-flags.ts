@@ -4,6 +4,7 @@ import { products, productVariants, productImages } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { stockForSkus } from "@/lib/stock";
 import { deriveVariant, MAX_GROUP_SIZE } from "@/lib/variant-grouping";
+import { processStockNotifications } from "@/lib/stock-notify";
 
 /**
  * Vult de gedenormaliseerde catalogus-vlaggen in één pass:
@@ -155,6 +156,10 @@ async function main() {
     return m.hasImage && m.inStock && isPrimaryById.get(p.id);
   }).length;
   console.log(`\n✓ Klaar. Zichtbaar in catalogus (foto+voorraad, primair): ${visible} van ${prods.length} actieve producten.`);
+
+  // Terug-op-voorraad-mails versturen voor wat net weer leverbaar is.
+  const notified = await processStockNotifications();
+  if (notified) console.log(`✓ ${notified} terug-op-voorraad-notificatie(s) verstuurd.`);
   process.exit(0);
 }
 
