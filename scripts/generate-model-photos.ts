@@ -16,7 +16,8 @@ import { and, eq, sql } from "drizzle-orm";
  *   GENTS_MODEL_BASE_PLUS        – URL van het plus-size model (optioneel)
  *   STOREGENTS_BLOB_READ_WRITE_TOKEN – voor het opslaan van de output
  *
- *   npm run generate:model-photos -- 25     (aantal producten deze run)
+ *   npm run generate:model-photos -- 25                       (25 producten deze run)
+ *   npm run generate:model-photos -- 1 colbert-sjas-blauw     (één product gericht her-genereren)
  */
 
 const API = "https://api.fashn.ai/v1";
@@ -29,13 +30,38 @@ const CATEGORY: Record<string, "tops" | "bottoms" | "one-pieces"> = {
   Pakken: "one-pieces",
 };
 
+/**
+ * Shopify-CDN-URL → master zonder width/height-cap. FASHN tryon-v1.6 capt de
+ * output op 864×1296 (~1 MP) en upscalet niet boven de input; de master aanleveren
+ * geeft dus de scherpst mogelijke 1 MP-output. Geldt voor model én productfoto.
+ */
+function toFullRes(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.pathname.includes("/cdn/shop") || u.hostname.endsWith("shopify.com")) {
+      u.searchParams.delete("width");
+      u.searchParams.delete("height");
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 async function runVTON(modelImage: string, garmentImage: string, category: string, apiKey: string): Promise<string | null> {
   const start = await fetch(`${API}/run`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model_name: "tryon-v1.6",
-      inputs: { model_image: modelImage, garment_image: garmentImage, category },
+      inputs: {
+        model_image: toFullRes(modelImage),
+        garment_image: toFullRes(garmentImage),
+        category,
+        mode: "quality", // max realisme (zelfde 864×1296, ~12-19s)
+        garment_photo_type: "auto",
+        output_format: "jpeg",
+      },
     }),
   });
   if (!start.ok) {
@@ -62,7 +88,7 @@ async function toBlob(url: string, path: string, token: string): Promise<string 
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
-    const blob = await put(path, await res.arrayBuffer(), { access: "public", token, contentType: "image/jpeg" });
+    const blob = await put(path, await res.arrayBuffer(), { access: "public", token, contentType: "image/jpeg", allowOverwrite: true });
     return blob.url;
   } catch (e) {
     console.error("  blob-upload-fout:", e);
@@ -80,14 +106,16 @@ async function main() {
     process.exit(1);
   }
   const limit = Math.max(1, Math.min(200, Number(process.argv[2]) || 20));
+  const onlyHandle = (process.argv[3] || "").trim(); // optioneel: één product gericht (her)genereren
   const db = getDb();
 
-  // Zichtbare apparel-producten met flat-foto, nog zonder modelfoto.
+  // Zichtbare apparel-producten met flat-foto, nog zonder modelfoto (of één gerichte handle).
   const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
       (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
     from products p
-    where p.status='active' and p.has_image and p.in_stock and p.is_group_primary and p.model_image_url=''
+    where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
+      ${onlyHandle ? sql`and p.handle = ${onlyHandle}` : sql`and p.model_image_url=''`}
       and p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(Object.keys(CATEGORY).map((k) => sql`${k}`), sql`, `)})
     order by p.stock_qty desc
     limit ${limit}
