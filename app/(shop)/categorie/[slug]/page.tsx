@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
+import { JsonLd } from "@/components/json-ld";
 import { getFilteredProducts, getFacets } from "@/lib/catalog";
 import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -55,9 +57,25 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     return qs ? `/categorie/${slug}?${qs}` : `/categorie/${slug}`;
   }
 
+  const siteUrl = getSiteUrl();
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
+      { "@type": "ListItem", position: 2, name: cat.label, item: `${siteUrl}/categorie/${slug}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
-      <div className="border-b border-line pb-6">
+      <JsonLd data={breadcrumbJsonLd} />
+      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
+        <Link href="/" className="hover:text-ink">Home</Link>
+        {" / "}
+        <span className="text-ink">{cat.label}</span>
+      </nav>
+      <div className="mt-6 border-b border-line pb-6">
         <p className="label-brand">Categorie</p>
         <h1 className="mt-2 text-display-md">{cat.label}</h1>
       </div>
