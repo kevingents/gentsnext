@@ -38,7 +38,7 @@ export function HelpButton() {
   }
 
   return (
-    <div className="fixed bottom-6 left-6 z-30 hidden lg:block">
+    <div className="fixed bottom-20 right-4 z-30 lg:bottom-6 lg:right-6">
       {open ? (
         <div className="mb-3 w-80 border border-line bg-canvas p-4 shadow-pop">
           <p className="label-brand mb-2">Hulp nodig?</p>

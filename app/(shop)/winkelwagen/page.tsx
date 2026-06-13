@@ -75,17 +75,23 @@ export default function WinkelwagenPage() {
           <div className="border border-line p-5">
             <p className="label-brand">Overzicht</p>
             <div className="mt-4 flex items-center justify-between font-sans text-sm">
-              <span className="text-muted">Subtotaal ({cart.count})</span>
+              <span className="text-muted">Artikelen ({cart.count})</span>
               <span>{formatEuro(cart.subtotalCents)}</span>
             </div>
             <div className="mt-2 flex items-center justify-between font-sans text-sm">
               <span className="text-muted">Verzending</span>
               <span>{cart.subtotalCents >= 7500 ? "Gratis" : "Berekend bij afrekenen"}</span>
             </div>
+            {cart.subtotalCents > 0 && cart.subtotalCents < 7500 ? (
+              <p className="mt-2 font-sans text-xs text-ink-soft">
+                Nog <strong>{formatEuro(7500 - cart.subtotalCents)}</strong> tot gratis verzending.
+              </p>
+            ) : null}
             <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
-              <span className="font-sans text-sm">Totaal</span>
+              <span className="font-sans text-sm">Subtotaal</span>
               <span className="font-display text-xl">{formatEuro(cart.subtotalCents)}</span>
             </div>
+            <p className="mt-1 font-sans text-xs text-muted">Verzendkosten worden bij het afrekenen bepaald.</p>
             <Link href="/afrekenen" className="btn-primary mt-5 w-full">
               Afrekenen
             </Link>

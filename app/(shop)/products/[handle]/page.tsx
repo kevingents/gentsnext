@@ -48,7 +48,8 @@ const SPEC_LABELS: [key: string, label: string][] = [
 ];
 
 const TRUST = [
-  "Gratis retour binnen 14 dagen",
+  "Gratis retour binnen 14 dagen — ook in de winkel",
+  "Gratis vermaken in onze winkels",
   "Persoonlijk advies in 19 winkels",
   "Veilig betalen met iDEAL",
 ];
@@ -368,6 +369,12 @@ export default async function ProductPage({ params }: Props) {
             hasStock={hasStock}
             colorSiblings={colorSiblings}
           />
+
+          {String(attrs.pasvorm ?? "").trim() ? (
+            <p className="mt-6 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
+              <span className="font-medium text-ink">Pasvorm: {String(attrs.pasvorm)}.</span> Twijfel je tussen twee maten? Kies de grootste.
+            </p>
+          ) : null}
 
           <ul className="mt-8 space-y-1.5">
             {TRUST.map((t) => (
