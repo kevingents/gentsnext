@@ -5,6 +5,7 @@ import { CartDrawer } from "@/components/cart/cart-drawer";
 import { WishlistProvider } from "@/components/wishlist/wishlist-context";
 import { BackToTop } from "@/components/back-to-top";
 import { CookieNotice } from "@/components/cookie-notice";
+import { SkipLink } from "@/components/skip-link";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -12,8 +13,9 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     <CartProvider>
       <WishlistProvider>
         <div className="flex min-h-screen flex-col">
+          <SkipLink />
           <SiteHeader />
-          <main className="flex-1">{children}</main>
+          <main id="main" className="flex-1">{children}</main>
           <SiteFooter />
           <CartDrawer />
           <BackToTop />
