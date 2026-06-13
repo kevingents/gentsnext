@@ -24,6 +24,7 @@ import { getReviewSummary, getPublishedReviews } from "@/lib/reviews-db";
 import { ReviewsSection } from "@/components/reviews/reviews-section";
 import { pickupInfoByCity } from "@/lib/stores";
 import { BRANCH_CITY } from "@/lib/fulfillment-config";
+import { estimateDelivery } from "@/lib/fulfillment";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
@@ -132,6 +133,18 @@ export default async function ProductPage({ params }: Props) {
   const anyInStock =
     !hasStock || colors.some((c) => c.sizes.some((s) => !s.known || s.qty > 0));
 
+  // Representatieve (best op voorraad) variant voor de bezorgbelofte op de PDP.
+  let representativeSku = "";
+  let bestQty = 0;
+  for (const c of colors) {
+    for (const s of c.sizes) {
+      if (s.sku && s.qty > bestQty) {
+        bestQty = s.qty;
+        representativeSku = s.sku;
+      }
+    }
+  }
+
   const specs = SPEC_LABELS.map(([key, label]) => ({
     label,
     value: String(attrs[key] ?? "").trim(),
@@ -147,12 +160,13 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
     getReviewSummary(product.handle),
     getPublishedReviews(product.handle, 30),
+    representativeSku ? estimateDelivery([{ sku: representativeSku, qty: 1 }]) : Promise.resolve(null),
   ]);
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
@@ -388,6 +402,9 @@ export default async function ProductPage({ params }: Props) {
             referenceCents={referenceCents}
             hasStock={hasStock}
             colorSiblings={colorSiblings}
+            deliveryPromise={delivery?.promise ?? null}
+            deliveryNote={delivery?.note ?? null}
+            cutoffHour={settings.warehouseCutoffHour}
           />
 
           {String(attrs.pasvorm ?? "").trim() ? (

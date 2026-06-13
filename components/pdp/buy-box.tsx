@@ -40,6 +40,10 @@ type Props = {
   referenceCents?: number;
   hasStock: boolean;
   colorSiblings?: SiblingItem[];
+  /** Server-belofte uit de allocatie-engine (estimateDelivery). */
+  deliveryPromise?: string | null;
+  deliveryNote?: string | null;
+  cutoffHour?: number;
 };
 
 export function BuyBox({
@@ -56,6 +60,9 @@ export function BuyBox({
   referenceCents,
   hasStock,
   colorSiblings,
+  deliveryPromise,
+  deliveryNote,
+  cutoffHour,
 }: Props) {
   const cart = useCart();
   const { setSizeLabel } = usePdpSize();
@@ -218,7 +225,7 @@ export function BuyBox({
         ) : null}
       </div>
 
-      <DeliveryPromise />
+      {!allSoldOut ? <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} /> : null}
 
       {/* Bestelknop + bewaren — of, als alles uitverkocht is, de mail-me-blok. */}
       {allSoldOut ? (
