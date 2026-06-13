@@ -20,6 +20,20 @@ function apiKey(): string {
   return key;
 }
 
+/**
+ * Organisatie-/OAuth-token (access_…) i.p.v. een gewone API-key (test_/live_).
+ * Dan moet je profileId + testmode expliciet meesturen.
+ */
+function usesAccessToken(): boolean {
+  return (process.env.MOLLIE_API_KEY || "").startsWith("access_");
+}
+function testmode(): boolean {
+  // Access-token: standaard testmode tenzij expliciet uitgezet. API-key bepaalt
+  // de modus zelf (test_/live_).
+  if (!usesAccessToken()) return false;
+  return process.env.MOLLIE_TESTMODE !== "false";
+}
+
 export function centsToValue(cents: number): string {
   return (cents / 100).toFixed(2);
 }
@@ -61,6 +75,11 @@ export async function createMolliePayment(input: {
     metadata: input.metadata,
   };
   if (input.method) body.method = input.method;
+  // Access-token vereist een profileId + expliciete testmode.
+  if (usesAccessToken()) {
+    if (process.env.MOLLIE_PROFILE_ID) body.profileId = process.env.MOLLIE_PROFILE_ID;
+    body.testmode = testmode();
+  }
 
   const res = await fetch(`${API}/payments`, {
     method: "POST",
@@ -78,7 +97,8 @@ export async function createMolliePayment(input: {
 }
 
 export async function getMolliePayment(id: string): Promise<MolliePayment> {
-  const res = await fetch(`${API}/payments/${encodeURIComponent(id)}`, {
+  const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
+  const res = await fetch(`${API}/payments/${encodeURIComponent(id)}${qs}`, {
     headers: { Authorization: `Bearer ${apiKey()}` },
   });
   if (!res.ok) {

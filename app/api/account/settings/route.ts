@@ -1,0 +1,43 @@
+import { NextResponse } from "next/server";
+import { getSessionCustomer } from "@/lib/account";
+import { updateSettings, type Settings } from "@/lib/settings";
+
+export const dynamic = "force-dynamic";
+
+const NUM_FIELDS: (keyof Settings)[] = [
+  "freeShippingCents", "shippingCents", "expressSurchargeCents",
+  "warehouseCutoffHour", "storeCutoffHour",
+  "standardMinDays", "standardMaxDays", "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
+  "retailSafetyStock", "warehouseSafetyStock",
+];
+
+/** Werkt de centrale instellingen bij — alleen voor beheerders. */
+export async function POST(req: Request) {
+  const customer = await getSessionCustomer();
+  if (!customer) return NextResponse.json({ ok: false, error: "niet ingelogd" }, { status: 401 });
+  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "geen beheerrechten" }, { status: 403 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "ongeldige body" }, { status: 400 });
+  }
+
+  const patch: Partial<Settings> = {};
+  for (const f of NUM_FIELDS) {
+    const v = body[f];
+    if (v != null && Number.isFinite(Number(v))) (patch as Record<string, number>)[f] = Math.max(0, Math.round(Number(v)));
+  }
+  if (typeof body.protectUnderstockedRetail === "boolean") patch.protectUnderstockedRetail = body.protectUnderstockedRetail;
+  if (body.branchCutoffs && typeof body.branchCutoffs === "object") {
+    const bc: Record<string, number> = {};
+    for (const [k, v] of Object.entries(body.branchCutoffs as Record<string, unknown>)) {
+      if (Number.isFinite(Number(v))) bc[k] = Math.max(0, Math.min(23, Math.round(Number(v))));
+    }
+    patch.branchCutoffs = bc;
+  }
+
+  const next = await updateSettings(patch);
+  return NextResponse.json({ ok: true, settings: next });
+}

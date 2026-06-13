@@ -25,6 +25,7 @@ type Address = {
 type Customer = {
   id: string; email: string; firstName: string; lastName: string; phone: string;
   loyaltyPoints: number; sizeProfile: Record<string, string>; marketingOptIn: boolean;
+  isAdmin?: boolean;
 };
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
@@ -69,9 +70,14 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
           <p className="label-brand">Mijn GENTS</p>
           <h1 className="mt-2 text-display-md">Hallo {name}</h1>
         </div>
-        <form action="/api/account/logout" method="post">
-          <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">Uitloggen</button>
-        </form>
+        <div className="flex items-center gap-4">
+          {customer.isAdmin ? (
+            <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">Instellingen (beheer)</a>
+          ) : null}
+          <form action="/api/account/logout" method="post">
+            <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">Uitloggen</button>
+          </form>
+        </div>
       </div>
 
       {/* Tabs */}

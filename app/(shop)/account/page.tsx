@@ -27,6 +27,7 @@ export default async function AccountPage() {
     loyaltyPoints: data.pointsBalance,
     sizeProfile: (customer.sizeProfile ?? {}) as Record<string, string>,
     marketingOptIn: customer.marketingOptIn,
+    isAdmin: customer.isAdmin,
   };
 
   return <ProfileClient customer={safeCustomer} data={safe} />;
