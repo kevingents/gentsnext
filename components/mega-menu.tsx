@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MenuItem } from "@/lib/main-menu";
 
 /** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
@@ -95,10 +95,62 @@ export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
 
 function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Toegankelijkheid: Esc sluit, focus blijft binnen de drawer (trap), achtergrond
+  // scrollt niet mee, en de focus keert terug naar het openende element.
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      panelRef.current
+        ? Array.from(
+            panelRef.current.querySelectorAll<HTMLElement>(
+              'a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+    focusables()[0]?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === "Tab") {
+        const list = focusables();
+        if (!list.length) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      prevFocus?.focus?.();
+    };
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="absolute inset-0 animate-[fadeIn_.2s_ease] bg-ink/40" onClick={onClose} />
-      <div className="absolute inset-y-0 left-0 w-[88%] max-w-sm animate-[slideInLeft_.25s_ease-out] overflow-y-auto bg-canvas shadow-drawer">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Hoofdmenu"
+        className="absolute inset-y-0 left-0 w-[88%] max-w-sm animate-[slideInLeft_.25s_ease-out] overflow-y-auto bg-canvas shadow-drawer"
+      >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <span className="label-brand">Menu</span>
           <button type="button" onClick={onClose} aria-label="Menu sluiten" className="font-sans text-sm underline">Sluiten</button>

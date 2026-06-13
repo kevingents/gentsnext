@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
 import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
 import { useT } from "@/components/i18n/locale-provider";
@@ -78,11 +78,50 @@ function groupLines(lines: CartLine[]): Group[] {
 export function CartDrawer() {
   const cart = useCart();
   const t = useT();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(cart.close);
+  closeRef.current = cart.close;
 
+  // Toegankelijkheid: scroll-lock + Esc-sluiten + focus-trap + focus-terugkeer.
   useEffect(() => {
-    document.body.style.overflow = cart.isOpen ? "hidden" : "";
+    if (!cart.isOpen) return;
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      panelRef.current
+        ? Array.from(
+            panelRef.current.querySelectorAll<HTMLElement>(
+              'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+    focusables()[0]?.focus();
+    document.body.style.overflow = "hidden";
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (e.key === "Tab") {
+        const list = focusables();
+        if (!list.length) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", onKey);
     return () => {
+      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
+      prevFocus?.focus?.();
     };
   }, [cart.isOpen]);
 
@@ -105,7 +144,7 @@ export function CartDrawer() {
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Winkelwagen" aria-modal="true">
       <div className="absolute inset-0 animate-[fadeIn_.25s_ease] bg-ink/40" onClick={cart.close} />
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer animate-[slideInRight_.32s_cubic-bezier(.16,1,.3,1)]">
+      <div ref={panelRef} className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer animate-[slideInRight_.32s_cubic-bezier(.16,1,.3,1)]">
         {/* Kop */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <p className="font-display text-lg">{t("cart.title")} ({cart.count})</p>
