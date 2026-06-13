@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMolliePayment, mollieConfigured } from "@/lib/mollie";
-import { applyPaymentStatus, sendOrderConfirmationOnce } from "@/lib/orders";
+import { applyPaymentStatus, sendOrderConfirmationOnce, planAndPushFulfillmentOnce } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -34,8 +34,8 @@ export async function POST(req: Request) {
     await applyPaymentStatus(payment.id, payment.status);
     if (payment.status === "paid" || payment.status === "authorized") {
       await sendOrderConfirmationOnce(payment.id);
-      // TODO (na go-live): order naar SRS si_weborder pushen (Bol-patroon) +
-      // voorraad afboeken.
+      // Allocatie (magazijn-eerst, minimaal splitsen) + SRS-weborder-push.
+      await planAndPushFulfillmentOnce(payment.id);
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

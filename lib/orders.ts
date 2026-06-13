@@ -2,6 +2,8 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
 import { sendOrderConfirmation } from "@/lib/email";
+import { allocateOrder } from "@/lib/fulfillment";
+import { pushOrderToSRS } from "@/lib/srs";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -203,6 +205,51 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   if (!ok) {
     // Niet verstuurd → claim terugdraaien zodat een volgende webhook het opnieuw probeert.
     await db.update(orders).set({ confirmationSentAt: null }).where(eq(orders.id, orderId));
+  }
+}
+
+/**
+ * Berekent het allocatieplan (welke filialen leveren wat) en pusht de
+ * weborders naar SRS — precies één keer per order (idempotent t.o.v. dubbele
+ * webhooks). Claimt eerst via een conditionele UPDATE op fulfillment_status.
+ */
+export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promise<void> {
+  const db = getDb();
+  const claimed = await db
+    .update(orders)
+    .set({ fulfillmentStatus: "planning" })
+    .where(
+      and(
+        eq(orders.molliePaymentId, molliePaymentId),
+        eq(orders.status, "paid"),
+        eq(orders.fulfillmentStatus, "pending")
+      )
+    )
+    .returning({ id: orders.id });
+  if (!claimed.length) return; // al gepland of (nog) niet betaald
+
+  const orderId = claimed[0].id;
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
+
+  try {
+    const plan = await allocateOrder(
+      lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title }))
+    );
+    const result = await pushOrderToSRS(order, plan);
+    await db
+      .update(orders)
+      .set({
+        fulfillmentPlan: plan,
+        fulfillmentStatus: result.status,
+        srsPushedAt: result.pushed > 0 ? sql`now()` : null,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(orders.id, orderId));
+  } catch (e) {
+    console.error("[fulfillment] plan/push faalde voor", order.orderNumber, e);
+    // Terug naar 'pending' zodat een volgende webhook het opnieuw probeert.
+    await db.update(orders).set({ fulfillmentStatus: "pending" }).where(eq(orders.id, orderId));
   }
 }
 

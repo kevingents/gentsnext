@@ -240,6 +240,10 @@ export const orders = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }),
     /** SRS-weborder-push-status (na betaling) — voor de latere koppeling. */
     srsPushedAt: timestamp("srs_pushed_at", { withTimezone: true }),
+    /** Allocatieplan (welke filialen leveren wat) — lib/fulfillment. */
+    fulfillmentPlan: jsonb("fulfillment_plan"),
+    /** 'pending' | 'planned' | 'pushed' | 'partial' | 'failed'. */
+    fulfillmentStatus: text("fulfillment_status").notNull().default("pending"),
     /** Orderbevestigingsmail verstuurd (idempotent — webhook kan dubbel komen). */
     confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
