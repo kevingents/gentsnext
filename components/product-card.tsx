@@ -10,6 +10,8 @@ export function ProductCard({ product }: { product: ProductCardData }) {
     <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
       {product.hasSale ? (
         <ProductCardBadge label="Sale" tone="sale" />
+      ) : product.lowStock ? (
+        <ProductCardBadge label="Laatste exemplaren" tone="sale" />
       ) : product.isNew ? (
         <ProductCardBadge label="Nieuw" tone="new" />
       ) : null}

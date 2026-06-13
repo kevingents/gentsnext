@@ -41,6 +41,8 @@ export type ProductCardData = {
   compareAtCents?: number;
   /** Aantal kleuren in de variantgroep (≥2 → toon "+N kleuren" op de kaart). */
   colorCount?: number;
+  /** Lage voorraad → eerlijke schaarste-badge ("Laatste exemplaren"). */
+  lowStock?: boolean;
 };
 
 export async function listCollections() {
@@ -95,6 +97,7 @@ async function buildProductCards(
         attributes: products.attributes,
         groupColorCount: products.groupColorCount,
         variantColorLabel: products.variantColorLabel,
+        stockQty: products.stockQty,
       })
       .from(products)
       .where(inArray(products.id, ids)),
@@ -102,6 +105,7 @@ async function buildProductCards(
 
   const colorCount = new Map(prodMeta.map((m) => [m.id, m.groupColorCount]));
   const colorLabel = new Map(prodMeta.map((m) => [m.id, m.variantColorLabel]));
+  const stockQtyById = new Map(prodMeta.map((m) => [m.id, m.stockQty]));
 
   const firstImage = new Map<string, { url: string; alt: string }>();
   for (const img of images) {
@@ -165,6 +169,10 @@ async function buildProductCards(
       hasSale: onSale.get(p.id) ?? false,
       compareAtCents: compareAtBest.get(p.id),
       colorCount: colorCount.get(p.id) ?? 1,
+      lowStock: (() => {
+        const q = stockQtyById.get(p.id) ?? 0;
+        return q > 0 && q <= 5;
+      })(),
     };
   });
 }
