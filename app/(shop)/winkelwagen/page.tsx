@@ -80,7 +80,7 @@ export default function WinkelwagenPage() {
             </div>
             <div className="mt-2 flex items-center justify-between font-sans text-sm">
               <span className="text-muted">Verzending</span>
-              <span>{cart.subtotalCents >= 5000 ? "Gratis" : "Berekend bij afrekenen"}</span>
+              <span>{cart.subtotalCents >= 7500 ? "Gratis" : "Berekend bij afrekenen"}</span>
             </div>
             <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
               <span className="font-sans text-sm">Totaal</span>

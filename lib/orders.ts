@@ -8,7 +8,7 @@ import { sendOrderConfirmation } from "@/lib/email";
  * gehaald — nooit het client-bedrag vertrouwen. Bedragen in centen.
  */
 
-const FREE_SHIPPING_CENTS = 5000; // €50
+const FREE_SHIPPING_CENTS = 7500; // €75 (drempel zoals op gents.nl)
 const SHIPPING_CENTS = 495; // €4,95 onder de drempel
 
 export type CheckoutItem = {

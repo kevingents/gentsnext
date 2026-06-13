@@ -113,16 +113,23 @@ async function buildProductCards(
     if (explicit || recent) newFlag.set(m.id, true);
   }
 
+  // Alt-tekst-strategie: Shopify-alt alleen behouden als hij Nederlands lijkt;
+  // anders consistente NL-fallback. Voorkomt half-Engelse alt-tags voor SEO/AI.
+  const isEnglishish = (s: string) =>
+    /\b(the|with|smiling|man|stylish|wearing|worn|outfit|shirt|trousers)\b/i.test(s);
+
   return base.map((p) => {
     const img = firstImage.get(p.id);
     const range = priceRange.get(p.id);
+    const rawAlt = (img?.alt || "").trim();
+    const cleanAlt = !rawAlt || isEnglishish(rawAlt) ? p.title : rawAlt;
     return {
       id: p.id,
       handle: p.handle,
       title: p.title,
       vendor: p.vendor,
       imageUrl: img?.url || "",
-      imageAlt: img?.alt || p.title,
+      imageAlt: cleanAlt,
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,

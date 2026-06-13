@@ -21,13 +21,18 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-between border border-line bg-canvas px-4 py-2.5 text-left font-sans text-sm hover:border-ink"
+          className="flex w-full items-center justify-between border border-line bg-canvas px-4 py-3 text-left font-sans text-sm hover:border-ink"
         >
-          <span>
-            <span className="text-success">●</span>{" "}
-            <span className="font-medium">Vandaag afhalen</span>{" "}
-            <span className="text-muted">
-              in {available.length} {available.length === 1 ? "winkel" : "winkels"}
+          <span className="flex items-center gap-2.5">
+            {/* Winkel-icoon — visueel duidelijker dan een puntje */}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden className="shrink-0 text-ink">
+              <path d="M3 9l1.5-4.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 14h6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium text-ink">Ophalen in een winkel</span>
+              <span className="text-xs text-success">
+                ● Vandaag op voorraad in {available.length} {available.length === 1 ? "winkel" : "winkels"}
+              </span>
             </span>
           </span>
           <span aria-hidden className="text-muted">→</span>

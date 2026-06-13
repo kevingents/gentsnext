@@ -50,7 +50,7 @@ function CartSuggestions({ hoofdgroepen, onNavigate }: { hoofdgroepen: string[];
   );
 }
 
-const FREE_SHIPPING_CENTS = 5000; // €50 — instelbaar; gratis verzending-drempel
+const FREE_SHIPPING_CENTS = 7500; // €50 — instelbaar; gratis verzending-drempel
 
 type Group = { groupId?: string; groupLabel?: string; lines: CartLine[] };
 

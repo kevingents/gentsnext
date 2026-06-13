@@ -29,7 +29,7 @@ export type SiteSettings = {
 
 export const SITE_SETTINGS: SiteSettings = {
   announcement: {
-    text: "Gratis verzending vanaf € 50 · Persoonlijk advies in onze 19 winkels —",
+    text: "Gratis verzending vanaf € 75 · Persoonlijk advies in onze 19 winkels —",
     linkLabel: "vind een winkel",
     linkHref: "/pages/winkels",
   },
@@ -49,7 +49,7 @@ export const SITE_SETTINGS: SiteSettings = {
     "Gratis retour binnen 14 dagen",
     "Persoonlijk advies in 19 winkels",
   ],
-  freeShippingCents: 5000,
+  freeShippingCents: 7500,
   deliveryCutoffHour: 16,
 };
 

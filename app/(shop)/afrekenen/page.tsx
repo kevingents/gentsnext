@@ -25,7 +25,7 @@ export default function AfrekenenPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const shippingCents = cart.subtotalCents >= 5000 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
+  const shippingCents = cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
   const totalCents = cart.subtotalCents + shippingCents;
 
   if (cart.lines.length === 0 && !notice) {
