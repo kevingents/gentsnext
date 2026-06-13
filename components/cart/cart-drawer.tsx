@@ -111,7 +111,7 @@ export function CartDrawer() {
           </div>
         ) : (
           <>
-            {/* Gratis verzending-balk */}
+            {/* Gratis verzending-balk + levertijdcue */}
             <div className="border-b border-line px-5 py-3">
               {remaining > 0 ? (
                 <p className="font-sans text-xs text-ink-soft">
@@ -123,6 +123,9 @@ export function CartDrawer() {
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
                 <div className="h-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
               </div>
+              <p className="mt-2 font-sans text-[0.65rem] text-muted">
+                Vóór 16:00 besteld = vandaag verzonden.
+              </p>
             </div>
 
             {/* Regels */}
