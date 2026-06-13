@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
+import { DEFAULT_SYNONYMS } from "@/lib/search-helpers";
 
 /**
  * Centrale, in de backend instelbare configuratie. Eén bron van waarheid
@@ -32,6 +33,8 @@ export type Settings = {
   retailSafetyStock: number;
   warehouseSafetyStock: number;
   protectUnderstockedRetail: boolean;
+  // Zoeken
+  searchSynonyms: string; // één groep per regel, komma-gescheiden
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -51,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   retailSafetyStock: num(process.env.GENTS_RETAIL_SAFETY_STOCK, 1),
   warehouseSafetyStock: num(process.env.GENTS_WAREHOUSE_SAFETY_STOCK, 0),
   protectUnderstockedRetail: (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0",
+  searchSynonyms: DEFAULT_SYNONYMS,
 };
 
 let _cache: Settings | null = null;

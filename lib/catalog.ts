@@ -13,7 +13,8 @@ import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
-import { isSizeToken, expandSynonyms } from "@/lib/search-helpers";
+import { isSizeToken, expandSynonyms, parseSynonyms } from "@/lib/search-helpers";
+import { getSettings } from "@/lib/settings";
 
 /** Leeslaag voor de storefront — alle catalogus-queries op één plek. */
 
@@ -716,12 +717,16 @@ export async function searchProducts(q: string, limit = 24, facets: SearchFacets
   const hasFacets = Boolean(facets.category || facets.colorFamilies?.length || facets.sizeLabels?.length || facets.priceMinCents || facets.priceMaxCents);
   if (!wordTokens.length && !sizeTokens.length && !hasFacets) return [];
 
+  // Synoniemen uit de instellingen (beheerbaar in /account/instellingen).
+  const settings = await getSettings();
+  const synMap = parseSynonyms(settings.searchSynonyms);
+
   const HAY = sql`lower(p.title || ' ' || p.vendor || ' ' || coalesce(p.attributes ->> 'hoofdgroep_omschrijving',''))`;
   const conds: SQL[] = [sql`p.status='active' and p.has_image=true and p.in_stock=true and p.is_group_primary=true`];
   const scoreParts: SQL[] = [];
 
   for (const tok of wordTokens) {
-    const syns = expandSynonyms(tok);
+    const syns = expandSynonyms(tok, synMap);
     const ors: SQL[] = [];
     const scoreOrs: SQL[] = [];
     for (const s of syns) {

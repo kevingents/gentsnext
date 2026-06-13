@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     if (v != null && Number.isFinite(Number(v))) (patch as Record<string, number>)[f] = Math.max(0, Math.round(Number(v)));
   }
   if (typeof body.protectUnderstockedRetail === "boolean") patch.protectUnderstockedRetail = body.protectUnderstockedRetail;
+  if (typeof body.searchSynonyms === "string") patch.searchSynonyms = body.searchSynonyms.slice(0, 8000);
   if (body.branchCutoffs && typeof body.branchCutoffs === "object") {
     const bc: Record<string, number> = {};
     for (const [k, v] of Object.entries(body.branchCutoffs as Record<string, unknown>)) {

@@ -17,6 +17,7 @@ type Settings = {
   retailSafetyStock: number;
   warehouseSafetyStock: number;
   protectUnderstockedRetail: boolean;
+  searchSynonyms: string;
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan). */
@@ -130,6 +131,20 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         />
         <span className="font-sans text-sm">Onderbevoorrade winkels (tekort) niet laten meeleveren</span>
       </label>
+
+      <section>
+        <p className="label-brand mb-2">Zoek-synoniemen</p>
+        <p className="mb-2 font-sans text-xs text-muted">
+          Eén groep per regel, komma-gescheiden. Woorden in dezelfde groep vinden
+          elkaars producten (bv. <em>colbert, jasje, blazer</em>).
+        </p>
+        <textarea
+          value={s.searchSynonyms}
+          onChange={(e) => setS((p) => ({ ...p, searchSynonyms: e.target.value }))}
+          rows={8}
+          className="w-full resize-y border border-line bg-canvas px-3 py-2.5 font-mono text-xs focus:border-ink focus:outline-none"
+        />
+      </section>
 
       {msg ? <p className={`font-sans text-sm ${state === "fail" ? "text-danger" : "text-success"}`}>{msg}</p> : null}
       <button type="submit" disabled={state === "busy"} className="btn-primary">
