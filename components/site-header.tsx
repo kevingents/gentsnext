@@ -55,6 +55,12 @@ function SiteHeaderInner() {
             Maatadvies
           </Link>
           <SearchTrigger />
+          <Link href="/account" aria-label="Mijn account" className="text-ink-soft transition-colors hover:text-ink">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />
+            </svg>
+          </Link>
           <WishlistLink />
           <CartButton />
         </div>

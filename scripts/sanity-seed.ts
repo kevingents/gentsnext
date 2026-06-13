@@ -39,8 +39,10 @@ function imageRef(id: string) {
 const key = () => Math.random().toString(36).slice(2, 10);
 
 async function main() {
-  // Landings
+  // Landings — zakelijk/students worden door eigen components gerenderd, skip.
+  const SKIP_LANDINGS = new Set(["zakelijk", "students"]);
   for (const l of Object.values(LANDINGS)) {
+    if (SKIP_LANDINGS.has(l.handle)) continue;
     const hero = await uploadImage(l.heroImage);
     const sections = [];
     for (const s of l.sections) {
