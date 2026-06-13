@@ -92,6 +92,16 @@ export function CartDrawer() {
   const pct = Math.min(100, Math.round((cart.subtotalCents / FREE_SHIPPING_CENTS) * 100));
   const groups = groupLines(cart.lines);
 
+  // Slim: meerdere maten van hetzelfde artikel → moedig "houd de beste, retour de rest" aan.
+  const sizesByHandle = new Map<string, Set<string>>();
+  for (const l of cart.lines) {
+    if (!l.size) continue;
+    const set = sizesByHandle.get(l.productHandle) ?? new Set<string>();
+    set.add(l.size);
+    sizesByHandle.set(l.productHandle, set);
+  }
+  const multiSize = [...sizesByHandle.values()].some((s) => s.size >= 2);
+
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Winkelwagen" aria-modal="true">
       <div className="absolute inset-0 bg-ink/40" onClick={cart.close} />
@@ -142,6 +152,15 @@ export function CartDrawer() {
                 className="mt-2 font-sans text-[0.65rem] text-muted"
               />
             </div>
+
+            {multiSize ? (
+              <div className="flex items-start gap-2 border-b border-line bg-surface px-5 py-2.5">
+                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="9" /></svg>
+                <p className="font-sans text-xs text-ink-soft">
+                  <span className="font-medium text-ink">Slimme keuze.</span> Meerdere maten van hetzelfde artikel — houd de beste en retourneer de rest <strong>gratis</strong> binnen 14 dagen.
+                </p>
+              </div>
+            ) : null}
 
             {/* Regels */}
             <div className="flex-1 overflow-y-auto px-5 py-4">

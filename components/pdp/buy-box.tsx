@@ -200,6 +200,12 @@ export function BuyBox({
         {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
           <ClickAndCollect branches={selectedSize.branches} />
         ) : null}
+        {active && active.sizes.length >= 2 ? (
+          <p className="mt-3 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
+            <span className="font-medium text-ink">Twijfel je tussen twee maten?</span> Bestel ze allebei en
+            retourneer <strong>gratis</strong> wat niet past — binnen 14 dagen.
+          </p>
+        ) : null}
       </div>
 
       <DeliveryPromise />
