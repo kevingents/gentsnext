@@ -21,6 +21,8 @@ export type ProductCardData = {
   imageAlt: string;
   minPriceCents: number;
   hasPriceRange: boolean;
+  isNew?: boolean;
+  hasSale?: boolean;
 };
 
 export async function listCollections() {
@@ -49,7 +51,7 @@ async function buildProductCards(
   const ids = base.map((p) => p.id);
   if (!ids.length) return [];
 
-  const [images, variants] = await Promise.all([
+  const [images, variants, prodMeta] = await Promise.all([
     db
       .select({
         productId: productImages.productId,
@@ -64,9 +66,18 @@ async function buildProductCards(
       .select({
         productId: productVariants.productId,
         priceCents: productVariants.priceCents,
+        compareAtCents: productVariants.compareAtCents,
       })
       .from(productVariants)
       .where(inArray(productVariants.productId, ids)),
+    db
+      .select({
+        id: products.id,
+        sourceCreatedAt: products.sourceCreatedAt,
+        attributes: products.attributes,
+      })
+      .from(products)
+      .where(inArray(products.id, ids)),
   ]);
 
   const firstImage = new Map<string, { url: string; alt: string }>();
@@ -74,6 +85,7 @@ async function buildProductCards(
     if (!firstImage.has(img.productId)) firstImage.set(img.productId, { url: img.url, alt: img.alt });
   }
   const priceRange = new Map<string, { min: number; max: number }>();
+  const onSale = new Map<string, boolean>();
   for (const v of variants) {
     const range = priceRange.get(v.productId);
     if (!range) priceRange.set(v.productId, { min: v.priceCents, max: v.priceCents });
@@ -81,6 +93,17 @@ async function buildProductCards(
       range.min = Math.min(range.min, v.priceCents);
       range.max = Math.max(range.max, v.priceCents);
     }
+    if (v.compareAtCents && v.compareAtCents > v.priceCents) onSale.set(v.productId, true);
+  }
+
+  const NEW_DAYS = 30;
+  const newThreshold = Date.now() - NEW_DAYS * 86400000;
+  const newFlag = new Map<string, boolean>();
+  for (const m of prodMeta) {
+    const attrs = (m.attributes ?? {}) as Record<string, unknown>;
+    const explicit = String(attrs.new ?? "").toLowerCase() === "ja";
+    const recent = m.sourceCreatedAt ? new Date(m.sourceCreatedAt).getTime() > newThreshold : false;
+    if (explicit || recent) newFlag.set(m.id, true);
   }
 
   return base.map((p) => {
@@ -95,6 +118,8 @@ async function buildProductCards(
       imageAlt: img?.alt || p.title,
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
+      isNew: newFlag.get(p.id) ?? false,
+      hasSale: onSale.get(p.id) ?? false,
     };
   });
 }

@@ -3,10 +3,16 @@ import Link from "next/link";
 import type { ProductCardData } from "@/lib/catalog";
 import { formatEuro } from "@/lib/pricing";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
+import { ProductCardBadge } from "@/components/product-card-badge";
 
 export function ProductCard({ product }: { product: ProductCardData }) {
   return (
     <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
+      {product.hasSale ? (
+        <ProductCardBadge label="Sale" tone="sale" />
+      ) : product.isNew ? (
+        <ProductCardBadge label="Nieuw" tone="new" />
+      ) : null}
       <WishlistButton handle={product.handle} />
       <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
         {product.imageUrl ? (
