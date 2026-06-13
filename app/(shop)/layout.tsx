@@ -4,6 +4,7 @@ import { CartProvider } from "@/components/cart/cart-context";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { WishlistProvider } from "@/components/wishlist/wishlist-context";
 import { BackToTop } from "@/components/back-to-top";
+import { CookieNotice } from "@/components/cookie-notice";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <SiteFooter />
           <CartDrawer />
           <BackToTop />
+          <CookieNotice />
         </div>
       </WishlistProvider>
     </CartProvider>

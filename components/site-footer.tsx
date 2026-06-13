@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { NewsletterSignup } from "@/components/newsletter-signup";
 
 const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -44,6 +45,22 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
 export function SiteFooter() {
   return (
     <footer className="mt-24 bg-ink text-canvas">
+      {/* Nieuwsbrief-blok */}
+      <div className="border-b border-canvas/15">
+        <div className="mx-auto grid max-w-page items-center gap-6 px-gutter py-10 md:grid-cols-2">
+          <div>
+            <p className="label-brand !text-canvas/60">GENTS Insider</p>
+            <h2 className="mt-2 font-display text-2xl font-light text-canvas">
+              Nieuwe collecties, styling-tips en exclusieve aanbiedingen
+            </h2>
+            <p className="mt-1 font-sans text-sm text-canvas/70">
+              Schrijf je in en mis nooit meer een lancering of sale.
+            </p>
+          </div>
+          <NewsletterSignup />
+        </div>
+      </div>
+
       <div className="mx-auto max-w-page px-gutter py-14">
         <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-[1.6fr_repeat(4,1fr)]">
           <div>
