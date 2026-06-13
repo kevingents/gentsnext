@@ -374,7 +374,11 @@ function inList(col: SQL, values: string[]): SQL {
   )})`;
 }
 
-/** Variant-niveau EXISTS — één variant moet aan álle gekozen variant-filters voldoen. */
+/**
+ * Variant-niveau EXISTS — één variant moet aan álle gekozen variant-filters
+ * voldoen ÉN op voorraad zijn. Filter je op maat S, dan zie je geen producten
+ * waar S uitverkocht is (de matchende variant moet leverbaar zijn).
+ */
 function variantExists(f: ProductFilters): SQL | null {
   const parts: SQL[] = [sql`v.product_id = ${products.id}`];
   let active = false;
@@ -395,6 +399,8 @@ function variantExists(f: ProductFilters): SQL | null {
     active = true;
   }
   if (!active) return null;
+  // De matchende variant moet op voorraad zijn (geen uitverkochte maten tonen).
+  parts.push(sql`v.stock_qty > 0`);
   return sql`exists (select 1 from ${productVariants} v where ${sql.join(parts, sql` and `)})`;
 }
 
@@ -484,12 +490,12 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
     db.execute<{ fam: string; n: number }>(sql`
       select v.color_family as fam, count(distinct ${products.id})::int as n
       from ${products} join ${productVariants} v on v.product_id = ${products.id}
-      where ${ctx} and v.color_family <> ''
+      where ${ctx} and v.color_family <> '' and v.stock_qty > 0
       group by v.color_family`),
     db.execute<{ size: string; n: number }>(sql`
       select v.size_label as size, count(distinct ${products.id})::int as n
       from ${products} join ${productVariants} v on v.product_id = ${products.id}
-      where ${ctx} and v.size_label <> ''
+      where ${ctx} and v.size_label <> '' and v.stock_qty > 0
       group by v.size_label`),
     db.execute<{ fit: string; n: number }>(sql`
       select ${products.attributes} ->> 'pasvorm' as fit, count(*)::int as n
