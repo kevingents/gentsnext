@@ -4,6 +4,7 @@ import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
 import { CartButton } from "@/components/cart/cart-button";
 import { WishlistLink } from "@/components/wishlist/wishlist-link";
 import { AnnouncementBar } from "@/components/announcement-bar";
+import { SearchTrigger } from "@/components/search/search-trigger";
 
 export function SiteHeader() {
   return (
@@ -53,12 +54,7 @@ function SiteHeaderInner() {
           >
             Maatadvies
           </Link>
-          <Link href="/zoeken" aria-label="Zoeken" className="text-ink-soft transition-colors hover:text-ink">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
-            </svg>
-          </Link>
+          <SearchTrigger />
           <WishlistLink />
           <CartButton />
         </div>
