@@ -20,6 +20,8 @@ import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
 import { categoryByHoofdgroep } from "@/lib/categories";
 import { parseRating } from "@/lib/reviews";
+import { getReviewSummary, getPublishedReviews } from "@/lib/reviews-db";
+import { ReviewsSection } from "@/components/reviews/reviews-section";
 import { pickupInfoByCity } from "@/lib/stores";
 import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { getReferencePrices } from "@/lib/pricing";
@@ -145,11 +147,15 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
+    getReviewSummary(product.handle),
+    getPublishedReviews(product.handle, 30),
   ]);
+  // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
+  const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
   // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
   // we maken die (samen met dit product) klikbaar/shoppbaar.
   const settings = await getSettings();
@@ -201,14 +207,28 @@ export default async function ProductPage({ params }: Props) {
       availability: anyInStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
     },
   };
-  if (rating) {
+  if (displayRating) {
     productJsonLd.aggregateRating = {
       "@type": "AggregateRating",
-      ratingValue: rating.value.toFixed(1),
-      reviewCount: rating.count,
+      ratingValue: displayRating.value.toFixed(1),
+      reviewCount: displayRating.count,
       bestRating: 5,
       worstRating: 1,
     };
+  }
+  // Eigen reviews als Review-objecten (rich results) — alleen met tekst.
+  if (productReviews.length) {
+    productJsonLd.review = productReviews
+      .filter((r) => r.body)
+      .slice(0, 10)
+      .map((r) => ({
+        "@type": "Review",
+        reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5, worstRating: 1 },
+        author: { "@type": "Person", name: r.authorName },
+        datePublished: r.createdAt.slice(0, 10),
+        ...(r.title ? { name: r.title } : {}),
+        reviewBody: r.body,
+      }));
   }
 
   const breadcrumbJsonLd = {
@@ -357,7 +377,7 @@ export default async function ProductPage({ params }: Props) {
           <BuyBox
             title={product.title}
             vendor={String(attrs.merk || product.vendor || "")}
-            rating={rating}
+            rating={displayRating}
             hoofdgroep={hoofdgroep}
             sizeChartHandle={sizeChartFor(hoofdgroep)}
             productHandle={product.handle}
@@ -421,6 +441,8 @@ export default async function ProductPage({ params }: Props) {
           </div>
         </section>
       ) : null}
+
+      <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
 
       <RecentStrip exclude={product.handle} />
     </div>

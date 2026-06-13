@@ -74,6 +74,7 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
           {customer.isAdmin ? (
             <>
               <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">Orders</a>
+              <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">Reviews</a>
               <a href="/account/analytics" className="font-sans text-sm text-ink underline hover:text-ink">Analytics</a>
               <a href="/account/productmedia" className="font-sans text-sm text-ink underline hover:text-ink">Productmedia</a>
               <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">Instellingen</a>

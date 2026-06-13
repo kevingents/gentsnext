@@ -1,7 +1,15 @@
 import type { ProductRating } from "@/lib/reviews";
 
 /** Sterretjes-rij + optionele telling. Pure SVG, geen scripts. */
-export function RatingStars({ rating, size = "sm" }: { rating: ProductRating | null; size?: "xs" | "sm" | "md" }) {
+export function RatingStars({
+  rating,
+  size = "sm",
+  showCount = true,
+}: {
+  rating: ProductRating | null;
+  size?: "xs" | "sm" | "md";
+  showCount?: boolean;
+}) {
   if (!rating) return null;
   const px = size === "xs" ? 10 : size === "sm" ? 14 : 18;
   const filled = Math.round(rating.value * 2) / 2; // halve sterren
@@ -28,7 +36,7 @@ export function RatingStars({ rating, size = "sm" }: { rating: ProductRating | n
           );
         })}
       </span>
-      <span className="text-muted">({rating.count})</span>
+      {showCount && rating.count > 0 ? <span className="text-muted">({rating.count})</span> : null}
     </span>
   );
 }

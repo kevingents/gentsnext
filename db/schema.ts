@@ -557,3 +557,39 @@ export const storePurchases = pgTable(
     index("store_purchases_email_idx").on(t.email),
   ]
 );
+
+/* ─────────────────────────── Productreviews ────────────────────────────── */
+
+/**
+ * Native productreviews (eigen, niet Judge.me). Een review hangt aan een
+ * product (handle) en — indien gekoppeld aan een order — geldt als
+ * geverifieerde aankoop. Niet-geverifieerde reviews komen op 'pending' en
+ * worden gemodereerd in de backend; geverifieerde kopers publiceren direct.
+ * Voor mode relevant: optionele pasvorm-feedback (valt klein/normaal/groot).
+ */
+export const reviews = pgTable(
+  "reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productHandle: text("product_handle").notNull(),
+    /** Order waaraan de review hangt (geverifieerde aankoop), optioneel. */
+    orderNumber: text("order_number").notNull().default(""),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    authorName: text("author_name").notNull().default(""),
+    email: text("email").notNull().default(""),
+    rating: integer("rating").notNull(), // 1–5
+    title: text("title").notNull().default(""),
+    body: text("body").notNull().default(""),
+    /** Pasvorm-feedback: '' | 'klein' | 'normaal' | 'groot'. */
+    fit: text("fit").notNull().default(""),
+    verified: boolean("verified").notNull().default(false),
+    /** 'pending' | 'published' | 'rejected'. */
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("reviews_handle_status_idx").on(t.productHandle, t.status),
+    index("reviews_status_idx").on(t.status, t.createdAt),
+    index("reviews_order_idx").on(t.orderNumber),
+  ]
+);

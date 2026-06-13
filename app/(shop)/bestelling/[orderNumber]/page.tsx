@@ -102,6 +102,17 @@ export default async function OrderPage({ params, searchParams }: Props) {
         <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>Totaal</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
       </dl>
 
+      {paid ? (
+        <div className="mt-8 flex flex-col items-start gap-2 rounded-card bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-sans text-sm text-ink-soft">
+            <span className="font-medium text-ink">Blij met je aankoop?</span> Help andere klanten met een korte review.
+          </p>
+          <Link href={`/review/${order.orderNumber}${t ? `?t=${t}` : ""}`} className="btn-ghost shrink-0">
+            Schrijf een review
+          </Link>
+        </div>
+      ) : null}
+
       {paid && extras?.careItems.length ? (
         <section className="mt-12 border-t border-line pt-8">
           <p className="label-brand">Zo geniet je er lang van</p>
