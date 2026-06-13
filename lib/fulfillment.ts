@@ -6,11 +6,11 @@ import {
   branchPriority,
   branchCountry,
   safetyStockFor,
+  cutoffHourFor,
   isHoliday,
-  PROTECT_UNDERSTOCKED_RETAIL,
-  CARRIER_CUTOFF_HOUR,
   BRANCH_CITY,
 } from "@/lib/fulfillment-config";
+import { getSettings, type Settings } from "@/lib/settings";
 
 /**
  * Order-allocatie ("welke filialen leveren wat"). Doelen, in volgorde:
@@ -102,20 +102,21 @@ function openOn(branchId: string, dayName: string, isoDate: string, hoursByCity:
   return Boolean((hours[dayName] || "").trim());
 }
 
-function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>) {
+function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>, settings: Settings) {
   const n = nowNL();
+  const cutoff = cutoffHourFor(branchId, settings);
   for (let k = 0; k < 9; k++) {
     const day = DAYS[(n.dayIndex + k) % 7];
     const iso = isoAtOffset(n, k);
     if (!openOn(branchId, day, iso, hoursByCity)) continue;
-    if (k === 0 && n.minutes >= CARRIER_CUTOFF_HOUR * 60) continue;
+    if (k === 0 && n.minutes >= cutoff * 60) continue;
     return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day, dispatchInDays: k };
   }
   return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: 9 };
 }
 
 /* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
-async function buildBranches(skus: string[]): Promise<Branch[]> {
+async function buildBranches(skus: string[], settings: Settings): Promise<Branch[]> {
   const stock = await stockForSkus(skus);
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
@@ -127,8 +128,8 @@ async function buildBranches(skus: string[]): Promise<Branch[]> {
     for (const b of entry.byBranch) {
       if (!isFulfillable(b.branchId)) continue;
       // Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
-      if (PROTECT_UNDERSTOCKED_RETAIL && !isWarehouse(b.branchId) && b.tekort > 0) continue;
-      const net = b.qty - safetyStockFor(b.branchId);
+      if (settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0) continue;
+      const net = b.qty - safetyStockFor(b.branchId, settings);
       if (net <= 0) continue;
       let rec = byBranch.get(b.branchId);
       if (!rec) {
@@ -141,7 +142,7 @@ async function buildBranches(skus: string[]): Promise<Branch[]> {
 
   const branches: Branch[] = [];
   for (const [branchId, rec] of byBranch) {
-    const d = dispatchInfo(branchId, hoursByCity);
+    const d = dispatchInfo(branchId, hoursByCity, settings);
     branches.push({
       branchId,
       store: rec.store,
@@ -202,7 +203,8 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
     return { shipments: [], splitCount: 0, fullyAllocated: true, shortages: [], strategy: "single-source", computedAt };
   }
 
-  const branches = await buildBranches(skus);
+  const settings = await getSettings();
+  const branches = await buildBranches(skus, settings);
   const better = makeComparator(opts.country || "NL");
 
   // 1. Single-source: één filiaal dat de HELE order dekt → bespaart verzendkosten.
@@ -323,43 +325,95 @@ function toShipment(b: Branch, lines: ShipmentLine[]): Shipment {
 }
 
 /* ── Levertijd-schatting (vóór de checkout) ──────────────────────────────── */
+export type DeliveryOption = {
+  /** Bezorgdatum-label: "morgen", "overmorgen", "woensdag 17 juni". */
+  dateLabel: string;
+  /** Range-label voor standaard: "2-3 werkdagen". */
+  rangeLabel: string;
+  surchargeCents: number;
+};
 export type DeliveryEstimate = {
   inStock: boolean;
-  /** Werkdagen tot verzending (0 = vandaag). */
-  dispatchInDays: number;
-  /** Korte NL-belofte: "Voor 16:00 besteld, morgen in huis". */
+  fromWarehouseOnly: boolean;
+  isSplit: boolean;
+  hasStoreSource: boolean;
+  /** Korte belofte voor PDP/cart. */
   promise: string;
-  /** Bezorgdatum-label: "morgen", "overmorgen", "woensdag 17 juni". */
-  deliveryLabel: string;
+  /** Uitleg waaróm het langer duurt (split/winkel) — logisch voor de klant. */
+  note: string | null;
+  standard: DeliveryOption;
+  express: DeliveryOption;
 };
 
-/**
- * Schat de bezorging vóór de checkout, op basis van de echte allocatie
- * (magazijn-eerst, openingstijden, cutoff). Bezorging = verzenddag + 1 werkdag
- * transit. Bij een split telt de laatste zending (conservatief).
- */
-export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOptions = {}): Promise<DeliveryEstimate | null> {
-  const plan = await allocateOrder(lines, opts);
-  if (!plan.shipments.length) return null;
-  const maxDispatch = Math.max(...plan.shipments.map((s) => s.dispatchInDays));
-
-  const n = nowNL();
-  // +1 werkdag transit; zondag overslaan (bezorgers leveren ma–za).
-  let deliveryK = maxDispatch + 1;
-  while (DAYS[(n.dayIndex + deliveryK) % 7] === "zondag") deliveryK++;
-
-  const deliveryLabel =
-    deliveryK === 1 ? "morgen" : deliveryK === 2 ? "overmorgen" : nlDateLabel(n, deliveryK);
-
-  const beforeCutoff = maxDispatch === 0;
-  const promise = beforeCutoff
-    ? `Voor ${CARRIER_CUTOFF_HOUR}:00 besteld, ${deliveryLabel} in huis`
-    : `Besteld vandaag, ${deliveryLabel} in huis`;
-
-  return { inStock: plan.fullyAllocated, dispatchInDays: maxDispatch, promise, deliveryLabel };
+/** Volgende bezorgdag-offset (kalenderdagen) na 'startK', n leverdagen verder (ma–za, geen feestdag NL). */
+function addDeliveryDays(base: { dayIndex: number; y: number; m: number; d: number }, startK: number, n: number): number {
+  let k = startK;
+  let added = 0;
+  while (added < n) {
+    k++;
+    const day = DAYS[(base.dayIndex + k) % 7];
+    const iso = isoAtOffset(base, k);
+    if (day === "zondag") continue; // bezorgers leveren ma–za
+    if (isHoliday("99", iso)) continue; // NL-feestdag
+    added++;
+  }
+  return k;
 }
 
-function nlDateLabel(base: { y: number; m: number; d: number }, k: number): string {
+function dayLabel(base: { dayIndex: number; y: number; m: number; d: number }, k: number): string {
+  if (k === 1) return "morgen";
+  if (k === 2) return "overmorgen";
   const dt = new Date(Date.UTC(base.y, base.m - 1, base.d) + k * 86400000);
   return new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(dt);
+}
+
+/**
+ * Schat de bezorging vóór de checkout op basis van de ECHTE allocatie. Twee
+ * opties: standaard (gratis) en sneller (+toeslag). Een split- of winkel-zending
+ * duurt logischerwijs langer dan rechtstreeks uit het magazijn — dat leggen we
+ * ook uit aan de klant. Alle dagen/toeslagen komen uit de instelbare settings.
+ */
+export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOptions = {}): Promise<DeliveryEstimate | null> {
+  const settings = await getSettings();
+  const plan = await allocateOrder(lines, opts);
+  if (!plan.shipments.length) return null;
+
+  const n = nowNL();
+  const maxDispatch = Math.max(...plan.shipments.map((s) => s.dispatchInDays));
+  const isSplit = plan.splitCount > 1;
+  const hasStoreSource = plan.shipments.some((s) => !s.isWarehouse);
+  const fromWarehouseOnly = !isSplit && !hasStoreSource;
+
+  // Standaard transit: magazijn = snel (warehouseTransitDays); winkel/split = +extra.
+  const stdTransit = settings.warehouseTransitDays + (fromWarehouseOnly ? 0 : settings.storeExtraDays);
+  const stdMinK = addDeliveryDays(n, maxDispatch, stdTransit);
+  const stdMaxK = addDeliveryDays(n, maxDispatch, stdTransit + 1);
+
+  // Express: snelste werkdag na verzending.
+  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays);
+
+  const standard: DeliveryOption = {
+    dateLabel: dayLabel(n, fromWarehouseOnly ? stdMinK : stdMaxK),
+    rangeLabel: fromWarehouseOnly ? `${settings.warehouseTransitDays}-${settings.warehouseTransitDays + 1} werkdagen` : `${settings.standardMinDays}-${settings.standardMaxDays} werkdagen`,
+    surchargeCents: 0,
+  };
+  const express: DeliveryOption = {
+    dateLabel: dayLabel(n, expK),
+    rangeLabel: "Sneller",
+    surchargeCents: settings.expressSurchargeCents,
+  };
+
+  const note = isSplit
+    ? "Je bestelling komt deels uit verschillende locaties; daarom kan een deel iets later aankomen."
+    : hasStoreSource
+      ? "Dit artikel versturen we vanuit een van onze winkels, wat iets langer duurt dan vanuit het magazijn."
+      : null;
+
+  const cutoff = settings.warehouseCutoffHour;
+  const beforeCutoff = maxDispatch === 0;
+  const promise = beforeCutoff
+    ? `Voor ${cutoff}:00 besteld, ${standard.dateLabel} in huis`
+    : `Bezorging ${standard.dateLabel}`;
+
+  return { inStock: plan.fullyAllocated, fromWarehouseOnly, isSplit, hasStoreSource, promise, note, standard, express };
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createOrder, attachMolliePayment, type CheckoutItem } from "@/lib/orders";
+import { createOrder, attachMolliePayment, type CheckoutItem, type DeliveryMethod } from "@/lib/orders";
 import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,10 @@ export async function POST(req: Request) {
     if (!String(c[f] || "").trim()) return bad("Vul alle adresvelden in.");
   }
 
+  const deliveryMethod: DeliveryMethod = body?.deliveryMethod === "express" ? "express" : "standard";
   let order;
   try {
-    order = await createOrder(c, items);
+    order = await createOrder(c, items, deliveryMethod);
   } catch (e) {
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
   }

@@ -4,14 +4,14 @@ import { orders, orderLines, products, productVariants } from "@/db/schema";
 import { sendOrderConfirmation } from "@/lib/email";
 import { allocateOrder } from "@/lib/fulfillment";
 import { pushOrderToSRS } from "@/lib/srs";
+import { getSettings } from "@/lib/settings";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
  * gehaald — nooit het client-bedrag vertrouwen. Bedragen in centen.
  */
 
-const FREE_SHIPPING_CENTS = 7500; // €75 (drempel zoals op gents.nl)
-const SHIPPING_CENTS = 495; // €4,95 onder de drempel
+export type DeliveryMethod = "standard" | "express";
 
 export type CheckoutItem = {
   sku: string;
@@ -104,14 +104,19 @@ export type CreatedOrder = {
 
 export async function createOrder(
   contact: CheckoutContact,
-  items: CheckoutItem[]
+  items: CheckoutItem[],
+  deliveryMethod: DeliveryMethod = "standard"
 ): Promise<CreatedOrder> {
   const db = getDb();
+  const settings = await getSettings();
   const lines = await resolveLines(items);
   if (!lines.length) throw new Error("Geen geldige producten in de bestelling.");
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
-  const shippingCents = subtotalCents >= FREE_SHIPPING_CENTS ? 0 : SHIPPING_CENTS;
+  // Verzendkosten + (optionele) express-toeslag — alles uit de instelbare settings.
+  const baseShipping = subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
+  const surcharge = deliveryMethod === "express" ? settings.expressSurchargeCents : 0;
+  const shippingCents = baseShipping + surcharge;
   const totalCents = subtotalCents + shippingCents;
   const orderNumber = generateOrderNumber();
 
@@ -129,6 +134,7 @@ export async function createOrder(
       postalCode: contact.postalCode.trim(),
       city: contact.city.trim(),
       country: (contact.country || "NL").trim(),
+      deliveryMethod,
       subtotalCents,
       shippingCents,
       totalCents,

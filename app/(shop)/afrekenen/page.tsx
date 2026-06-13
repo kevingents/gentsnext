@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useCart } from "@/components/cart/cart-context";
-import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
+import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { formatEuro } from "@/lib/pricing";
 
 const FIELDS = [
@@ -26,7 +26,12 @@ export default function AfrekenenPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const shippingCents = cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
+  const [delivery, setDelivery] = useState<"standard" | "express">("standard");
+  const [expressSurcharge, setExpressSurcharge] = useState(0);
+
+  const baseShipping = cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
+  const surcharge = delivery === "express" ? expressSurcharge : 0;
+  const shippingCents = baseShipping + surcharge;
   const totalCents = cart.subtotalCents + shippingCents;
 
   if (cart.lines.length === 0 && !notice) {
@@ -54,6 +59,7 @@ export default function AfrekenenPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contact: form,
+          deliveryMethod: delivery,
           items: cart.lines.map((l) => ({
             sku: l.sku,
             qty: l.qty,
@@ -171,14 +177,24 @@ export default function AfrekenenPage() {
                 </li>
               ))}
             </ul>
+            <div className="mt-4 border-t border-line pt-4">
+              <DeliveryOptions
+                items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                value={delivery}
+                onChange={(m, s) => {
+                  setDelivery(m);
+                  setExpressSurcharge(m === "express" ? s : expressSurcharge || s);
+                }}
+              />
+            </div>
             <dl className="mt-4 space-y-1.5 border-t border-line pt-4 font-sans text-sm">
               <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(cart.subtotalCents)}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{shippingCents === 0 ? "Gratis" : formatEuro(shippingCents)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{baseShipping === 0 ? "Gratis" : formatEuro(baseShipping)}</dd></div>
+              {surcharge > 0 ? (
+                <div className="flex justify-between"><dt className="text-muted">Snellere levering</dt><dd>+ {formatEuro(surcharge)}</dd></div>
+              ) : null}
               <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>Totaal</dt><dd className="font-display text-lg">{formatEuro(totalCents)}</dd></div>
             </dl>
-            <div className="mt-4 border-t border-line pt-4">
-              <DeliveryEstimate items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))} />
-            </div>
           </div>
         </aside>
       </div>

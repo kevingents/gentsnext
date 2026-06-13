@@ -230,6 +230,8 @@ export const orders = pgTable(
     postalCode: text("postal_code").notNull().default(""),
     city: text("city").notNull().default(""),
     country: text("country").notNull().default("NL"),
+    /** 'standard' | 'express' (snellere levering tegen toeslag). */
+    deliveryMethod: text("delivery_method").notNull().default("standard"),
     subtotalCents: integer("subtotal_cents").notNull(),
     shippingCents: integer("shipping_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull(),
@@ -275,6 +277,17 @@ export const orderLines = pgTable(
   },
   (t) => [index("order_lines_order_idx").on(t.orderId)]
 );
+
+/**
+ * Centrale instellingen-store (één rij, id='global'). Alle in de backend
+ * instelbare knoppen (verzending, cutoffs, levertijd, toeslag, drempels,
+ * veiligheidsvoorraad, …) staan hier als JSON. Zie lib/settings.
+ */
+export const appSettings = pgTable("app_settings", {
+  id: text("id").primaryKey().default("global"),
+  data: jsonb("data").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * "Mail me als het er weer is" — terug-op-voorraad-notificaties. Per product
@@ -334,6 +347,8 @@ export const customers = pgTable(
     /** Stijl-/maatvoorkeuren en notities (vrij). */
     preferences: jsonb("preferences").notNull().default({}),
     marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    /** Beheerder — toegang tot de instellingen-backend. */
+    isAdmin: boolean("is_admin").notNull().default(false),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
