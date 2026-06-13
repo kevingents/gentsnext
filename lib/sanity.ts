@@ -31,7 +31,8 @@ export function urlForImage(source: any, width = 1200): string {
 export async function sanityFetch<T>(query: string, params: Record<string, unknown> = {}): Promise<T | null> {
   if (!sanityClient) return null;
   try {
-    return await sanityClient.fetch<T>(query, params, { next: { revalidate: 60 } });
+    // tag 'sanity' → de revalidate-webhook kan alle content in één keer verversen.
+    return await sanityClient.fetch<T>(query, params, { next: { revalidate: 60, tags: ["sanity"] } });
   } catch (e) {
     console.error("[sanity] fetch-fout:", e instanceof Error ? e.message : e);
     return null;
