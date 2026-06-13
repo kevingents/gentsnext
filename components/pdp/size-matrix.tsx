@@ -74,10 +74,16 @@ export function SizeMatrix({
     sizes.map((s) => s.size)
   );
 
-  // Eén kolom (truien/schoenen): platte rij maatknoppen.
+  // Eén kolom (truien/schoenen/accessoires): platte rij maatknoppen.
   if (layout === "regular-only") {
-    const sorted = [...sizes].sort(
-      (a, b) => rowSortIndex(sizeRowLabel(a.size)) - rowSortIndex(sizeRowLabel(b.size))
+    // Numeriek sorteren als de maten getallen zijn (riemen 75–115), anders op
+    // lettermaat-bucket (XS…6XL).
+    const num = (s: string) => parseInt(sizeToken(s), 10);
+    const allNumeric = sizes.every((s) => !Number.isNaN(num(s.size)));
+    const sorted = [...sizes].sort((a, b) =>
+      allNumeric
+        ? num(a.size) - num(b.size)
+        : rowSortIndex(sizeRowLabel(a.size)) - rowSortIndex(sizeRowLabel(b.size))
     );
     return (
       <ul className="mt-2 flex flex-wrap gap-2">

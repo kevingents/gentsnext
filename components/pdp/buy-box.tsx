@@ -142,7 +142,8 @@ export function BuyBox({
             })}
           </div>
         </div>
-      ) : active && active.color !== "Standaard" ? (
+      ) : active && active.color !== "Standaard" && !title.toLowerCase().includes(active.color.toLowerCase()) ? (
+        // Alleen tonen als de kleur NIET al in de titel staat (geen dubbeling).
         <p className="mt-7 font-sans text-sm">
           <span className="text-muted">Kleur: </span>
           <span className="font-medium">{active.color}</span>

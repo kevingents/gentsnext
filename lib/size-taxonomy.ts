@@ -73,6 +73,10 @@ export function sizeGroup(value: string, layout: SizeLayout): SizeGroup {
 
 const REGULAR_ONLY_HG = new Set([
   "truien", "poloshirts", "poloshirt", "schoenen", "shoes", "loafers", "sneakers", "veterschoenen", "laarzen",
+  // Accessoires: platte matenlijst (geen Regular/Long/Short — die slaat nergens
+  // op bij riemen/dassen; hun maten zijn cm-omtrek of "ONE", geen lichaamslengte).
+  "riemen", "riem", "stropdassen", "strikken", "sokken", "bretels", "sjaal", "sjaals",
+  "manchetknopen", "dasspelden", "pochet", "cumberband", "accessoires", "ondergoed", "boxershorts",
 ]);
 const SLEEVE_HG = new Set(["overhemden", "shirts"]);
 

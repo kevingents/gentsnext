@@ -6,7 +6,6 @@ import { Gallery } from "@/components/pdp/gallery";
 import { BuyBox, type BuyColor } from "@/components/pdp/buy-box";
 import { Accordion } from "@/components/pdp/accordion";
 import { ColorSiblings } from "@/components/pdp/color-siblings";
-import { ColorDonut } from "@/components/pdp/color-donut";
 import { PdpSizeProvider } from "@/components/pdp/pdp-size-context";
 import { ProductCard } from "@/components/product-card";
 import { TrackRecent } from "@/components/recent/track-recent";
@@ -325,12 +324,6 @@ export default async function ProductPage({ params }: Props) {
           {colorSiblings.length > 0 ? (
             <div className="mt-7">
               <ColorSiblings siblings={colorSiblings} />
-            </div>
-          ) : null}
-
-          {colorSiblings.length >= 3 ? (
-            <div className="mt-8 border-t border-line pt-6">
-              <ColorDonut siblings={colorSiblings} />
             </div>
           ) : null}
 
