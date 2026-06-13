@@ -274,7 +274,7 @@ export default async function ProductPage({ params }: Props) {
         <span className="text-ink">{product.title}</span>
       </nav>
 
-      <div className="mt-6 grid gap-10 lg:grid-cols-2">
+      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
         <Gallery images={images.map((i) => ({ url: i.url, alt: i.alt }))} title={product.title} />
 
         <div className="lg:sticky lg:top-24 lg:self-start">

@@ -44,7 +44,7 @@ function Cell({
       onClick={() => onSelect(cell.size)}
       aria-pressed={on}
       title={out ? "Niet op voorraad" : low ? `Nog ${cell.qty} op voorraad` : undefined}
-      className={`relative flex h-12 w-full items-center justify-center border font-sans text-sm transition-colors ${
+      className={`relative flex h-10 w-full items-center justify-center border font-sans text-sm transition-colors ${
         out
           ? "cursor-not-allowed border-line text-muted line-through decoration-muted"
           : on
@@ -122,13 +122,13 @@ export function SizeMatrix({
     cellMap.get(row)![group] = s;
   }
   const rows = [...cellMap.keys()].sort((a, b) => rowSortIndex(a) - rowSortIndex(b));
-  const gridCols = `2.5rem repeat(${columns.length}, minmax(0, 1fr))`;
+  const gridCols = `1.75rem repeat(${columns.length}, minmax(0, 1fr))`;
 
   return (
     <div className="mt-2 overflow-x-auto">
-      <div className="min-w-[18rem]">
+      <div className="min-w-[16rem]">
         {/* Kolomkoppen */}
-        <div className="grid items-end gap-2 pb-2" style={{ gridTemplateColumns: gridCols }}>
+        <div className="grid items-end gap-1.5 pb-2" style={{ gridTemplateColumns: gridCols }}>
           <span />
           {columns.map((c) => (
             <div key={c.key} className="text-center">
@@ -138,9 +138,9 @@ export function SizeMatrix({
           ))}
         </div>
         {/* Rijen */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {rows.map((row) => (
-            <div key={row} className="grid items-center gap-2" style={{ gridTemplateColumns: gridCols }}>
+            <div key={row} className="grid items-center gap-1.5" style={{ gridTemplateColumns: gridCols }}>
               <span className="font-sans text-xs font-medium text-muted">{row}</span>
               {columns.map((c) => (
                 <Cell key={c.key} cell={cellMap.get(row)?.[c.key] ?? null} selected={selected} onSelect={onSelect} />

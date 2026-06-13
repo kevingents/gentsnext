@@ -4,9 +4,11 @@ import { UspBar } from "@/components/usp-bar";
 import { ProductCard } from "@/components/product-card";
 import { RecentStrip } from "@/components/recent/recent-strip";
 import { TrustBlock } from "@/components/home/trust-block";
+import { VideoHero } from "@/components/home/video-hero";
 import { JsonLd } from "@/components/json-ld";
 import { getStores } from "@/lib/stores";
 import { getSiteUrl } from "@/lib/site-url";
+import { getSiteSettings } from "@/lib/site-settings";
 import { listCollections, getHighlights } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
 
@@ -46,6 +48,7 @@ export default async function Home() {
     // DB nog niet bereikbaar — hero + USP tonen, rest valt weg.
   }
   const featured = CATEGORIES.slice(0, 8);
+  const settings = await getSiteSettings();
   const siteUrl = getSiteUrl();
   const stores = getStores();
   const orgJsonLd = {
@@ -70,37 +73,16 @@ export default async function Home() {
     <>
       <JsonLd data={orgJsonLd} />
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="relative isolate">
-        <div className="relative h-[68vh] min-h-[460px] w-full overflow-hidden bg-ink">
-          <Image
-            src="/brand/brand-model-charcoal.jpg"
-            alt="Man in charcoal kostuum"
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover object-top opacity-90"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/10 to-transparent" />
-          <div className="absolute inset-0 mx-auto flex max-w-page flex-col items-start justify-end px-gutter pb-14">
-            <p className="label-brand !text-canvas/80">Suits You</p>
-            <h1 className="mt-3 max-w-2xl text-display-xl font-light text-canvas">
-              Perfect gekleed voor elk formeel moment
-            </h1>
-            <p className="mt-4 max-w-lg font-sans text-base text-canvas/85">
-              Van bruiloft tot boardroom. Betaalbare luxe met persoonlijk advies van
-              de dresscode-experts van GENTS.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link href="/categorie/pakken" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
-                Shop pakken
-              </Link>
-              <Link href="/pak-samenstellen" className="btn-ghost !border-canvas !text-canvas hover:!bg-canvas hover:!text-ink">
-                Stel je pak samen
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      <VideoHero
+        videoUrl={settings.hero.videoUrl || ""}
+        videoUrlMobile={settings.hero.videoUrlMobile}
+        posterUrl={settings.hero.posterUrl}
+        eyebrow={settings.hero.eyebrow}
+        title={settings.hero.title}
+        subtitle={settings.hero.subtitle}
+        primary={settings.hero.primary}
+        secondary={settings.hero.secondary}
+      />
 
       <UspBar />
 

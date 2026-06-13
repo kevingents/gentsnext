@@ -50,7 +50,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
     <div className={pending ? "opacity-60 transition-opacity" : ""}>
       {/* Kleur */}
       {facets.colors.length > 0 ? (
-        <FilterGroup title="Kleur">
+        <FilterGroup title="Kleur" defaultOpen>
           <div className="flex flex-wrap gap-2">
             {facets.colors.map((c) => {
               const sw = colorSwatch(c.label);
@@ -209,11 +209,30 @@ export function PlpFilters({ facets, selection, total }: Props) {
   );
 }
 
-function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
+function FilterGroup({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="border-b border-line py-5 first:pt-0">
-      <p className="label-brand mb-3">{title}</p>
-      {children}
-    </section>
+    <details open={defaultOpen} className="border-b border-line py-1 first:pt-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between py-3 [&::-webkit-details-marker]:hidden">
+        <span className="label-brand">{title}</span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          aria-hidden
+          className="text-muted transition-transform [details[open]_&]:rotate-180"
+        >
+          <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </summary>
+      <div className="pb-4">{children}</div>
+    </details>
   );
 }
