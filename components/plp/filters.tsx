@@ -41,6 +41,8 @@ export function PlpFilters({ facets, selection, total }: Props) {
 
   const maxEuro = Math.ceil(facets.priceMaxCents / 100);
   const activeCount =
+    selection.types.length +
+    selection.materials.length +
     selection.colors.length +
     selection.sizes.length +
     selection.fits.length +
@@ -48,6 +50,29 @@ export function PlpFilters({ facets, selection, total }: Props) {
 
   const body = (
     <div className={pending ? "opacity-60 transition-opacity" : ""}>
+      {/* Type (subgroep) — bv. Chino/Pantalon/Lange mouw/2-delig */}
+      {facets.types.length > 1 ? (
+        <FilterGroup title="Type" defaultOpen>
+          <div className="space-y-1.5">
+            {facets.types.map((tp) => {
+              const active = selection.types.includes(tp.value);
+              return (
+                <label key={tp.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => apply({ types: toggle(selection.types, tp.value) })}
+                    className="h-4 w-4 accent-ink"
+                  />
+                  <span>{tp.label}</span>
+                  <span className="text-muted">{tp.count}</span>
+                </label>
+              );
+            })}
+          </div>
+        </FilterGroup>
+      ) : null}
+
       {/* Kleur */}
       {facets.colors.length > 0 ? (
         <FilterGroup title="Kleur" defaultOpen>
@@ -128,6 +153,29 @@ export function PlpFilters({ facets, selection, total }: Props) {
         </FilterGroup>
       ) : null}
 
+      {/* Materiaal */}
+      {facets.materials.length > 1 ? (
+        <FilterGroup title="Materiaal">
+          <div className="space-y-1.5">
+            {facets.materials.map((m) => {
+              const active = selection.materials.includes(m.value);
+              return (
+                <label key={m.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => apply({ materials: toggle(selection.materials, m.value) })}
+                    className="h-4 w-4 accent-ink"
+                  />
+                  <span>{m.value}</span>
+                  <span className="text-muted">{m.count}</span>
+                </label>
+              );
+            })}
+          </div>
+        </FilterGroup>
+      ) : null}
+
       {/* Prijs */}
       <FilterGroup title="Prijs">
         <div className="flex flex-wrap gap-2">
@@ -155,7 +203,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
       {activeCount > 0 ? (
         <button
           type="button"
-          onClick={() => apply({ colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
+          onClick={() => apply({ types: [], materials: [], colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
           Wis alle filters ({activeCount})

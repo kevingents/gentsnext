@@ -2,6 +2,8 @@ import type { ProductFilters, ProductSort } from "@/lib/catalog";
 
 /** Vorm van de PLP-URL-parameters (gedeeld tussen server-parsing en client-UI). */
 export type PlpSelection = {
+  types: string[];
+  materials: string[];
   colors: string[];
   sizes: string[];
   fits: string[];
@@ -28,6 +30,8 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
   const sortRaw = get("sort") as ProductSort | undefined;
   const [pMin, pMax] = csv(get("prijs")).map((n) => Number(n));
   return {
+    types: csv(get("type")),
+    materials: csv(get("materiaal")),
     colors: csv(get("kleur")),
     sizes: csv(get("maat")),
     fits: csv(get("pasvorm")),
@@ -41,6 +45,8 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
 /** Bouwt een query-string uit een selectie (lege waarden weggelaten). */
 export function buildPlpQuery(sel: Partial<PlpSelection>): string {
   const p = new URLSearchParams();
+  if (sel.types?.length) p.set("type", sel.types.join(","));
+  if (sel.materials?.length) p.set("materiaal", sel.materials.join(","));
   if (sel.colors?.length) p.set("kleur", sel.colors.join(","));
   if (sel.sizes?.length) p.set("maat", sel.sizes.join(","));
   if (sel.fits?.length) p.set("pasvorm", sel.fits.join(","));
@@ -57,6 +63,8 @@ export function selectionToFilters(
 ): ProductFilters {
   return {
     ...base,
+    types: sel.types,
+    materials: sel.materials,
     colorFamilies: sel.colors,
     sizes: sel.sizes,
     fits: sel.fits,

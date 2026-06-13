@@ -285,6 +285,8 @@ export type ProductSort = "nieuw" | "prijs-op" | "prijs-af" | "naam";
 export type ProductFilters = {
   collectionId?: string;
   category?: string; // hoofdgroep_omschrijving
+  types?: string[]; // subgroep (chino/pantalon/lange mouw/…)
+  materials?: string[]; // materiaal
   colorFamilies?: string[];
   sizes?: string[];
   fits?: string[];
@@ -293,12 +295,20 @@ export type ProductFilters = {
 };
 
 export type Facets = {
+  types: { value: string; label: string; count: number }[];
+  materials: { value: string; count: number }[];
   colors: { key: ColorFamily; label: string; hex: string; count: number }[];
   sizes: { value: string; label: string; count: number }[];
   fits: { value: string; count: number }[];
   priceMinCents: number;
   priceMaxCents: number;
 };
+
+/** "MM" = mix & match — nettere weergave in het type-filter. */
+export function typeLabel(v: string): string {
+  if (v === "MM" || v === "Gilet MM") return v === "MM" ? "Mix & match" : "Gilet (mix & match)";
+  return v;
+}
 
 /** Product-niveau condities (collectie/categorie) — bepalen de facet-context. */
 function contextConditions(f: ProductFilters): SQL[] {
@@ -387,6 +397,12 @@ function allConditions(f: ProductFilters): SQL[] {
   if (f.fits?.length) {
     conds.push(inList(sql`${products.attributes} ->> 'pasvorm'`, f.fits));
   }
+  if (f.types?.length) {
+    conds.push(inList(sql`${products.attributes} ->> 'subgroep'`, f.types));
+  }
+  if (f.materials?.length) {
+    conds.push(inList(sql`${products.attributes} ->> 'materiaal'`, f.materials));
+  }
   const ve = variantExists(f);
   if (ve) conds.push(ve);
   return conds;
@@ -448,7 +464,17 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
   // gekozen kleur/maat/pasvorm — zo blijven alle opties met telling zichtbaar.
   const ctx = sql.join(contextConditions(f), sql` and `);
 
-  const [colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
+  const [typeRows, materialRows, colorRows, sizeRows, fitRows, priceRow] = await Promise.all([
+    db.execute<{ v: string; n: number }>(sql`
+      select ${products.attributes} ->> 'subgroep' as v, count(*)::int as n
+      from ${products}
+      where ${ctx} and coalesce(${products.attributes} ->> 'subgroep','') <> ''
+      group by ${products.attributes} ->> 'subgroep'`),
+    db.execute<{ v: string; n: number }>(sql`
+      select ${products.attributes} ->> 'materiaal' as v, count(*)::int as n
+      from ${products}
+      where ${ctx} and coalesce(${products.attributes} ->> 'materiaal','') <> ''
+      group by ${products.attributes} ->> 'materiaal'`),
     db.execute<{ fam: string; n: number }>(sql`
       select v.color_family as fam, count(distinct ${products.id})::int as n
       from ${products} join ${productVariants} v on v.product_id = ${products.id}
@@ -486,7 +512,20 @@ export async function getFacets(f: ProductFilters): Promise<Facets> {
     .map((r) => ({ value: r.fit, count: r.n }))
     .sort((a, b) => b.count - a.count);
 
+  const types = typeRows.rows
+    .map((r) => ({ value: r.v, label: typeLabel(r.v), count: r.n }))
+    .sort((a, b) => b.count - a.count);
+
+  // Materiaal: alleen tonen wat genoeg voorkomt (anders een te lange lijst).
+  const materials = materialRows.rows
+    .map((r) => ({ value: r.v, count: r.n }))
+    .filter((m) => m.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12);
+
   return {
+    types,
+    materials,
     colors,
     sizes,
     fits,
