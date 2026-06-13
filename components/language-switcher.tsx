@@ -1,16 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, splitLocale, localizedPath, type Locale } from "@/lib/i18n";
 
-/** Taalkeuze — zet de locale-cookie en herlaadt (server + client hertalen). */
+/** Taalkeuze — zet de cookie en navigeert naar de gelokaliseerde URL (fase 2). */
 export function LanguageSwitcher({ current }: { current: Locale }) {
   const [open, setOpen] = useState(false);
 
   function choose(loc: Locale) {
-    document.cookie = `gents-locale=${loc}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+    document.cookie = `${LOCALE_COOKIE}=${loc}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
     setOpen(false);
-    if (loc !== current) window.location.reload();
+    if (loc === current) return;
+    // Strip het huidige prefix en navigeer naar de gekozen taal-URL.
+    const { path } = splitLocale(window.location.pathname);
+    window.location.href = localizedPath(path, loc) + window.location.search + window.location.hash;
   }
 
   return (

@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { getAllLooks } from "@/lib/looks";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
-  title: "Shop the look",
-  description: "Complete outfits voor elk moment — klik en shop de hele look.",
-  alternates: { canonical: "/looks" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: "Shop the look",
+    description: "Complete outfits voor elk moment — klik en shop de hele look.",
+    alternates: await localeAlternates("/looks"),
+  };
+}
 
 export default async function LooksPage() {
   const looks = await getAllLooks();

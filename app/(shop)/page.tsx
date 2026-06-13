@@ -13,8 +13,14 @@ import { listCollections, getHighlights, getProductsByHandles } from "@/lib/cata
 import { getTrendingHandles } from "@/lib/analytics";
 import { getAllLooks } from "@/lib/looks";
 import { CATEGORIES } from "@/lib/categories";
+import { localeAlternates } from "@/lib/seo";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { alternates: await localeAlternates("/") };
+}
 
 /** Gelegenheden — kern van de GENTS-positionering ("gelegenheid > doelgroep"). */
 const OCCASIONS = [

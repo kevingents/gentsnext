@@ -25,6 +25,7 @@ import { pickupInfoByCity } from "@/lib/stores";
 import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
+import { localeAlternates } from "@/lib/seo";
 import { sortSizes } from "@/lib/sizing";
 import { stockForSkus, stockAvailable } from "@/lib/stock";
 
@@ -63,7 +64,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: product.seoTitle || product.title,
     description: product.seoDescription || stripHtml(product.descriptionHtml).slice(0, 160),
-    alternates: { canonical: `/products/${handle}` },
+    alternates: await localeAlternates(`/products/${handle}`),
     openGraph: images[0] ? { images: [{ url: images[0].url }] } : undefined,
   };
 }

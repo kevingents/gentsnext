@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3, Montserrat } from "next/font/google";
 import { getSiteUrl } from "@/lib/site-url";
+import { getLocale } from "@/lib/locale-server";
 import "./globals.css";
 
 // Headers — open Adobe-successor van Myriad Pro (brandbook), lichte gewichten
@@ -35,9 +36,10 @@ export const metadata: Metadata = {
  * Minimale root-layout (alleen html/body + fonts). De winkel-chrome
  * (header/footer/cart) zit in de (shop)-groep, zodat /studio schermvullend is.
  */
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
-    <html lang="nl" className={`${display.variable} ${body.variable}`}>
+    <html lang={locale} className={`${display.variable} ${body.variable}`}>
       <body className="bg-canvas font-sans text-ink antialiased">{children}</body>
     </html>
   );

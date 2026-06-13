@@ -7,6 +7,7 @@ import { JsonLd } from "@/components/json-ld";
 import { brandBySlug } from "@/lib/brands";
 import { getProductsByBrand } from "@/lib/catalog";
 import { getSiteUrl } from "@/lib/site-url";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: brand.name,
     description: brand.intro,
-    alternates: { canonical: `/merken/${slug}` },
+    alternates: await localeAlternates(`/merken/${slug}`),
   };
 }
 

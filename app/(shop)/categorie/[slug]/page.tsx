@@ -9,6 +9,7 @@ import { getFilteredProducts, getFacets } from "@/lib/catalog";
 import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +28,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   return {
     title: cat.label,
     description: `${cat.label} bij GENTS — betaalbare luxe voor elk formeel moment.`,
-    alternates: {
-      canonical: sel.page > 1 ? `/categorie/${slug}?page=${sel.page}` : `/categorie/${slug}`,
-    },
+    alternates: await localeAlternates(sel.page > 1 ? `/categorie/${slug}?page=${sel.page}` : `/categorie/${slug}`),
   };
 }
 

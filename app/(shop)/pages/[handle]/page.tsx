@@ -10,6 +10,7 @@ import { PortableContent } from "@/components/sanity/portable";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
 import { getLanding, type Landing } from "@/lib/landings";
+import { localeAlternates } from "@/lib/seo";
 import { getSanityLanding, getSanityPage, urlForImage, type SanityLanding } from "@/lib/sanity";
 import { getHighlights, getCollectionByHandle, getCollectionProducts } from "@/lib/catalog";
 
@@ -61,18 +62,18 @@ function fallbackTitle(handle: string): string {
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;
   const store = getStoreByPageHandle(handle);
-  if (store) return { title: `GENTS ${store.city} — herenmode & pakken`, alternates: { canonical: `/pages/${handle}` } };
+  if (store) return { title: `GENTS ${store.city} — herenmode & pakken`, alternates: await localeAlternates(`/pages/${handle}`) };
 
   const sanityLanding = await getSanityLanding(handle);
   const landing = sanityLanding ? toLanding(sanityLanding) : getLanding(handle);
   if (landing)
-    return { title: landing.title, description: landing.seoDescription, alternates: { canonical: `/pages/${handle}` } };
+    return { title: landing.title, description: landing.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
 
   const sanityPage = await getSanityPage(handle);
   if (sanityPage)
-    return { title: sanityPage.title, description: sanityPage.seoDescription, alternates: { canonical: `/pages/${handle}` } };
+    return { title: sanityPage.title, description: sanityPage.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
   const mp = getMigratedPage(handle);
-  if (mp) return { title: mp.title, alternates: { canonical: `/pages/${handle}` } };
+  if (mp) return { title: mp.title, alternates: await localeAlternates(`/pages/${handle}`) };
   return { title: fallbackTitle(handle), robots: { index: false } };
 }
 

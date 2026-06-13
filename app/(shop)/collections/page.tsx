@@ -3,13 +3,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { listCollections } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Collecties",
-  alternates: { canonical: "/collections" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Collecties", alternates: await localeAlternates("/collections") };
+}
 
 // Categorie-tegels met merkfotografie — visueel ipv platte lijst.
 const FEATURED: { slug: string; img: string }[] = [

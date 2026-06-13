@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/json-ld";
 import { getCollectionByHandle, getFilteredProducts, getFacets } from "@/lib/catalog";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +28,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     title: collection.seoTitle || collection.title,
     description: collection.seoDescription || undefined,
     // Gefilterde/gepagineerde views niet als aparte canonical indexeren.
-    alternates: {
-      canonical:
-        sel.page > 1 ? `/collections/${handle}?page=${sel.page}` : `/collections/${handle}`,
-    },
+    alternates: await localeAlternates(
+      sel.page > 1 ? `/collections/${handle}?page=${sel.page}` : `/collections/${handle}`,
+    ),
   };
 }
 

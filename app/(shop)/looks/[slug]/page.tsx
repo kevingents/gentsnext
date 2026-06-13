@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLookBySlug, getAllLooks, resolveLook } from "@/lib/looks";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const look = await getLookBySlug(slug);
   if (!look) return {};
-  return { title: `${look.title} — Shop the look`, description: look.subtitle, alternates: { canonical: `/looks/${slug}` } };
+  return { title: `${look.title} — Shop the look`, description: look.subtitle, alternates: await localeAlternates(`/looks/${slug}`) };
 }
 
 export default async function LookPage({ params }: Props) {
