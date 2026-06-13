@@ -7,6 +7,7 @@ import { BackToTop } from "@/components/back-to-top";
 import { CookieNotice } from "@/components/cookie-notice";
 import { SkipLink } from "@/components/skip-link";
 import { HelpButton } from "@/components/help-button";
+import { WelcomePopup } from "@/components/welcome-popup";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <BackToTop />
           <HelpButton />
           <CookieNotice />
+          <WelcomePopup />
         </div>
       </WishlistProvider>
     </CartProvider>

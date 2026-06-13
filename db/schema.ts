@@ -232,6 +232,8 @@ export const orders = pgTable(
     country: text("country").notNull().default("NL"),
     /** 'standard' | 'express' (snellere levering tegen toeslag). */
     deliveryMethod: text("delivery_method").notNull().default("standard"),
+    voucherCode: text("voucher_code").notNull().default(""),
+    discountCents: integer("discount_cents").notNull().default(0),
     subtotalCents: integer("subtotal_cents").notNull(),
     shippingCents: integer("shipping_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull(),
@@ -418,6 +420,8 @@ export const vouchers = pgTable(
     percentOff: integer("percent_off").notNull().default(0),
     minSpendCents: integer("min_spend_cents").notNull().default(0),
     status: text("status").notNull().default("active"),
+    email: text("email").notNull().default(""),
+    singleUse: boolean("single_use").notNull().default(true),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

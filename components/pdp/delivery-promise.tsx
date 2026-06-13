@@ -39,19 +39,41 @@ function cutoffSuffix(now: Date): string {
     : "Voor 16:00 besteld, morgen verzonden.";
 }
 
-export function DeliveryPromise() {
+/** Live aftel-tekst tot de cutoff, voor urgentie ("bestel binnen 2u 14m"). */
+function countdownLabel(now: Date, cutoffHour: number): string | null {
+  const day = now.getDay();
+  if (day === 0 || day === 6) return null; // weekend → geen vandaag-verzending
+  const cutoff = new Date(now);
+  cutoff.setHours(cutoffHour, 0, 0, 0);
+  const ms = cutoff.getTime() - now.getTime();
+  if (ms <= 0) return null;
+  const mins = Math.floor(ms / 60000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const t = h > 0 ? `${h} uur en ${m} min` : `${m} min`;
+  return `Bestel binnen ${t} en wij versturen het vandaag nog`;
+}
+
+export function DeliveryPromise({ cutoffHour = 16 }: { cutoffHour?: number }) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
   }, []);
   if (!now) return null;
+  const countdown = countdownLabel(now, cutoffHour);
   return (
     <div className="mt-6 border-y border-line py-3">
       <p className="font-sans text-sm">
         <span className="text-success">●</span>{" "}
         <span className="font-medium">{nextDeliveryLabel(now)}</span>
       </p>
-      <p className="mt-1 font-sans text-xs text-muted">{cutoffSuffix(now)}</p>
+      {countdown ? (
+        <p className="mt-1 font-sans text-xs font-medium text-danger">⏱ {countdown}</p>
+      ) : (
+        <p className="mt-1 font-sans text-xs text-muted">{cutoffSuffix(now)}</p>
+      )}
     </div>
   );
 }

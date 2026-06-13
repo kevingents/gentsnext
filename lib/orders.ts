@@ -5,6 +5,7 @@ import { sendOrderConfirmation } from "@/lib/email";
 import { allocateOrder } from "@/lib/fulfillment";
 import { pushOrderToSRS } from "@/lib/srs";
 import { getSettings } from "@/lib/settings";
+import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -105,7 +106,8 @@ export type CreatedOrder = {
 export async function createOrder(
   contact: CheckoutContact,
   items: CheckoutItem[],
-  deliveryMethod: DeliveryMethod = "standard"
+  deliveryMethod: DeliveryMethod = "standard",
+  voucherCode = ""
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -113,11 +115,21 @@ export async function createOrder(
   if (!lines.length) throw new Error("Geen geldige producten in de bestelling.");
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
+  // Kortingscode server-side valideren (nooit het clientbedrag vertrouwen).
+  let discountCents = 0;
+  let appliedCode = "";
+  if (voucherCode.trim()) {
+    const v = await validateVoucher(voucherCode, subtotalCents);
+    if (v.valid) {
+      discountCents = v.discountCents;
+      appliedCode = v.code;
+    }
+  }
   // Verzendkosten + (optionele) express-toeslag — alles uit de instelbare settings.
   const baseShipping = subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
   const surcharge = deliveryMethod === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
-  const totalCents = subtotalCents + shippingCents;
+  const totalCents = Math.max(0, subtotalCents - discountCents) + shippingCents;
   const orderNumber = generateOrderNumber();
 
   const [order] = await db
@@ -135,11 +147,15 @@ export async function createOrder(
       city: contact.city.trim(),
       country: (contact.country || "NL").trim(),
       deliveryMethod,
+      voucherCode: appliedCode,
+      discountCents,
       subtotalCents,
       shippingCents,
       totalCents,
     })
     .returning({ id: orders.id, orderNumber: orders.orderNumber });
+
+  if (appliedCode) await redeemVoucher(appliedCode);
 
   await db.insert(orderLines).values(
     lines.map((l) => ({

@@ -167,7 +167,11 @@ export function BuyBox({
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
-              <span className="text-success">● Op voorraad — maat {selectedSize.size}</span>
+              selectedSize.qty <= 5 ? (
+                <span className="text-danger">● Nog maar {selectedSize.qty} op voorraad — wees er snel bij</span>
+              ) : (
+                <span className="text-success">● Op voorraad — maat {selectedSize.size}</span>
+              )
             ) : (
               <span className="text-muted">Maat {selectedSize.size} tijdelijk uitverkocht</span>
             )}

@@ -28,11 +28,37 @@ export default function AfrekenenPage() {
 
   const [delivery, setDelivery] = useState<"standard" | "express">("standard");
   const [expressSurcharge, setExpressSurcharge] = useState(0);
+  const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
+  const [voucherInput, setVoucherInput] = useState("");
+  const [voucherErr, setVoucherErr] = useState("");
 
   const baseShipping = cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
   const surcharge = delivery === "express" ? expressSurcharge : 0;
   const shippingCents = baseShipping + surcharge;
-  const totalCents = cart.subtotalCents + shippingCents;
+  const discountCents = voucher?.discountCents ?? 0;
+  const totalCents = Math.max(0, cart.subtotalCents - discountCents) + shippingCents;
+
+  async function applyVoucher() {
+    setVoucherErr("");
+    if (!voucherInput.trim()) return;
+    try {
+      const r = await fetch("/api/voucher/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: voucherInput, subtotalCents: cart.subtotalCents }),
+      });
+      const d = await r.json();
+      if (d.valid) {
+        setVoucher({ code: d.code, discountCents: d.discountCents, label: d.label });
+        setVoucherErr("");
+      } else {
+        setVoucher(null);
+        setVoucherErr(d.error || "Ongeldige code.");
+      }
+    } catch {
+      setVoucherErr("Kon de code niet controleren.");
+    }
+  }
 
   if (cart.lines.length === 0 && !notice) {
     return (
@@ -60,6 +86,7 @@ export default function AfrekenenPage() {
         body: JSON.stringify({
           contact: form,
           deliveryMethod: delivery,
+          voucherCode: voucher?.code || "",
           items: cart.lines.map((l) => ({
             sku: l.sku,
             qty: l.qty,
@@ -187,8 +214,33 @@ export default function AfrekenenPage() {
                 }}
               />
             </div>
+            {/* Kortingscode */}
+            <div className="mt-4 border-t border-line pt-4">
+              {voucher ? (
+                <div className="flex items-center justify-between font-sans text-sm">
+                  <span className="text-success">✓ Code {voucher.code} — {voucher.label}</span>
+                  <button type="button" onClick={() => { setVoucher(null); setVoucherInput(""); }} className="text-muted underline">verwijder</button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex gap-2">
+                    <input
+                      value={voucherInput}
+                      onChange={(e) => setVoucherInput(e.target.value)}
+                      placeholder="Kortingscode"
+                      className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm uppercase focus:border-ink focus:outline-none"
+                    />
+                    <button type="button" onClick={applyVoucher} className="btn-ghost !px-4 !py-2 whitespace-nowrap">Toepassen</button>
+                  </div>
+                  {voucherErr ? <p className="mt-1 font-sans text-xs text-danger">{voucherErr}</p> : null}
+                </div>
+              )}
+            </div>
             <dl className="mt-4 space-y-1.5 border-t border-line pt-4 font-sans text-sm">
               <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(cart.subtotalCents)}</dd></div>
+              {discountCents > 0 ? (
+                <div className="flex justify-between text-success"><dt>Korting ({voucher?.code})</dt><dd>− {formatEuro(discountCents)}</dd></div>
+              ) : null}
               <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{baseShipping === 0 ? "Gratis" : formatEuro(baseShipping)}</dd></div>
               {surcharge > 0 ? (
                 <div className="flex justify-between"><dt className="text-muted">Snellere levering</dt><dd>+ {formatEuro(surcharge)}</dd></div>

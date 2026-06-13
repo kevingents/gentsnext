@@ -26,9 +26,10 @@ export async function POST(req: Request) {
   }
 
   const deliveryMethod: DeliveryMethod = body?.deliveryMethod === "express" ? "express" : "standard";
+  const voucherCode = String(body?.voucherCode || "").trim();
   let order;
   try {
-    order = await createOrder(c, items, deliveryMethod);
+    order = await createOrder(c, items, deliveryMethod, voucherCode);
   } catch (e) {
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
   }
