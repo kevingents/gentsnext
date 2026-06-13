@@ -4,8 +4,19 @@ import { projectId, dataset, apiVersion, sanityConfigured } from "@/sanity/env";
 
 export { sanityConfigured };
 
+// Server-only lees-token (werkt ook bij een private dataset). lib/sanity wordt
+// alleen server-side gebruikt (server components), dus dit lekt niet client-side.
+const readToken = process.env.SANITY_API_KEY || process.env.SANITY_API_TOKEN;
+
 export const sanityClient = sanityConfigured
-  ? createClient({ projectId, dataset, apiVersion, useCdn: true })
+  ? createClient({
+      projectId,
+      dataset,
+      apiVersion,
+      useCdn: !readToken,
+      token: readToken || undefined,
+      perspective: "published",
+    })
   : null;
 
 const builder = sanityConfigured ? imageUrlBuilder({ projectId, dataset } as any) : null;

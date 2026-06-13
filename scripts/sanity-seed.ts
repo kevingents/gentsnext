@@ -11,9 +11,9 @@ import { LANDINGS } from "@/lib/landings";
  * schrijf-token SANITY_API_TOKEN (Editor/Deploy). Idempotent (createOrReplace).
  *   npm run sanity:seed
  */
-const token = process.env.SANITY_API_TOKEN;
+const token = process.env.SANITY_API_KEY || process.env.SANITY_API_TOKEN;
 if (!projectId || !token) {
-  console.error("Zet NEXT_PUBLIC_SANITY_PROJECT_ID en SANITY_API_TOKEN voordat je seedt.");
+  console.error("Zet NEXT_PUBLIC_SANITY_PROJECT_ID en SANITY_API_KEY voordat je seedt.");
   process.exit(1);
 }
 
