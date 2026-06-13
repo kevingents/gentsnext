@@ -29,3 +29,6 @@ Thumbs.db
 
 .vercel
 .env*.local
+
+# Sanity
+.sanity/

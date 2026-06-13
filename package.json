@@ -15,15 +15,23 @@
     "import:shopify": "tsx scripts/import-shopify-bulk.ts",
     "cache:publish": "tsx scripts/publish-cache.ts",
     "backfill:colorfamily": "tsx scripts/backfill-color-family.ts",
-    "backfill:sizelabel": "tsx scripts/backfill-size-label.ts"
+    "backfill:sizelabel": "tsx scripts/backfill-size-label.ts",
+    "sanity:seed": "tsx scripts/sanity-seed.ts",
+    "studio:dev": "sanity dev",
+    "studio:deploy": "sanity deploy"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@portabletext/react": "^6.2.0",
+    "@sanity/image-url": "^2.1.1",
+    "@sanity/vision": "^3.99.0",
     "@vercel/blob": "^2.4.0",
     "drizzle-orm": "^0.45.2",
     "next": "^15.5.19",
+    "next-sanity": "^9.12.3",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "sanity": "^3.99.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.21",
