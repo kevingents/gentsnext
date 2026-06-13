@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { useCart } from "@/components/cart/cart-context";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
@@ -141,6 +142,8 @@ export function BuyBox({
           </p>
         ) : null}
       </div>
+
+      <DeliveryPromise />
 
       {/* Bestelknop */}
       <button
