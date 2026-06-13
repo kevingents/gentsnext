@@ -12,6 +12,7 @@ import { RecentStrip } from "@/components/recent/recent-strip";
 import { getProductByHandle, getRecommendations } from "@/lib/catalog";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
+import { faqFor } from "@/lib/pdp-faq";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -205,12 +206,36 @@ export default async function ProductPage({ params }: Props) {
         </div>
       ),
     },
+    {
+      title: "Veelgestelde vragen",
+      content: (
+        <dl className="font-sans text-sm">
+          {faqFor(hoofdgroep).map((f) => (
+            <div key={f.q} className="py-3 first:pt-0 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-line">
+              <dt className="font-medium text-ink">{f.q}</dt>
+              <dd className="mt-1 leading-relaxed text-ink-soft">{f.a}</dd>
+            </div>
+          ))}
+        </dl>
+      ),
+    },
   ];
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqFor(hoofdgroep).map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
 
   return (
     <div className="mx-auto max-w-page px-gutter py-8 pb-28 lg:pb-8">
       <JsonLd data={productJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
+      <JsonLd data={faqJsonLd} />
       <TrackRecent handle={product.handle} />
 
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
