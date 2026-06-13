@@ -8,6 +8,8 @@ import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
+import { RatingStars } from "@/components/rating-stars";
+import type { ProductRating } from "@/lib/reviews";
 import { useCart } from "@/components/cart/cart-context";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
@@ -23,6 +25,7 @@ export type BuySize = {
 type Props = {
   title: string;
   vendor: string;
+  rating?: ProductRating | null;
   hoofdgroep: string;
   sizeChartHandle: string | null;
   productHandle: string;
@@ -37,6 +40,7 @@ type Props = {
 export function BuyBox({
   title,
   vendor,
+  rating,
   hoofdgroep,
   sizeChartHandle,
   productHandle,
@@ -79,6 +83,11 @@ export function BuyBox({
     <div>
       {vendor ? <p className="label-brand">{vendor}</p> : null}
       <h1 className="mt-2 text-display-md">{title}</h1>
+      {rating ? (
+        <div className="mt-2">
+          <RatingStars rating={rating} size="sm" />
+        </div>
+      ) : null}
 
       <div className="mt-4 flex items-baseline gap-3">
         {referenceCents ? (

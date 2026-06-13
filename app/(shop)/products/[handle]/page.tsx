@@ -15,6 +15,7 @@ import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
 import { categoryByHoofdgroep } from "@/lib/categories";
+import { parseRating } from "@/lib/reviews";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -114,6 +115,7 @@ export default async function ProductPage({ params }: Props) {
   })).filter((s) => s.value);
 
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
+  const rating = parseRating(attrs);
   // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
   const cat = categoryByHoofdgroep(hoofdgroep);
   const breadcrumb = cat
@@ -127,7 +129,7 @@ export default async function ProductPage({ params }: Props) {
     getColorSiblings(attrs, product.handle),
   ]);
 
-  const productJsonLd = {
+  const productJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.title,
@@ -144,6 +146,15 @@ export default async function ProductPage({ params }: Props) {
       availability: anyInStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
     },
   };
+  if (rating) {
+    productJsonLd.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: rating.value.toFixed(1),
+      reviewCount: rating.count,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -270,6 +281,7 @@ export default async function ProductPage({ params }: Props) {
           <BuyBox
             title={product.title}
             vendor={String(attrs.merk || product.vendor || "")}
+            rating={rating}
             hoofdgroep={hoofdgroep}
             sizeChartHandle={sizeChartFor(hoofdgroep)}
             productHandle={product.handle}
