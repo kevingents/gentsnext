@@ -10,6 +10,7 @@ export type MenuItem = { label: string; href: string; children?: MenuLink[] };
 
 export const MAIN_MENU: MenuItem[] = [
   { label: "New arrivals", href: "/collections/nieuwe-collectie-gents" },
+  { label: "Looks", href: "/looks" },
   {
     label: "Collecties",
     href: "#",
