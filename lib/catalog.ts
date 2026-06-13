@@ -12,6 +12,20 @@ import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
 
 /** Leeslaag voor de storefront — alle catalogus-queries op één plek. */
 
+/**
+ * Zichtbaarheidsregel voor de catalogus: alleen actieve producten MÉT foto,
+ * MÉT voorraad, en alleen het PRIMAIRE product van een kleurgroep (de andere
+ * kleuren zijn als variant bereikbaar via de PDP). Eén plek, overal hergebruikt.
+ */
+function visibleProductConds(): SQL[] {
+  return [
+    eq(products.status, "active"),
+    eq(products.hasImage, true),
+    eq(products.inStock, true),
+    eq(products.isGroupPrimary, true),
+  ];
+}
+
 export type ProductCardData = {
   id: string;
   handle: string;
@@ -25,6 +39,8 @@ export type ProductCardData = {
   hasSale?: boolean;
   /** Hoogste compareAt-prijs voor de variant die nu op sale is — voor doorstrepen. */
   compareAtCents?: number;
+  /** Aantal kleuren in de variantgroep (≥2 → toon "+N kleuren" op de kaart). */
+  colorCount?: number;
 };
 
 export async function listCollections() {
@@ -77,10 +93,15 @@ async function buildProductCards(
         id: products.id,
         sourceCreatedAt: products.sourceCreatedAt,
         attributes: products.attributes,
+        groupColorCount: products.groupColorCount,
+        variantColorLabel: products.variantColorLabel,
       })
       .from(products)
       .where(inArray(products.id, ids)),
   ]);
+
+  const colorCount = new Map(prodMeta.map((m) => [m.id, m.groupColorCount]));
+  const colorLabel = new Map(prodMeta.map((m) => [m.id, m.variantColorLabel]));
 
   const firstImage = new Map<string, { url: string; alt: string }>();
   for (const img of images) {
@@ -123,10 +144,18 @@ async function buildProductCards(
     const range = priceRange.get(p.id);
     const rawAlt = (img?.alt || "").trim();
     const cleanAlt = !rawAlt || isEnglishish(rawAlt) ? p.title : rawAlt;
+    // Bij een kleurgroep tonen we de BASISnaam op de kaart (kleur weg uit titel),
+    // zodat "Stropdas PE lichtblauw" → "Stropdas PE · In 19 kleuren".
+    const cnt = colorCount.get(p.id) ?? 1;
+    const lbl = (colorLabel.get(p.id) || "").trim();
+    let displayTitle = p.title;
+    if (cnt > 1 && lbl && p.title.toLowerCase().endsWith(lbl.toLowerCase())) {
+      displayTitle = p.title.slice(0, p.title.length - lbl.length).replace(/[\s,–-]+$/, "").trim() || p.title;
+    }
     return {
       id: p.id,
       handle: p.handle,
-      title: p.title,
+      title: displayTitle,
       vendor: p.vendor,
       imageUrl: img?.url || "",
       imageAlt: cleanAlt,
@@ -135,6 +164,7 @@ async function buildProductCards(
       isNew: newFlag.get(p.id) ?? false,
       hasSale: onSale.get(p.id) ?? false,
       compareAtCents: compareAtBest.get(p.id),
+      colorCount: colorCount.get(p.id) ?? 1,
     };
   });
 }
@@ -143,7 +173,7 @@ export async function getCollectionProducts(collectionId: string, page: number, 
   const db = getDb();
   const baseQuery = and(
     eq(productCollections.collectionId, collectionId),
-    eq(products.status, "active")
+    ...visibleProductConds()
   );
 
   const [rows, totals] = await Promise.all([
@@ -210,7 +240,7 @@ export async function listProductHandles(limit = 50000) {
   return db
     .select({ handle: products.handle, updatedAt: products.updatedAt })
     .from(products)
-    .where(eq(products.status, "active"))
+    .where(and(...visibleProductConds()))
     .limit(limit);
 }
 
@@ -238,7 +268,7 @@ export type Facets = {
 
 /** Product-niveau condities (collectie/categorie) — bepalen de facet-context. */
 function contextConditions(f: ProductFilters): SQL[] {
-  const conds: SQL[] = [eq(products.status, "active")];
+  const conds: SQL[] = [...visibleProductConds()];
   if (f.collectionId) {
     conds.push(
       sql`exists (select 1 from ${productCollections} pc where pc.product_id = ${products.id} and pc.collection_id = ${f.collectionId})`
@@ -263,7 +293,9 @@ export async function getProductsByHandles(handles: string[]): Promise<ProductCa
       vendor: products.vendor,
     })
     .from(products)
-    .where(and(inArray(products.handle, list), eq(products.status, "active")));
+    // Bewaarde/recent-bekeken items: tonen zolang ze actief zijn én een foto
+    // hebben (geen lege kaarten); voorraad mag tijdelijk 0 zijn.
+    .where(and(inArray(products.handle, list), eq(products.status, "active"), eq(products.hasImage, true)));
   // Volgorde van de invoer behouden.
   const cards = await buildProductCards(rows);
   const byHandle = new Map(cards.map((c) => [c.handle, c]));
@@ -276,9 +308,8 @@ export async function getProductsByBrand(brand: string, limit = 48): Promise<Pro
   const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
     select p.id, p.handle, p.title, p.vendor
     from ${products} p
-    where p.status = 'active'
+    where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
       and p.attributes ->> 'merk' = ${brand}
-      and exists (select 1 from ${productImages} pi where pi.product_id = p.id)
     order by p.source_created_at desc nulls last
     limit ${limit}
   `);
@@ -463,10 +494,9 @@ export async function getRecommendations(
   const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string; hg: string }>(sql`
     select p.id, p.handle, p.title, p.vendor, p.attributes ->> 'hoofdgroep_omschrijving' as hg
     from ${products} p
-    where p.status = 'active'
+    where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
       and p.attributes ->> 'hoofdgroep_omschrijving' in (${sql.join(targets.map((t) => sql`${t}`), sql`, `)})
       and p.id <> ${exclude}
-      and exists (select 1 from ${productImages} pi where pi.product_id = p.id)
     order by p.source_created_at desc nulls last
     limit 60
   `);
@@ -522,7 +552,7 @@ export async function searchProducts(q: string, limit = 24): Promise<ProductCard
       vendor: products.vendor,
     })
     .from(products)
-    .where(and(eq(products.status, "active"), ...conds))
+    .where(and(...visibleProductConds(), ...conds))
     .orderBy(desc(products.sourceCreatedAt))
     .limit(limit);
   return buildProductCards(rows);
@@ -537,13 +567,44 @@ export async function getHighlights(category: string, limit = 4): Promise<Produc
   const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
     select p.id, p.handle, p.title, p.vendor
     from ${products} p
-    where p.status = 'active'
+    where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
       and p.attributes ->> 'hoofdgroep_omschrijving' = ${category}
-      and exists (select 1 from ${productImages} pi where pi.product_id = p.id)
     order by p.source_created_at desc nulls last
     limit ${limit}
   `);
   return buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
+}
+
+export type VariantSibling = {
+  handle: string;
+  colorLabel: string;
+  imageUrl: string;
+  inStock: boolean;
+  isCurrent: boolean;
+};
+
+/**
+ * Kleurvarianten van een product (zelfde variantGroupKey). Geeft alle kleuren
+ * terug — ook het huidige product — met eerste foto en voorraadstatus, zodat de
+ * PDP duidelijke kleurkeuze-swatches kan tonen. Leeg als er geen groep is.
+ */
+export async function getVariantSiblings(groupKey: string, currentHandle: string): Promise<VariantSibling[]> {
+  if (!groupKey) return [];
+  const db = getDb();
+  const rows = await db.execute<{ handle: string; label: string; in_stock: boolean; url: string | null }>(sql`
+    select p.handle, p.variant_color_label as label, p.in_stock,
+      (select pi.url from ${productImages} pi where pi.product_id = p.id order by pi.position asc limit 1) as url
+    from ${products} p
+    where p.variant_group_key = ${groupKey} and p.status = 'active' and p.has_image = true
+    order by p.in_stock desc, p.variant_color_label asc
+  `);
+  return rows.rows.map((r) => ({
+    handle: r.handle,
+    colorLabel: r.label || "Variant",
+    imageUrl: r.url || "",
+    inStock: r.in_stock,
+    isCurrent: r.handle === currentHandle,
+  }));
 }
 
 /** Lijst van categorieën (hoofdgroep) met telling — voor nav/landing. */
@@ -552,7 +613,8 @@ export async function listCategories(): Promise<{ name: string; count: number }[
   const rows = await db.execute<{ name: string; n: number }>(sql`
     select attributes ->> 'hoofdgroep_omschrijving' as name, count(*)::int as n
     from ${products}
-    where status = 'active' and attributes ->> 'hoofdgroep_omschrijving' is not null
+    where status = 'active' and has_image = true and in_stock = true and is_group_primary = true
+      and attributes ->> 'hoofdgroep_omschrijving' is not null
     group by 1 order by n desc`);
   return rows.rows.map((r) => ({ name: r.name, count: r.n }));
 }

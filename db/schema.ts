@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   integer,
+  boolean,
   timestamp,
   jsonb,
   primaryKey,
@@ -48,6 +49,23 @@ export const products = pgTable(
     /** createdAt van het bronproduct in Shopify (cache-veld `createdAt`). */
     sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    /**
+     * Gedenormaliseerde zichtbaarheidsvlaggen — gevuld door scripts/sync-stock.
+     * Catalogus toont alleen producten met foto ÉN voorraad (eis: geen lege
+     * kaarten of niet-leverbare artikelen).
+     */
+    hasImage: boolean("has_image").notNull().default(false),
+    inStock: boolean("in_stock").notNull().default(false),
+    stockQty: integer("stock_qty").notNull().default(0),
+    stockSyncedAt: timestamp("stock_synced_at", { withTimezone: true }),
+    /** Kleurgroep-sleutel (uit titel afgeleid) voor het samenvoegen van kleurvarianten. */
+    variantGroupKey: text("variant_group_key").notNull().default(""),
+    /** Eén primair product per kleurgroep wordt in listings getoond. */
+    isGroupPrimary: boolean("is_group_primary").notNull().default(true),
+    /** Aantal kleuren in de groep (voor de "+N kleuren"-badge). */
+    groupColorCount: integer("group_color_count").notNull().default(1),
+    /** Kleurlabel van dít product binnen de groep (bv. "rood met stip"). */
+    variantColorLabel: text("variant_color_label").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -55,6 +73,8 @@ export const products = pgTable(
     uniqueIndex("products_handle_unique").on(t.handle),
     uniqueIndex("products_shopify_id_unique").on(t.shopifyProductId),
     index("products_status_idx").on(t.status),
+    index("products_visible_idx").on(t.status, t.hasImage, t.inStock),
+    index("products_variant_group_idx").on(t.variantGroupKey),
   ]
 );
 
@@ -83,6 +103,8 @@ export const productVariants = pgTable(
     /** Bevroren Shopify-GID — feed_id voor Merchant Center/Squeezely. */
     shopifyVariantId: text("shopify_variant_id"),
     imageUrl: text("image_url").notNull().default(""),
+    /** Voorraad per variant (som over filialen) — gevuld door scripts/sync-stock. */
+    stockQty: integer("stock_qty").notNull().default(0),
     attributes: jsonb("attributes").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -197,6 +219,8 @@ export const orders = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orderNumber: text("order_number").notNull(),
     status: text("status").notNull().default("open"),
+    /** Koppeling aan een klantaccount (nullable: gast-checkout blijft mogelijk). */
+    customerId: uuid("customer_id"),
     email: text("email").notNull(),
     firstName: text("first_name").notNull().default(""),
     lastName: text("last_name").notNull().default(""),
@@ -246,4 +270,155 @@ export const orderLines = pgTable(
     roleLabel: text("role_label"),
   },
   (t) => [index("order_lines_order_idx").on(t.orderId)]
+);
+
+/* ─────────────────────────── Klanten & loyaliteit ───────────────────────── */
+
+/**
+ * Klantaccount — omnichannel. Gekoppeld aan online orders (orders.customerId)
+ * én aan winkelaankopen (storePurchases) via srsCustomerId/e-mail, zodat een
+ * klant in zijn profiel zowel online- als winkelaankopen ziet. Auth gaat via
+ * een magic-link sessie (customerSessions); wachtwoord is optioneel voor later.
+ */
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    /** Optioneel wachtwoord (bcrypt) — magic-link is de primaire route. */
+    passwordHash: text("password_hash"),
+    /** SRS/POS-klantnummer — koppelt winkelaankopen aan dit account. */
+    srsCustomerId: text("srs_customer_id"),
+    /** Spaarpunten-saldo (afgeleid van loyaltyEvents, hier gecachet). */
+    loyaltyPoints: integer("loyalty_points").notNull().default(0),
+    /** Maatprofiel: { colbert, broek, overhemd, schoen, pasvoorkeur, ... }. */
+    sizeProfile: jsonb("size_profile").notNull().default({}),
+    /** Stijl-/maatvoorkeuren en notities (vrij). */
+    preferences: jsonb("preferences").notNull().default({}),
+    marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customers_email_unique").on(t.email),
+    index("customers_srs_idx").on(t.srsCustomerId),
+  ]
+);
+
+export const customerAddresses = pgTable(
+  "customer_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    label: text("label").notNull().default("Thuis"),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
+    street: text("street").notNull().default(""),
+    houseNumber: text("house_number").notNull().default(""),
+    postalCode: text("postal_code").notNull().default(""),
+    city: text("city").notNull().default(""),
+    country: text("country").notNull().default("NL"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("customer_addresses_customer_idx").on(t.customerId)]
+);
+
+/** Magic-link/sessie-tokens. Token = opaque, gehasht opgeslagen. */
+export const customerSessions = pgTable(
+  "customer_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    /** 'session' = ingelogd; 'magic' = nog te verzilveren login-link. */
+    kind: text("kind").notNull().default("session"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customer_sessions_token_unique").on(t.tokenHash),
+    index("customer_sessions_customer_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Vouchers/tegoedbonnen — kan persoonlijk (customerId) of generiek zijn.
+ * Type 'amount' (valueCents) of 'percent' (percentOff).
+ */
+export const vouchers = pgTable(
+  "vouchers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    description: text("description").notNull().default(""),
+    kind: text("kind").notNull().default("amount"),
+    valueCents: integer("value_cents").notNull().default(0),
+    percentOff: integer("percent_off").notNull().default(0),
+    minSpendCents: integer("min_spend_cents").notNull().default(0),
+    status: text("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("vouchers_code_unique").on(t.code),
+    index("vouchers_customer_idx").on(t.customerId),
+  ]
+);
+
+/** Spaarpunten-mutaties — saldo = som. Bron: online + winkelaankopen. */
+export const loyaltyEvents = pgTable(
+  "loyalty_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    points: integer("points").notNull(),
+    reason: text("reason").notNull().default(""),
+    refType: text("ref_type"),
+    refId: text("ref_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("loyalty_events_customer_idx").on(t.customerId)]
+);
+
+/**
+ * Winkelaankopen (omnichannel) — uit SRS/POS. Gekoppeld aan een klant via
+ * srsCustomerId of e-mail, zodat de klant ze in zijn profiel terugziet.
+ */
+export const storePurchases = pgTable(
+  "store_purchases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    srsCustomerId: text("srs_customer_id"),
+    email: text("email"),
+    storeName: text("store_name").notNull().default(""),
+    branchId: text("branch_id"),
+    receiptId: text("receipt_id"),
+    purchasedAt: timestamp("purchased_at", { withTimezone: true }).notNull().defaultNow(),
+    totalCents: integer("total_cents").notNull().default(0),
+    pointsEarned: integer("points_earned").notNull().default(0),
+    /** Regels: [{ title, size, color, qty, unitPriceCents }]. */
+    lines: jsonb("lines").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("store_purchases_customer_idx").on(t.customerId),
+    index("store_purchases_srs_idx").on(t.srsCustomerId),
+    index("store_purchases_email_idx").on(t.email),
+  ]
 );

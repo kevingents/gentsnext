@@ -10,7 +10,7 @@ import { ProductCard } from "@/components/product-card";
 import { TrackRecent } from "@/components/recent/track-recent";
 import { RecentStrip } from "@/components/recent/recent-strip";
 import { ShareRow } from "@/components/pdp/share-row";
-import { getProductByHandle, getRecommendations } from "@/lib/catalog";
+import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
@@ -124,10 +124,23 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, colorSiblings] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
+    getVariantSiblings(product.variantGroupKey || "", product.handle),
   ]);
+  // Voorkeur: kleurvarianten uit de titel-groepering (dekt o.a. de 235 dassen-
+  // /pochet-/strik-groepen); val terug op Shopify group_data-metafield.
+  const colorSiblings =
+    variantSiblings.length >= 2
+      ? variantSiblings.map((s) => ({
+          handle: s.handle,
+          colorName: s.colorLabel,
+          imageUrl: s.imageUrl,
+          isCurrent: s.isCurrent,
+          inStock: s.inStock,
+        }))
+      : metafieldSiblings;
 
   const productJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",

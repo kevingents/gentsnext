@@ -41,6 +41,9 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             <span className="ml-2 text-xs text-muted line-through">{formatEuro(product.compareAtCents)}</span>
           ) : null}
         </p>
+        {product.colorCount && product.colorCount > 1 ? (
+          <p className="font-sans text-xs text-muted">In {product.colorCount} kleuren</p>
+        ) : null}
       </div>
     </Link>
   );

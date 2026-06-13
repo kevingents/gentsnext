@@ -16,6 +16,7 @@
     "cache:publish": "tsx scripts/publish-cache.ts",
     "backfill:colorfamily": "tsx scripts/backfill-color-family.ts",
     "backfill:sizelabel": "tsx scripts/backfill-size-label.ts",
+    "sync:catalog": "tsx scripts/sync-catalog-flags.ts",
     "sanity:seed": "tsx scripts/sanity-seed.ts",
     "studio:dev": "sanity dev",
     "studio:deploy": "sanity deploy"
