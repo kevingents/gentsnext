@@ -14,6 +14,7 @@ import { and, eq, sql } from "drizzle-orm";
  *   FASHN_API_KEY                – FASHN.ai API-key
  *   GENTS_MODEL_BASE_REGULAR     – URL van het reguliere model (canvas)
  *   GENTS_MODEL_BASE_FORMAL      – URL van het smoking/black-tie-model (optioneel)
+ *   GENTS_MODEL_BASE_LIFESTYLE   – URL van het casual/Mr-Marvis-model (optioneel)
  *   GENTS_MODEL_BASE_PLUS        – URL van het plus-size model (optioneel)
  *   STOREGENTS_BLOB_READ_WRITE_TOKEN – voor het opslaan van de output
  *
@@ -102,6 +103,7 @@ async function main() {
   const baseRegular = process.env.GENTS_MODEL_BASE_REGULAR;
   const basePlus = process.env.GENTS_MODEL_BASE_PLUS;
   const baseFormal = process.env.GENTS_MODEL_BASE_FORMAL; // black-tie/smoking-canvas (optioneel)
+  const baseLifestyle = process.env.GENTS_MODEL_BASE_LIFESTYLE; // casual/Mr-Marvis-canvas (optioneel)
   const blobToken = process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey || !baseRegular || !blobToken) {
     console.error("Zet FASHN_API_KEY, GENTS_MODEL_BASE_REGULAR en een blob-token. Plus-size: GENTS_MODEL_BASE_PLUS.");
@@ -129,11 +131,21 @@ async function main() {
     const category = CATEGORY[r.hg];
     if (!category || !r.img) continue;
 
-    // Slim model: black-tie/smoking-stukken op het smoking-canvas (als gezet),
-    // zodat de foto bij de zwarte-strik/lakschoen-look past. Anders het zakelijke model.
-    const blackTie = /smoking|tuxedo|vadermoord|pliss|rokkostuum|galadui/.test(`${r.title} ${r.handle}`.toLowerCase());
-    const canvas = blackTie && baseFormal ? baseFormal : baseRegular;
-    console.log(`• ${r.handle} (${r.hg})${blackTie && baseFormal ? " [smoking-canvas]" : ""}`);
+    // Slim model — canvas per stijl/categorie (mix):
+    //  black-tie (smoking) → smoking-canvas; casual (chino/polo/trui) → lifestyle-
+    //  canvas (Mr Marvis-stijl, gekleurde achtergrond); formeel/zakelijk → studio.
+    //  Valt terug op het studio-model als een specifiek canvas niet is gezet.
+    const t = `${r.title} ${r.hg} ${r.handle}`.toLowerCase();
+    const blackTie = /smoking|tuxedo|vadermoord|pliss|rokkostuum|galadui/.test(t);
+    const casual =
+      !blackTie &&
+      (["Polo-shirts", "T-Shirts", "Truien", "Vesten"].includes(r.hg) ||
+        (r.hg === "Broeken" && !/pantalon/.test(t)) ||
+        (r.hg === "Overhemden" && /linnen|flanel|casual|denim|oxford/.test(t)) ||
+        /chino|jeans|denim|sweat|casual|polo/.test(t));
+    const canvas = blackTie && baseFormal ? baseFormal : casual && baseLifestyle ? baseLifestyle : baseRegular;
+    const tag = canvas === baseFormal ? " [smoking-canvas]" : canvas === baseLifestyle ? " [lifestyle-canvas]" : "";
+    console.log(`• ${r.handle} (${r.hg})${tag}`);
 
     // Regulier
     const reg = await runVTON(canvas, r.img, category, apiKey);
