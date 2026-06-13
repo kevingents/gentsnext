@@ -11,6 +11,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { getSiteSettings } from "@/lib/site-settings";
 import { listCollections, getHighlights, getProductsByHandles } from "@/lib/catalog";
 import { getTrendingHandles } from "@/lib/analytics";
+import { LOOKS } from "@/lib/looks";
 import { CATEGORIES } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
@@ -265,6 +266,25 @@ export default async function Home() {
           </div>
         </section>
       ) : null}
+
+      {/* ── Shop the look ───────────────────────────────────────────────── */}
+      <section className="relative my-4 overflow-hidden">
+        <div className="mx-auto grid max-w-page items-center gap-8 px-gutter py-10 md:grid-cols-2">
+          <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface md:max-h-[520px]">
+            <Image src={LOOKS[0].image} alt={LOOKS[0].title} fill sizes="(max-width:768px) 100vw, 50vw" className="object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
+          </div>
+          <div>
+            <p className="label-brand">Shop the look</p>
+            <h2 className="mt-2 text-display-md">Compleet gekleed, in één klik</h2>
+            <p className="mt-3 max-w-md font-sans text-ink-soft">
+              Onze stylisten stellen complete outfits samen per gelegenheid. Klik op
+              de look en shop alle items tegelijk.
+            </p>
+            <Link href="/looks" className="btn-primary mt-6 inline-flex">Bekijk de looks</Link>
+          </div>
+        </div>
+      </section>
 
       <RecentStrip />
       <TrustBlock />
