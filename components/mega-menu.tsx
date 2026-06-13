@@ -1,14 +1,15 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { MAIN_MENU, type MenuItem } from "@/lib/main-menu";
 
-/** Desktop: horizontale menubalk met dropdowns. */
+/** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
 export function MegaMenuBar() {
   return (
-    <nav aria-label="Hoofdmenu">
-      <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
+    <nav aria-label="Hoofdmenu" className="relative">
+      <ul className="flex items-center justify-center gap-x-8">
         {MAIN_MENU.map((item) => (
           <DesktopItem key={item.label} item={item} />
         ))}
@@ -17,7 +18,67 @@ export function MegaMenuBar() {
   );
 }
 
-/** Mobiel: hamburger + uitklap-drawer. */
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="relative inline-block py-3 font-sans text-sm tracking-wide text-ink-soft transition-colors group-hover:text-ink group-focus-within:text-ink">
+      {children}
+      <span className="absolute bottom-1.5 left-0 h-px w-full origin-left scale-x-0 bg-ink transition-transform duration-300 ease-out group-hover:scale-x-100 group-focus-within:scale-x-100" />
+    </span>
+  );
+}
+
+function DesktopItem({ item }: { item: MenuItem }) {
+  const hasMega = Boolean(item.columns?.length);
+  if (!hasMega) {
+    return (
+      <li className="group">
+        <Link href={item.href}>
+          <Label>{item.label}</Label>
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li className="group">
+      <button type="button" aria-haspopup="true" className="cursor-default">
+        <Label>{item.label}</Label>
+      </button>
+      <div className="invisible absolute left-0 right-0 top-full z-50 -translate-y-2 pt-1 opacity-0 transition-all duration-200 ease-out group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+        <div className="overflow-hidden rounded-card border border-line bg-canvas shadow-pop">
+          <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_1.25fr] gap-8 p-8">
+            {item.columns!.map((col) => (
+              <div key={col.title ?? col.links[0].label}>
+                {col.title ? <p className="label-brand mb-3">{col.title}</p> : null}
+                <ul className="space-y-2">
+                  {col.links.map((l) => (
+                    <li key={l.label}>
+                      <Link href={l.href} className="group/link inline-flex items-center gap-1.5 font-sans text-sm text-ink-soft transition-colors hover:text-ink">
+                        {l.label}
+                        <span aria-hidden className="translate-x-0 opacity-0 transition-all duration-200 group-hover/link:translate-x-0.5 group-hover/link:opacity-100">→</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {(item.features ?? []).map((f) => (
+              <Link key={f.label} href={f.href} className="group/feat relative block aspect-[4/5] overflow-hidden rounded-card bg-surface">
+                <Image src={f.image} alt={f.label} fill sizes="22vw" className="object-cover transition-transform duration-500 group-hover/feat:scale-105" />
+                <span className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
+                <span className="absolute inset-x-4 bottom-4 text-canvas">
+                  {f.caption ? <span className="block font-sans text-[0.65rem] uppercase tracking-wide opacity-90">{f.caption}</span> : null}
+                  <span className="block font-display text-lg">{f.label}</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/** Mobiel: hamburger + uitklap-drawer met kolommen. */
 export function MegaMenuMobile() {
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
@@ -32,121 +93,50 @@ export function MegaMenuMobile() {
   );
 }
 
-function DesktopItem({ item }: { item: MenuItem }) {
-  const hasChildren = Boolean(item.children?.length);
-  const isLink = item.href !== "#";
-  const wide = (item.children?.length ?? 0) > 6;
-
-  return (
-    <li className="group relative">
-      {isLink ? (
-        <Link
-          href={item.href}
-          className="flex items-center gap-1 py-2 font-sans text-sm text-ink-soft transition-colors hover:text-ink group-focus-within:text-ink"
-        >
-          {item.label}
-        </Link>
-      ) : (
-        <button
-          type="button"
-          aria-haspopup="true"
-          className="flex items-center gap-1 py-2 font-sans text-sm text-ink-soft transition-colors hover:text-ink group-focus-within:text-ink"
-        >
-          {item.label}
-        </button>
-      )}
-
-      {hasChildren ? (
-        <div
-          className="invisible absolute left-1/2 top-full z-50 -translate-x-1/2 pt-2 opacity-0 transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-        >
-          <div
-            className={`border border-line bg-canvas p-5 shadow-pop ${wide ? "w-[26rem]" : "w-56"}`}
-          >
-            <ul className={wide ? "grid grid-cols-2 gap-x-6 gap-y-1" : "space-y-1"}>
-              {item.children!.map((child) => (
-                <li key={child.label}>
-                  <Link
-                    href={child.href}
-                    className="block py-1.5 font-sans text-sm text-ink-soft transition-colors hover:text-ink"
-                  >
-                    {child.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
 function MobileDrawer({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
-
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
-      <div className="absolute inset-0 bg-ink/40" onClick={onClose} />
-      <div className="absolute inset-y-0 left-0 w-[88%] max-w-sm overflow-y-auto bg-canvas shadow-drawer">
+      <div className="absolute inset-0 animate-[fadeIn_.2s_ease] bg-ink/40" onClick={onClose} />
+      <div className="absolute inset-y-0 left-0 w-[88%] max-w-sm animate-[slideInLeft_.25s_ease-out] overflow-y-auto bg-canvas shadow-drawer">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <span className="label-brand">Menu</span>
-          <button type="button" onClick={onClose} aria-label="Menu sluiten" className="font-sans text-sm underline">
-            Sluiten
-          </button>
+          <button type="button" onClick={onClose} aria-label="Menu sluiten" className="font-sans text-sm underline">Sluiten</button>
         </div>
         <ul className="px-2 py-2">
           {MAIN_MENU.map((item) => {
-            const hasChildren = Boolean(item.children?.length);
+            const hasMega = Boolean(item.columns?.length);
             const isOpen = open === item.label;
             return (
               <li key={item.label} className="border-b border-line/60">
-                {hasChildren ? (
+                {hasMega ? (
                   <>
                     <button
                       type="button"
                       onClick={() => setOpen(isOpen ? null : item.label)}
                       aria-expanded={isOpen}
-                      className="flex w-full items-center justify-between px-3 py-3 text-left font-sans text-sm font-medium"
+                      className="flex w-full items-center justify-between px-3 py-3.5 text-left font-sans text-sm font-medium"
                     >
                       {item.label}
-                      <span aria-hidden className="text-muted">
-                        {isOpen ? "–" : "+"}
-                      </span>
+                      <span aria-hidden className={`text-muted transition-transform duration-200 ${isOpen ? "rotate-45" : ""}`}>+</span>
                     </button>
                     {isOpen ? (
-                      <ul className="pb-2">
-                        {item.href !== "#" ? (
-                          <li>
-                            <Link
-                              href={item.href}
-                              onClick={onClose}
-                              className="block px-6 py-2 font-sans text-sm font-medium text-ink"
-                            >
-                              Alles in {item.label}
-                            </Link>
-                          </li>
-                        ) : null}
-                        {item.children!.map((child) => (
-                          <li key={child.label}>
-                            <Link
-                              href={child.href}
-                              onClick={onClose}
-                              className="block px-6 py-2 font-sans text-sm text-ink-soft"
-                            >
-                              {child.label}
-                            </Link>
-                          </li>
+                      <div className="pb-3">
+                        {item.columns!.map((col) => (
+                          <div key={col.title ?? col.links[0].label} className="mb-2">
+                            {col.title ? <p className="px-6 pb-1 pt-2 font-sans text-[0.65rem] uppercase tracking-wide text-muted">{col.title}</p> : null}
+                            {col.links.map((l) => (
+                              <Link key={l.label} href={l.href} onClick={onClose} className="block px-6 py-2 font-sans text-sm text-ink-soft">
+                                {l.label}
+                              </Link>
+                            ))}
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     ) : null}
                   </>
                 ) : (
-                  <Link
-                    href={item.href}
-                    onClick={onClose}
-                    className="block px-3 py-3 font-sans text-sm font-medium"
-                  >
+                  <Link href={item.href} onClick={onClose} className="block px-3 py-3.5 font-sans text-sm font-medium">
                     {item.label}
                   </Link>
                 )}
@@ -154,6 +144,10 @@ function MobileDrawer({ onClose }: { onClose: () => void }) {
             );
           })}
         </ul>
+        <div className="border-t border-line px-5 py-4">
+          <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">Winkels</Link>
+          <Link href="/maatadvies" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">Maatadvies</Link>
+        </div>
       </div>
     </div>
   );

@@ -47,15 +47,15 @@ function SiteHeaderInner({ locale }: { locale: import("@/lib/i18n").Locale }) {
         <div className="flex items-center gap-5 lg:flex-1 lg:justify-end">
           <Link
             href="/pak-samenstellen"
-            className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink sm:block"
+            className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
           >
             Pak samenstellen
           </Link>
           <Link
-            href="/maatadvies"
-            className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink sm:block"
+            href="/pages/winkels"
+            className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
           >
-            Maatadvies
+            Winkels
           </Link>
           <LanguageSwitcher current={locale} />
           <SearchTrigger />

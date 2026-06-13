@@ -1,121 +1,125 @@
 /**
- * Hoofdmenu — exact overgenomen uit de Shopify "Main menu" (handle
- * new-mainmenu). URLs 1:1 op /collections/<handle> en /pages/<handle> zodat de
- * structuur én de links overeenkomen met de huidige gents.nl.
- *
- * href "#" = alleen een dropdown-kop (geen eigen pagina), zoals in Shopify.
+ * Hoofdmenu — heringedeeld van 14 losse items naar 6 sterke groepen
+ * (gelegenheid-first, conform de GENTS-positionering). Elke groep heeft
+ * kolommen + een sfeer-tegel met beeld voor het mega-menu. "#" = alleen kop.
  */
 export type MenuLink = { label: string; href: string };
-export type MenuItem = { label: string; href: string; children?: MenuLink[] };
+export type MenuColumn = { title?: string; links: MenuLink[] };
+export type MenuFeature = { label: string; caption?: string; href: string; image: string };
+export type MenuItem = {
+  label: string;
+  href: string;
+  columns?: MenuColumn[];
+  features?: MenuFeature[];
+};
 
 export const MAIN_MENU: MenuItem[] = [
-  { label: "New arrivals", href: "/collections/nieuwe-collectie-gents" },
-  { label: "Looks", href: "/looks" },
+  { label: "Nieuw", href: "/collections/nieuwe-collectie-gents" },
   {
-    label: "Collecties",
+    label: "Kleding",
     href: "#",
-    children: [
-      { label: "The Blumfontain collectie", href: "/collections/the-blumfontain-collectie" },
-      { label: "The Daily basics", href: "/collections/the-basics" },
-      { label: "The Linnenblend collectie", href: "/products/pak-linnenblend-strandzand-1" },
+    columns: [
+      {
+        title: "Pakken & colberts",
+        links: [
+          { label: "Pakken", href: "/collections/pakken" },
+          { label: "Colberts", href: "/collections/colberts" },
+          { label: "Gilets", href: "/collections/gilets" },
+          { label: "Pak samenstellen", href: "/pak-samenstellen" },
+        ],
+      },
+      {
+        title: "Shirts & truien",
+        links: [
+          { label: "Overhemden", href: "/collections/overhemden" },
+          { label: "Korte mouwen", href: "/collections/korte-mouwen-overhemden" },
+          { label: "Polo's & shirts", href: "/collections/polos-en-shirts" },
+          { label: "Truien & vesten", href: "/collections/truien-en-vesten" },
+        ],
+      },
+      {
+        title: "Broeken & jassen",
+        links: [
+          { label: "Broeken", href: "/collections/broeken" },
+          { label: "Jassen", href: "/collections/jassen" },
+        ],
+      },
+    ],
+    features: [
+      { label: "Nieuwe collectie", caption: "Net binnen", href: "/collections/nieuwe-collectie-gents", image: "/brand/brand-model-navy.jpg" },
     ],
   },
   {
-    label: "Herenkleding",
+    label: "Gelegenheden",
     href: "#",
-    children: [
-      { label: "Overhemden", href: "/collections/overhemden" },
-      { label: "Korte mouwen overhemden", href: "/collections/korte-mouwen-overhemden" },
-      { label: "Basic overhemden", href: "/collections/basic-overhemden" },
-      { label: "Pakken", href: "/collections/pakken" },
-      { label: "Colberts", href: "/collections/colberts" },
-      { label: "Broeken", href: "/collections/broeken" },
-      { label: "Gilets", href: "/collections/gilets" },
-      { label: "Jassen", href: "/collections/jassen" },
-      { label: "Truien & Vesten", href: "/collections/truien-en-vesten" },
-      { label: "Poloshirts", href: "/collections/polos-en-shirts" },
+    columns: [
+      {
+        title: "Bruiloft",
+        links: [
+          { label: "Trouwpakken", href: "/collections/trouwen" },
+          { label: "Trouwaccessoires", href: "/collections/trouw-accessoires" },
+          { label: "Afspraak maken", href: "/pages/trouw-afspraak" },
+        ],
+      },
+      {
+        title: "Gala & Black Tie",
+        links: [
+          { label: "Smoking", href: "/collections/smoking" },
+          { label: "Dinnerjackets", href: "/collections/dinner-jacket" },
+          { label: "Rokkostuum", href: "/collections/rokkostuum" },
+          { label: "Jacquet", href: "/collections/jacquets" },
+        ],
+      },
+      {
+        title: "Zakelijk & studie",
+        links: [
+          { label: "Business pakken", href: "/collections/mix-match-pakken" },
+          { label: "Business overhemden", href: "/collections/business-overhemden" },
+          { label: "Voor studenten", href: "/pages/students" },
+        ],
+      },
+    ],
+    features: [
+      { label: "Dresscodes", caption: "Van black tie tot smart casual", href: "/pages/etiquette", image: "/brand/brand-impression-gala.jpg" },
     ],
   },
   {
     label: "Accessoires",
     href: "#",
-    children: [
-      { label: "Stropdassen", href: "/collections/stropdassen" },
-      { label: "Strikken", href: "/collections/strikken" },
-      { label: "Riemen", href: "/collections/riemen" },
-      { label: "Pochets", href: "/collections/pochets" },
-      { label: "Manchetknopen", href: "/collections/manchetknopen" },
-      { label: "Dasspelden", href: "/collections/dasspelden" },
-      { label: "Bretels", href: "/collections/bretels" },
-      { label: "Boxershorts", href: "/collections/ondergoed" },
-      { label: "Ondershirts", href: "/collections/t-shirt" },
-      { label: "Sokken", href: "/collections/sokken" },
+    columns: [
+      {
+        title: "Accessoires",
+        links: [
+          { label: "Stropdassen", href: "/collections/stropdassen" },
+          { label: "Strikken", href: "/collections/strikken" },
+          { label: "Pochets", href: "/collections/pochets" },
+          { label: "Riemen", href: "/collections/riemen" },
+          { label: "Manchetknopen", href: "/collections/manchetknopen" },
+          { label: "Bretels", href: "/collections/bretels" },
+        ],
+      },
+      {
+        title: "Schoenen",
+        links: [
+          { label: "Veterschoenen", href: "/collections/schoenen" },
+          { label: "Lakschoenen", href: "/collections/schoenen" },
+          { label: "Loafers", href: "/collections/schoenen" },
+          { label: "Gespschoenen", href: "/collections/schoenen" },
+        ],
+      },
+      {
+        title: "Meer",
+        links: [
+          { label: "Sokken", href: "/collections/sokken" },
+          { label: "Ondergoed", href: "/collections/ondergoed" },
+          { label: "Gifts", href: "/collections/gifts" },
+        ],
+      },
+    ],
+    features: [
+      { label: "Maak het af", caption: "De juiste details", href: "/collections/stropdassen", image: "/brand/brand-model-grey3piece.jpg" },
     ],
   },
-  {
-    label: "Schoenen",
-    href: "/collections/schoenen",
-    children: [
-      { label: "Gespschoenen", href: "/collections/schoenen" },
-      { label: "Lakschoenen", href: "/collections/schoenen" },
-      { label: "Loafers", href: "/collections/schoenen" },
-      { label: "Sneakers", href: "/collections/schoenen" },
-      { label: "Veterschoenen", href: "/collections/schoenen" },
-    ],
-  },
-  { label: "Gifts", href: "/collections/gifts" },
-  {
-    label: "Gala & Smoking",
-    href: "/collections/gala",
-    children: [
-      { label: "Smoking", href: "/collections/smoking" },
-      { label: "Dinnerjackets", href: "/collections/dinner-jacket" },
-      { label: "Rokkostuum", href: "/collections/rokkostuum" },
-      { label: "Jacquet", href: "/collections/jacquets" },
-    ],
-  },
-  {
-    label: "Trouwen",
-    href: "#",
-    children: [
-      { label: "Trouwpakken", href: "/collections/trouwen" },
-      { label: "Trouwaccessoires", href: "/collections/trouw-accessoires" },
-      { label: "Trouwafspraak maken", href: "/pages/trouw-afspraak" },
-    ],
-  },
-  {
-    label: "Dresscodes",
-    href: "/pages/etiquette",
-    children: [
-      { label: "Overzicht", href: "/pages/etiquette" },
-      { label: "Black tie", href: "/pages/black-tie-etiquette" },
-      { label: "White tie", href: "/pages/white-tie-etiquette" },
-      { label: "Gala", href: "/pages/gala-etiquette" },
-      { label: "Smart casual", href: "/pages/smart-casual-etiquette" },
-      { label: "Jacquet / morning coat", href: "/pages/jacquet-en-de-morning-coat-etiquette" },
-      { label: "Tenue de ville", href: "/pages/tenue-de-ville-etiquette" },
-      { label: "Promovendus", href: "/pages/promovendus-etiquette" },
-    ],
-  },
-  {
-    label: "Business",
-    href: "/collections/mix-match-pakken",
-    children: [
-      { label: "Business pakken", href: "/collections/mix-match-pakken" },
-      { label: "Business overhemden", href: "/collections/business-overhemden" },
-    ],
-  },
-  {
-    label: "Students",
-    href: "/collections/rokkostuum",
-    children: [
-      { label: "Rokkostuums", href: "/collections/rokkostuum" },
-      { label: "Jacquets", href: "/collections/jacquets" },
-      { label: "Kroegjasjes", href: "/collections/kroegjasjes" },
-      { label: "Dames", href: "/collections/dames" },
-      { label: "Voor Studentenverenigingen", href: "/pages/students" },
-    ],
-  },
-  { label: "Outlet", href: "/collections/sale" },
-  { label: "STORES", href: "/pages/winkels" },
+  { label: "Looks", href: "/looks" },
+  { label: "Sale", href: "/collections/sale" },
 ];
