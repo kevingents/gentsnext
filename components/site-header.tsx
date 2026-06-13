@@ -3,8 +3,18 @@ import Link from "next/link";
 import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
 import { CartButton } from "@/components/cart/cart-button";
 import { WishlistLink } from "@/components/wishlist/wishlist-link";
+import { AnnouncementBar } from "@/components/announcement-bar";
 
 export function SiteHeader() {
+  return (
+    <>
+      <AnnouncementBar />
+      <SiteHeaderInner />
+    </>
+  );
+}
+
+function SiteHeaderInner() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
       {/* Bovenrij: hamburger (mobiel) · logo · utilities */}

@@ -6,11 +6,19 @@ import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
+import { ClickAndCollect } from "@/components/pdp/click-collect";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { useCart } from "@/components/cart/cart-context";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
-export type BuySize = { size: string; sku: string; priceCents: number; qty: number; known: boolean };
+export type BuySize = {
+  size: string;
+  sku: string;
+  priceCents: number;
+  qty: number;
+  known: boolean;
+  branches?: { store: string; qty: number }[];
+};
 
 type Props = {
   title: string;
@@ -150,6 +158,9 @@ export function BuyBox({
               <span className="text-muted">Maat {selectedSize.size} tijdelijk uitverkocht</span>
             )}
           </p>
+        ) : null}
+        {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
+          <ClickAndCollect branches={selectedSize.branches} />
         ) : null}
       </div>
 

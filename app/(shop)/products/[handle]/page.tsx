@@ -95,6 +95,7 @@ export default async function ProductPage({ params }: Props) {
       priceCents: v.priceCents,
       qty: st?.online ?? 0,
       known: hasStock && Boolean(v.sku),
+      branches: st?.byBranch.map((b) => ({ store: b.store, qty: b.qty })) ?? [],
     });
   }
   const colors: BuyColor[] = [...colorMap.values()].map((c) => ({
