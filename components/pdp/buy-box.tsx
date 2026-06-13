@@ -16,6 +16,7 @@ type Props = {
   title: string;
   vendor: string;
   hoofdgroep: string;
+  sizeChartHandle: string | null;
   productHandle: string;
   image: string;
   colors: BuyColor[];
@@ -29,6 +30,7 @@ export function BuyBox({
   title,
   vendor,
   hoofdgroep,
+  sizeChartHandle,
   productHandle,
   image,
   colors,
@@ -121,9 +123,16 @@ export function BuyBox({
       <div className="mt-6">
         <div className="flex items-center justify-between">
           <p className="font-sans text-sm font-medium">Maat</p>
-          <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">
-            Vind mijn maat
-          </Link>
+          <div className="flex items-center gap-3 font-sans text-xs">
+            {sizeChartHandle ? (
+              <Link href={`/pages/${sizeChartHandle}`} className="text-ink-soft underline underline-offset-4 hover:text-ink">
+                Maattabel
+              </Link>
+            ) : null}
+            <Link href="/maatadvies" className="text-ink underline underline-offset-4">
+              Vind mijn maat
+            </Link>
+          </div>
         </div>
         {active ? (
           <SizeMatrix

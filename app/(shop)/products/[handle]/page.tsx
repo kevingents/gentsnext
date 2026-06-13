@@ -11,6 +11,7 @@ import { TrackRecent } from "@/components/recent/track-recent";
 import { RecentStrip } from "@/components/recent/recent-strip";
 import { getProductByHandle, getRecommendations } from "@/lib/catalog";
 import { getColorSiblings } from "@/lib/color-siblings";
+import { sizeChartFor } from "@/lib/size-charts";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { sortSizes } from "@/lib/sizing";
@@ -234,7 +235,8 @@ export default async function ProductPage({ params }: Props) {
           <BuyBox
             title={product.title}
             vendor={String(attrs.merk || product.vendor || "")}
-            hoofdgroep={String(attrs.hoofdgroep_omschrijving || "")}
+            hoofdgroep={hoofdgroep}
+            sizeChartHandle={sizeChartFor(hoofdgroep)}
             productHandle={product.handle}
             image={images[0]?.url || ""}
             colors={colors}
