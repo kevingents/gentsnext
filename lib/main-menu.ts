@@ -83,6 +83,20 @@ export const MAIN_MENU: MenuItem[] = [
     ],
   },
   {
+    label: "Dresscodes",
+    href: "/pages/etiquette",
+    children: [
+      { label: "Overzicht", href: "/pages/etiquette" },
+      { label: "Black tie", href: "/pages/black-tie-etiquette" },
+      { label: "White tie", href: "/pages/white-tie-etiquette" },
+      { label: "Gala", href: "/pages/gala-etiquette" },
+      { label: "Smart casual", href: "/pages/smart-casual-etiquette" },
+      { label: "Jacquet / morning coat", href: "/pages/jacquet-en-de-morning-coat-etiquette" },
+      { label: "Tenue de ville", href: "/pages/tenue-de-ville-etiquette" },
+      { label: "Promovendus", href: "/pages/promovendus-etiquette" },
+    ],
+  },
+  {
     label: "Business",
     href: "/collections/mix-match-pakken",
     children: [
