@@ -166,7 +166,7 @@ export function PlpFilters({ facets, selection, total }: Props) {
 
   return (
     <>
-      {/* Mobiel: filterknop + drawer */}
+      {/* Mobiel: filterknop bovenaan + sticky-CTA terwijl je scrollt */}
       <div className="mb-4 flex items-center justify-between lg:hidden">
         <button
           type="button"
@@ -177,6 +177,13 @@ export function PlpFilters({ facets, selection, total }: Props) {
         </button>
         <span className="font-sans text-sm text-muted">{total} artikelen</span>
       </div>
+      <button
+        type="button"
+        onClick={() => setOpenMobile(true)}
+        className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop lg:hidden"
+      >
+        Filter & sorteer {activeCount > 0 ? `· ${activeCount}` : ""}
+      </button>
 
       {openMobile ? (
         <div className="fixed inset-0 z-50 lg:hidden">
