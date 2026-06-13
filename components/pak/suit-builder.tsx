@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SuitDetail, SuitPieceDetail, SuitRole } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
@@ -39,7 +39,9 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
 
   const pakTitle = colbert.title.replace(/^colbert[\s-]*/i, "").trim() || colbert.title;
   const [withGilet, setWithGilet] = useState(false);
-  const [sizeLabel, setSizeLabel] = useState<string | null>(null);
+  // Maat PER ONDERDEEL — de USP: je kunt bv. een groter colbert (lange armen) met
+  // een kleinere pantalon (korte benen) combineren.
+  const [sizes, setSizes] = useState<Partial<Record<SuitRole, string>>>({});
 
   const activePieces = useMemo(
     () => [colbert, broek, ...(withGilet && gilet ? [gilet] : [])],
@@ -47,35 +49,49 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
   );
 
   const indices = useMemo(() => activePieces.map((p) => sizeIndex(p)), [activePieces]);
-
-  // Maten die in álle actieve onderdelen bestaan (zo is een compleet pak mogelijk).
-  const availableSizes = useMemo(() => {
-    if (!indices.length) return [];
-    const [first, ...rest] = indices;
-    const labels = [...first.keys()].filter((l) => rest.every((m) => m.has(l)));
-    return labels.sort((a, b) => rowSortIndex(a) - rowSortIndex(b));
-  }, [indices]);
-
-  const selection = useMemo(() => {
-    if (!sizeLabel) return null;
-    return activePieces.map((p, i) => ({ piece: p, variant: indices[i].get(sizeLabel) ?? null }));
-  }, [sizeLabel, activePieces, indices]);
-
-  const totalCents = useMemo(
-    () => (selection ? selection.reduce((sum, s) => sum + (s.variant?.priceCents ?? 0), 0) : 0),
-    [selection]
+  const pieceSizes = useMemo(
+    () => indices.map((m) => [...m.keys()].sort((a, b) => rowSortIndex(a) - rowSortIndex(b))),
+    [indices]
   );
+
+  // Bij het kiezen van een maat: vul nog-niet-gekozen onderdelen met dezelfde maat
+  // als die bestaat (snel "zelfde maat", maar elk onderdeel blijft los aanpasbaar).
+  function pickSize(role: SuitRole, label: string) {
+    setSizes((prev) => {
+      const next: Partial<Record<SuitRole, string>> = { ...prev, [role]: label };
+      activePieces.forEach((p, i) => {
+        if (next[p.role] == null && indices[i].has(label)) next[p.role] = label;
+      });
+      return next;
+    });
+  }
+
+  // Gilet erbij → vul 'm met de colbert-maat als die bestaat.
+  useEffect(() => {
+    if (!withGilet || !gilet) return;
+    const gi = activePieces.findIndex((p) => p.role === "gilet");
+    if (gi >= 0 && !sizes.gilet && sizes.colbert && indices[gi]?.has(sizes.colbert)) {
+      setSizes((prev) => ({ ...prev, gilet: sizes.colbert }));
+    }
+  }, [withGilet, gilet, activePieces, indices, sizes.colbert, sizes.gilet]);
+
+  const selection = useMemo(
+    () => activePieces.map((p, i) => ({ piece: p, variant: sizes[p.role] ? indices[i].get(sizes[p.role]!) ?? null : null })),
+    [activePieces, indices, sizes]
+  );
+  const allChosen = activePieces.every((p) => sizes[p.role]);
+  const totalCents = useMemo(() => selection.reduce((sum, s) => sum + (s.variant?.priceCents ?? 0), 0), [selection]);
 
   const baseFrom = useMemo(
     () => activePieces.reduce((sum, p) => sum + Math.min(...p.sizes.map((s) => s.priceCents)), 0),
     [activePieces]
   );
 
-  const canAdd = Boolean(selection && selection.every((s) => s.variant));
+  const canAdd = allChosen && selection.every((s) => s.variant);
 
   function addPak() {
-    if (!selection || !canAdd) return;
-    const groupId = `pak-${suit.code}-${sizeLabel}-${withGilet ? "3d" : "2d"}`;
+    if (!canAdd) return;
+    const groupId = `pak-${suit.code}-${withGilet ? "3d" : "2d"}-${activePieces.map((p) => sizes[p.role]).join("-")}`;
     cart.addMany(
       selection.map((s) => ({
         sku: s.variant!.sku,
@@ -127,7 +143,7 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
         <p className="label-brand">Stel je pak samen</p>
         <h1 className="mt-2 text-display-md">{colbert.title.replace(/^colbert[\s-]*/i, "").trim()}</h1>
         <p className="mt-2 font-display text-xl">
-          {selection ? formatEuro(totalCents) : `vanaf ${formatEuro(baseFrom)}`}
+          {allChosen ? formatEuro(totalCents) : `vanaf ${formatEuro(baseFrom)}`}
         </p>
 
         {/* 2- vs 3-delig */}
@@ -157,41 +173,54 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
           </div>
         ) : null}
 
-        {/* Maat (zelfde maat voor alle onderdelen) */}
+        {/* Maat PER ONDERDEEL — de USP: combineer gerust verschillende maten. */}
         <div className="mt-6">
           <div className="flex items-center justify-between">
-            <p className="font-sans text-sm font-medium">Maat</p>
+            <p className="font-sans text-sm font-medium">Maat per onderdeel</p>
             <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">
               Vind mijn maat
             </Link>
           </div>
-          {availableSizes.length ? (
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {availableSizes.map((label) => {
-                const on = sizeLabel === label;
-                return (
-                  <li key={label}>
-                    <button
-                      type="button"
-                      onClick={() => setSizeLabel(label)}
-                      aria-pressed={on}
-                      className={`min-w-[3rem] border px-3 py-2 text-center font-sans text-sm transition-colors ${on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"}`}
-                    >
-                      {rowDisplayLabel(label)}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="mt-2 font-sans text-sm text-muted">
-              Voor deze combinatie zijn geen overlappende maten beschikbaar.
-            </p>
-          )}
+          <p className="mt-1 font-sans text-xs text-muted">
+            Kies per onderdeel je maat — handig bij bijvoorbeeld langere armen of kortere benen.
+          </p>
+          <div className="mt-3 space-y-4">
+            {activePieces.map((p, i) => (
+              <div key={p.role}>
+                <p className="font-sans text-xs uppercase tracking-wide text-muted">{ROLE_LABEL[p.role]}</p>
+                {pieceSizes[i]?.length ? (
+                  <ul className="mt-1.5 flex flex-wrap gap-2">
+                    {pieceSizes[i].map((label) => {
+                      const v = indices[i].get(label);
+                      const out = v?.known && (v?.qty ?? 0) <= 0;
+                      const on = sizes[p.role] === label;
+                      return (
+                        <li key={label}>
+                          <button
+                            type="button"
+                            disabled={out}
+                            onClick={() => pickSize(p.role, label)}
+                            aria-pressed={on}
+                            className={`min-w-[2.75rem] border px-3 py-1.5 text-center font-sans text-sm transition-colors ${
+                              out ? "cursor-not-allowed border-line text-muted line-through opacity-50" : on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
+                            }`}
+                          >
+                            {rowDisplayLabel(label)}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="mt-1 font-sans text-sm text-muted">Geen maten beschikbaar.</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Samenvatting onderdelen */}
-        {selection ? (
+        {allChosen ? (
           <ul className="mt-6 divide-y divide-line border-y border-line">
             {selection.map((s) => {
               const out = s.variant?.known && (s.variant?.qty ?? 0) <= 0;
@@ -216,13 +245,13 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
         {/* Totaal + CTA */}
         <div className="mt-6 flex items-center justify-between">
           <span className="font-sans text-sm text-muted">Totaalprijs</span>
-          <span className="font-display text-2xl">{selection ? formatEuro(totalCents) : "—"}</span>
+          <span className="font-display text-2xl">{allChosen ? formatEuro(totalCents) : "—"}</span>
         </div>
         <button type="button" onClick={addPak} disabled={!canAdd} className="btn-primary mt-4 w-full">
-          {sizeLabel ? "Pak in winkelwagen" : "Kies een maat"}
+          {allChosen ? "Pak in winkelwagen" : "Kies de maten"}
         </button>
         <p className="mt-3 font-sans text-xs text-muted">
-          De onderdelen worden als compleet pak toegevoegd in dezelfde maat.
+          Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.
           Gratis retour binnen 14 dagen; afrekenen met iDEAL volgt binnenkort.
         </p>
       </div>
