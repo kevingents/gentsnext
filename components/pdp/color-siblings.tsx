@@ -21,9 +21,9 @@ export function ColorSiblings({ siblings }: { siblings: SiblingItem[] }) {
   return (
     <div>
       <p className="font-sans text-sm">
-        <span className="text-muted">Kleur: </span>
-        <span className="font-medium">{current?.colorName || "Deze kleur"}</span>
-        {siblings.length > 1 ? <span className="text-muted"> · {siblings.length} beschikbaar</span> : null}
+        <span className="text-muted">Kleur</span>
+        {current?.colorName ? <span className="font-medium">: {current.colorName}</span> : null}
+        {siblings.length > 1 ? <span className="text-muted"> · {siblings.length} kleuren</span> : null}
       </p>
 
       <div className="mt-2 flex h-9 w-full overflow-hidden rounded-card border border-line">

@@ -5,7 +5,6 @@ import { JsonLd } from "@/components/json-ld";
 import { Gallery } from "@/components/pdp/gallery";
 import { BuyBox, type BuyColor } from "@/components/pdp/buy-box";
 import { Accordion } from "@/components/pdp/accordion";
-import { ColorSiblings } from "@/components/pdp/color-siblings";
 import { PdpSizeProvider } from "@/components/pdp/pdp-size-context";
 import { ProductCard } from "@/components/product-card";
 import { TrackRecent } from "@/components/recent/track-recent";
@@ -367,13 +366,8 @@ export default async function ProductPage({ params }: Props) {
             maxPriceCents={maxPrice}
             referenceCents={referenceCents}
             hasStock={hasStock}
+            colorSiblings={colorSiblings}
           />
-
-          {colorSiblings.length > 0 ? (
-            <div className="mt-7">
-              <ColorSiblings siblings={colorSiblings} />
-            </div>
-          ) : null}
 
           <ul className="mt-8 space-y-1.5">
             {TRUST.map((t) => (

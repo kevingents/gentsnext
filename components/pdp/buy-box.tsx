@@ -7,6 +7,7 @@ import { formatEuro } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { ColorSiblings, type SiblingItem } from "@/components/pdp/color-siblings";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
 import { StockNotify } from "@/components/pdp/stock-notify";
@@ -38,6 +39,7 @@ type Props = {
   maxPriceCents: number;
   referenceCents?: number;
   hasStock: boolean;
+  colorSiblings?: SiblingItem[];
 };
 
 export function BuyBox({
@@ -53,6 +55,7 @@ export function BuyBox({
   maxPriceCents,
   referenceCents,
   hasStock,
+  colorSiblings,
 }: Props) {
   const cart = useCart();
   const { setSizeLabel } = usePdpSize();
@@ -114,8 +117,12 @@ export function BuyBox({
         </p>
       ) : null}
 
-      {/* Kleur */}
-      {colors.length > 1 ? (
+      {/* Kleur — kleurvarianten (aparte producten) als balk; anders in-product-swatches; anders één regel. */}
+      {colorSiblings && colorSiblings.length > 1 ? (
+        <div className="mt-7">
+          <ColorSiblings siblings={colorSiblings} />
+        </div>
+      ) : colors.length > 1 ? (
         <div className="mt-7">
           <p className="font-sans text-sm">
             <span className="text-muted">Kleur: </span>
@@ -201,10 +208,12 @@ export function BuyBox({
           <ClickAndCollect branches={selectedSize.branches} />
         ) : null}
         {active && active.sizes.length >= 2 ? (
-          <p className="mt-3 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
-            <span className="font-medium text-ink">Twijfel je tussen twee maten?</span> Bestel ze allebei en
-            retourneer <strong>gratis</strong> wat niet past — binnen 14 dagen.
-          </p>
+          <Link href="/maatadvies" className="mt-3 flex items-center gap-2.5 rounded-card bg-surface px-3 py-2 transition-colors hover:bg-line/40">
+            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span className="font-sans text-xs text-ink-soft">
+              <span className="font-medium text-ink">Twijfel je over je maat?</span> Doe het maatadvies (30 sec.) en bestel in één keer raak.
+            </span>
+          </Link>
         ) : null}
       </div>
 

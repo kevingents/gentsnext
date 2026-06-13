@@ -155,9 +155,11 @@ export function CartDrawer() {
 
             {multiSize ? (
               <div className="flex items-start gap-2 border-b border-line bg-surface px-5 py-2.5">
-                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="9" /></svg>
+                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 <p className="font-sans text-xs text-ink-soft">
-                  <span className="font-medium text-ink">Slimme keuze.</span> Meerdere maten van hetzelfde artikel — houd de beste en retourneer de rest <strong>gratis</strong> binnen 14 dagen.
+                  Je hebt meerdere maten van hetzelfde artikel.{" "}
+                  <Link href="/maatadvies" onClick={cart.close} className="font-medium text-ink underline underline-offset-2">Ons maatadvies</Link>{" "}
+                  helpt je de juiste te kiezen — zo voorkom je retour.
                 </p>
               </div>
             ) : null}
