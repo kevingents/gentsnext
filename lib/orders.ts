@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
@@ -41,6 +42,19 @@ function generateOrderNumber(): string {
     .toUpperCase()
     .padStart(3, "0");
   return `G${t}${r}`;
+}
+
+/** Niet-raadbaar toegangstoken voor de bevestigingslink (32 tekens, 192 bit). */
+function generateAccessToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+/** Constante-tijd-vergelijking; false bij lengteverschil of leeg token. */
+function tokenEquals(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 type ResolvedLine = {
@@ -98,6 +112,7 @@ async function resolveLines(items: CheckoutItem[]): Promise<ResolvedLine[]> {
 export type CreatedOrder = {
   id: string;
   orderNumber: string;
+  accessToken: string;
   totalCents: number;
   subtotalCents: number;
   shippingCents: number;
@@ -131,11 +146,13 @@ export async function createOrder(
   const shippingCents = baseShipping + surcharge;
   const totalCents = Math.max(0, subtotalCents - discountCents) + shippingCents;
   const orderNumber = generateOrderNumber();
+  const accessToken = generateAccessToken();
 
   const [order] = await db
     .insert(orders)
     .values({
       orderNumber,
+      accessToken,
       status: "open",
       email: contact.email.trim(),
       firstName: contact.firstName.trim(),
@@ -172,7 +189,7 @@ export async function createOrder(
     }))
   );
 
-  return { id: order.id, orderNumber: order.orderNumber, totalCents, subtotalCents, shippingCents };
+  return { id: order.id, orderNumber: order.orderNumber, accessToken, totalCents, subtotalCents, shippingCents };
 }
 
 export async function attachMolliePayment(orderId: string, molliePaymentId: string) {
@@ -300,7 +317,7 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   if (!order) return false;
   const { notifyOrderStatus } = await import("@/lib/order-notify");
   await notifyOrderStatus(
-    { orderNumber: order.orderNumber, email: order.email, firstName: order.firstName, phone: order.phone },
+    { orderNumber: order.orderNumber, email: order.email, firstName: order.firstName, phone: order.phone, accessToken: order.accessToken },
     status
   );
   return true;
@@ -319,4 +336,21 @@ export async function getOrderByNumber(orderNumber: string) {
   if (!order) return null;
   const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, order.id));
   return { order, lines };
+}
+
+/**
+ * Order voor de bevestigingspagina — alléén zichtbaar met een geldig
+ * access-token (gast) OF voor de ingelogde eigenaar. Voorkomt IDOR: besteldetails
+ * (naam, e-mail, regels, bedragen) zijn persoonsgegevens en mogen niet op een
+ * (deels voorspelbaar) ordernummer alleen opvraagbaar zijn.
+ */
+export async function getOrderForViewer(
+  orderNumber: string,
+  opts: { token?: string | null; customerId?: string | null }
+) {
+  const data = await getOrderByNumber(orderNumber);
+  if (!data) return null;
+  const tokenOk = tokenEquals(opts.token, data.order.accessToken);
+  const ownerOk = !!opts.customerId && data.order.customerId === opts.customerId;
+  return tokenOk || ownerOk ? data : null;
 }

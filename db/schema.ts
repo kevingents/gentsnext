@@ -255,6 +255,8 @@ export const orders = pgTable(
     status: text("status").notNull().default("open"),
     /** Koppeling aan een klantaccount (nullable: gast-checkout blijft mogelijk). */
     customerId: uuid("customer_id"),
+    /** Niet-raadbaar token voor de (gast-)bevestigingslink — beschermt tegen IDOR. */
+    accessToken: text("access_token"),
     email: text("email").notNull(),
     firstName: text("first_name").notNull().default(""),
     lastName: text("last_name").notNull().default(""),

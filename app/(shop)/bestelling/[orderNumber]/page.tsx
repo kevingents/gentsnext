@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getOrderByNumber } from "@/lib/orders";
+import { getOrderForViewer } from "@/lib/orders";
+import { getSessionCustomer } from "@/lib/account";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
 import { TrackPurchase } from "@/components/analytics/track-purchase";
@@ -10,11 +11,17 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Bestelling", robots: { index: false } };
 
-type Props = { params: Promise<{ orderNumber: string }> };
+type Props = {
+  params: Promise<{ orderNumber: string }>;
+  searchParams: Promise<{ t?: string }>;
+};
 
-export default async function OrderPage({ params }: Props) {
+export default async function OrderPage({ params, searchParams }: Props) {
   const { orderNumber } = await params;
-  const data = await getOrderByNumber(orderNumber);
+  const { t } = await searchParams;
+  // IDOR-bescherming: alleen tonen met geldig access-token (gast) of als eigenaar.
+  const customer = await getSessionCustomer();
+  const data = await getOrderForViewer(orderNumber, { token: t, customerId: customer?.id });
   if (!data) notFound();
   const { order, lines } = data;
 

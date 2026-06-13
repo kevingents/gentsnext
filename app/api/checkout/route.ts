@@ -40,6 +40,7 @@ export async function POST(req: Request) {
       ok: true,
       configured: false,
       orderNumber: order.orderNumber,
+      accessToken: order.accessToken,
       message: "Online afrekenen gaat binnenkort live. Je bestelling is nog niet verwerkt.",
     });
   }
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
     const payment = await createMolliePayment({
       amountCents: order.totalCents,
       description: `GENTS bestelling ${order.orderNumber}`,
-      redirectUrl: `${origin}/bestelling/${order.orderNumber}`,
+      redirectUrl: `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`,
       cancelUrl: `${origin}/afrekenen?geannuleerd=1`,
       webhookUrl: `${origin}/api/webhooks/mollie`,
       metadata: { orderNumber: order.orderNumber },

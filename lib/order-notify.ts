@@ -14,6 +14,7 @@ type OrderForNotify = {
   email: string;
   firstName: string;
   phone: string;
+  accessToken?: string | null;
 };
 
 const MESSAGES: Record<string, (o: OrderForNotify, url: string) => { subject: string; text: string }> = {
@@ -34,7 +35,7 @@ const MESSAGES: Record<string, (o: OrderForNotify, url: string) => { subject: st
 export async function notifyOrderStatus(order: OrderForNotify, status: string): Promise<void> {
   const make = MESSAGES[status];
   if (!make) return;
-  const url = `${getSiteUrl()}/bestelling/${order.orderNumber}`;
+  const url = `${getSiteUrl()}/bestelling/${order.orderNumber}${order.accessToken ? `?t=${order.accessToken}` : ""}`;
   const { subject, text } = make(order, url);
 
   // E-mail
