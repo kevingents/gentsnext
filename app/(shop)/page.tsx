@@ -4,6 +4,9 @@ import { UspBar } from "@/components/usp-bar";
 import { ProductCard } from "@/components/product-card";
 import { RecentStrip } from "@/components/recent/recent-strip";
 import { TrustBlock } from "@/components/home/trust-block";
+import { JsonLd } from "@/components/json-ld";
+import { getStores } from "@/lib/stores";
+import { getSiteUrl } from "@/lib/site-url";
 import { listCollections, getHighlights } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
 
@@ -43,9 +46,29 @@ export default async function Home() {
     // DB nog niet bereikbaar — hero + USP tonen, rest valt weg.
   }
   const featured = CATEGORIES.slice(0, 8);
+  const siteUrl = getSiteUrl();
+  const stores = getStores();
+  const orgJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ClothingStore",
+    name: "GENTS Herenmode",
+    url: siteUrl,
+    logo: `${siteUrl}/brand/brand-logo-zwart.png`,
+    image: `${siteUrl}/brand/brand-model-charcoal.jpg`,
+    slogan: "Suits You",
+    description: "GENTS — dé specialist voor je formele momenten. Pakken, overhemden, smoking en accessoires.",
+    department: stores.slice(0, 20).map((s) => ({
+      "@type": "ClothingStore",
+      name: `GENTS ${s.city}`,
+      url: `${siteUrl}/pages/${s.pageHandle}`,
+      address: { "@type": "PostalAddress", streetAddress: s.address, addressLocality: s.city, addressCountry: "NL" },
+      telephone: s.phone || undefined,
+    })),
+  };
 
   return (
     <>
+      <JsonLd data={orgJsonLd} />
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="relative isolate">
         <div className="relative h-[68vh] min-h-[460px] w-full overflow-hidden bg-ink">
