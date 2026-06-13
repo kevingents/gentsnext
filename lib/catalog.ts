@@ -210,6 +210,21 @@ function contextConditions(f: ProductFilters): SQL[] {
   return conds;
 }
 
+/** Producten van een merk (uit het 'merk'-attribute), nieuwste eerst. */
+export async function getProductsByBrand(brand: string, limit = 48): Promise<ProductCardData[]> {
+  const db = getDb();
+  const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
+    select p.id, p.handle, p.title, p.vendor
+    from ${products} p
+    where p.status = 'active'
+      and p.attributes ->> 'merk' = ${brand}
+      and exists (select 1 from ${productImages} pi where pi.product_id = p.id)
+    order by p.source_created_at desc nulls last
+    limit ${limit}
+  `);
+  return buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
+}
+
 /** Bouwt `col in ('a','b')` met correcte placeholders (drizzle expandeert arrays niet in ruwe sql). */
 function inList(col: SQL, values: string[]): SQL {
   return sql`${col} in (${sql.join(
@@ -418,6 +433,39 @@ export async function getRecommendations(
   return buildProductCards(
     ordered.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor }))
   );
+}
+
+/**
+ * Catalogus-zoek: matcht op titel, vendor, hoofdgroep en handle. Bewust
+ * eenvoudig (ILIKE op meerdere woorden) — Meilisearch volgt later.
+ */
+export async function searchProducts(q: string, limit = 24): Promise<ProductCardData[]> {
+  const needle = q.trim();
+  if (!needle) return [];
+  const db = getDb();
+  // Splits in woorden; elk woord moet ergens in titel/handle/vendor/hoofdgroep voorkomen.
+  const words = needle.split(/\s+/).filter((w) => w.length >= 2).slice(0, 6);
+  if (!words.length) return [];
+  const conds = words.map(
+    (w) => sql`(
+      ${products.title} ilike ${"%" + w + "%"} or
+      ${products.handle} ilike ${"%" + w + "%"} or
+      ${products.vendor} ilike ${"%" + w + "%"} or
+      ${products.attributes} ->> 'hoofdgroep_omschrijving' ilike ${"%" + w + "%"}
+    )`
+  );
+  const rows = await db
+    .select({
+      id: products.id,
+      handle: products.handle,
+      title: products.title,
+      vendor: products.vendor,
+    })
+    .from(products)
+    .where(and(eq(products.status, "active"), ...conds))
+    .orderBy(desc(products.sourceCreatedAt))
+    .limit(limit);
+  return buildProductCards(rows);
 }
 
 /**
