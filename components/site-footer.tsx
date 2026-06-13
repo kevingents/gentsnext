@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { FooterPayments } from "@/components/footer-payments";
 
 const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -99,6 +100,9 @@ export function SiteFooter() {
             © {new Date().getFullYear()} GENTS — Suits You. Alle prijzen incl. btw.
           </p>
         </div>
+      </div>
+      <div className="border-t border-canvas/10">
+        <FooterPayments />
       </div>
     </footer>
   );
