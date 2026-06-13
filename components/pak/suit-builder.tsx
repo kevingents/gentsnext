@@ -7,6 +7,9 @@ import type { SuitDetail, SuitPieceDetail, SuitRole } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
 import { useCart } from "@/components/cart/cart-context";
+import { parseComposition, parseCare, careProse } from "@/lib/care";
+import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
+import { Accordion } from "@/components/pdp/accordion";
 
 const ROLE_LABEL: Record<SuitRole, string> = {
   colbert: "Colbert",
@@ -60,7 +63,9 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
     setSizes((prev) => {
       const next: Partial<Record<SuitRole, string>> = { ...prev, [role]: label };
       activePieces.forEach((p, i) => {
-        if (next[p.role] == null && indices[i].has(label)) next[p.role] = label;
+        if (next[p.role] != null) return;
+        const v = indices[i].get(label);
+        if (v && !(v.known && v.qty <= 0)) next[p.role] = label; // alleen een leverbare maat auto-invullen
       });
       return next;
     });
@@ -87,7 +92,37 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
     [activePieces]
   );
 
-  const canAdd = allChosen && selection.every((s) => s.variant);
+  // Niet toevoegbaar als een gekozen onderdeel uitverkocht is.
+  const canAdd = allChosen && selection.every((s) => s.variant && !(s.variant.known && (s.variant.qty ?? 0) <= 0));
+
+  // Materiaal / onderhoud / pasvorm-details van het pak (uit het colbert).
+  const attrs = (suit.attributes ?? {}) as Record<string, unknown>;
+  const composition = parseComposition(String(attrs.samenstelling_materiaal ?? attrs.samenstelling ?? ""));
+  const careItems = parseCare(String(attrs.wasvoorschrift ?? ""), attrs);
+  const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
+  const materiaal = String(attrs.materiaal ?? "").trim();
+  const specRows = ([["merk", "Merk"], ["pasvorm", "Pasvorm"], ["sluiting", "Sluiting"], ["boord", "Boord"], ["zakken", "Zakken"], ["seizoen", "Seizoen"]] as const)
+    .map(([k, l]) => ({ label: l, value: String(attrs[k] ?? "").trim() }))
+    .filter((s) => s.value);
+  const detailItems = [
+    ...(composition.length || materiaal ? [{ title: "Materiaal", content: <MaterialBlock composition={composition} fallback={materiaal} /> }] : []),
+    ...(careItems.length ? [{ title: "Onderhoud", content: <CareBlock items={careItems} prose={careProseLines} /> }] : []),
+    ...(specRows.length
+      ? [{
+          title: "Pasvorm & details",
+          content: (
+            <dl className="divide-y divide-line border-y border-line">
+              {specRows.map((s) => (
+                <div key={s.label} className="flex justify-between gap-4 py-2.5 font-sans text-sm">
+                  <dt className="text-muted">{s.label}</dt>
+                  <dd className="text-right text-ink">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ),
+        }]
+      : []),
+  ];
 
   function addPak() {
     if (!canAdd) return;
@@ -201,11 +236,14 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
                             disabled={out}
                             onClick={() => pickSize(p.role, label)}
                             aria-pressed={on}
-                            className={`min-w-[2.75rem] border px-3 py-1.5 text-center font-sans text-sm transition-colors ${
-                              out ? "cursor-not-allowed border-line text-muted line-through opacity-50" : on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
+                            className={`min-w-[3rem] border px-3 py-1.5 text-center font-sans leading-none transition-colors ${
+                              out ? "cursor-not-allowed border-line text-muted opacity-50" : on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
                             }`}
                           >
-                            {rowDisplayLabel(label)}
+                            <span className={`block text-sm ${out ? "line-through" : ""}`}>{v?.size ?? rowDisplayLabel(label)}</span>
+                            {rowDisplayLabel(label) !== (v?.size ?? "") ? (
+                              <span className="mt-0.5 block text-[0.6rem] font-normal opacity-70">{rowDisplayLabel(label)}</span>
+                            ) : null}
                           </button>
                         </li>
                       );
@@ -255,6 +293,13 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
           Gratis retour binnen 14 dagen; afrekenen met iDEAL volgt binnenkort.
         </p>
       </div>
+
+      {/* Materiaal, onderhoud & pasvorm — net als op de productpagina */}
+      {detailItems.length ? (
+        <div className="lg:col-span-2">
+          <Accordion items={detailItems} />
+        </div>
+      ) : null}
     </div>
   );
 }

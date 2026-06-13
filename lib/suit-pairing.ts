@@ -133,6 +133,8 @@ export type SuitPieceDetail = {
 export type SuitDetail = {
   code: string;
   pieces: SuitPieceDetail[];
+  /** Attributen van het colbert (voor materiaal/onderhoud/pasvorm op de samensteller). */
+  attributes: Record<string, unknown>;
 };
 
 /** Volledig pak (incl. maten + voorraad) voor de samensteller, op colbert-handle. */
@@ -193,5 +195,13 @@ export async function getSuitByColbertHandle(handle: string): Promise<SuitDetail
     sizes: sortSizes(byProduct.get(p.id) || []),
   }));
 
-  return { code: foundCode, pieces: detail };
+  // Attributen van het colbert (materiaal/onderhoud/pasvorm) voor de samensteller.
+  const colbertId = chosen.find((p) => p.role === "colbert")?.id;
+  let attributes: Record<string, unknown> = {};
+  if (colbertId) {
+    const ar = await db.execute<{ attrs: Record<string, unknown> }>(sql`select attributes as attrs from ${products} where id = ${colbertId} limit 1`);
+    attributes = ar.rows[0]?.attrs ?? {};
+  }
+
+  return { code: foundCode, pieces: detail, attributes };
 }
