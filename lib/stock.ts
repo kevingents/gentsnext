@@ -15,7 +15,7 @@ import { list } from "@vercel/blob";
  * Per-branch is voor click & collect ("op voorraad in winkel X").
  */
 
-export type BranchStock = { branchId: string; store: string; qty: number };
+export type BranchStock = { branchId: string; store: string; qty: number; tekort: number; ideaal: number };
 export type SkuStock = { total: number; online: number; byBranch: BranchStock[] };
 
 type StockIndex = Map<string, SkuStock>;
@@ -60,6 +60,8 @@ async function loadIndex(): Promise<StockIndex> {
     const qty = Number(r?.voorraad) || 0;
     const branchId = String(r?.filiaalNummer || "").trim();
     const store = String(r?.store || `Filiaal ${branchId}`);
+    const tekort = Number(r?.tekort) || 0;
+    const ideaal = Number(r?.ideaal) || 0;
     let entry = index.get(sku);
     if (!entry) {
       entry = { total: 0, online: 0, byBranch: [] };
@@ -68,7 +70,7 @@ async function loadIndex(): Promise<StockIndex> {
     if (qty > 0) {
       entry.total += qty;
       if (!online || online.has(branchId)) entry.online += qty;
-      entry.byBranch.push({ branchId, store, qty });
+      entry.byBranch.push({ branchId, store, qty, tekort, ideaal });
     }
   }
   return index;

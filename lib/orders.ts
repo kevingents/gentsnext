@@ -234,14 +234,26 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
 
   try {
     const plan = await allocateOrder(
-      lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title }))
+      lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title, groupId: l.groupId ?? undefined })),
+      { country: order.country, postalCode: order.postalCode }
     );
     const result = await pushOrderToSRS(order, plan);
+    // Niet volledig toewijsbaar (voorraad-tekort) → markeer voor handmatige
+    // review/nalevering i.p.v. stilzwijgend 'afgerond'. We pushen wél wat kan.
+    const status = plan.fullyAllocated ? result.status : "review";
+    if (!plan.fullyAllocated) {
+      console.warn(
+        "[fulfillment] order",
+        order.orderNumber,
+        "niet volledig toewijsbaar — shortages:",
+        JSON.stringify(plan.shortages)
+      );
+    }
     await db
       .update(orders)
       .set({
         fulfillmentPlan: plan,
-        fulfillmentStatus: result.status,
+        fulfillmentStatus: status,
         srsPushedAt: result.pushed > 0 ? sql`now()` : null,
         updatedAt: sql`now()`,
       })

@@ -41,6 +41,39 @@ export const BRANCH_CITY: Record<string, string> = {
   "23": "Den Bosch", "50": "Antwerpen",
 };
 
+/** Land per filiaal — Antwerpen (50) = BE, rest NL. Voor cross-border-afweging. */
+export const COUNTRY_OF_BRANCH: Record<string, string> = { "50": "BE" };
+export function branchCountry(branchId: string): string {
+  return COUNTRY_OF_BRANCH[branchId] || "NL";
+}
+
+/** Max aantal filialen waarover één order gesplitst mag worden. */
+export const MAX_SHIPMENTS_PER_ORDER = numEnv(process.env.GENTS_MAX_SHIPMENTS, 3);
+
+/**
+ * Feestdagen NL+BE (yyyy-mm-dd) waarop NIET verzonden wordt. Bewust als lijst
+ * (geen secret); jaarlijks bijwerken of later uit een Instellingen-kalender.
+ */
+export const SHIPPING_HOLIDAYS: Record<string, Set<string>> = {
+  NL: new Set([
+    "2026-01-01", "2026-04-03", "2026-04-06", "2026-04-27", "2026-05-14",
+    "2026-05-25", "2026-12-25", "2026-12-26",
+  ]),
+  BE: new Set([
+    "2026-01-01", "2026-04-06", "2026-05-01", "2026-05-14", "2026-05-25",
+    "2026-07-21", "2026-08-15", "2026-11-01", "2026-11-11", "2026-12-25",
+  ]),
+};
+export function isHoliday(branchId: string, isoDate: string): boolean {
+  return SHIPPING_HOLIDAYS[branchCountry(branchId)]?.has(isoDate) ?? false;
+}
+
+/**
+ * Beschermt onderbevoorrade winkels: een retail-filiaal met tekort>0 op een SKU
+ * springt NIET bij (die voorraad heeft de winkel zelf nodig). Aan/uit.
+ */
+export const PROTECT_UNDERSTOCKED_RETAIL = (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0";
+
 export function isWarehouse(branchId: string): boolean {
   return WAREHOUSE_BRANCHES.includes(branchId);
 }

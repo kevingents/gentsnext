@@ -4,7 +4,10 @@ import {
   isFulfillable,
   isWarehouse,
   branchPriority,
+  branchCountry,
   safetyStockFor,
+  isHoliday,
+  PROTECT_UNDERSTOCKED_RETAIL,
   CARRIER_CUTOFF_HOUR,
   BRANCH_CITY,
 } from "@/lib/fulfillment-config";
@@ -14,13 +17,16 @@ import {
  *  1. Order COMPLEET vanaf één locatie → bespaart verzendkosten.
  *  2. Magazijn eerst (retail-voorraad bewaren we voor de winkelklant).
  *  3. Kan het op meerdere plekken → die met de meeste voorraad.
- *  4. Lukt één locatie niet → zo min mogelijk splitsen, en binnen een split
- *     opnieuw magazijn + meeste voorraad.
- *  5. Openingstijden: een filiaal dat vandaag dicht is (bv. Hilversum op maandag)
- *     kan niet vandaag verzenden → we kiezen liever een open locatie.
+ *  4. Geen single-source → zo min mogelijk splitsen; daarbinnen magazijn+voorraad.
+ *  5. Openingstijden + feestdagen: een filiaal dat vandaag dicht is (Hilversum
+ *     maandag, of een feestdag) of na cutoff → verzendt later; liever open.
+ * Extra slimmigheden: pak-sets (groupId) blijven bij elkaar, onderbevoorrade
+ * winkels (tekort) springen niet bij, en BE-klanten worden bij voorkeur vanuit
+ * Antwerpen bediend (cross-border vermijden).
  */
 
-export type OrderLineInput = { sku: string; qty: number; title?: string };
+export type OrderLineInput = { sku: string; qty: number; title?: string; groupId?: string };
+export type AllocateOptions = { country?: string; postalCode?: string };
 
 export type ShipmentLine = { sku: string; qty: number; title?: string };
 export type Shipment = {
@@ -46,67 +52,80 @@ type Branch = {
   store: string;
   isWarehouse: boolean;
   priority: number;
+  country: string;
   canDispatchToday: boolean;
   dispatchLabel: string;
-  avail: Map<string, number>; // sku → beschikbaar (na veiligheidsvoorraad)
+  avail: Map<string, number>; // sku → beschikbaar (na veiligheidsvoorraad/tekort)
 };
 
-/* ── Openingstijden → verzendmoment ──────────────────────────────────────── */
-function nowNL(): { dayIndex: number; minutes: number } {
+/* ── Tijd & openingstijden → verzendmoment ───────────────────────────────── */
+function nowNL(): { dayIndex: number; minutes: number; y: number; m: number; d: number } {
   const fmt = new Intl.DateTimeFormat("nl-NL", {
     timeZone: "Europe/Amsterdam",
     weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
-  const parts = fmt.formatToParts(new Date());
-  const day = (parts.find((p) => p.type === "weekday")?.value || "").toLowerCase();
-  const hour = Number(parts.find((p) => p.type === "hour")?.value || 0);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value || 0);
-  return { dayIndex: Math.max(0, DAYS.indexOf(day)), minutes: hour * 60 + minute };
+  const p = fmt.formatToParts(new Date());
+  const get = (t: string) => p.find((x) => x.type === t)?.value || "";
+  const day = get("weekday").toLowerCase();
+  return {
+    dayIndex: Math.max(0, DAYS.indexOf(day)),
+    minutes: Number(get("hour")) * 60 + Number(get("minute")),
+    y: Number(get("year")),
+    m: Number(get("month")),
+    d: Number(get("day")),
+  };
 }
 
-function openOn(branchId: string, dayName: string, hoursByCity: Map<string, Record<string, string>>): boolean {
-  if (isWarehouse(branchId)) {
-    // Magazijn verzendt op werkdagen (ma–vr).
-    return dayName !== "zaterdag" && dayName !== "zondag";
-  }
+/** yyyy-mm-dd voor 'k' dagen na de NL-datum (date-only, DST-veilig). */
+function isoAtOffset(base: { y: number; m: number; d: number }, k: number): string {
+  const t = Date.UTC(base.y, base.m - 1, base.d) + k * 86400000;
+  const dt = new Date(t);
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${dt.getUTCFullYear()}-${mm}-${dd}`;
+}
+
+function openOn(branchId: string, dayName: string, isoDate: string, hoursByCity: Map<string, Record<string, string>>): boolean {
+  if (isHoliday(branchId, isoDate)) return false;
+  if (isWarehouse(branchId)) return dayName !== "zaterdag" && dayName !== "zondag";
   const city = BRANCH_CITY[branchId];
   const hours = city ? hoursByCity.get(city.toLowerCase()) : undefined;
-  if (!hours) return dayName !== "zaterdag" && dayName !== "zondag"; // onbekend → werkdagen
+  if (!hours) return dayName !== "zaterdag" && dayName !== "zondag";
   return Boolean((hours[dayName] || "").trim());
 }
 
-/** Eerstvolgende verzenddag voor een filiaal + of dat vandaag nog kan. */
 function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>) {
-  const { dayIndex, minutes } = nowNL();
-  for (let k = 0; k < 8; k++) {
-    const day = DAYS[(dayIndex + k) % 7];
-    if (!openOn(branchId, day, hoursByCity)) continue;
-    if (k === 0 && minutes >= CARRIER_CUTOFF_HOUR * 60) continue; // vandaag na cutoff
-    const canToday = k === 0;
-    const label = k === 0 ? "vandaag" : k === 1 ? "morgen" : day;
-    return { canDispatchToday: canToday, dispatchLabel: label };
+  const n = nowNL();
+  for (let k = 0; k < 9; k++) {
+    const day = DAYS[(n.dayIndex + k) % 7];
+    const iso = isoAtOffset(n, k);
+    if (!openOn(branchId, day, iso, hoursByCity)) continue;
+    if (k === 0 && n.minutes >= CARRIER_CUTOFF_HOUR * 60) continue;
+    return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day };
   }
   return { canDispatchToday: false, dispatchLabel: "z.s.m." };
 }
 
-/* ── Kandidaat-filialen opbouwen ─────────────────────────────────────────── */
-async function buildBranches(lines: OrderLineInput[]): Promise<Branch[]> {
-  const skus = [...new Set(lines.map((l) => l.sku).filter(Boolean))];
+/* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
+async function buildBranches(skus: string[]): Promise<Branch[]> {
   const stock = await stockForSkus(skus);
-
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
 
-  // Inverteer: branchId → { store, sku → qty }.
   const byBranch = new Map<string, { store: string; avail: Map<string, number> }>();
   for (const sku of skus) {
     const entry = stock.get(sku);
     if (!entry) continue;
     for (const b of entry.byBranch) {
       if (!isFulfillable(b.branchId)) continue;
+      // Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
+      if (PROTECT_UNDERSTOCKED_RETAIL && !isWarehouse(b.branchId) && b.tekort > 0) continue;
       const net = b.qty - safetyStockFor(b.branchId);
       if (net <= 0) continue;
       let rec = byBranch.get(b.branchId);
@@ -126,6 +145,7 @@ async function buildBranches(lines: OrderLineInput[]): Promise<Branch[]> {
       store: rec.store,
       isWarehouse: isWarehouse(branchId),
       priority: branchPriority(branchId),
+      country: branchCountry(branchId),
       canDispatchToday: d.canDispatchToday,
       dispatchLabel: d.dispatchLabel,
       avail: rec.avail,
@@ -140,25 +160,55 @@ function totalAvail(b: Branch): number {
   return s;
 }
 
-/** Comparator: vandaag-verzendbaar > magazijn/prioriteit > meeste voorraad. */
-function better(a: Branch, b: Branch): number {
-  if (a.canDispatchToday !== b.canDispatchToday) return a.canDispatchToday ? -1 : 1;
-  if (a.priority !== b.priority) return b.priority - a.priority;
-  return totalAvail(b) - totalAvail(a);
+/**
+ * Comparator (kleiner = beter): vandaag-verzendbaar > zelfde land als klant >
+ * magazijn/prioriteit > meeste voorraad > stabiel filiaalnummer (reproduceerbaar).
+ */
+function makeComparator(country: string) {
+  const cc = (country || "NL").toUpperCase();
+  return (a: Branch, b: Branch): number => {
+    if (a.canDispatchToday !== b.canDispatchToday) return a.canDispatchToday ? -1 : 1;
+    const aSame = a.country === cc, bSame = b.country === cc;
+    if (aSame !== bSame) return aSame ? -1 : 1;
+    if (a.priority !== b.priority) return b.priority - a.priority;
+    const ta = totalAvail(a), tb = totalAvail(b);
+    if (ta !== tb) return tb - ta;
+    return (Number(a.branchId) || 0) - (Number(b.branchId) || 0);
+  };
 }
 
 /* ── Hoofd-allocatie ─────────────────────────────────────────────────────── */
-export async function allocateOrder(lines: OrderLineInput[]): Promise<FulfillmentPlan> {
+export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptions = {}): Promise<FulfillmentPlan> {
   const computedAt = new Date().toISOString();
-  const branches = await buildBranches(lines);
-  const titleBySku = new Map(lines.map((l) => [l.sku, l.title]));
 
-  // 1. Single-source: een filiaal dat de HELE order dekt → bespaart verzendkosten.
-  const fullCovers = branches.filter((b) => lines.every((l) => (b.avail.get(l.sku) ?? 0) >= l.qty));
+  // 0. Schoonmaken: lege/0-qty regels eruit; per SKU optellen (dubbele regels!).
+  const clean = lines.filter((l) => l.sku && l.qty > 0);
+  const need = new Map<string, number>();
+  const titleBySku = new Map<string, string | undefined>();
+  const groupSkus = new Map<string, Set<string>>(); // groupId → skus (pak-sets bij elkaar)
+  for (const l of clean) {
+    need.set(l.sku, (need.get(l.sku) ?? 0) + l.qty);
+    if (!titleBySku.has(l.sku)) titleBySku.set(l.sku, l.title);
+    if (l.groupId) {
+      if (!groupSkus.has(l.groupId)) groupSkus.set(l.groupId, new Set());
+      groupSkus.get(l.groupId)!.add(l.sku);
+    }
+  }
+  const skus = [...need.keys()];
+  if (!skus.length) {
+    return { shipments: [], splitCount: 0, fullyAllocated: true, shortages: [], strategy: "single-source", computedAt };
+  }
+
+  const branches = await buildBranches(skus);
+  const better = makeComparator(opts.country || "NL");
+
+  // 1. Single-source: één filiaal dat de HELE order dekt → bespaart verzendkosten.
+  const fullCovers = branches.filter((b) => skus.every((sku) => (b.avail.get(sku) ?? 0) >= (need.get(sku) ?? 0)));
   if (fullCovers.length) {
     const best = [...fullCovers].sort(better)[0];
+    const sLines = skus.map((sku) => ({ sku, qty: need.get(sku)!, title: titleBySku.get(sku) }));
     return {
-      shipments: [toShipment(best, lines.map((l) => ({ sku: l.sku, qty: l.qty, title: l.title })))],
+      shipments: [toShipment(best, sLines)],
       splitCount: 1,
       fullyAllocated: true,
       shortages: [],
@@ -167,11 +217,11 @@ export async function allocateOrder(lines: OrderLineInput[]): Promise<Fulfillmen
     };
   }
 
-  // 2. Least-split greedy: kies steeds het filiaal dat de meeste resterende
-  //    regels VOLLEDIG dekt; gelijkspel → magazijn/voorraad. Daarna pas splitsen.
-  const need = new Map(lines.map((l) => [l.sku, l.qty]));
+  // 2. Least-split greedy met groep-bewustzijn.
+  const remaining = new Map(need);
   const assigned = new Map<string, Map<string, number>>(); // branchId → sku → qty
   const work = branches.map((b) => ({ ...b, avail: new Map(b.avail) }));
+  const branchById = new Map(work.map((b) => [b.branchId, b]));
 
   const assign = (b: Branch, sku: string, qty: number) => {
     if (qty <= 0) return;
@@ -179,60 +229,70 @@ export async function allocateOrder(lines: OrderLineInput[]): Promise<Fulfillmen
     const m = assigned.get(b.branchId)!;
     m.set(sku, (m.get(sku) ?? 0) + qty);
     b.avail.set(sku, (b.avail.get(sku) ?? 0) - qty);
-    need.set(sku, (need.get(sku) ?? 0) - qty);
+    remaining.set(sku, (remaining.get(sku) ?? 0) - qty);
   };
 
-  let guard = 0;
-  while ([...need.values()].some((q) => q > 0) && guard++ < 100) {
-    const open = [...need.entries()].filter(([, q]) => q > 0).map(([sku]) => sku);
+  // 2a. Pak-sets bij elkaar: probeer elke groep volledig uit één filiaal.
+  for (const [, set] of groupSkus) {
+    const gskus = [...set].filter((s) => (remaining.get(s) ?? 0) > 0);
+    if (gskus.length < 2) continue;
+    const cover = work.filter((b) => gskus.every((s) => (b.avail.get(s) ?? 0) >= (remaining.get(s) ?? 0)));
+    if (!cover.length) continue; // geen filiaal heeft de hele set → laat aan greedy over
+    const best = [...cover].sort(better)[0];
+    for (const s of gskus) assign(best, s, remaining.get(s)!);
+  }
 
-    // Beste filiaal op #volledig-dekbare regels.
+  // 2b. Greedy: kies steeds het filiaal dat de meeste open regels VOLLEDIG dekt.
+  let guard = 0;
+  const maxGuard = skus.length * (work.length + 1) + 5;
+  while ([...remaining.values()].some((q) => q > 0) && guard++ < maxGuard) {
+    const open = [...remaining.entries()].filter(([, q]) => q > 0).map(([sku]) => sku);
+
     let pick: { b: (typeof work)[number]; full: string[] } | null = null;
     for (const b of work) {
-      const full = open.filter((sku) => (b.avail.get(sku) ?? 0) >= (need.get(sku) ?? 0));
+      const full = open.filter((sku) => (b.avail.get(sku) ?? 0) >= (remaining.get(sku) ?? 0));
       if (!full.length) continue;
-      if (
-        !pick ||
-        full.length > pick.full.length ||
-        (full.length === pick.full.length && better(b, pick.b) < 0)
-      ) {
+      if (!pick || full.length > pick.full.length || (full.length === pick.full.length && better(b, pick.b) < 0)) {
         pick = { b, full };
       }
     }
-
     if (pick) {
-      for (const sku of pick.full) assign(pick.b, sku, need.get(sku) ?? 0);
+      for (const sku of pick.full) assign(pick.b, sku, remaining.get(sku)!);
       continue;
     }
 
-    // Geen enkel filiaal dekt een regel volledig → split de zwaarste regel.
-    const sku = open.sort((a, c) => (need.get(c) ?? 0) - (need.get(a) ?? 0))[0];
+    // Geen filiaal dekt een regel volledig → split de zwaarste regel; vul uit de
+    // filialen met de MEESTE voorraad eerst (minste versnippering), dan prio.
+    const sku = open.sort((a, c) => (remaining.get(c) ?? 0) - (remaining.get(a) ?? 0))[0];
     const suppliers = work
       .filter((b) => (b.avail.get(sku) ?? 0) > 0)
-      .sort(better);
+      .sort((a, b) => {
+        const qa = a.avail.get(sku) ?? 0, qb = b.avail.get(sku) ?? 0;
+        if (qa !== qb) return qb - qa;
+        return better(a, b);
+      });
     let filled = false;
     for (const b of suppliers) {
-      const take = Math.min(b.avail.get(sku) ?? 0, need.get(sku) ?? 0);
+      const take = Math.min(b.avail.get(sku) ?? 0, remaining.get(sku) ?? 0);
       assign(b, sku, take);
       filled = true;
-      if ((need.get(sku) ?? 0) <= 0) break;
+      if ((remaining.get(sku) ?? 0) <= 0) break;
     }
-    if (!filled) break; // niets meer beschikbaar → shortage
+    if (!filled) break;
   }
 
-  // Bouw shipments uit de toewijzingen.
+  // Shipments bouwen, magazijn eerst.
   const shipments: Shipment[] = [];
   for (const [branchId, skuMap] of assigned) {
-    const b = branches.find((x) => x.branchId === branchId)!;
+    const b = branchById.get(branchId)!;
     const sLines = [...skuMap.entries()]
       .filter(([, q]) => q > 0)
       .map(([sku, qty]) => ({ sku, qty, title: titleBySku.get(sku) }));
     if (sLines.length) shipments.push(toShipment(b, sLines));
   }
-  // Magazijn-shipments eerst tonen.
   shipments.sort((a, b) => Number(b.isWarehouse) - Number(a.isWarehouse) || b.units - a.units);
 
-  const shortages = [...need.entries()]
+  const shortages = [...remaining.entries()]
     .filter(([, q]) => q > 0)
     .map(([sku, q]) => ({ sku, qtyShort: q, title: titleBySku.get(sku) }));
 
