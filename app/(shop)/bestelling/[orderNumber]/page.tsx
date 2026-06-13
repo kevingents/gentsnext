@@ -73,6 +73,12 @@ export default async function OrderPage({ params, searchParams }: Props) {
       <div className="mt-8 border-y border-line py-5">
         <p className="font-sans text-sm text-muted">Bestelnummer</p>
         <p className="font-display text-lg">{order.orderNumber}</p>
+        {order.companyName ? (
+          <p className="mt-2 font-sans text-sm text-ink-soft">
+            Zakelijke bestelling — <span className="text-ink">{order.companyName}</span>
+            {order.vatNumber ? ` · BTW ${order.vatNumber}` : ""}
+          </p>
+        ) : null}
       </div>
 
       <ul className="divide-y divide-line">

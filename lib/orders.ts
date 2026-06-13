@@ -34,6 +34,9 @@ export type CheckoutContact = {
   postalCode: string;
   city: string;
   country?: string;
+  /** Zakelijk bestellen (optioneel). */
+  companyName?: string;
+  vatNumber?: string;
 };
 
 /** Leesbaar, uniek ordernummer (geen botsing dankzij tijd + random). */
@@ -165,6 +168,8 @@ export async function createOrder(
       postalCode: contact.postalCode.trim(),
       city: contact.city.trim(),
       country: (contact.country || "NL").trim(),
+      companyName: (contact.companyName || "").trim(),
+      vatNumber: (contact.vatNumber || "").trim(),
       deliveryMethod,
       voucherCode: appliedCode,
       discountCents,

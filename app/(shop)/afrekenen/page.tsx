@@ -37,14 +37,27 @@ const POSTCODE_RE = /^[1-9][0-9]{3}\s?[a-zA-Z]{2}$/;
 const HOUSENR_RE = /^[0-9]+[a-zA-Z0-9 -]*$/;
 
 function Steps() {
-  const steps = ["Winkelwagen", "Gegevens", "Betalen"];
+  const steps: { label: string; done?: boolean; active?: boolean }[] = [
+    { label: "Winkelwagen", done: true },
+    { label: "Gegevens & bezorging", active: true },
+    { label: "Betalen" },
+    { label: "Bevestiging" },
+  ];
   return (
-    <ol className="mt-3 flex items-center gap-2 font-sans text-xs text-muted">
+    <ol className="mt-5 flex items-center">
       {steps.map((s, i) => (
-        <li key={s} className="flex items-center gap-2">
-          <span className={`flex h-5 w-5 items-center justify-center rounded-full ${i === 1 ? "bg-ink text-canvas" : "border border-line"}`}>{i + 1}</span>
-          <span className={i === 1 ? "font-medium text-ink" : ""}>{s}</span>
-          {i < steps.length - 1 ? <span aria-hidden className="mx-1 text-line">—</span> : null}
+        <li key={s.label} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full font-sans text-xs ${s.done ? "bg-ink text-canvas" : s.active ? "border-2 border-ink font-medium text-ink" : "border border-line text-muted"}`}>
+              {s.done ? (
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12l5 5 9-9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              ) : (
+                i + 1
+              )}
+            </span>
+            <span className={`hidden font-sans text-xs sm:inline ${s.active ? "font-medium text-ink" : s.done ? "text-ink-soft" : "text-muted"}`}>{s.label}</span>
+          </span>
+          {i < steps.length - 1 ? <span aria-hidden className={`mx-2 h-px flex-1 ${s.done ? "bg-ink" : "bg-line"}`} /> : null}
         </li>
       ))}
     </ol>
@@ -65,6 +78,7 @@ function CheckoutForm() {
   const canceled = params.get("geannuleerd") === "1";
 
   const [form, setForm] = useState<Record<string, string>>({});
+  const [business, setBusiness] = useState(false);
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -145,6 +159,10 @@ function CheckoutForm() {
       setError("Vul een geldig huisnummer in (begint met een cijfer).");
       return;
     }
+    if (business && !(form.companyName || "").trim()) {
+      setError("Vul de bedrijfsnaam in voor een zakelijke bestelling.");
+      return;
+    }
     if (!agree) {
       setError("Accepteer de algemene voorwaarden om te bestellen.");
       return;
@@ -211,7 +229,55 @@ function CheckoutForm() {
       <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Formulier */}
         <form onSubmit={submit} noValidate>
-          <p className="label-brand">Contact & bezorgadres</p>
+          {/* Particulier / Zakelijk */}
+          <div className="inline-flex rounded-card border border-line p-0.5">
+            {([["Particulier", false], ["Zakelijk", true]] as const).map(([label, val]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  setBusiness(val);
+                  if (!val) setForm((p) => ({ ...p, companyName: "", vatNumber: "" }));
+                }}
+                className={`px-4 py-1.5 font-sans text-sm transition-colors ${business === val ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {business ? (
+            <>
+              <p className="label-brand mt-6">Bedrijfsgegevens</p>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <label className="col-span-2 block">
+                  <span className="font-sans text-sm text-ink">Bedrijfsnaam</span>
+                  <input
+                    value={form.companyName || ""}
+                    onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))}
+                    autoComplete="organization"
+                    required
+                    className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                  />
+                </label>
+                <label className="col-span-2 block">
+                  <span className="font-sans text-sm text-ink">
+                    BTW-nummer <span className="text-muted">(optioneel)</span>
+                  </span>
+                  <input
+                    value={form.vatNumber || ""}
+                    onChange={(e) => setForm((p) => ({ ...p, vatNumber: e.target.value.toUpperCase() }))}
+                    autoComplete="off"
+                    placeholder="NL000000000B00"
+                    className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                  />
+                  <span className="mt-1 block font-sans text-xs text-muted">Vermeld je BTW-nummer voor een correcte zakelijke factuur.</span>
+                </label>
+              </div>
+            </>
+          ) : null}
+
+          <p className="label-brand mt-6">Contact & bezorgadres</p>
           <div className="mt-4 grid grid-cols-2 gap-4">
             {FIELDS.map((f) => (
               <label key={f.name} className={f.col === 2 ? "col-span-2 block" : "block"}>

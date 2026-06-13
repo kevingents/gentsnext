@@ -266,6 +266,9 @@ export const orders = pgTable(
     postalCode: text("postal_code").notNull().default(""),
     city: text("city").notNull().default(""),
     country: text("country").notNull().default("NL"),
+    /** Zakelijk bestellen (optioneel): bedrijfsnaam + BTW-nummer. */
+    companyName: text("company_name").notNull().default(""),
+    vatNumber: text("vat_number").notNull().default(""),
     /** 'standard' | 'express' (snellere levering tegen toeslag). */
     deliveryMethod: text("delivery_method").notNull().default("standard"),
     voucherCode: text("voucher_code").notNull().default(""),
