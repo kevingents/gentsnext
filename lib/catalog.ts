@@ -23,6 +23,8 @@ export type ProductCardData = {
   hasPriceRange: boolean;
   isNew?: boolean;
   hasSale?: boolean;
+  /** Hoogste compareAt-prijs voor de variant die nu op sale is — voor doorstrepen. */
+  compareAtCents?: number;
 };
 
 export async function listCollections() {
@@ -86,6 +88,7 @@ async function buildProductCards(
   }
   const priceRange = new Map<string, { min: number; max: number }>();
   const onSale = new Map<string, boolean>();
+  const compareAtBest = new Map<string, number>();
   for (const v of variants) {
     const range = priceRange.get(v.productId);
     if (!range) priceRange.set(v.productId, { min: v.priceCents, max: v.priceCents });
@@ -93,7 +96,11 @@ async function buildProductCards(
       range.min = Math.min(range.min, v.priceCents);
       range.max = Math.max(range.max, v.priceCents);
     }
-    if (v.compareAtCents && v.compareAtCents > v.priceCents) onSale.set(v.productId, true);
+    if (v.compareAtCents && v.compareAtCents > v.priceCents) {
+      onSale.set(v.productId, true);
+      const cur = compareAtBest.get(v.productId) ?? 0;
+      if (v.compareAtCents > cur) compareAtBest.set(v.productId, v.compareAtCents);
+    }
   }
 
   const NEW_DAYS = 30;
@@ -120,6 +127,7 @@ async function buildProductCards(
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,
       hasSale: onSale.get(p.id) ?? false,
+      compareAtCents: compareAtBest.get(p.id),
     };
   });
 }

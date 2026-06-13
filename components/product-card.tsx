@@ -36,7 +36,10 @@ export function ProductCard({ product }: { product: ProductCardData }) {
         <h3 className="font-sans text-sm text-ink">{product.title}</h3>
         <p className="font-sans text-sm text-ink-soft">
           {product.hasPriceRange ? "vanaf " : ""}
-          {formatEuro(product.minPriceCents)}
+          <span className={product.compareAtCents ? "text-danger" : ""}>{formatEuro(product.minPriceCents)}</span>
+          {product.compareAtCents ? (
+            <span className="ml-2 text-xs text-muted line-through">{formatEuro(product.compareAtCents)}</span>
+          ) : null}
         </p>
       </div>
     </Link>

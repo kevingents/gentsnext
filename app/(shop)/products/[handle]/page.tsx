@@ -9,6 +9,7 @@ import { ColorSiblings } from "@/components/pdp/color-siblings";
 import { ProductCard } from "@/components/product-card";
 import { TrackRecent } from "@/components/recent/track-recent";
 import { RecentStrip } from "@/components/recent/recent-strip";
+import { ShareRow } from "@/components/pdp/share-row";
 import { getProductByHandle, getRecommendations } from "@/lib/catalog";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sizeChartFor } from "@/lib/size-charts";
@@ -292,6 +293,7 @@ export default async function ProductPage({ params }: Props) {
           <div className="mt-8">
             <Accordion items={accordionItems} />
           </div>
+          <ShareRow title={product.title} />
         </div>
       </div>
 
