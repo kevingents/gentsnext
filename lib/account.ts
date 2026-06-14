@@ -14,6 +14,7 @@ import {
   newsletterSubscribers,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
+import { sendWelcomeEmail } from "@/lib/email";
 
 /**
  * Klant-accountlaag. Auth via magic-link (wachtwoordloos): e-mail → login-token
@@ -96,8 +97,16 @@ export async function consumeMagicToken(rawToken: string): Promise<boolean> {
   // Bestaande gast-orders met dit e-mailadres aan het account koppelen.
   const [cust] = await db.select().from(customers).where(eq(customers.id, magic.customerId)).limit(1);
   if (cust) {
+    const firstTime = !cust.emailVerifiedAt; // eerste bevestiging → welkomstmail
     await db.update(customers).set({ emailVerifiedAt: sql`now()`, lastLoginAt: sql`now()` }).where(eq(customers.id, cust.id));
     await claimGuestData(cust.id, cust.email);
+    if (firstTime) {
+      try {
+        await sendWelcomeEmail(cust.email, cust.firstName);
+      } catch (e) {
+        console.error("[account] welkomstmail-fout:", e);
+      }
+    }
   }
   return true;
 }

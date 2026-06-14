@@ -175,6 +175,80 @@ export async function sendGiftcardEmail(g: GiftcardEmail): Promise<boolean> {
   return true;
 }
 
+/* ── Gedeelde wrapper + generieke verzender (voor lifecycle-mails) ── */
+
+function shell(inner: string): string {
+  return `<!doctype html><html lang="nl"><body style="margin:0;background:#F6F5F2;padding:24px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E6E4DF">
+        <tr><td style="padding:28px 28px 0">
+          <div style="font:300 26px Arial,sans-serif;letter-spacing:6px;color:#0A0A0A">GENTS</div>
+          <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#8B8B8B;margin-top:4px">— SUITS YOU —</div>
+        </td></tr>
+        ${inner}
+      </table>
+      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS — Suits You · Alle prijzen incl. btw</div>
+    </td></tr></table>
+  </body></html>`;
+}
+
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!emailConfigured() || !to) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: process.env.RESEND_FROM, to: [to], subject, html }),
+  });
+  if (!res.ok) {
+    console.error("[email] Resend-fout:", res.status, (await res.text()).slice(0, 200));
+    return false;
+  }
+  return true;
+}
+
+/** Welkomstmail bij de eerste account-bevestiging (one-shot, zie account.ts). */
+export async function sendWelcomeEmail(email: string, firstName: string): Promise<boolean> {
+  const site = getSiteUrl();
+  const hi = firstName ? `Welkom, ${firstName}` : "Welkom bij GENTS";
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${hi}</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">
+        Goed dat je er bent. Je account staat klaar — je bestellingen, bewaarde maten en favorieten vind je voortaan op één plek.
+      </p>
+    </td></tr>
+    <tr><td style="padding:4px 28px">
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:0"><strong>Handig om te weten</strong></p>
+      <ul style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:6px 0 0;padding-left:18px">
+        <li>Bewaar je maten en we vullen ze automatisch in — <a href="${site}/maatadvies" style="color:#0A0A0A">doe het maatadvies</a>.</li>
+        <li>Gratis retour binnen 14 dagen, ook in onze winkels.</li>
+        <li>Persoonlijk advies in 19 winkels door heel Nederland.</li>
+      </ul>
+    </td></tr>
+    <tr><td style="padding:20px 28px 28px">
+      <a href="${site}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 22px;text-decoration:none">Begin met shoppen</a>
+    </td></tr>`;
+  return sendEmail(email, "Welkom bij GENTS", shell(inner));
+}
+
+/** Double-opt-in: bevestigingsmail voor de nieuwsbrief. */
+export async function sendNewsletterConfirmation(email: string, confirmUrl: string): Promise<boolean> {
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Bevestig je inschrijving</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">
+        Nog één klik en je ontvangt als eerste onze nieuwe collecties, styling-tips en exclusieve aanbiedingen.
+      </p>
+    </td></tr>
+    <tr><td style="padding:12px 28px 28px">
+      <a href="${confirmUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 22px;text-decoration:none">Ja, schrijf me in</a>
+      <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:16px">
+        Heb je je niet aangemeld? Negeer deze mail — er gebeurt niets.
+      </p>
+    </td></tr>`;
+  return sendEmail(email, "Bevestig je GENTS-nieuwsbrief", shell(inner));
+}
+
 export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]): Promise<boolean> {
   if (!emailConfigured()) return false;
   const res = await fetch("https://api.resend.com/emails", {
