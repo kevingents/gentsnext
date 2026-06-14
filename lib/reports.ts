@@ -169,6 +169,103 @@ export async function listOrders(opts: OrderListOpts) {
   };
 }
 
+/* ── Retentie / herhaalaankopen ── */
+
+export type CohortRow = { cohort: string; customers: number; repeat: number; repeatPct: number; avgOrders: number };
+export type RetentionReport = {
+  overall: { customers: number; repeat: number; repeatPct: number; avgOrders: number };
+  cohorts: CohortRow[];
+};
+
+/** Herhaalaankoop-analyse: per maand-cohort (eerste betaalde order) hoeveel klanten terugkwamen. */
+export async function retentionReport(): Promise<RetentionReport> {
+  const db = getDb();
+  const rows = (
+    await db.execute<{ cohort: string; customers: string; repeat: string; orders: string }>(sql`
+      with firsts as (
+        select customer_id, min(created_at) first_at, count(*) cnt
+        from orders
+        where ${PAID} and customer_id is not null
+        group by customer_id
+      )
+      select to_char(date_trunc('month', first_at),'YYYY-MM') cohort,
+             count(*) customers,
+             count(*) filter (where cnt >= 2) repeat,
+             coalesce(sum(cnt),0) orders
+      from firsts group by 1 order by 1 desc limit 12`)
+  ).rows;
+  const [tot] = (
+    await db.execute<{ customers: string; repeat: string; orders: string }>(sql`
+      with firsts as (
+        select customer_id, count(*) cnt from orders
+        where ${PAID} and customer_id is not null group by customer_id
+      )
+      select count(*) customers, count(*) filter (where cnt >= 2) repeat, coalesce(sum(cnt),0) orders from firsts`)
+  ).rows;
+  const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  const cohorts: CohortRow[] = rows.map((x) => {
+    const customers = Number(x.customers) || 0;
+    const repeat = Number(x.repeat) || 0;
+    return { cohort: x.cohort, customers, repeat, repeatPct: pct(repeat, customers), avgOrders: customers ? Math.round((Number(x.orders) / customers) * 10) / 10 : 0 };
+  });
+  const oc = Number(tot?.customers) || 0;
+  const orep = Number(tot?.repeat) || 0;
+  return {
+    overall: { customers: oc, repeat: orep, repeatPct: pct(orep, oc), avgOrders: oc ? Math.round((Number(tot?.orders) / oc) * 10) / 10 : 0 },
+    cohorts,
+  };
+}
+
+/* ── Retouren (refunds) ── */
+
+export type ReturnsReport = {
+  count: number;
+  valueCents: number;
+  paidCount: number;
+  ratePct: number;
+  topCategories: { category: string; qty: number; orders: number }[];
+  recent: { orderNumber: string; date: string; name: string; totalCents: number }[];
+};
+
+export async function returnsReport(r: Range): Promise<ReturnsReport> {
+  const db = getDb();
+  const [agg] = (
+    await db.execute<{ n: string; val: string }>(sql`
+      select count(*) n, coalesce(sum(total_cents),0) val from orders
+      where status='refunded' and created_at between ${r.from} and ${r.to}`)
+  ).rows;
+  const [paid] = (
+    await db.execute<{ n: string }>(sql`select count(*) n from orders where ${PAID} and created_at between ${r.from} and ${r.to}`)
+  ).rows;
+  const cats = (
+    await db.execute<{ cat: string; qty: string; orders: string }>(sql`
+      select coalesce(p.attributes->>'hoofdgroep_omschrijving','—') cat,
+             coalesce(sum(ol.quantity),0) qty, count(distinct o.id) orders
+      from orders o
+      join order_lines ol on ol.order_id = o.id
+      left join product_variants v on v.sku = ol.sku
+      left join products p on p.id = v.product_id
+      where o.status='refunded' and o.created_at between ${r.from} and ${r.to}
+      group by 1 order by qty desc limit 10`)
+  ).rows;
+  const recent = (
+    await db.execute<{ order_number: string; d: string; name: string; total_cents: number }>(sql`
+      select order_number, to_char(created_at,'YYYY-MM-DD') d, (first_name||' '||last_name) name, total_cents
+      from orders where status='refunded' and created_at between ${r.from} and ${r.to}
+      order by created_at desc limit 20`)
+  ).rows;
+  const count = Number(agg?.n) || 0;
+  const paidCount = Number(paid?.n) || 0;
+  return {
+    count,
+    valueCents: Number(agg?.val) || 0,
+    paidCount,
+    ratePct: paidCount + count > 0 ? Math.round((count / (paidCount + count)) * 1000) / 10 : 0,
+    topCategories: cats.map((c) => ({ category: c.cat, qty: Number(c.qty) || 0, orders: Number(c.orders) || 0 })),
+    recent: recent.map((x) => ({ orderNumber: x.order_number, date: x.d, name: (x.name || "").trim(), totalCents: Number(x.total_cents) || 0 })),
+  };
+}
+
 /* ── CSV-export (orders + klanten) ── */
 
 const EXPORT_CAP = 100_000;

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
-import { parseRange, getKpis, topProducts, revenueByCategory, topCustomers, voucherGiftcardImpact, newsletterStats, reviewStats } from "@/lib/reports";
+import { parseRange, getKpis, topProducts, revenueByCategory, topCustomers, voucherGiftcardImpact, newsletterStats, reviewStats, retentionReport, returnsReport } from "@/lib/reports";
 import { BackofficeShell, Section, RangeForm, euro } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +24,8 @@ export default async function RapportagesPage({ searchParams }: Props) {
 
   const sp = await searchParams;
   const r = parseRange(sp);
-  const [kpi, prods, cats, custs, promo, news, reviews] = await Promise.all([
-    getKpis(r), topProducts(r, 50), revenueByCategory(r), topCustomers(50), voucherGiftcardImpact(r), newsletterStats(), reviewStats(),
+  const [kpi, prods, cats, custs, promo, news, reviews, retention, returns] = await Promise.all([
+    getKpis(r), topProducts(r, 50), revenueByCategory(r), topCustomers(50), voucherGiftcardImpact(r), newsletterStats(), reviewStats(), retentionReport(), returnsReport(r),
   ]);
 
   const onlineAov = kpi.orders ? Math.round(kpi.revenueCents / kpi.orders) : 0;
@@ -71,6 +71,45 @@ export default async function RapportagesPage({ searchParams }: Props) {
               {!cats.length ? <tr><td colSpan={3} className="py-4 text-center text-muted">Geen data.</td></tr> : null}
             </tbody>
           </table>
+        </Section>
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <Section title="Retentie — herhaalaankopen (all-time)">
+          <dl className="mb-3 grid grid-cols-3 gap-3 font-sans text-sm">
+            <div><dt className="text-xs uppercase tracking-wide text-muted">Klanten</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-pnavy">{retention.overall.customers.toLocaleString("nl-NL")}</dd></div>
+            <div><dt className="text-xs uppercase tracking-wide text-muted">Herhaalkopers</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-pnavy">{retention.overall.repeatPct}%</dd></div>
+            <div><dt className="text-xs uppercase tracking-wide text-muted">Orders/klant</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-pnavy">{retention.overall.avgOrders}</dd></div>
+          </dl>
+          <div className="max-h-[22rem] overflow-y-auto">
+            <table className="w-full border-collapse font-sans text-sm">
+              <thead className="sticky top-0 bg-canvas"><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted"><th className="py-1.5">Cohort (1e order)</th><th className="py-1.5 text-right">Klanten</th><th className="py-1.5 text-right">Herhaal</th><th className="py-1.5 text-right">Orders/kl.</th></tr></thead>
+              <tbody>
+                {retention.cohorts.map((c) => (
+                  <tr key={c.cohort} className="border-b border-line/60"><td className="py-1.5 tabular-nums">{c.cohort}</td><td className="py-1.5 text-right tabular-nums">{c.customers.toLocaleString("nl-NL")}</td><td className="py-1.5 text-right tabular-nums">{c.repeatPct}%</td><td className="py-1.5 text-right tabular-nums">{c.avgOrders}</td></tr>
+                ))}
+                {!retention.cohorts.length ? <tr><td colSpan={4} className="py-4 text-center text-muted">Geen data.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+
+        <Section title="Retouren (periode)">
+          <dl className="mb-3 grid grid-cols-3 gap-3 font-sans text-sm">
+            <div><dt className="text-xs uppercase tracking-wide text-muted">Retouren</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-pnavy">{returns.count.toLocaleString("nl-NL")}</dd></div>
+            <div><dt className="text-xs uppercase tracking-wide text-muted">Retourwaarde</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-pnavy">{euro(returns.valueCents)}</dd></div>
+            <div><dt className="text-xs uppercase tracking-wide text-muted">Retourpercentage</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-pnavy">{returns.ratePct}%</dd></div>
+          </dl>
+          {returns.topCategories.length ? (
+            <table className="w-full border-collapse font-sans text-sm">
+              <thead><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted"><th className="py-1.5">Meest geretourneerd</th><th className="py-1.5 text-right">Artikelen</th><th className="py-1.5 text-right">Orders</th></tr></thead>
+              <tbody>
+                {returns.topCategories.map((c) => (
+                  <tr key={c.category} className="border-b border-line/60"><td className="py-1.5"><span className="block max-w-[16rem] truncate">{c.category}</span></td><td className="py-1.5 text-right tabular-nums">{c.qty.toLocaleString("nl-NL")}</td><td className="py-1.5 text-right tabular-nums">{c.orders}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className="font-sans text-sm text-muted">Geen retouren in deze periode.</p>}
         </Section>
       </div>
 
