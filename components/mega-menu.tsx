@@ -29,6 +29,12 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function DesktopItem({ item }: { item: MenuItem }) {
   const hasMega = Boolean(item.columns?.length);
+  // Na een klik navigeert Next.js client-side zónder herladen; de geklikte link
+  // houdt focus (:focus-within) en de muis hangt nog boven het paneel (:hover),
+  // waardoor het mega-paneel open blijft. We forceren het dicht bij een klik en
+  // herstellen zodra de muis het menu-item verlaat.
+  const [closed, setClosed] = useState(false);
+
   if (!hasMega) {
     return (
       <li className="group">
@@ -38,12 +44,22 @@ function DesktopItem({ item }: { item: MenuItem }) {
       </li>
     );
   }
+
+  const closeOnNav = () => {
+    setClosed(true);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  };
+
+  const base = "invisible absolute left-0 right-0 top-full z-50 -translate-y-2 pt-1 opacity-0 transition-all duration-200 ease-out";
+  const reveal =
+    "group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100";
+
   return (
-    <li className="group">
+    <li className="group" onMouseLeave={() => setClosed(false)}>
       <button type="button" aria-haspopup="true" className="cursor-default">
         <Label>{item.label}</Label>
       </button>
-      <div className="invisible absolute left-0 right-0 top-full z-50 -translate-y-2 pt-1 opacity-0 transition-all duration-200 ease-out group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+      <div className={`${base} ${closed ? "" : reveal}`}>
         <div className="overflow-hidden rounded-card border border-line bg-canvas shadow-pop">
           <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_1.25fr] gap-8 p-8">
             {item.columns!.map((col) => (
@@ -52,7 +68,7 @@ function DesktopItem({ item }: { item: MenuItem }) {
                 <ul className="space-y-2">
                   {col.links.map((l) => (
                     <li key={l.label}>
-                      <Link href={l.href} className="group/link inline-flex items-center gap-1.5 font-sans text-sm text-ink-soft transition-colors hover:text-ink">
+                      <Link href={l.href} onClick={closeOnNav} className="group/link inline-flex items-center gap-1.5 font-sans text-sm text-ink-soft transition-colors hover:text-ink">
                         {l.label}
                         <span aria-hidden className="translate-x-0 opacity-0 transition-all duration-200 group-hover/link:translate-x-0.5 group-hover/link:opacity-100">→</span>
                       </Link>
@@ -62,7 +78,7 @@ function DesktopItem({ item }: { item: MenuItem }) {
               </div>
             ))}
             {(item.features ?? []).map((f) => (
-              <Link key={f.label} href={f.href} className="group/feat relative block aspect-[4/5] overflow-hidden rounded-card bg-surface">
+              <Link key={f.label} href={f.href} onClick={closeOnNav} className="group/feat relative block aspect-[4/5] overflow-hidden rounded-card bg-surface">
                 <Image src={f.image} alt={f.label} fill sizes="22vw" className="object-cover transition-transform duration-500 group-hover/feat:scale-105" />
                 <span className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
                 <span className="absolute inset-x-4 bottom-4 text-canvas">
