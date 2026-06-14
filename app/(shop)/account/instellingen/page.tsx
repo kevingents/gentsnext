@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { getSettings } from "@/lib/settings";
 import { SettingsForm } from "@/components/account/settings-form";
+import { BackofficeShell } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Instellingen", robots: { index: false, follow: false } };
@@ -24,14 +25,13 @@ export default async function InstellingenPage() {
 
   const settings = await getSettings();
   return (
-    <div className="mx-auto max-w-3xl px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Instellingen</h1>
-      <p className="mt-3 font-sans text-sm text-ink-soft">
-        Verzending, levertijd en voorraad-regels. Wijzigingen werken binnen een
-        halve minuut door in de hele winkel.
+    <BackofficeShell active="/account/instellingen" title="Instellingen">
+      <p className="font-sans text-sm text-pslate">
+        Verzending, levertijd en voorraad-regels. Wijzigingen werken binnen een halve minuut door in de hele winkel.
       </p>
-      <SettingsForm initial={settings} />
-    </div>
+      <div className="rounded-xl border border-pnavy-100 bg-white p-5 shadow-portal">
+        <SettingsForm initial={settings} />
+      </div>
+    </BackofficeShell>
   );
 }

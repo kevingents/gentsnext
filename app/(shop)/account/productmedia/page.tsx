@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { SizeMediaForm } from "@/components/account/size-media-form";
+import { BackofficeShell } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Productmedia", robots: { index: false, follow: false } };
@@ -19,16 +20,13 @@ export default async function ProductMediaPage() {
     );
   }
   return (
-    <div className="mx-auto max-w-2xl px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Modelfoto's</h1>
-      <p className="mt-3 font-sans text-sm text-ink-soft">
-        Stel per product een <strong>reguliere modelfoto</strong> in (die de galerij
-        leidt — model eerst) en een <strong>grote-maat-foto</strong> die getoond
-        wordt zodra de klant een grote maat kiest. AI-gegenereerd of echt — plak de
-        afbeeldings-URL.
+    <BackofficeShell active="/account/productmedia" title="Modelfoto's">
+      <p className="font-sans text-sm text-pslate">
+        Stel per product een <strong className="text-pnavy">reguliere modelfoto</strong> in (die de galerij leidt — model eerst) en een <strong className="text-pnavy">grote-maat-foto</strong> die getoond wordt zodra de klant een grote maat kiest. AI-gegenereerd of echt — plak de afbeeldings-URL.
       </p>
-      <SizeMediaForm />
-    </div>
+      <div className="rounded-xl border border-pnavy-100 bg-white p-5 shadow-portal">
+        <SizeMediaForm />
+      </div>
+    </BackofficeShell>
   );
 }

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { getDashboard } from "@/lib/analytics";
 import { getProductsByHandles } from "@/lib/catalog";
+import { BackofficeShell } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Analytics", robots: { index: false, follow: false } };
@@ -32,10 +33,8 @@ export default async function AnalyticsPage() {
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Analytics</h1>
-      <p className="mt-2 font-sans text-sm text-muted">Laatste {d.days} dagen · anoniem, eigen data</p>
+    <BackofficeShell active="/account/analytics" title="Funnel & analytics">
+      <p className="font-sans text-sm text-pslate">Laatste {d.days} dagen · anoniem, eigen data</p>
 
       {/* Kerncijfers */}
       <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -70,7 +69,7 @@ export default async function AnalyticsPage() {
         />
         <List title="Activiteit per type" rows={d.counts.map((c) => ({ label: c.type, n: c.n }))} />
       </div>
-    </div>
+    </BackofficeShell>
   );
 }
 

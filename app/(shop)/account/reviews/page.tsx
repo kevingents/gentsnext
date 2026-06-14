@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { listReviewsForModeration } from "@/lib/reviews-db";
 import { ReviewsModeration } from "@/components/account/reviews-moderation";
+import { BackofficeShell } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Reviews", robots: { index: false, follow: false } };
@@ -36,13 +37,11 @@ export default async function ReviewsAdminPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Reviews</h1>
-      <p className="mt-2 font-sans text-sm text-muted">
+    <BackofficeShell active="/account/reviews" title="Reviews">
+      <p className="font-sans text-sm text-pslate">
         {items.length} review(s) wachten op moderatie. Geverifieerde kopers worden automatisch geplaatst.
       </p>
       <ReviewsModeration initial={items} />
-    </div>
+    </BackofficeShell>
   );
 }
