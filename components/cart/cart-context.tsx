@@ -19,12 +19,16 @@ export type CartLine = {
   roleLabel?: string; // bv. "Colbert"
 };
 
+/** Korte "toegevoegd aan winkelwagen"-bevestiging (site-breed, i.p.v. de drawer openklappen). */
+export type AddedNotice = { line: CartLine; extraCount: number; nonce: number };
+
 type CartState = {
   lines: CartLine[];
   isOpen: boolean;
   count: number;
   subtotalCents: number;
-  add: (line: Omit<CartLine, "id">, opts?: { open?: boolean }) => void;
+  added: AddedNotice | null;
+  add: (line: Omit<CartLine, "id">) => void;
   addMany: (lines: Omit<CartLine, "id">[]) => void;
   remove: (id: string) => void;
   removeGroup: (groupId: string) => void;
@@ -32,6 +36,7 @@ type CartState = {
   clear: () => void;
   open: () => void;
   close: () => void;
+  dismissAdded: () => void;
 };
 
 const CartCtx = createContext<CartState | null>(null);
@@ -44,6 +49,7 @@ function lineId(l: Omit<CartLine, "id">): string {
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [added, setAdded] = useState<AddedNotice | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrateren uit localStorage na mount (SSR-veilig).
@@ -66,7 +72,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lines, hydrated]);
 
-  const add = useCallback((line: Omit<CartLine, "id">, opts?: { open?: boolean }) => {
+  const add = useCallback((line: Omit<CartLine, "id">) => {
     const id = lineId(line);
     track("add_to_cart", { handle: line.productHandle, valueCents: line.priceCents * line.qty });
     setLines((prev) => {
@@ -74,9 +80,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (existing) return prev.map((l) => (l.id === id ? { ...l, qty: l.qty + line.qty } : l));
       return [...prev, { ...line, id }];
     });
-    // De winkelwagen-drawer opent standaard (bv. PDP); bij het samenstellen van
-    // een look (meerdere toevoegingen achter elkaar) zetten we open:false.
-    if (opts?.open !== false) setIsOpen(true);
+    // Géén drawer openklappen: een korte "toegevoegd"-bevestiging i.p.v. (Mr Marvis-stijl).
+    setAdded((prev) => ({ line: { ...line, id }, extraCount: 0, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
 
   const addMany = useCallback((newLines: Omit<CartLine, "id">[]) => {
@@ -90,8 +95,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
-    setIsOpen(true);
+    if (newLines[0]) {
+      const first = newLines[0];
+      setAdded((prev) => ({ line: { ...first, id: lineId(first) }, extraCount: newLines.length - 1, nonce: (prev?.nonce ?? 0) + 1 }));
+    }
   }, []);
+
+  const dismissAdded = useCallback(() => setAdded(null), []);
 
   const remove = useCallback((id: string) => setLines((prev) => prev.filter((l) => l.id !== id)), []);
   const removeGroup = useCallback(
@@ -117,6 +127,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     isOpen,
     count,
     subtotalCents,
+    added,
     add,
     addMany,
     remove,
@@ -125,6 +136,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     clear,
     open,
     close,
+    dismissAdded,
   };
 
   return <CartCtx.Provider value={value}>{children}</CartCtx.Provider>;

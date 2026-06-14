@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { CartProvider } from "@/components/cart/cart-context";
 import { CartDrawer } from "@/components/cart/cart-drawer";
+import { AddedToCartToast } from "@/components/cart/added-toast";
 import { WishlistProvider } from "@/components/wishlist/wishlist-context";
 import { BackToTop } from "@/components/back-to-top";
 import { CookieNotice } from "@/components/cookie-notice";
@@ -25,6 +26,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           <main id="main" className="flex-1">{children}</main>
           <SiteFooter />
           <CartDrawer />
+          <AddedToCartToast />
           <BackToTop />
           <HelpButton />
           <CookieNotice />
