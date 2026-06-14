@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { issueMagicToken } from "@/lib/account";
+import { issueMagicToken, magicLinkThrottled } from "@/lib/account";
 import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,12 @@ export async function POST(req: Request) {
   }
   if (!/.+@.+\..+/.test(email)) {
     return NextResponse.json({ ok: false, error: "ongeldig e-mailadres" }, { status: 400 });
+  }
+
+  // Anti-bombing: te veel aanvragen voor dit adres? Doe alsof het gelukt is
+  // (niet onthullen of het bestaat) maar stuur geen nieuwe mail.
+  if (await magicLinkThrottled(email)) {
+    return NextResponse.json({ ok: true, sent: true });
   }
 
   const { rawToken } = await issueMagicToken(email);

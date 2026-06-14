@@ -42,6 +42,27 @@ export async function findOrCreateCustomer(email: string) {
   return created;
 }
 
+/**
+ * Throttle tegen e-mail-bombing: max N magic-links per e-mailadres per 10 min.
+ * Telt alleen bestaande klanten (onbekend adres = nog geen sessies = niet beperkt).
+ */
+export async function magicLinkThrottled(email: string, maxPer10Min = 4): Promise<boolean> {
+  const db = getDb();
+  const norm = email.trim().toLowerCase();
+  const rows = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(customerSessions)
+    .innerJoin(customers, eq(customers.id, customerSessions.customerId))
+    .where(
+      and(
+        eq(customers.email, norm),
+        eq(customerSessions.kind, "magic"),
+        sql`${customerSessions.createdAt} > now() - interval '10 minutes'`,
+      ),
+    );
+  return (rows[0]?.n ?? 0) >= maxPer10Min;
+}
+
 /** Maakt een magic-login-token. Retourneert het ruwe token (voor de e-maillink). */
 export async function issueMagicToken(email: string): Promise<{ customerId: string; rawToken: string }> {
   const db = getDb();
