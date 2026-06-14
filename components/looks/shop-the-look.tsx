@@ -7,6 +7,7 @@ import { formatEuro } from "@/lib/pricing";
 import type { ResolvedLook, LookBuyData } from "@/lib/looks";
 import { useCart } from "@/components/cart/cart-context";
 import { track } from "@/lib/track-client";
+import { SizeMatrix } from "@/components/pdp/size-matrix";
 
 /**
  * Interactieve modelfoto met GENUMMERDE hotspots → elk cijfer wijst het artikel
@@ -138,32 +139,19 @@ export function ShopTheLook({
                       <span className="font-sans text-xs text-muted">Kies je maat</span>
                       <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">Vind mijn maat</Link>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {data.sizes.map((s) => {
-                        const out = s.qty <= 0;
-                        const on = sel === s.size;
-                        return (
-                          <button
-                            key={s.size}
-                            type="button"
-                            disabled={out}
-                            onClick={() => setPicked((p) => ({ ...p, [i]: s.size }))}
-                            className={`min-w-9 rounded-card border px-2 py-1 font-sans text-xs transition-colors ${
-                              out ? "cursor-not-allowed border-line text-muted line-through opacity-50" : on ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"
-                            }`}
-                          >
-                            {s.size}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <SizeMatrix
+                      sizes={data.sizes.map((s) => ({ ...s, known: true }))}
+                      hoofdgroep={data.hoofdgroep}
+                      selected={sel ?? null}
+                      onSelect={(size) => setPicked((p) => ({ ...p, [i]: size }))}
+                    />
                     <button
                       type="button"
                       onClick={() => addItem(i)}
                       disabled={!selSize || (selSize?.qty ?? 0) <= 0}
                       className="btn-primary mt-2.5 w-full !py-2 text-sm"
                     >
-                      {added[i] ? "Toegevoegd ✓" : !sel ? "Kies een maat" : "In winkelwagen"}
+                      {added[i] ? "Toegevoegd" : !sel ? "Kies een maat" : "In winkelwagen"}
                     </button>
                   </div>
                 ) : (

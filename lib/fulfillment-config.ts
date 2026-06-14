@@ -69,9 +69,13 @@ export function branchPriority(branchId: string): number {
 export function safetyStockFor(branchId: string, s: Settings): number {
   return isWarehouse(branchId) ? s.warehouseSafetyStock : s.retailSafetyStock;
 }
-export function cutoffHourFor(branchId: string, s: Settings): number {
+export function cutoffHourFor(branchId: string, s: Settings, dayName?: string): number {
   if (s.branchCutoffs && s.branchCutoffs[branchId] != null) return s.branchCutoffs[branchId];
-  return isWarehouse(branchId) ? s.warehouseCutoffHour : s.storeCutoffHour;
+  const wh = isWarehouse(branchId);
+  // Per-weekdag-override (bv. magazijn vrijdag 16:00) gaat vóór het basisuur.
+  const byDay = wh ? s.warehouseCutoffByDay : s.storeCutoffByDay;
+  if (dayName && byDay && byDay[dayName] != null) return byDay[dayName];
+  return wh ? s.warehouseCutoffHour : s.storeCutoffHour;
 }
 
 function parseList(raw: string | undefined, fallback: string[]): string[] {

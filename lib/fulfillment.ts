@@ -104,7 +104,8 @@ function openOn(branchId: string, dayName: string, isoDate: string, hoursByCity:
 
 function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>, settings: Settings) {
   const n = nowNL();
-  const cutoff = cutoffHourFor(branchId, settings);
+  // Cutoff van vandaag (per-weekdag, bv. magazijn vrijdag 16:00).
+  const cutoff = cutoffHourFor(branchId, settings, DAYS[n.dayIndex]);
   for (let k = 0; k < 9; k++) {
     const day = DAYS[(n.dayIndex + k) % 7];
     const iso = isoAtOffset(n, k);
@@ -399,11 +400,12 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
     rangeLabel: fromWarehouseOnly ? `${settings.warehouseTransitDays}-${settings.warehouseTransitDays + 1} werkdagen` : `${settings.standardMinDays}-${settings.standardMaxDays} werkdagen`,
     surchargeCents: 0,
   };
-  // Express alleen aanbieden als het ÉCHT eerder in huis is dan standaard —
-  // anders betaalt de klant voor niks (geen "Sneller · Sneller" op dezelfde dag).
+  // Express kan ALLEEN als de hele order rechtstreeks uit het magazijn komt —
+  // vanuit een winkel of bij een split is snelle levering niet mogelijk. En het
+  // moet écht eerder in huis zijn dan standaard (anders betaalt de klant voor niks).
   const ed = settings.expressTransitDays;
   const express: DeliveryOption | null =
-    expK < stdShownK
+    fromWarehouseOnly && expK < stdShownK
       ? { dateLabel: dayLabel(n, expK), rangeLabel: `${ed} werkdag${ed === 1 ? "" : "en"}`, surchargeCents: settings.expressSurchargeCents }
       : null;
 

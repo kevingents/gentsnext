@@ -23,6 +23,10 @@ export type Settings = {
   warehouseCutoffHour: number;
   storeCutoffHour: number;
   branchCutoffs: Record<string, number>;
+  /** Per-weekdag cutoff (NL-dagnaam → uur); overschrijft het basisuur op die dag.
+   *  Bv. magazijn verzendt op vrijdag tot 16:00, winkels tot 17:00. */
+  warehouseCutoffByDay: Record<string, number>;
+  storeCutoffByDay: Record<string, number>;
   // Levertijd (werkdagen)
   standardMinDays: number;
   standardMaxDays: number;
@@ -60,9 +64,13 @@ export const DEFAULT_SETTINGS: Settings = {
   freeShippingCents: num(process.env.GENTS_FREE_SHIPPING_CENTS, 7500),
   shippingCents: num(process.env.GENTS_SHIPPING_CENTS, 495),
   expressSurchargeCents: num(process.env.GENTS_EXPRESS_SURCHARGE_CENTS, 150),
-  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 16),
-  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 15),
+  // Basisuur = "einde dag" (geen vroege cutoff); de bindende cutoff zit in de
+  // per-weekdag-override hieronder (magazijn vrijdag 16:00, winkels vrijdag 17:00).
+  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 23),
+  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 23),
   branchCutoffs: {},
+  warehouseCutoffByDay: { vrijdag: 16 },
+  storeCutoffByDay: { vrijdag: 17 },
   standardMinDays: num(process.env.GENTS_STANDARD_MIN_DAYS, 2),
   standardMaxDays: num(process.env.GENTS_STANDARD_MAX_DAYS, 3),
   warehouseTransitDays: 1,
@@ -104,6 +112,8 @@ export async function getSettings(): Promise<Settings> {
       ...DEFAULT_SETTINGS,
       ...stored,
       branchCutoffs: { ...DEFAULT_SETTINGS.branchCutoffs, ...(stored.branchCutoffs || {}) },
+      warehouseCutoffByDay: { ...DEFAULT_SETTINGS.warehouseCutoffByDay, ...(stored.warehouseCutoffByDay || {}) },
+      storeCutoffByDay: { ...DEFAULT_SETTINGS.storeCutoffByDay, ...(stored.storeCutoffByDay || {}) },
       modelLook: { ...DEFAULT_SETTINGS.modelLook, ...(stored.modelLook || {}) },
       giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
     };

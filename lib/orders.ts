@@ -149,9 +149,23 @@ export async function createOrder(
       appliedCode = v.code;
     }
   }
+  // Express kan alléén als de héle order rechtstreeks uit het magazijn leverbaar
+  // is (snelle levering kan niet vanuit de winkels). Server-side borgen: bij een
+  // split, winkel-bron of tekort zetten we stilletjes terug naar standaard —
+  // zo betaalt niemand voor express die we niet kunnen waarmaken.
+  let method: DeliveryMethod = deliveryMethod;
+  if (method === "express") {
+    const plan = await allocateOrder(
+      lines.map((l) => ({ sku: l.sku, qty: l.quantity, groupId: l.groupId })),
+      { country: contact.country || "NL" }
+    );
+    const warehouseOnly = plan.fullyAllocated && plan.splitCount === 1 && plan.shipments.every((s) => s.isWarehouse);
+    if (!warehouseOnly) method = "standard";
+  }
+
   // Verzendkosten + (optionele) express-toeslag — alles uit de instelbare settings.
   const baseShipping = subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
-  const surcharge = deliveryMethod === "express" ? settings.expressSurchargeCents : 0;
+  const surcharge = method === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
   const totalBeforeGiftcard = Math.max(0, subtotalCents - discountCents) + shippingCents;
   // Cadeaubon als betaalmiddel: dekt (een deel van) het hele bedrag incl. verzending.
@@ -186,7 +200,7 @@ export async function createOrder(
       country: (contact.country || "NL").trim(),
       companyName: (contact.companyName || "").trim(),
       vatNumber: (contact.vatNumber || "").trim(),
-      deliveryMethod,
+      deliveryMethod: method,
       voucherCode: appliedCode,
       discountCents,
       giftcardCode: appliedGiftcard,
