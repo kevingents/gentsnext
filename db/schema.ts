@@ -663,3 +663,33 @@ export const giftcardTransactions = pgTable(
     index("giftcard_tx_order_idx").on(t.orderNumber),
   ]
 );
+
+/* ─────────────────────────── Nieuwsbrief ───────────────────────────────── */
+
+/**
+ * Nieuwsbrief-inschrijvingen — eigen store (bron van waarheid), met kanaalkeuze
+ * e-mail óf WhatsApp. E-mail-opt-ins worden óók naar de Resend-audience gepusht;
+ * WhatsApp-opt-ins (telefoon) alleen hier (geen Resend-equivalent). AVG: alleen
+ * bij expliciete opt-in; uitschrijven via status.
+ */
+export const newsletterSubscribers = pgTable(
+  "newsletter_subscribers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 'email' | 'whatsapp'. */
+    channel: text("channel").notNull().default("email"),
+    email: text("email").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    /** 'subscribed' | 'unsubscribed'. */
+    status: text("status").notNull().default("subscribed"),
+    /** Herkomst: 'site' | 'checkout' | 'popup'. */
+    source: text("source").notNull().default("site"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("newsletter_email_idx").on(t.email),
+    index("newsletter_phone_idx").on(t.phone),
+    index("newsletter_channel_idx").on(t.channel),
+  ]
+);
