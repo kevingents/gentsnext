@@ -6,7 +6,7 @@ import {
   parseRange, getKpis, revenueByDay, topProducts, revenueByCategory,
   statusDistribution, voucherGiftcardImpact, newsletterStats, reviewStats, funnel,
 } from "@/lib/reports";
-import { AdminNav, Kpi, BarList, DayBars, RangeForm, Section, euro } from "@/components/account/report-ui";
+import { BackofficeShell, Kpi, BarList, DayBars, RangeForm, Section, euro } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Statistieken", robots: { index: false, follow: false } };
@@ -35,13 +35,9 @@ export default async function StatistiekenPage({ searchParams }: Props) {
   const fmtPct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "—");
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Statistieken</h1>
-      <div className="mt-6"><AdminNav active="/account/statistieken" /></div>
-
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <p className="font-sans text-sm text-muted">Periode {sp.from || "—"} t/m {sp.to || "vandaag"} · online webshop-orders</p>
+    <BackofficeShell active="/account/statistieken" title="Statistieken">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <p className="text-sm text-pslate">Periode {sp.from || "—"} t/m {sp.to || "vandaag"} · online webshop-orders</p>
         <RangeForm from={r.from} to={r.to} action="/account/statistieken" />
       </div>
 
@@ -105,14 +101,14 @@ export default async function StatistiekenPage({ searchParams }: Props) {
           />
         </Section>
       </div>
-    </div>
+    </BackofficeShell>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-pslate">{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
   );

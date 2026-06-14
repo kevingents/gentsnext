@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { parseRange, getKpis, topProducts, revenueByCategory, topCustomers, voucherGiftcardImpact, newsletterStats, reviewStats } from "@/lib/reports";
-import { AdminNav, Section, RangeForm, euro } from "@/components/account/report-ui";
+import { BackofficeShell, Section, RangeForm, euro } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Rapportages", robots: { index: false, follow: false } };
@@ -32,13 +32,9 @@ export default async function RapportagesPage({ searchParams }: Props) {
   const storeAov = kpi.storeOrders ? Math.round(kpi.storeRevenueCents / kpi.storeOrders) : 0;
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Rapportages</h1>
-      <div className="mt-6"><AdminNav active="/account/rapportages" /></div>
-
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <p className="font-sans text-sm text-muted">Periode {sp.from || "—"} t/m {sp.to || "vandaag"}</p>
+    <BackofficeShell active="/account/rapportages" title="Rapportages">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <p className="text-sm text-pslate">Periode {sp.from || "—"} t/m {sp.to || "vandaag"}</p>
         <RangeForm from={r.from} to={r.to} action="/account/rapportages" />
       </div>
 
@@ -107,15 +103,15 @@ export default async function RapportagesPage({ searchParams }: Props) {
           </div>
         </Section>
       </div>
-    </div>
+    </BackofficeShell>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="text-muted">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
+      <dt className="text-pslate">{label}</dt>
+      <dd className="tabular-nums text-pnavy">{value}</dd>
     </div>
   );
 }

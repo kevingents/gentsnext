@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers } from "@/db/schema";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
-import { AdminNav, Kpi, Section, euro } from "@/components/account/report-ui";
+import { BackofficeShell, Kpi, Section, euro } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Klant", robots: { index: false, follow: false } };
@@ -38,12 +38,8 @@ export default async function KlantDetailPage({ params }: Props) {
   const name = `${c.firstName} ${c.lastName}`.trim() || c.email.split("@")[0];
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">{name}</h1>
-      <div className="mt-6"><AdminNav active="/account/klanten" /></div>
-
-      <Link href="/account/klanten" className="mb-4 inline-block font-sans text-sm text-muted underline">← Alle klanten</Link>
+    <BackofficeShell active="/account/klanten" title={name}>
+      <Link href="/account/klanten" className="inline-block text-sm text-pslate underline">← Alle klanten</Link>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Online besteed" value={euro(onlineSpent)} sub={`${data.onlineOrders.length} orders`} accent />
@@ -126,15 +122,15 @@ export default async function KlantDetailPage({ params }: Props) {
           ) : null}
         </Section>
       </div>
-    </div>
+    </BackofficeShell>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="text-muted">{label}</dt>
-      <dd className="max-w-[60%] truncate text-right">{value}</dd>
+      <dt className="text-pslate">{label}</dt>
+      <dd className="max-w-[60%] truncate text-right text-pnavy">{value}</dd>
     </div>
   );
 }

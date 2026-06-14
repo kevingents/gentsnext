@@ -30,6 +30,10 @@ const config: Config = {
         surface: "#F6F5F2",
         navy: { DEFAULT: "#1A1A2E", soft: "#2A2A44" },
         gold: { DEFAULT: "#C9A14A", soft: "#E4D2A6" },
+        // Back-office (portal-huisstijl, los van de storefront): navy/cream/slate.
+        pnavy: { DEFAULT: "#0a1f33", 50: "#eef2f6", 100: "#d4dde6", 600: "#13314d", 700: "#0e2740", 800: "#0a1f33", 900: "#071521" },
+        pslate: "#3a4a5a",
+        pcream: "#f5f5f2",
         // Statuskleuren (functioneel, niet merk) — bewust ingetogen.
         success: "#2F6F4E",
         danger: "#9B2C2C",
@@ -61,6 +65,7 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(10 10 10 / 0.04), 0 8px 24px -16px rgb(10 10 10 / 0.18)",
+        portal: "0 1px 2px 0 rgb(10 31 51 / 0.04), 0 1px 3px 0 rgb(10 31 51 / 0.08)",
         drawer: "-8px 0 32px -12px rgb(10 10 10 / 0.25)",
         pop: "0 12px 40px -12px rgb(10 10 10 / 0.28)",
       },

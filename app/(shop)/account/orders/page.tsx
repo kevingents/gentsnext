@@ -5,7 +5,7 @@ import { getSessionCustomer } from "@/lib/account";
 import { listOperationalOrders } from "@/lib/orders";
 import { listOrders } from "@/lib/reports";
 import { OrdersAdmin } from "@/components/account/orders-admin";
-import { AdminNav, Section, euro } from "@/components/account/report-ui";
+import { BackofficeShell, Section, euro, StatusBadge, fieldClass, btnSecondary } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Orders", robots: { index: false, follow: false } };
@@ -61,15 +61,11 @@ export default async function OrdersPage({ searchParams }: Props) {
   };
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Orders</h1>
-      <div className="mt-6"><AdminNav active="/account/orders" /></div>
-
+    <BackofficeShell active="/account/orders" title="Orders">
       {operational.length ? (
-        <div className="mb-8">
+        <div>
           <Section title={`Te verwerken — ${operational.length} operationele orders`}>
-            <p className="mb-3 font-sans text-xs text-muted">Nieuwe webshop-orders (geen geïmporteerde historie). Een statuswijziging stuurt de klant een update.</p>
+            <p className="mb-3 text-xs text-pslate">Nieuwe webshop-orders (geen geïmporteerde historie). Een statuswijziging stuurt de klant een update.</p>
             <OrdersAdmin orders={operational} />
           </Section>
         </div>
@@ -79,74 +75,74 @@ export default async function OrdersPage({ searchParams }: Props) {
         {/* Filter (GET) */}
         <form method="get" action="/account/orders" className="mb-4 flex flex-wrap items-end gap-2">
           <label className="block">
-            <span className="font-sans text-xs text-muted">Zoek (nr/e-mail/naam/postcode)</span>
-            <input name="q" defaultValue={sp.q || ""} className="mt-0.5 block w-56 border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+            <span className="text-xs text-pslate">Zoek (nr/e-mail/naam/postcode)</span>
+            <input name="q" defaultValue={sp.q || ""} className={`mt-0.5 block w-56 rounded-lg ${fieldClass}`} />
           </label>
           <label className="block">
-            <span className="font-sans text-xs text-muted">Status</span>
-            <select name="status" defaultValue={sp.status || ""} className="mt-0.5 block border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none">
+            <span className="text-xs text-pslate">Status</span>
+            <select name="status" defaultValue={sp.status || ""} className={`mt-0.5 block rounded-lg ${fieldClass}`}>
               {STATUSES.map((s) => <option key={s} value={s}>{s ? STATUS_NL[s] || s : "Alle"}</option>)}
             </select>
           </label>
           <label className="block">
-            <span className="font-sans text-xs text-muted">Kanaal</span>
-            <select name="channel" defaultValue={sp.channel || ""} className="mt-0.5 block border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none">
+            <span className="text-xs text-pslate">Kanaal</span>
+            <select name="channel" defaultValue={sp.channel || ""} className={`mt-0.5 block rounded-lg ${fieldClass}`}>
               <option value="">Alle</option>
               <option value="online">Webshop</option>
               <option value="import">Geïmporteerd</option>
             </select>
           </label>
           <label className="block">
-            <span className="font-sans text-xs text-muted">Van</span>
-            <input type="date" name="from" defaultValue={sp.from || ""} className="mt-0.5 block border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+            <span className="text-xs text-pslate">Van</span>
+            <input type="date" name="from" defaultValue={sp.from || ""} className={`mt-0.5 block rounded-lg ${fieldClass}`} />
           </label>
           <label className="block">
-            <span className="font-sans text-xs text-muted">Tot</span>
-            <input type="date" name="to" defaultValue={sp.to || ""} className="mt-0.5 block border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+            <span className="text-xs text-pslate">Tot</span>
+            <input type="date" name="to" defaultValue={sp.to || ""} className={`mt-0.5 block rounded-lg ${fieldClass}`} />
           </label>
-          <button type="submit" className="btn-ghost !px-4 !py-1.5 text-sm">Filter</button>
-          {(sp.q || sp.status || sp.channel || sp.from || sp.to) ? <Link href="/account/orders" className="font-sans text-sm text-muted underline">wis</Link> : null}
+          <button type="submit" className={btnSecondary}>Filter</button>
+          {(sp.q || sp.status || sp.channel || sp.from || sp.to) ? <Link href="/account/orders" className="text-sm text-pslate underline">wis</Link> : null}
         </form>
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse font-sans text-sm">
+          <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                <th className="py-2 pr-3">Order</th>
-                <th className="py-2 pr-3">Datum</th>
-                <th className="py-2 pr-3">Klant</th>
-                <th className="py-2 pr-3">Plaats</th>
-                <th className="py-2 pr-3">Kanaal</th>
-                <th className="py-2 pr-3">Status</th>
-                <th className="py-2 pl-3 text-right">Bedrag</th>
+              <tr className="border-b border-pnavy-100 bg-pnavy-50/50 text-left text-xs uppercase tracking-wider text-pslate">
+                <th className="px-3 py-2.5">Order</th>
+                <th className="px-3 py-2.5">Datum</th>
+                <th className="px-3 py-2.5">Klant</th>
+                <th className="px-3 py-2.5">Plaats</th>
+                <th className="px-3 py-2.5">Kanaal</th>
+                <th className="px-3 py-2.5">Status</th>
+                <th className="px-3 py-2.5 text-right">Bedrag</th>
               </tr>
             </thead>
             <tbody>
               {list.rows.map((o) => (
-                <tr key={o.orderNumber} className="border-b border-line/60">
-                  <td className="py-2 pr-3 font-medium">{o.orderNumber}</td>
-                  <td className="py-2 pr-3 text-muted">{o.createdAt}</td>
-                  <td className="py-2 pr-3"><span className="block max-w-[14rem] truncate">{o.name || "—"}</span><span className="block max-w-[14rem] truncate text-xs text-muted">{o.email}</span></td>
-                  <td className="py-2 pr-3 text-muted">{o.city}</td>
-                  <td className="py-2 pr-3"><span className="text-xs text-muted">{o.channel === "import" ? "import" : "webshop"}</span></td>
-                  <td className="py-2 pr-3">{STATUS_NL[o.status] || o.status}</td>
-                  <td className="py-2 pl-3 text-right tabular-nums">{euro(o.totalCents)}</td>
+                <tr key={o.orderNumber} className="border-b border-pnavy-50 hover:bg-pnavy-50/40">
+                  <td className="px-3 py-2 font-medium text-pnavy">{o.orderNumber}</td>
+                  <td className="px-3 py-2 text-pslate">{o.createdAt}</td>
+                  <td className="px-3 py-2"><span className="block max-w-[14rem] truncate text-pnavy">{o.name || "—"}</span><span className="block max-w-[14rem] truncate text-xs text-pslate">{o.email}</span></td>
+                  <td className="px-3 py-2 text-pslate">{o.city}</td>
+                  <td className="px-3 py-2 text-xs text-pslate">{o.channel === "import" ? "import" : "webshop"}</td>
+                  <td className="px-3 py-2"><StatusBadge status={o.status} /></td>
+                  <td className="px-3 py-2 text-right tabular-nums text-pnavy">{euro(o.totalCents)}</td>
                 </tr>
               ))}
-              {!list.rows.length ? <tr><td colSpan={7} className="py-6 text-center text-muted">Geen orders gevonden.</td></tr> : null}
+              {!list.rows.length ? <tr><td colSpan={7} className="py-6 text-center text-pslate">Geen orders gevonden.</td></tr> : null}
             </tbody>
           </table>
         </div>
 
         {/* Paginatie */}
-        <div className="mt-4 flex items-center justify-between font-sans text-sm">
-          <span className="text-muted">Pagina {page} / {totalPages.toLocaleString("nl-NL")}</span>
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <span className="text-pslate">Pagina {page} / {totalPages.toLocaleString("nl-NL")}</span>
           <div className="flex gap-2">
-            {page > 1 ? <Link href={qs({ page: page - 1 })} className="btn-ghost !px-3 !py-1.5">← Vorige</Link> : null}
-            {page < totalPages ? <Link href={qs({ page: page + 1 })} className="btn-ghost !px-3 !py-1.5">Volgende →</Link> : null}
+            {page > 1 ? <Link href={qs({ page: page - 1 })} className={btnSecondary}>← Vorige</Link> : null}
+            {page < totalPages ? <Link href={qs({ page: page + 1 })} className={btnSecondary}>Volgende →</Link> : null}
           </div>
         </div>
       </Section>
-    </div>
+    </BackofficeShell>
   );
 }

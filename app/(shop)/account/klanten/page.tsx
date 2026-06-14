@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { listCustomers } from "@/lib/reports";
-import { AdminNav, Section, euro } from "@/components/account/report-ui";
+import { BackofficeShell, Section, euro, fieldClass, btnSecondary } from "@/components/account/report-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Klanten", robots: { index: false, follow: false } };
@@ -34,68 +34,64 @@ export default async function KlantenPage({ searchParams }: Props) {
   };
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Beheer</p>
-      <h1 className="mt-2 text-display-md">Klanten</h1>
-      <div className="mt-6"><AdminNav active="/account/klanten" /></div>
-
+    <BackofficeShell active="/account/klanten" title="Klanten">
       <Section title={`Klantoverzicht — ${list.total.toLocaleString("nl-NL")}`}>
         <form method="get" action="/account/klanten" className="mb-4 flex flex-wrap items-end gap-2">
           <label className="block">
-            <span className="font-sans text-xs text-muted">Zoek (naam/e-mail/telefoon/SRS)</span>
-            <input name="q" defaultValue={sp.q || ""} className="mt-0.5 block w-64 border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none" />
+            <span className="text-xs text-pslate">Zoek (naam/e-mail/telefoon/SRS)</span>
+            <input name="q" defaultValue={sp.q || ""} className={`mt-0.5 block w-64 rounded-lg ${fieldClass}`} />
           </label>
           <label className="block">
-            <span className="font-sans text-xs text-muted">Sorteer</span>
-            <select name="sort" defaultValue={sort} className="mt-0.5 block border border-line bg-canvas px-2 py-1.5 font-sans text-sm focus:border-ink focus:outline-none">
+            <span className="text-xs text-pslate">Sorteer</span>
+            <select name="sort" defaultValue={sort} className={`mt-0.5 block rounded-lg ${fieldClass}`}>
               <option value="spent">Meeste besteed</option>
               <option value="orders">Meeste orders</option>
               <option value="recent">Nieuwste</option>
             </select>
           </label>
-          <button type="submit" className="btn-ghost !px-4 !py-1.5 text-sm">Filter</button>
-          {sp.q ? <Link href="/account/klanten" className="font-sans text-sm text-muted underline">wis</Link> : null}
+          <button type="submit" className={btnSecondary}>Filter</button>
+          {sp.q ? <Link href="/account/klanten" className="text-sm text-pslate underline">wis</Link> : null}
         </form>
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse font-sans text-sm">
+          <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                <th className="py-2 pr-3">Klant</th>
-                <th className="py-2 pr-3">Telefoon</th>
-                <th className="py-2 pr-3">SRS</th>
-                <th className="py-2 pr-3 text-right">Orders</th>
-                <th className="py-2 pr-3 text-right">Besteed</th>
-                <th className="py-2 pl-3">Sinds</th>
+              <tr className="border-b border-pnavy-100 bg-pnavy-50/50 text-left text-xs uppercase tracking-wider text-pslate">
+                <th className="px-3 py-2.5">Klant</th>
+                <th className="px-3 py-2.5">Telefoon</th>
+                <th className="px-3 py-2.5">SRS</th>
+                <th className="px-3 py-2.5 text-right">Orders</th>
+                <th className="px-3 py-2.5 text-right">Besteed</th>
+                <th className="px-3 py-2.5">Sinds</th>
               </tr>
             </thead>
             <tbody>
               {list.rows.map((c) => (
-                <tr key={c.id} className="border-b border-line/60">
-                  <td className="py-2 pr-3">
-                    <Link href={`/account/klanten/${c.id}`} className="block max-w-[16rem] truncate font-medium hover:underline">{c.name || c.email.split("@")[0]}</Link>
-                    <span className="block max-w-[16rem] truncate text-xs text-muted">{c.email}</span>
+                <tr key={c.id} className="border-b border-pnavy-50 hover:bg-pnavy-50/40">
+                  <td className="px-3 py-2">
+                    <Link href={`/account/klanten/${c.id}`} className="block max-w-[16rem] truncate font-medium text-pnavy hover:underline">{c.name || c.email.split("@")[0]}</Link>
+                    <span className="block max-w-[16rem] truncate text-xs text-pslate">{c.email}</span>
                   </td>
-                  <td className="py-2 pr-3 text-muted">{c.phone || "—"}</td>
-                  <td className="py-2 pr-3 text-muted">{c.srsCustomerId || "—"}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{c.orders}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{euro(c.spentCents)}</td>
-                  <td className="py-2 pl-3 text-muted">{c.createdAt}</td>
+                  <td className="px-3 py-2 text-pslate">{c.phone || "—"}</td>
+                  <td className="px-3 py-2 text-pslate">{c.srsCustomerId || "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-pnavy">{c.orders}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-pnavy">{euro(c.spentCents)}</td>
+                  <td className="px-3 py-2 text-pslate">{c.createdAt}</td>
                 </tr>
               ))}
-              {!list.rows.length ? <tr><td colSpan={6} className="py-6 text-center text-muted">Geen klanten gevonden.</td></tr> : null}
+              {!list.rows.length ? <tr><td colSpan={6} className="py-6 text-center text-pslate">Geen klanten gevonden.</td></tr> : null}
             </tbody>
           </table>
         </div>
 
-        <div className="mt-4 flex items-center justify-between font-sans text-sm">
-          <span className="text-muted">Pagina {page} / {totalPages.toLocaleString("nl-NL")}</span>
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <span className="text-pslate">Pagina {page} / {totalPages.toLocaleString("nl-NL")}</span>
           <div className="flex gap-2">
-            {page > 1 ? <Link href={qs({ page: page - 1 })} className="btn-ghost !px-3 !py-1.5">← Vorige</Link> : null}
-            {page < totalPages ? <Link href={qs({ page: page + 1 })} className="btn-ghost !px-3 !py-1.5">Volgende →</Link> : null}
+            {page > 1 ? <Link href={qs({ page: page - 1 })} className={btnSecondary}>← Vorige</Link> : null}
+            {page < totalPages ? <Link href={qs({ page: page + 1 })} className={btnSecondary}>Volgende →</Link> : null}
           </div>
         </div>
       </Section>
-    </div>
+    </BackofficeShell>
   );
 }
