@@ -27,7 +27,9 @@ function storeName(branchId: string): string {
 
 function parseDate(s: string): Date {
   const d = new Date(String(s || "").replace(" ", "T"));
-  return isNaN(d.getTime()) ? new Date() : d;
+  // Bij een onleesbare/lege datum NIET op vandaag zetten (zou historie misdateren);
+  // epoch-sentinel maakt zichtbaar dat de SRS-datum ontbrak.
+  return isNaN(d.getTime()) ? new Date(0) : d;
 }
 
 type CustomerRow = { id: string; email: string; srsCustomerId: string | null };
@@ -58,12 +60,14 @@ export async function importStorePurchases(customer: CustomerRow): Promise<Store
   const existing = await db.select({ receiptId: storePurchases.receiptId }).from(storePurchases).where(eq(storePurchases.customerId, customer.id));
   const seen = new Set(existing.map((r) => r.receiptId).filter(Boolean) as string[]);
 
+  const batchSeen = new Set<string>(); // ook binnen één batch dedupen
   const rows = txns
-    .map((t) => {
-      const receiptId = t.receiptNr || `${t.branchId}-${t.posNr}-${t.dateTime}`;
-      return { t, receiptId };
+    .map((t) => ({ t, receiptId: t.receiptNr || `${t.branchId}-${t.posNr}-${t.dateTime}` }))
+    .filter(({ receiptId }) => {
+      if (!receiptId || seen.has(receiptId) || batchSeen.has(receiptId)) return false;
+      batchSeen.add(receiptId);
+      return true;
     })
-    .filter(({ receiptId }) => receiptId && !seen.has(receiptId))
     .map(({ t, receiptId }) => ({
       customerId: customer.id,
       srsCustomerId: srsId,
@@ -72,15 +76,20 @@ export async function importStorePurchases(customer: CustomerRow): Promise<Store
       branchId: t.branchId || null,
       receiptId,
       purchasedAt: parseDate(t.dateTime),
-      totalCents: Math.round((Number(t.total) || 0) * 100),
+      totalCents: Math.round((Number(t.total) || 0) * 100), // som van charged; bij netto-retour negatief (correct)
       pointsEarned: 0,
-      lines: t.items.map((i) => ({
-        title: i.description || i.sku,
-        size: "",
-        color: "",
-        qty: Math.max(1, Math.floor(Number(i.pieces) || 1)),
-        unitPriceCents: Math.round((Number(i.charged || 0) / Math.max(1, Number(i.pieces) || 1)) * 100),
-      })),
+      lines: t.items.map((i) => {
+        // SRS 'Charged' = regeltotaal en is NEGATIEF bij retour-regels. Teken
+        // bewaren we (qty × stukprijs = regeltotaal blijft kloppen).
+        const pieces = Math.trunc(Number(i.pieces)) || 1;
+        return {
+          title: i.description || i.sku,
+          size: "",
+          color: "",
+          qty: pieces,
+          unitPriceCents: Math.round((Number(i.charged || 0) / pieces) * 100),
+        };
+      }),
     }));
 
   if (rows.length) await db.insert(storePurchases).values(rows);
