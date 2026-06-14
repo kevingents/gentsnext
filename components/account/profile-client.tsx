@@ -17,6 +17,10 @@ type Voucher = {
   id: string; code: string; description: string; kind: string; valueCents: number;
   percentOff: number; status: string; expiresAt: string | null;
 };
+type Giftcard = {
+  id: string; code: string; initialCents: number; balanceCents: number;
+  status: string; expiresAt: string | null; recipientEmail: string; createdAt: string;
+};
 type Loyalty = { id: string; points: number; reason: string; createdAt: string };
 type Address = {
   id: string; label: string; street: string; houseNumber: string; postalCode: string;
@@ -29,14 +33,14 @@ type Customer = {
 };
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
-  loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
+  giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
 };
 
 const TABS = [
   { key: "overzicht", label: "Overzicht" },
   { key: "bestellingen", label: "Bestellingen" },
   { key: "punten", label: "Spaarpunten" },
-  { key: "vouchers", label: "Vouchers" },
+  { key: "vouchers", label: "Tegoed" },
   { key: "maten", label: "Mijn maten" },
   { key: "gegevens", label: "Gegevens" },
   { key: "adressen", label: "Adresboek" },
@@ -275,26 +279,62 @@ function Punten({ data }: { data: Data }) {
 
 /* ── Vouchers ─────────────────────────────────────────────────────────────── */
 function Vouchers({ data }: { data: Data }) {
-  if (!data.vouchers.length) return <Empty title="Geen vouchers" body="Tegoedbonnen en acties verschijnen hier zodra je ze ontvangt." />;
+  const hasGiftcards = data.giftcards.length > 0;
+  const hasVouchers = data.vouchers.length > 0;
+  if (!hasGiftcards && !hasVouchers) {
+    return <Empty title="Geen tegoed" body="Cadeaubonnen, tegoedbonnen en acties verschijnen hier zodra je ze ontvangt." />;
+  }
   return (
-    <ul className="grid gap-4 sm:grid-cols-2">
-      {data.vouchers.map((v) => {
-        const expired = v.status !== "active" || (v.expiresAt && new Date(v.expiresAt).getTime() < Date.now());
-        const value = v.kind === "percent" ? `${v.percentOff}% korting` : formatEuro(v.valueCents);
-        return (
-          <li key={v.id} className={`border p-5 ${expired ? "border-line opacity-60" : "border-ink"}`}>
-            <p className="font-display text-2xl font-light">{value}</p>
-            <p className="mt-1 font-sans text-sm text-ink-soft">{v.description || "Tegoedbon"}</p>
-            <div className="mt-3 flex items-center justify-between">
-              <code className="bg-surface px-2 py-1 font-sans text-sm tracking-wider">{v.code}</code>
-              <span className="font-sans text-xs text-muted">
-                {expired ? "Verlopen" : v.expiresAt ? `Geldig t/m ${nlDate(v.expiresAt)}` : "Geen einddatum"}
-              </span>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="space-y-8">
+      {hasGiftcards ? (
+        <div>
+          <p className="font-sans text-sm font-medium text-ink">Cadeaubonnen</p>
+          <ul className="mt-3 grid gap-4 sm:grid-cols-2">
+            {data.giftcards.map((g) => {
+              const expired = Boolean(g.expiresAt && new Date(g.expiresAt).getTime() < Date.now());
+              const depleted = g.balanceCents <= 0;
+              return (
+                <li key={g.id} className={`border p-5 ${depleted || expired ? "border-line opacity-60" : "border-ink"}`}>
+                  <p className="font-sans text-xs uppercase tracking-wide text-muted">Saldo</p>
+                  <p className="font-display text-2xl font-light">{formatEuro(g.balanceCents)}</p>
+                  <p className="mt-0.5 font-sans text-xs text-muted">van {formatEuro(g.initialCents)}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <code className="bg-surface px-2 py-1 font-sans text-sm tracking-wider">{g.code}</code>
+                    <span className="font-sans text-xs text-muted">
+                      {depleted ? "Gebruikt" : expired ? "Verlopen" : g.expiresAt ? `Geldig t/m ${nlDate(g.expiresAt)}` : ""}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {hasVouchers ? (
+        <div>
+          {hasGiftcards ? <p className="font-sans text-sm font-medium text-ink">Vouchers</p> : null}
+          <ul className={`grid gap-4 sm:grid-cols-2 ${hasGiftcards ? "mt-3" : ""}`}>
+            {data.vouchers.map((v) => {
+              const expired = v.status !== "active" || (v.expiresAt && new Date(v.expiresAt).getTime() < Date.now());
+              const value = v.kind === "percent" ? `${v.percentOff}% korting` : formatEuro(v.valueCents);
+              return (
+                <li key={v.id} className={`border p-5 ${expired ? "border-line opacity-60" : "border-ink"}`}>
+                  <p className="font-display text-2xl font-light">{value}</p>
+                  <p className="mt-1 font-sans text-sm text-ink-soft">{v.description || "Tegoedbon"}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <code className="bg-surface px-2 py-1 font-sans text-sm tracking-wider">{v.code}</code>
+                    <span className="font-sans text-xs text-muted">
+                      {expired ? "Verlopen" : v.expiresAt ? `Geldig t/m ${nlDate(v.expiresAt)}` : "Geen einddatum"}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

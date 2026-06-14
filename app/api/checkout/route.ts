@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { createOrder, attachMolliePayment, type CheckoutItem, type DeliveryMethod } from "@/lib/orders";
+import {
+  createOrder,
+  attachMolliePayment,
+  finalizeGiftcardCoveredOrder,
+  type CheckoutItem,
+  type DeliveryMethod,
+} from "@/lib/orders";
 import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
 
 export const dynamic = "force-dynamic";
@@ -27,11 +33,24 @@ export async function POST(req: Request) {
 
   const deliveryMethod: DeliveryMethod = body?.deliveryMethod === "express" ? "express" : "standard";
   const voucherCode = String(body?.voucherCode || "").trim();
+  const giftcardCode = String(body?.giftcardCode || "").trim();
   let order;
   try {
-    order = await createOrder(c, items, deliveryMethod, voucherCode);
+    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode);
   } catch (e) {
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
+  }
+
+  const origin = new URL(req.url).origin;
+
+  // Volledig met cadeaubon (of 100%-voucher) betaald → geen Mollie nodig.
+  if (order.totalCents === 0) {
+    await finalizeGiftcardCoveredOrder(order.id);
+    return NextResponse.json({
+      ok: true,
+      configured: true,
+      checkoutUrl: `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`,
+    });
   }
 
   // Niet geconfigureerd: order is bewaard, maar betalen kan nog niet.
@@ -45,7 +64,6 @@ export async function POST(req: Request) {
     });
   }
 
-  const origin = new URL(req.url).origin;
   try {
     const payment = await createMolliePayment({
       amountCents: order.totalCents,

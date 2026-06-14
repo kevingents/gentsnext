@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getMolliePayment, mollieConfigured } from "@/lib/mollie";
-import { applyPaymentStatus, sendOrderConfirmationOnce, planAndPushFulfillmentOnce } from "@/lib/orders";
+import {
+  applyPaymentStatus,
+  sendOrderConfirmationOnce,
+  planAndPushFulfillmentOnce,
+  releaseOrderGiftcard,
+} from "@/lib/orders";
+import { applyGiftcardPaymentStatus } from "@/lib/giftcards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -31,11 +37,21 @@ export async function POST(req: Request) {
 
   try {
     const payment = await getMolliePayment(id);
+
+    // Cadeaubon-aankoop (eigen flow) — activeer + mail de bon, geen order.
+    if (payment.metadata && (payment.metadata as Record<string, unknown>).kind === "giftcard") {
+      await applyGiftcardPaymentStatus(payment.id, payment.status);
+      return NextResponse.json({ ok: true });
+    }
+
     await applyPaymentStatus(payment.id, payment.status);
     if (payment.status === "paid" || payment.status === "authorized") {
       await sendOrderConfirmationOnce(payment.id);
       // Allocatie (magazijn-eerst, minimaal splitsen) + SRS-weborder-push.
       await planAndPushFulfillmentOnce(payment.id);
+    } else if (["canceled", "expired", "failed"].includes(payment.status)) {
+      // Mislukte betaling → een ingezette cadeaubon weer vrijgeven.
+      await releaseOrderGiftcard(payment.id);
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

@@ -9,6 +9,7 @@ import { allocateOrder } from "@/lib/fulfillment";
 import { pushOrderToSRS } from "@/lib/srs";
 import { getSettings } from "@/lib/settings";
 import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
+import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -121,13 +122,16 @@ export type CreatedOrder = {
   totalCents: number;
   subtotalCents: number;
   shippingCents: number;
+  /** Met een cadeaubon afgeboekt bedrag (centen). */
+  giftcardCents: number;
 };
 
 export async function createOrder(
   contact: CheckoutContact,
   items: CheckoutItem[],
   deliveryMethod: DeliveryMethod = "standard",
-  voucherCode = ""
+  voucherCode = "",
+  giftcardCode = ""
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -149,7 +153,19 @@ export async function createOrder(
   const baseShipping = subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
   const surcharge = deliveryMethod === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
-  const totalCents = Math.max(0, subtotalCents - discountCents) + shippingCents;
+  const totalBeforeGiftcard = Math.max(0, subtotalCents - discountCents) + shippingCents;
+  // Cadeaubon als betaalmiddel: dekt (een deel van) het hele bedrag incl. verzending.
+  // Server-side gevalideerd; afboeking gebeurt na het aanmaken van de order.
+  let giftcardCents = 0;
+  let appliedGiftcard = "";
+  if (giftcardCode.trim()) {
+    const g = await validateGiftcard(giftcardCode, totalBeforeGiftcard);
+    if (g.valid) {
+      giftcardCents = g.applyCents;
+      appliedGiftcard = g.code;
+    }
+  }
+  const totalCents = Math.max(0, totalBeforeGiftcard - giftcardCents);
   const orderNumber = generateOrderNumber();
   const accessToken = generateAccessToken();
 
@@ -173,6 +189,8 @@ export async function createOrder(
       deliveryMethod,
       voucherCode: appliedCode,
       discountCents,
+      giftcardCode: appliedGiftcard,
+      giftcardCents,
       subtotalCents,
       shippingCents,
       totalCents,
@@ -180,6 +198,8 @@ export async function createOrder(
     .returning({ id: orders.id, orderNumber: orders.orderNumber });
 
   if (appliedCode) await redeemVoucher(appliedCode);
+  // Cadeaubon afboeken (idempotent per order; geeft het werkelijk afgeboekte terug).
+  if (appliedGiftcard) await redeemGiftcard(appliedGiftcard, order.orderNumber, giftcardCents);
 
   await db.insert(orderLines).values(
     lines.map((l) => ({
@@ -196,7 +216,33 @@ export async function createOrder(
     }))
   );
 
-  return { id: order.id, orderNumber: order.orderNumber, accessToken, totalCents, subtotalCents, shippingCents };
+  return { id: order.id, orderNumber: order.orderNumber, accessToken, totalCents, subtotalCents, shippingCents, giftcardCents };
+}
+
+/**
+ * Rondt een order af die volledig met een cadeaubon is betaald (totaal = 0):
+ * geen Mollie nodig. Markeert betaald, stuurt de bevestiging en plant de
+ * fulfilment — alles idempotent via een synthetische betaal-id.
+ */
+export async function finalizeGiftcardCoveredOrder(orderId: string): Promise<void> {
+  const synthetic = `gift-${orderId}`;
+  await attachMolliePayment(orderId, synthetic);
+  await applyPaymentStatus(synthetic, "paid");
+  await sendOrderConfirmationOnce(synthetic);
+  await planAndPushFulfillmentOnce(synthetic);
+}
+
+/** Geeft de cadeaubon van een order terug wanneer de betaling mislukt/verloopt. */
+export async function releaseOrderGiftcard(molliePaymentId: string): Promise<void> {
+  const db = getDb();
+  const [order] = await db
+    .select({ giftcardCode: orders.giftcardCode, orderNumber: orders.orderNumber, giftcardCents: orders.giftcardCents })
+    .from(orders)
+    .where(eq(orders.molliePaymentId, molliePaymentId))
+    .limit(1);
+  if (order?.giftcardCode && order.giftcardCents > 0) {
+    await releaseGiftcard(order.giftcardCode, order.orderNumber);
+  }
 }
 
 export async function attachMolliePayment(orderId: string, molliePaymentId: string) {

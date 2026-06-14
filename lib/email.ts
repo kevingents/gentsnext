@@ -33,6 +33,8 @@ type OrderInfo = {
   subtotalCents: number;
   shippingCents: number;
   totalCents: number;
+  discountCents?: number;
+  giftcardCents?: number;
 };
 
 function orderHtml(order: OrderInfo, lines: OrderLine[]): string {
@@ -66,8 +68,10 @@ function orderHtml(order: OrderInfo, lines: OrderLine[]): string {
         <tr><td style="padding:8px 28px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}
             <tr><td style="padding:10px 0 0;font:14px Arial,sans-serif;color:#8B8B8B">Subtotaal</td><td align="right" style="padding:10px 0 0;font:14px Arial,sans-serif;color:#0A0A0A">${euro(order.subtotalCents)}</td></tr>
+            ${order.discountCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">Korting</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.discountCents)}</td></tr>` : ""}
             <tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">Verzending</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">${order.shippingCents === 0 ? "Gratis" : euro(order.shippingCents)}</td></tr>
-            <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">Totaal</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>
+            ${order.giftcardCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">Cadeaubon</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.giftcardCents)}</td></tr>` : ""}
+            <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${order.giftcardCents ? "Nog te betalen" : "Totaal"}</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>
           </table>
         </td></tr>
         <tr><td style="padding:16px 28px 28px">
@@ -83,6 +87,92 @@ function orderHtml(order: OrderInfo, lines: OrderLine[]): string {
       <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS — Suits You · Alle prijzen incl. btw</div>
     </td></tr></table>
   </body></html>`;
+}
+
+/* ── Cadeaubon ── */
+
+type GiftcardEmail = {
+  code: string;
+  initialCents: number;
+  recipientName: string;
+  recipientEmail: string;
+  senderName: string;
+  message: string;
+  expiresAt: Date | null;
+};
+
+function giftcardHtml(g: GiftcardEmail): string {
+  const site = getSiteUrl();
+  const greeting = g.recipientName ? `Hoi ${g.recipientName},` : "Hoi,";
+  const fromLine = g.senderName
+    ? `<strong style="color:#0A0A0A">${g.senderName}</strong> heeft je een GENTS-cadeaubon gestuurd.`
+    : `Je hebt een GENTS-cadeaubon ontvangen.`;
+  const expiry = g.expiresAt
+    ? new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric" }).format(g.expiresAt)
+    : null;
+  const personal = g.message
+    ? `<tr><td style="padding:8px 28px 0">
+         <div style="border-left:3px solid #0A0A0A;padding:6px 0 6px 14px;font:italic 14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${g.message}</div>
+       </td></tr>`
+    : "";
+
+  return `<!doctype html><html lang="nl"><body style="margin:0;background:#F6F5F2;padding:24px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E6E4DF">
+        <tr><td style="padding:28px 28px 0">
+          <div style="font:300 26px Arial,sans-serif;letter-spacing:6px;color:#0A0A0A">GENTS</div>
+          <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#8B8B8B;margin-top:4px">— SUITS YOU —</div>
+        </td></tr>
+        <tr><td style="padding:24px 28px 8px">
+          <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${greeting}</h1>
+          <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:8px 0 0">${fromLine}</p>
+        </td></tr>
+        ${personal}
+        <tr><td style="padding:20px 28px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #0A0A0A">
+            <tr><td align="center" style="padding:22px 16px;background:#0A0A0A">
+              <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#C9A14A">CADEAUBON</div>
+              <div style="font:600 34px Arial,sans-serif;color:#fff;margin:6px 0">${euro(g.initialCents)}</div>
+              <div style="font:12px Arial,sans-serif;color:#B9B9B9;margin-bottom:10px">Cadeaubon-code</div>
+              <div style="display:inline-block;background:#fff;color:#0A0A0A;font:700 20px 'Courier New',monospace;letter-spacing:2px;padding:10px 18px">${g.code}</div>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:0 28px 8px">
+          <p style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:0">
+            <strong>Zo verzilver je 'm:</strong> shop op <a href="${site}" style="color:#0A0A0A">gents.nl</a>, vul bij het afrekenen de code in onder “Cadeaubon”. Het bedrag wordt van je bestelling afgetrokken — je kunt 'm in meerdere keren gebruiken tot het saldo op is.
+          </p>
+          ${expiry ? `<p style="font:12px Arial,sans-serif;color:#8B8B8B;margin:10px 0 0">Geldig tot ${expiry}.</p>` : ""}
+        </td></tr>
+        <tr><td style="padding:18px 28px 28px">
+          <a href="${site}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 22px;text-decoration:none">Begin met shoppen</a>
+        </td></tr>
+      </table>
+      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS — Suits You · Alle prijzen incl. btw</div>
+    </td></tr></table>
+  </body></html>`;
+}
+
+export async function sendGiftcardEmail(g: GiftcardEmail): Promise<boolean> {
+  if (!emailConfigured() || !g.recipientEmail) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM,
+      to: [g.recipientEmail],
+      subject: g.senderName ? `${g.senderName} stuurt je een GENTS-cadeaubon` : "Je GENTS-cadeaubon",
+      html: giftcardHtml(g),
+    }),
+  });
+  if (!res.ok) {
+    console.error("[email] giftcard Resend-fout:", res.status, (await res.text()).slice(0, 200));
+    return false;
+  }
+  return true;
 }
 
 export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]): Promise<boolean> {

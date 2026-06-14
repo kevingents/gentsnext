@@ -14,7 +14,7 @@ export default async function AccountPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
 
-  const data = await getProfileData(customer.id);
+  const data = await getProfileData(customer.id, customer.email);
 
   // Serialiseer naar plain JSON (datums → ISO) voor de client component.
   const safe = JSON.parse(JSON.stringify(data));

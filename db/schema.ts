@@ -273,6 +273,9 @@ export const orders = pgTable(
     deliveryMethod: text("delivery_method").notNull().default("standard"),
     voucherCode: text("voucher_code").notNull().default(""),
     discountCents: integer("discount_cents").notNull().default(0),
+    /** Cadeaubon als betaalmiddel: ingezette code + afgeboekt bedrag (centen). */
+    giftcardCode: text("giftcard_code").notNull().default(""),
+    giftcardCents: integer("giftcard_cents").notNull().default(0),
     subtotalCents: integer("subtotal_cents").notNull(),
     shippingCents: integer("shipping_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull(),
@@ -591,5 +594,67 @@ export const reviews = pgTable(
     index("reviews_handle_status_idx").on(t.productHandle, t.status),
     index("reviews_status_idx").on(t.status, t.createdAt),
     index("reviews_order_idx").on(t.orderNumber),
+  ]
+);
+
+/* ─────────────────────────── Cadeaubonnen ──────────────────────────────── */
+
+/**
+ * Cadeaubonnen (giftcards) — SALDO-gebaseerd betaalmiddel, los van vouchers
+ * (die zijn korting). Een bon wordt gekocht (pending → na betaling active +
+ * gemaild), heeft een saldo dat bij gebruik wordt afgeboekt (meerdere keren
+ * mogelijk) en een transactie-ledger voor audit + idempotentie. NL-prepaid:
+ * optionele vervaldatum (ruim, instelbaar via settings.giftcardConfig).
+ */
+export const giftcards = pgTable(
+  "giftcards",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    initialCents: integer("initial_cents").notNull(),
+    balanceCents: integer("balance_cents").notNull().default(0),
+    /** 'pending' (betaling loopt) | 'active' | 'depleted' | 'cancelled'. */
+    status: text("status").notNull().default("pending"),
+    recipientName: text("recipient_name").notNull().default(""),
+    recipientEmail: text("recipient_email").notNull().default(""),
+    senderName: text("sender_name").notNull().default(""),
+    message: text("message").notNull().default(""),
+    buyerEmail: text("buyer_email").notNull().default(""),
+    /** Koper-account (optioneel) — voor weergave in 'Mijn GENTS'. */
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    /** Mollie-betaling van de aankoop (webhook-routing + idempotente activatie). */
+    molliePaymentId: text("mollie_payment_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** Geactiveerd + verstuurd (idempotentie-claim). */
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("giftcards_code_unique").on(t.code),
+    index("giftcards_mollie_idx").on(t.molliePaymentId),
+    index("giftcards_recipient_idx").on(t.recipientEmail),
+    index("giftcards_customer_idx").on(t.customerId),
+  ]
+);
+
+/** Saldo-mutaties per cadeaubon: + uitgifte/vrijgave, − besteding. Audit + idempotentie. */
+export const giftcardTransactions = pgTable(
+  "giftcard_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    giftcardId: uuid("giftcard_id")
+      .notNull()
+      .references(() => giftcards.id, { onDelete: "cascade" }),
+    deltaCents: integer("delta_cents").notNull(),
+    /** 'issue' | 'redeem' | 'release'. */
+    reason: text("reason").notNull().default(""),
+    /** Gekoppelde order (besteding/vrijgave) — idempotentiesleutel. */
+    orderNumber: text("order_number").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("giftcard_tx_card_idx").on(t.giftcardId),
+    index("giftcard_tx_order_idx").on(t.orderNumber),
   ]
 );

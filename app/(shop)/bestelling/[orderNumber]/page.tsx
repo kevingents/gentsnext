@@ -98,8 +98,10 @@ export default async function OrderPage({ params, searchParams }: Props) {
       </ul>
       <dl className="mt-4 space-y-1.5 font-sans text-sm">
         <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(order.subtotalCents)}</dd></div>
+        {order.discountCents > 0 ? (<div className="flex justify-between text-success"><dt>Korting{order.voucherCode ? ` (${order.voucherCode})` : ""}</dt><dd>− {formatEuro(order.discountCents)}</dd></div>) : null}
         <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{order.shippingCents === 0 ? "Gratis" : formatEuro(order.shippingCents)}</dd></div>
-        <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>Totaal</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
+        {order.giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>Cadeaubon</dt><dd>− {formatEuro(order.giftcardCents)}</dd></div>) : null}
+        <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>{order.giftcardCents > 0 ? "Betaald" : "Totaal"}</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
       </dl>
 
       {paid ? (

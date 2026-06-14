@@ -12,6 +12,7 @@ import {
   orders,
   orderLines,
 } from "@/db/schema";
+import { getGiftcardsForCustomer } from "@/lib/giftcards";
 
 /**
  * Klant-accountlaag. Auth via magic-link (wachtwoordloos): e-mail → login-token
@@ -142,14 +143,15 @@ export async function claimGuestData(customerId: string, email: string): Promise
 export type ProfileData = Awaited<ReturnType<typeof getProfileData>>;
 
 /** Alle profielgegevens in één keer voor de accountpagina. */
-export async function getProfileData(customerId: string) {
+export async function getProfileData(customerId: string, email = "") {
   const db = getDb();
-  const [onlineOrders, storeBuys, vouchersList, loyalty, addresses] = await Promise.all([
+  const [onlineOrders, storeBuys, vouchersList, loyalty, addresses, giftcardsList] = await Promise.all([
     db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.createdAt)).limit(50),
     db.select().from(storePurchases).where(eq(storePurchases.customerId, customerId)).orderBy(desc(storePurchases.purchasedAt)).limit(50),
     db.select().from(vouchers).where(eq(vouchers.customerId, customerId)).orderBy(desc(vouchers.createdAt)),
     db.select().from(loyaltyEvents).where(eq(loyaltyEvents.customerId, customerId)).orderBy(desc(loyaltyEvents.createdAt)).limit(100),
     db.select().from(customerAddresses).where(eq(customerAddresses.customerId, customerId)).orderBy(desc(customerAddresses.isDefault)),
+    getGiftcardsForCustomer(customerId, email),
   ]);
 
   // Orderregels ophalen voor de online orders.
@@ -173,6 +175,7 @@ export async function getProfileData(customerId: string) {
     storeBuys,
     vouchers: vouchersList,
     activeVouchers,
+    giftcards: giftcardsList,
     loyalty,
     pointsBalance,
     addresses,

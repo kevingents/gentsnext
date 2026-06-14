@@ -90,6 +90,9 @@ function CheckoutForm() {
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [voucherInput, setVoucherInput] = useState("");
   const [voucherErr, setVoucherErr] = useState("");
+  const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
+  const [giftcardInput, setGiftcardInput] = useState("");
+  const [giftcardErr, setGiftcardErr] = useState("");
 
   // Adres-autofill: postcode + huisnummer → straat + plaats.
   useEffect(() => {
@@ -113,6 +116,31 @@ function CheckoutForm() {
   const shippingCents = baseShipping + surcharge;
   const discountCents = voucher?.discountCents ?? 0;
   const totalCents = Math.max(0, cart.subtotalCents - discountCents) + shippingCents;
+  // Cadeaubon dekt (een deel van) het hele bedrag incl. verzending.
+  const giftcardCents = giftcard ? Math.min(giftcard.balanceCents, totalCents) : 0;
+  const payableCents = Math.max(0, totalCents - giftcardCents);
+
+  async function applyGiftcard() {
+    setGiftcardErr("");
+    if (!giftcardInput.trim()) return;
+    try {
+      const r = await fetch("/api/giftcard/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: giftcardInput, amountCents: totalCents }),
+      });
+      const d = await r.json();
+      if (d.valid) {
+        setGiftcard({ code: d.code, balanceCents: d.balanceCents });
+        setGiftcardErr("");
+      } else {
+        setGiftcard(null);
+        setGiftcardErr(d.error || "Ongeldige cadeaubon.");
+      }
+    } catch {
+      setGiftcardErr("Kon de cadeaubon niet controleren.");
+    }
+  }
 
   async function applyVoucher() {
     setVoucherErr("");
@@ -168,7 +196,7 @@ function CheckoutForm() {
       return;
     }
     setBusy(true);
-    track("checkout_start", { valueCents: totalCents, props: { items: cart.lines.length } });
+    track("checkout_start", { valueCents: payableCents, props: { items: cart.lines.length } });
     // Niet-voorgevinkte nieuwsbrief-opt-in (AVG): alleen bij expliciete keuze.
     if (newsletter && form.email) {
       fetch("/api/newsletter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email }) }).catch(() => {});
@@ -181,6 +209,7 @@ function CheckoutForm() {
           contact: form,
           deliveryMethod: delivery,
           voucherCode: voucher?.code || "",
+          giftcardCode: giftcard?.code || "",
           items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty, groupId: l.groupId, roleLabel: l.roleLabel })),
         }),
       });
@@ -316,11 +345,19 @@ function CheckoutForm() {
           {error ? <p role="alert" className="mt-4 font-sans text-sm text-danger">{error}</p> : null}
 
           <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
-            {busy ? "Bezig…" : `Veilig betalen — ${formatEuro(totalCents)}`}
+            {busy
+              ? "Bezig…"
+              : payableCents === 0
+                ? "Bestelling afronden — volledig met cadeaubon"
+                : `Veilig betalen — ${formatEuro(payableCents)}`}
           </button>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
             <FooterPayments />
-            <span className="font-sans text-xs text-muted">Je rondt de betaling af via iDEAL/Mollie. Totaal incl. btw · gratis retour binnen 14 dagen.</span>
+            <span className="font-sans text-xs text-muted">
+              {payableCents === 0
+                ? "Je cadeaubon dekt het volledige bedrag — geen betaling nodig."
+                : "Je rondt de betaling af via iDEAL/Mollie. Totaal incl. btw · gratis retour binnen 14 dagen."}
+            </span>
           </div>
         </form>
 
@@ -368,12 +405,32 @@ function CheckoutForm() {
                 </div>
               )}
             </div>
+            <div className="mt-3 border-t border-line pt-4">
+              {giftcard ? (
+                <div className="flex items-center justify-between font-sans text-sm">
+                  <span className="text-success">Cadeaubon {giftcard.code} — saldo {formatEuro(giftcard.balanceCents)}</span>
+                  <button type="button" onClick={() => { setGiftcard(null); setGiftcardInput(""); }} className="text-muted underline">verwijder</button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex gap-2">
+                    <input value={giftcardInput} onChange={(e) => setGiftcardInput(e.target.value)} placeholder="Cadeaubon-code" className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm uppercase focus:border-ink focus:outline-none" />
+                    <button type="button" onClick={applyGiftcard} className="btn-ghost !px-4 !py-2 whitespace-nowrap">Inwisselen</button>
+                  </div>
+                  {giftcardErr ? <p className="mt-1 font-sans text-xs text-danger">{giftcardErr}</p> : null}
+                </div>
+              )}
+            </div>
             <dl className="mt-4 space-y-1.5 border-t border-line pt-4 font-sans text-sm">
               <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(cart.subtotalCents)}</dd></div>
               {discountCents > 0 ? (<div className="flex justify-between text-success"><dt>Korting ({voucher?.code})</dt><dd>− {formatEuro(discountCents)}</dd></div>) : null}
               <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{baseShipping === 0 ? "Gratis" : formatEuro(baseShipping)}</dd></div>
               {surcharge > 0 ? (<div className="flex justify-between"><dt className="text-muted">Snellere levering</dt><dd>+ {formatEuro(surcharge)}</dd></div>) : null}
-              <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>Totaal</dt><dd className="font-display text-lg">{formatEuro(totalCents)}</dd></div>
+              {giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>Cadeaubon</dt><dd>− {formatEuro(giftcardCents)}</dd></div>) : null}
+              <div className="flex justify-between border-t border-line pt-2 font-medium">
+                <dt>{giftcardCents > 0 ? "Te betalen" : "Totaal"}</dt>
+                <dd className="font-display text-lg">{formatEuro(payableCents)}</dd>
+              </div>
             </dl>
           </div>
         </aside>

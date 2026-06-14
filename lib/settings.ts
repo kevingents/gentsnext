@@ -43,6 +43,15 @@ export type Settings = {
     minStock: number; // drempel "goed op voorraad" voor de slimme look-substitutie
     items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
   };
+  // Cadeaubonnen: aan/uit, voorgestelde bedragen, grenzen voor een vrij bedrag,
+  // en geldigheidsduur (maanden). Bedragen in centen.
+  giftcardConfig: {
+    enabled: boolean;
+    presetAmountsCents: number[];
+    minCents: number;
+    maxCents: number;
+    validityMonths: number;
+  };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -72,6 +81,13 @@ export const DEFAULT_SETTINGS: Settings = {
       { handle: "cognac-cap-toe", label: "Schoenen", hoofdgroep: "Schoenen", x: 50, y: 94 },
     ],
   },
+  giftcardConfig: {
+    enabled: true,
+    presetAmountsCents: [2500, 5000, 10000, 15000],
+    minCents: 1000,
+    maxCents: 50000,
+    validityMonths: 24,
+  },
 };
 
 let _cache: Settings | null = null;
@@ -89,6 +105,7 @@ export async function getSettings(): Promise<Settings> {
       ...stored,
       branchCutoffs: { ...DEFAULT_SETTINGS.branchCutoffs, ...(stored.branchCutoffs || {}) },
       modelLook: { ...DEFAULT_SETTINGS.modelLook, ...(stored.modelLook || {}) },
+      giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

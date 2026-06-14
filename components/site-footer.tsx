@@ -12,6 +12,7 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Overhemden", href: "/categorie/overhemden" },
       { label: "Pak samenstellen", href: "/pak-samenstellen" },
       { label: "Shop the look", href: "/looks" },
+      { label: "Cadeaubon", href: "/cadeaubon" },
       { label: "Favorieten", href: "/favorieten" },
       { label: "Alle collecties", href: "/collections" },
     ],
