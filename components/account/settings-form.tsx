@@ -23,6 +23,13 @@ type Settings = {
     minStock: number;
     items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
   };
+  giftcardConfig: {
+    enabled: boolean;
+    presetAmountsCents: number[];
+    minCents: number;
+    maxCents: number;
+    validityMonths: number;
+  };
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan). */
@@ -65,6 +72,21 @@ export function SettingsForm({ initial }: { initial: Settings }) {
   const [s, setS] = useState<Settings>(initial);
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
+  const [presetText, setPresetText] = useState(
+    initial.giftcardConfig.presetAmountsCents.map((c) => (c / 100).toString()).join(", ")
+  );
+
+  function setGc(patch: Partial<Settings["giftcardConfig"]>) {
+    setS((p) => ({ ...p, giftcardConfig: { ...p.giftcardConfig, ...patch } }));
+  }
+  function setPresets(v: string) {
+    setPresetText(v);
+    const cents = v
+      .split(",")
+      .map((x) => Math.round(parseFloat(x.trim().replace(",", ".")) * 100))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    setGc({ presetAmountsCents: cents });
+  }
 
   function setField(key: keyof Settings, raw: string, kind: string) {
     const n = Number(raw);
@@ -215,6 +237,43 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         <button type="button" onClick={addLookItem} className="mt-3 border border-line px-3 py-1.5 font-sans text-sm hover:border-ink">
           Stuk toevoegen
         </button>
+      </section>
+
+      <section>
+        <p className="label-brand mb-2">Cadeaubonnen</p>
+        <label className="mb-3 flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={s.giftcardConfig.enabled}
+            onChange={(e) => setGc({ enabled: e.target.checked })}
+            className="accent-ink"
+          />
+          <span className="font-sans text-sm">Cadeaubonnen verkopen (toont /cadeaubon)</span>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="block">
+            <span className="font-sans text-sm">Minimumbedrag</span>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="font-sans text-sm text-muted">€</span>
+              <input type="number" step="1" min="1" defaultValue={s.giftcardConfig.minCents / 100} onChange={(e) => setGc({ minCents: Math.max(1, Math.round(Number(e.target.value) * 100)) })} className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+            </div>
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">Maximumbedrag</span>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="font-sans text-sm text-muted">€</span>
+              <input type="number" step="1" min="1" defaultValue={s.giftcardConfig.maxCents / 100} onChange={(e) => setGc({ maxCents: Math.max(1, Math.round(Number(e.target.value) * 100)) })} className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+            </div>
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">Geldigheid (maanden)</span>
+            <input type="number" step="1" min="1" defaultValue={s.giftcardConfig.validityMonths} onChange={(e) => setGc({ validityMonths: Math.max(1, Math.round(Number(e.target.value) || 24)) })} className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+          </label>
+        </div>
+        <label className="mt-3 block">
+          <span className="font-sans text-sm">Voorgestelde bedragen (euro, komma-gescheiden)</span>
+          <input value={presetText} onChange={(e) => setPresets(e.target.value)} placeholder="25, 50, 100, 150" className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+        </label>
       </section>
 
       {msg ? <p className={`font-sans text-sm ${state === "fail" ? "text-danger" : "text-success"}`}>{msg}</p> : null}

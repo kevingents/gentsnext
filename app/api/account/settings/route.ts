@@ -61,6 +61,21 @@ export async function POST(req: Request) {
     };
   }
 
+  if (body.giftcardConfig && typeof body.giftcardConfig === "object") {
+    const gc = body.giftcardConfig as Record<string, unknown>;
+    const amounts = (Array.isArray(gc.presetAmountsCents) ? gc.presetAmountsCents : [])
+      .map((n) => Math.max(0, Math.round(Number(n) || 0)))
+      .filter((n) => n > 0)
+      .slice(0, 8);
+    patch.giftcardConfig = {
+      enabled: gc.enabled !== false,
+      presetAmountsCents: amounts.length ? amounts : [2500, 5000, 10000, 15000],
+      minCents: Math.max(1, Math.round(Number(gc.minCents) || 1000)),
+      maxCents: Math.max(1, Math.round(Number(gc.maxCents) || 50000)),
+      validityMonths: Math.max(1, Math.round(Number(gc.validityMonths) || 24)),
+    };
+  }
+
   const next = await updateSettings(patch);
   return NextResponse.json({ ok: true, settings: next });
 }
