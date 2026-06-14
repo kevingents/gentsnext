@@ -73,22 +73,26 @@ async function importCustomers(db: ReturnType<typeof getDb>) {
   for (;;) {
     const data = await gql(CUSTOMERS_Q, { cursor });
     const conn = data.customers;
+    // Batch per pagina, gededupliceerd op e-mail (ON CONFLICT mag een rij niet 2× raken).
+    const byEmail = new Map<string, typeof customers.$inferInsert>();
     for (const { node: c } of conn.edges) {
       const email = String(c.email || "").trim().toLowerCase();
       if (!email) continue;
       seen++;
-      if (DRY) continue;
-      const optIn = c.emailMarketingConsent?.marketingState === "SUBSCRIBED";
+      byEmail.set(email, {
+        email,
+        firstName: String(c.firstName || "").slice(0, 120),
+        lastName: String(c.lastName || "").slice(0, 120),
+        phone: String(c.phone || "").slice(0, 40),
+        marketingOptIn: c.emailMarketingConsent?.marketingState === "SUBSCRIBED",
+        createdAt: c.createdAt ? new Date(c.createdAt) : undefined,
+      });
+    }
+    const batch = [...byEmail.values()];
+    if (!DRY && batch.length) {
       await db
         .insert(customers)
-        .values({
-          email,
-          firstName: String(c.firstName || "").slice(0, 120),
-          lastName: String(c.lastName || "").slice(0, 120),
-          phone: String(c.phone || "").slice(0, 40),
-          marketingOptIn: optIn,
-          createdAt: c.createdAt ? new Date(c.createdAt) : undefined,
-        })
+        .values(batch)
         .onConflictDoUpdate({
           target: customers.email,
           set: {
@@ -98,7 +102,7 @@ async function importCustomers(db: ReturnType<typeof getDb>) {
             updatedAt: sql`now()`,
           },
         });
-      written++;
+      written += batch.length;
     }
     process.stdout.write(`\r  klanten: ${seen} gezien…`);
     if (MAX && seen >= MAX) break;
@@ -154,19 +158,20 @@ async function importOrders(db: ReturnType<typeof getDb>, emailToId: Map<string,
   for (;;) {
     const data = await gql(ORDERS_Q, { cursor });
     const conn = data.orders;
+    const orderVals: (typeof orders.$inferInsert)[] = [];
+    const linesByNumber = new Map<string, Omit<typeof orderLines.$inferInsert, "orderId">[]>();
+    const haveNum = new Set<string>();
+
     for (const { node: o } of conn.edges) {
       seen++;
       const orderNumber = String(o.name || "").replace(/^#/, "").trim();
-      if (!orderNumber) continue;
+      if (!orderNumber || haveNum.has(orderNumber)) continue;
       const email = String(o.email || o.customer?.email || "").trim();
       const addr = o.shippingAddress || {};
       const nameParts = String(addr.name || "").trim().split(/\s+/);
       const firstName = String(o.customer?.firstName || nameParts[0] || "").slice(0, 120);
       const lastName = String(o.customer?.lastName || nameParts.slice(1).join(" ") || "").slice(0, 120);
       const fin = mapFinancial(o.displayFinancialStatus);
-      const subtotalCents = cents(o.subtotalPriceSet?.shopMoney?.amount);
-      const shippingCents = cents(o.totalShippingPriceSet?.shopMoney?.amount);
-      const discountCents = cents(o.totalDiscountsSet?.shopMoney?.amount);
       const totalCents = cents(o.totalPriceSet?.shopMoney?.amount);
       const lines = (o.lineItems?.edges || []).map(({ node: li }: any) => ({
         sku: String(li.sku || li.variant?.sku || li.variant?.barcode || "").slice(0, 120),
@@ -180,47 +185,54 @@ async function importOrders(db: ReturnType<typeof getDb>, emailToId: Map<string,
       if (sample.length < 5) {
         sample.push(`  #${orderNumber} · ${email || "—"} · ${fin.status} · ${(totalCents / 100).toFixed(2)} · ${lines.length} regels`);
       }
-
       if (DRY) continue;
 
-      const [row] = await db
-        .insert(orders)
-        .values({
-          orderNumber,
-          status: fin.status,
-          customerId: email ? emailToId.get(email.toLowerCase()) ?? null : null,
-          email,
-          firstName,
-          lastName,
-          phone: String(o.phone || addr.phone || "").slice(0, 40),
-          street: String(addr.address1 || "").slice(0, 200),
-          houseNumber: String(addr.address2 || "").slice(0, 60),
-          postalCode: String(addr.zip || "").slice(0, 20),
-          city: String(addr.city || "").slice(0, 120),
-          country: String(addr.countryCodeV2 || "NL").slice(0, 4),
-          deliveryMethod: "standard",
-          discountCents,
-          subtotalCents,
-          shippingCents,
-          totalCents,
-          currency: String(o.totalPriceSet?.shopMoney?.currencyCode || "EUR"),
-          paymentStatus: fin.paymentStatus,
-          paidAt: fin.status === "paid" ? new Date(o.processedAt || o.createdAt) : null,
-          // 'imported' (nooit 'pending') → geen enkele SRS-push-job pakt deze op.
-          fulfillmentStatus: "imported",
-          createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
-        })
-        .onConflictDoNothing({ target: orders.orderNumber })
-        .returning({ id: orders.id });
+      haveNum.add(orderNumber);
+      orderVals.push({
+        orderNumber,
+        status: fin.status,
+        customerId: email ? emailToId.get(email.toLowerCase()) ?? null : null,
+        email,
+        firstName,
+        lastName,
+        phone: String(o.phone || addr.phone || "").slice(0, 40),
+        street: String(addr.address1 || "").slice(0, 200),
+        houseNumber: String(addr.address2 || "").slice(0, 60),
+        postalCode: String(addr.zip || "").slice(0, 20),
+        city: String(addr.city || "").slice(0, 120),
+        country: String(addr.countryCodeV2 || "NL").slice(0, 4),
+        deliveryMethod: "standard",
+        discountCents: cents(o.totalDiscountsSet?.shopMoney?.amount),
+        subtotalCents: cents(o.subtotalPriceSet?.shopMoney?.amount),
+        shippingCents: cents(o.totalShippingPriceSet?.shopMoney?.amount),
+        totalCents,
+        currency: String(o.totalPriceSet?.shopMoney?.currencyCode || "EUR"),
+        paymentStatus: fin.paymentStatus,
+        paidAt: fin.status === "paid" ? new Date(o.processedAt || o.createdAt) : null,
+        // 'imported' (nooit 'pending') → geen enkele SRS-push-job pakt deze op.
+        fulfillmentStatus: "imported",
+        createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
+      });
+      linesByNumber.set(orderNumber, lines);
+    }
 
-      if (!row) {
-        skipped++;
-        continue;
+    if (!DRY && orderVals.length) {
+      // Eén insert per pagina; onConflictDoNothing → returning bevat alleen de
+      // werkelijk nieuwe orders. Daarna in één keer de bijbehorende regels.
+      const rows = await db
+        .insert(orders)
+        .values(orderVals)
+        .onConflictDoNothing({ target: orders.orderNumber })
+        .returning({ id: orders.id, orderNumber: orders.orderNumber });
+      inserted += rows.length;
+      skipped += orderVals.length - rows.length;
+      const lineVals: (typeof orderLines.$inferInsert)[] = [];
+      for (const r of rows) {
+        for (const l of linesByNumber.get(r.orderNumber) || []) lineVals.push({ orderId: r.id, ...l });
       }
-      inserted++;
-      if (lines.length) {
-        await db.insert(orderLines).values(lines.map((l: (typeof lines)[number]) => ({ orderId: row.id, ...l })));
-        lineCount += lines.length;
+      if (lineVals.length) {
+        await db.insert(orderLines).values(lineVals);
+        lineCount += lineVals.length;
       }
     }
     process.stdout.write(`\r  orders: ${seen} gezien · ${inserted} nieuw · ${skipped} bestond al…`);
