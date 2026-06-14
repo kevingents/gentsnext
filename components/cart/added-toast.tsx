@@ -29,8 +29,9 @@ export function AddedToCartToast() {
   const meta = [l.color, l.size ? `maat ${l.size}` : ""].filter(Boolean).join(" · ");
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center px-4 pt-4 sm:pt-20" role="status" aria-live="polite">
-      <div className="pointer-events-auto relative w-full max-w-md rounded-card border border-line bg-canvas p-4 shadow-drawer sm:p-5">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center px-4" role="status" aria-live="polite">
+      <button type="button" aria-label="Sluiten" onClick={cart.dismissAdded} className="absolute inset-0 cursor-default animate-[fadeIn_.2s_ease] bg-ink/30" />
+      <div className="relative w-full max-w-md animate-[fadeIn_.2s_ease] rounded-card border border-line bg-canvas p-5 shadow-drawer">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <svg viewBox="0 0 24 24" className="h-5 w-5 text-success" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

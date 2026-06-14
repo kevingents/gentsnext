@@ -19,8 +19,6 @@ export async function GET(req: Request) {
   if (!hgs.length) return NextResponse.json({ items: [] });
 
   const lead = PRIORITY.find((p) => hgs.includes(p)) || hgs[0];
-  const items = await getRecommendations(lead, null, 3);
-  // Niet aanbevelen wat al in de cart zit (op categorie).
-  const filtered = items.filter(() => true);
-  return NextResponse.json({ items: filtered });
+  const items = await getRecommendations(lead, null, 12);
+  return NextResponse.json({ items });
 }

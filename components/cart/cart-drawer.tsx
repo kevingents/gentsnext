@@ -10,44 +10,46 @@ import { formatEuro } from "@/lib/pricing";
 
 type Suggestion = { id: string; handle: string; title: string; imageUrl: string; minPriceCents: number };
 
-function CartSuggestions({ hoofdgroepen, onNavigate }: { hoofdgroepen: string[]; onNavigate: () => void }) {
+function CartSuggestions({ hoofdgroepen, excludeHandles, onNavigate }: { hoofdgroepen: string[]; excludeHandles: string[]; onNavigate: () => void }) {
   const [items, setItems] = useState<Suggestion[]>([]);
   const key = hoofdgroepen.join(",");
+  const exclude = excludeHandles.join(",");
 
   useEffect(() => {
     if (!key) return;
     let active = true;
+    const skip = new Set(exclude.split(",").filter(Boolean));
     fetch(`/api/cart-suggestions?hg=${encodeURIComponent(key)}`)
       .then((r) => (r.ok ? r.json() : { items: [] }))
       .then((d) => {
-        if (active) setItems((d.items || []).slice(0, 3));
+        if (active) setItems(((d.items || []) as Suggestion[]).filter((s) => !skip.has(s.handle)).slice(0, 10));
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [key]);
+  }, [key, exclude]);
 
   if (!items.length) return null;
   return (
     <div className="border-t border-line px-5 py-4">
-      <p className="label-brand mb-3">Maak je outfit af</p>
-      <ul className="space-y-3">
+      <p className="label-brand mb-3">Vaak samen gekocht</p>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((s) => (
-          <li key={s.id}>
-            <Link href={`/products/${s.handle}`} onClick={onNavigate} className="flex items-center gap-3 group">
-              <div className="relative h-14 w-11 shrink-0 overflow-hidden rounded-card bg-surface">
-                {s.imageUrl ? <Image src={s.imageUrl} alt={s.title} fill sizes="44px" className="object-cover" /> : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-sans text-sm text-ink group-hover:underline">{s.title}</p>
-                <p className="font-sans text-xs text-muted">{formatEuro(s.minPriceCents)}</p>
-              </div>
-              <span aria-hidden className="text-muted">+</span>
-            </Link>
-          </li>
+          <Link
+            key={s.id}
+            href={`/products/${s.handle}`}
+            onClick={onNavigate}
+            className="group block w-28 shrink-0"
+          >
+            <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
+              {s.imageUrl ? <Image src={s.imageUrl} alt={s.title} fill sizes="112px" className="object-cover transition-transform duration-300 group-hover:scale-105" /> : null}
+            </div>
+            <p className="mt-1.5 line-clamp-2 font-sans text-xs leading-snug text-ink">{s.title}</p>
+            <p className="font-sans text-xs text-muted">{formatEuro(s.minPriceCents)}</p>
+          </Link>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
@@ -230,9 +232,10 @@ export function CartDrawer() {
               </ul>
             </div>
 
-            {/* Bijverkoop */}
+            {/* Vaak samen gekocht */}
             <CartSuggestions
               hoofdgroepen={[...new Set(cart.lines.map((l) => l.hoofdgroep).filter(Boolean) as string[])]}
+              excludeHandles={[...new Set(cart.lines.map((l) => l.productHandle))]}
               onNavigate={cart.close}
             />
 
@@ -243,12 +246,14 @@ export function CartDrawer() {
                 <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
               </div>
               <p className="mt-1 font-sans text-xs text-muted">Incl. btw, excl. verzendkosten</p>
-              <Link href="/afrekenen" onClick={cart.close} className="btn-primary mt-3 w-full">
-                {t("cart.checkout")}
-              </Link>
-              <Link href="/winkelwagen" onClick={cart.close} className="btn-ghost mt-2 w-full">
-                Bekijk winkelwagen
-              </Link>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button type="button" onClick={cart.close} className="btn-ghost w-full !px-2 text-sm">
+                  Doorgaan met winkelen
+                </button>
+                <Link href="/afrekenen" onClick={cart.close} className="btn-primary w-full text-center !px-2 text-sm">
+                  {t("cart.checkout")}
+                </Link>
+              </div>
             </div>
           </>
         )}
