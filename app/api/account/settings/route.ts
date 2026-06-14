@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { updateSettings, type Settings } from "@/lib/settings";
+import { DAYS } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,19 @@ export async function POST(req: Request) {
     }
     patch.branchCutoffs = bc;
   }
+  // Per-weekdag cutoff (alleen geldige NL-dagnamen, uur 0–23).
+  const dayMap = (raw: unknown): Record<string, number> => {
+    const out: Record<string, number> = {};
+    if (raw && typeof raw === "object") {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        const day = String(k).toLowerCase();
+        if (DAYS.includes(day) && Number.isFinite(Number(v))) out[day] = Math.max(0, Math.min(23, Math.round(Number(v))));
+      }
+    }
+    return out;
+  };
+  if (body.warehouseCutoffByDay != null) patch.warehouseCutoffByDay = dayMap(body.warehouseCutoffByDay);
+  if (body.storeCutoffByDay != null) patch.storeCutoffByDay = dayMap(body.storeCutoffByDay);
   if (body.modelLook && typeof body.modelLook === "object") {
     const ml = body.modelLook as { enabled?: unknown; items?: unknown };
     const items = (Array.isArray(ml.items) ? ml.items : [])

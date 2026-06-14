@@ -409,7 +409,7 @@ export default async function ProductPage({ params }: Props) {
             colorSiblings={colorSiblings}
             deliveryPromise={delivery?.promise ?? null}
             deliveryNote={delivery?.note ?? null}
-            cutoffHour={settings.warehouseCutoffHour}
+            cutoffHour={delivery?.cutoffHour ?? 16}
             mySize={mySize?.raw ?? null}
           />
 

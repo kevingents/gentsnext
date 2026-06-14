@@ -340,6 +340,8 @@ export type DeliveryEstimate = {
   hasStoreSource: boolean;
   /** Korte belofte voor PDP/cart. */
   promise: string;
+  /** Cutoff-uur van vandaag (per-weekdag) voor de PDP-aftelteller. */
+  cutoffHour: number;
   /** Uitleg waaróm het langer duurt (split/winkel) — logisch voor de klant. */
   note: string | null;
   standard: DeliveryOption;
@@ -405,7 +407,7 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
   // moet écht eerder in huis zijn dan standaard (anders betaalt de klant voor niks).
   const ed = settings.expressTransitDays;
   const express: DeliveryOption | null =
-    fromWarehouseOnly && expK < stdShownK
+    fromWarehouseOnly && plan.fullyAllocated && expK < stdShownK
       ? { dateLabel: dayLabel(n, expK), rangeLabel: `${ed} werkdag${ed === 1 ? "" : "en"}`, surchargeCents: settings.expressSurchargeCents }
       : null;
 
@@ -415,11 +417,17 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
       ? "Dit artikel versturen we vanuit een van onze winkels, wat iets langer duurt dan vanuit het magazijn."
       : null;
 
-  const cutoff = settings.warehouseCutoffHour;
+  // Cutoff van vandaag, per-weekdag, van het filiaal/de filialen die vandaag
+  // verzenden (bv. magazijn vrijdag 16:00) — niet langer het basisuur.
+  const today = DAYS[n.dayIndex];
+  const todayShips = plan.shipments.filter((s) => s.dispatchInDays === 0);
+  const cutoffHour = todayShips.length
+    ? Math.min(...todayShips.map((s) => cutoffHourFor(s.branchId, settings, today)))
+    : cutoffHourFor("99", settings, today);
   const beforeCutoff = maxDispatch === 0;
   const promise = beforeCutoff
-    ? `Voor ${cutoff}:00 besteld, ${standard.dateLabel} in huis`
+    ? `Voor ${cutoffHour}:00 besteld, ${standard.dateLabel} in huis`
     : `Bezorging ${standard.dateLabel}`;
 
-  return { inStock: plan.fullyAllocated, fromWarehouseOnly, isSplit, hasStoreSource, promise, note, standard, express };
+  return { inStock: plan.fullyAllocated, fromWarehouseOnly, isSplit, hasStoreSource, promise, cutoffHour, note, standard, express };
 }

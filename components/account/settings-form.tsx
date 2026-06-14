@@ -9,6 +9,8 @@ type Settings = {
   warehouseCutoffHour: number;
   storeCutoffHour: number;
   branchCutoffs: Record<string, number>;
+  warehouseCutoffByDay: Record<string, number>;
+  storeCutoffByDay: Record<string, number>;
   standardMinDays: number;
   standardMaxDays: number;
   warehouseTransitDays: number;
@@ -95,6 +97,19 @@ export function SettingsForm({ initial }: { initial: Settings }) {
     setS((p) => ({ ...p, [key]: val }));
   }
 
+  function setDayCutoff(which: "warehouseCutoffByDay" | "storeCutoffByDay", day: string, raw: string) {
+    setS((p) => {
+      const map = { ...(p[which] || {}) };
+      const t = raw.trim();
+      if (t === "") delete map[day];
+      else {
+        const n = Math.max(0, Math.min(23, Math.round(Number(t))));
+        if (Number.isFinite(n)) map[day] = n;
+      }
+      return { ...p, [which]: map };
+    });
+  }
+
   type LookItem = Settings["modelLook"]["items"][number];
   function setLookItem(i: number, key: keyof LookItem, val: string | number) {
     setS((p) => ({
@@ -162,6 +177,34 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           </div>
         </section>
       ))}
+
+      <section>
+        <p className="label-brand mb-1">Cutoff per weekdag (optioneel)</p>
+        <p className="mb-3 font-sans text-xs text-muted">
+          Leeg = het basisuur hierboven. Zo verzendt het magazijn op vrijdag tot 16:00 en de winkels tot 17:00.
+        </p>
+        {([["warehouseCutoffByDay", "Magazijn"], ["storeCutoffByDay", "Winkels"]] as const).map(([key, label]) => (
+          <div key={key} className="mb-3">
+            <p className="mb-1 font-sans text-sm">{label}</p>
+            <div className="grid grid-cols-7 gap-2">
+              {([["maandag", "Ma"], ["dinsdag", "Di"], ["woensdag", "Wo"], ["donderdag", "Do"], ["vrijdag", "Vr"], ["zaterdag", "Za"], ["zondag", "Zo"]] as const).map(([day, short]) => (
+                <label key={day} className="block text-center">
+                  <span className="block font-sans text-xs text-muted">{short}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    defaultValue={s[key]?.[day] != null ? String(s[key][day]) : ""}
+                    onChange={(e) => setDayCutoff(key, day, e.target.value)}
+                    placeholder="—"
+                    className="mt-1 w-full border border-line bg-canvas px-1 py-1.5 text-center font-sans text-sm focus:border-ink focus:outline-none"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
 
       <label className="flex items-center gap-2">
         <input
