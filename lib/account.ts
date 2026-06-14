@@ -11,6 +11,7 @@ import {
   storePurchases,
   orders,
   orderLines,
+  newsletterSubscribers,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
 
@@ -207,4 +208,64 @@ export type SizeProfile = {
 export async function updateSizeProfile(customerId: string, sizeProfile: SizeProfile) {
   const db = getDb();
   await db.update(customers).set({ sizeProfile, updatedAt: sql`now()` }).where(eq(customers.id, customerId));
+}
+
+/* ── AVG: inzage & verwijdering ───────────────────────────────────────────── */
+
+/** Alle persoonsgegevens van de klant in één bundel (recht op inzage/dataportabiliteit). */
+export async function exportMyData(customerId: string, email: string) {
+  const db = getDb();
+  const [cust] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+  const profile = await getProfileData(customerId, email);
+  return {
+    geexporteerdOp: new Date().toISOString(),
+    account: cust
+      ? {
+          email: cust.email,
+          voornaam: cust.firstName,
+          achternaam: cust.lastName,
+          telefoon: cust.phone,
+          maatprofiel: cust.sizeProfile,
+          voorkeuren: cust.preferences,
+          nieuwsbriefAangemeld: cust.marketingOptIn,
+          spaarpunten: profile.pointsBalance,
+          klantSinds: cust.createdAt,
+        }
+      : null,
+    onlineBestellingen: profile.onlineOrders,
+    winkelaankopen: profile.storeBuys,
+    adresboek: profile.addresses,
+    tegoedbonnen: profile.vouchers,
+    cadeaubonnen: profile.giftcards,
+    spaarpuntenHistorie: profile.loyalty,
+  };
+}
+
+/**
+ * Recht op vergetelheid: anonimiseert het account (e-mail/naam/telefoon/maten/
+ * voorkeuren gewist, wachtwoord verwijderd) en wist adresboek, sessies en
+ * nieuwsbrief-inschrijvingen. Bestellingen/winkelaankopen blijven bewaard als
+ * wettelijk verplichte administratie (NL 7 jaar), gekoppeld aan het anonieme account.
+ */
+export async function deleteAccount(customerId: string, email: string): Promise<void> {
+  const db = getDb();
+  const anonEmail = `verwijderd+${customerId}@gents.invalid`;
+  await db
+    .update(customers)
+    .set({
+      email: anonEmail,
+      firstName: "",
+      lastName: "",
+      phone: "",
+      passwordHash: null,
+      srsCustomerId: null,
+      sizeProfile: {},
+      preferences: {},
+      marketingOptIn: false,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(customers.id, customerId));
+  await db.delete(customerAddresses).where(eq(customerAddresses.customerId, customerId));
+  await db.delete(customerSessions).where(eq(customerSessions.customerId, customerId));
+  if (email) await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.email, email.trim().toLowerCase()));
 }

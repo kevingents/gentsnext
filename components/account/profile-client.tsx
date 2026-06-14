@@ -44,6 +44,7 @@ const TABS = [
   { key: "maten", label: "Mijn maten" },
   { key: "gegevens", label: "Gegevens" },
   { key: "adressen", label: "Adresboek" },
+  { key: "privacy", label: "Privacy" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -116,6 +117,7 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
         {tab === "maten" && <Maten customer={customer} />}
         {tab === "gegevens" && <Gegevens customer={customer} />}
         {tab === "adressen" && <Adressen data={data} />}
+        {tab === "privacy" && <Privacy />}
       </div>
     </div>
   );
@@ -400,6 +402,71 @@ function Maten({ customer }: { customer: Customer }) {
         {state === "busy" ? "Opslaan…" : state === "done" ? "Opgeslagen" : "Maten opslaan"}
       </button>
     </form>
+  );
+}
+
+/* ── Privacy (AVG: inzage & verwijdering) ─────────────────────────────────── */
+function Privacy() {
+  const [confirm, setConfirm] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+
+  async function remove() {
+    setState("busy");
+    try {
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm }),
+      });
+      if (res.ok) {
+        window.location.href = "/?verwijderd=1";
+        return;
+      }
+      setState("error");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <div className="max-w-2xl space-y-10">
+      <section>
+        <h2 className="font-display text-xl">Mijn gegevens downloaden</h2>
+        <p className="mt-2 font-sans text-sm text-ink-soft">
+          Een kopie van alles wat we van je bewaren — profiel, bestellingen, adresboek,
+          tegoed en spaarpunten — als JSON-bestand.
+        </p>
+        <a href="/api/account/export-me" className="btn-ghost mt-4 inline-block">Download mijn gegevens</a>
+      </section>
+
+      <section className="border border-danger/30 bg-danger/5 p-5">
+        <h2 className="font-display text-xl text-ink">Account verwijderen</h2>
+        <p className="mt-2 font-sans text-sm text-ink-soft">
+          Je persoonsgegevens (naam, e-mail, telefoon, maten, adressen) worden gewist en je wordt
+          uitgelogd. Je bestelhistorie bewaren we geanonimiseerd, omdat de wet ons verplicht de
+          administratie te bewaren. Dit kan niet ongedaan worden gemaakt.
+        </p>
+        <label className="mt-4 block">
+          <span className="font-sans text-sm">Typ <span className="font-semibold">VERWIJDER</span> om te bevestigen</span>
+          <input
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="mt-1 block w-full max-w-xs border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={confirm !== "VERWIJDER" || state === "busy"}
+          className="btn-primary mt-4 !bg-danger disabled:opacity-50"
+        >
+          {state === "busy" ? "Bezig…" : "Account definitief verwijderen"}
+        </button>
+        {state === "error" ? (
+          <p className="mt-2 font-sans text-sm text-danger">Verwijderen lukte niet — probeer het later opnieuw.</p>
+        ) : null}
+      </section>
+    </div>
   );
 }
 
