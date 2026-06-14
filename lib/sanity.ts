@@ -124,3 +124,14 @@ const MENU_PROJECTION = `{
 export function getSanityMenu() {
   return sanityFetch<SanityMenu>(`*[_type == "navigation"][0] ${MENU_PROJECTION}`);
 }
+
+export type SanityFooter = {
+  intro?: string;
+  columns?: { title?: string; links?: { label: string; href: string }[] }[];
+};
+
+const FOOTER_PROJECTION = `{ intro, columns[]{ title, links[]{ label, href } } }`;
+
+export function getSanityFooter() {
+  return sanityFetch<SanityFooter>(`*[_type == "footer"][0] ${FOOTER_PROJECTION}`);
+}

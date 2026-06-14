@@ -3,53 +3,10 @@ import Link from "next/link";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { FooterPayments } from "@/components/footer-payments";
 import { CookieSettingsLink } from "@/components/cookie-settings-link";
+import { getFooter } from "@/lib/footer-server";
 
-const COLS: { title: string; links: { label: string; href: string }[] }[] = [
-  {
-    title: "Shoppen",
-    links: [
-      { label: "Pakken", href: "/categorie/pakken" },
-      { label: "Overhemden", href: "/categorie/overhemden" },
-      { label: "Pak samenstellen", href: "/pak-samenstellen" },
-      { label: "Shop the look", href: "/looks" },
-      { label: "Cadeaubon", href: "/cadeaubon" },
-      { label: "Favorieten", href: "/favorieten" },
-      { label: "Alle collecties", href: "/collections" },
-    ],
-  },
-  {
-    title: "Juridisch",
-    links: [
-      { label: "Algemene voorwaarden", href: "/pages/algemene-voorwaarden" },
-      { label: "Privacyverklaring", href: "/pages/privacyverklaring" },
-      { label: "Cookies", href: "/pages/cookies" },
-      { label: "Herroepingsformulier", href: "/pages/herroepingsformulier" },
-    ],
-  },
-  {
-    title: "Service",
-    links: [
-      { label: "Klantenservice", href: "/pages/service" },
-      { label: "Maatadvies", href: "/maatadvies" },
-      { label: "Bezorging & levertijd", href: "/pages/bezorgkosten-levertijden" },
-      { label: "Retourneren", href: "/pages/retourneren" },
-      { label: "Onze winkels", href: "/pages/winkels" },
-    ],
-  },
-  {
-    title: "GENTS",
-    links: [
-      { label: "Over GENTS", href: "/pages/over-gents" },
-      { label: "Etiquette & dresscodes", href: "/pages/etiquette" },
-      { label: "Trouwen met GENTS", href: "/pages/trouwen-met-gents" },
-      { label: "Zakelijk", href: "/pages/zakelijk" },
-      { label: "Studenten & verenigingen", href: "/pages/students" },
-      { label: "Werken bij GENTS", href: "/pages/werken-bij-gents" },
-    ],
-  },
-];
-
-export function SiteFooter() {
+export async function SiteFooter() {
+  const { intro, columns } = await getFooter();
   return (
     <footer className="mt-24 bg-ink text-canvas">
       {/* Nieuwsbrief-blok */}
@@ -79,11 +36,10 @@ export function SiteFooter() {
               className="h-10 w-auto"
             />
             <p className="mt-4 max-w-xs font-sans text-sm leading-relaxed text-canvas/70">
-              Dé specialist voor je formele momenten. Betaalbare luxe, persoonlijk
-              advies — online en in onze winkels.
+              {intro}
             </p>
           </div>
-          {COLS.map((col) => (
+          {columns.map((col) => (
             <nav key={col.title} aria-label={col.title}>
               <p className="label-brand !text-canvas/60">{col.title}</p>
               <ul className="mt-4 space-y-2.5">
