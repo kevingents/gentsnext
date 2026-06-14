@@ -169,6 +169,84 @@ export async function listOrders(opts: OrderListOpts) {
   };
 }
 
+/* ── CSV-export (orders + klanten) ── */
+
+const EXPORT_CAP = 100_000;
+
+function csvCell(v: string | number): string {
+  const s = String(v ?? "");
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+/** Excel-vriendelijk: UTF-8 BOM, puntkomma-scheiding, CRLF. */
+function toCsv(header: string[], rows: (string | number)[][]): string {
+  return "﻿" + [header, ...rows].map((r) => r.map(csvCell).join(";")).join("\r\n");
+}
+function euros(cents: number): string {
+  return ((Number(cents) || 0) / 100).toFixed(2).replace(".", ",");
+}
+
+/** Volledige order-export (zelfde filters als het overzicht, geen paginatie). */
+export async function exportOrders(opts: OrderListOpts): Promise<string> {
+  const db = getDb();
+  const conds = [sql`1=1`];
+  if (opts.search) {
+    const q = `%${opts.search.trim().toLowerCase()}%`;
+    conds.push(sql`(lower(order_number) like ${q} or lower(email) like ${q} or lower(first_name||' '||last_name) like ${q} or lower(postal_code) like ${q})`);
+  }
+  if (opts.status) conds.push(sql`status = ${opts.status}`);
+  if (opts.channel === "online") conds.push(sql`mollie_payment_id is not null and fulfillment_status <> 'imported'`);
+  if (opts.channel === "import") conds.push(sql`fulfillment_status = 'imported'`);
+  if (opts.from) conds.push(sql`created_at >= ${opts.from}`);
+  if (opts.to) conds.push(sql`created_at <= ${opts.to}`);
+  const where = sql.join(conds, sql` and `);
+  const rows = await db.execute<{
+    order_number: string; created_at: string; status: string; channel: string; fulfillment_status: string;
+    email: string; name: string; postal_code: string; city: string;
+    total_cents: number; discount_cents: number; giftcard_cents: number;
+  }>(sql`
+    select order_number, to_char(created_at,'YYYY-MM-DD HH24:MI') created_at, status,
+           case when fulfillment_status='imported' then 'import' when mollie_payment_id is not null then 'online' else 'online' end channel,
+           fulfillment_status, email, (first_name||' '||last_name) name, coalesce(postal_code,'') postal_code, coalesce(city,'') city,
+           total_cents, coalesce(discount_cents,0) discount_cents, coalesce(giftcard_cents,0) giftcard_cents
+    from orders where ${where}
+    order by created_at desc limit ${EXPORT_CAP}`);
+  return toCsv(
+    ["Ordernummer", "Datum", "Status", "Kanaal", "Fulfilment", "E-mail", "Naam", "Postcode", "Plaats", "Totaal", "Korting", "Cadeaubon"],
+    rows.rows.map((x) => [
+      x.order_number, x.created_at, x.status, x.channel, x.fulfillment_status, x.email, (x.name || "").trim(),
+      x.postal_code, x.city, euros(x.total_cents), euros(x.discount_cents), euros(x.giftcard_cents),
+    ]),
+  );
+}
+
+/** Volledige klant-export (zelfde zoekfilter als het overzicht). */
+export async function exportCustomers(opts: CustomerListOpts): Promise<string> {
+  const db = getDb();
+  const conds = [sql`1=1`];
+  if (opts.search) {
+    const q = `%${opts.search.trim().toLowerCase()}%`;
+    conds.push(sql`(lower(c.email) like ${q} or lower(c.first_name||' '||c.last_name) like ${q} or c.phone like ${q} or c.srs_customer_id like ${q})`);
+  }
+  const where = sql.join(conds, sql` and `);
+  const paidFilter = sql`o.status in ('paid','shipped','ready_pickup','delivered')`;
+  const rows = await db.execute<{
+    email: string; name: string; phone: string; srs: string;
+    orders_count: string; spent_cents: string; created_at: string;
+  }>(sql`
+    select c.email, (c.first_name||' '||c.last_name) name, coalesce(c.phone,'') phone, coalesce(c.srs_customer_id,'') srs,
+           count(o.id) filter (where ${paidFilter}) orders_count,
+           coalesce(sum(o.total_cents) filter (where ${paidFilter}),0) spent_cents,
+           to_char(c.created_at,'YYYY-MM-DD') created_at
+    from customers c left join orders o on o.customer_id = c.id
+    where ${where}
+    group by c.id, c.email, c.first_name, c.last_name, c.phone, c.srs_customer_id, c.created_at
+    order by spent_cents desc limit ${EXPORT_CAP}`);
+  return toCsv(
+    ["E-mail", "Naam", "Telefoon", "SRS-id", "Orders", "Besteed", "Klant sinds"],
+    rows.rows.map((x) => [x.email, (x.name || "").trim(), x.phone, x.srs, Number(x.orders_count) || 0, euros(Number(x.spent_cents)), x.created_at]),
+  );
+}
+
 /* ── Klantoverzicht (gepagineerd + zoeken) + detail ── */
 
 export type CustomerListOpts = { search?: string; page?: number; pageSize?: number; sort?: "spent" | "orders" | "recent" };

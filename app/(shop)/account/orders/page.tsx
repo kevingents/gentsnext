@@ -59,6 +59,11 @@ export default async function OrdersPage({ searchParams }: Props) {
     }
     return `?${u.toString()}`;
   };
+  const exportHref = (() => {
+    const u = new URLSearchParams({ type: "orders" });
+    for (const [k, v] of Object.entries({ q: sp.q, status: sp.status, channel: sp.channel, from: sp.from, to: sp.to })) if (v) u.set(k, String(v));
+    return `/api/account/export?${u.toString()}`;
+  })();
 
   return (
     <BackofficeShell active="/account/orders" title="Orders">
@@ -71,7 +76,10 @@ export default async function OrdersPage({ searchParams }: Props) {
         </div>
       ) : null}
 
-      <Section title={`Alle orders — ${list.total.toLocaleString("nl-NL")}`}>
+      <Section
+        title={`Alle orders — ${list.total.toLocaleString("nl-NL")}`}
+        right={<a href={exportHref} className={btnSecondary}>Exporteer CSV</a>}
+      >
         {/* Filter (GET) */}
         <form method="get" action="/account/orders" className="mb-4 flex flex-wrap items-end gap-2">
           <label className="block">

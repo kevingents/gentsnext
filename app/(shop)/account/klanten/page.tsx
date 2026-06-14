@@ -32,10 +32,14 @@ export default async function KlantenPage({ searchParams }: Props) {
     for (const [k, v] of Object.entries({ q: sp.q, sort: sp.sort, ...p })) if (v) u.set(k, String(v));
     return `?${u.toString()}`;
   };
+  const exportHref = `/api/account/export?${new URLSearchParams({ type: "customers", ...(sp.q ? { q: sp.q } : {}) }).toString()}`;
 
   return (
     <BackofficeShell active="/account/klanten" title="Klanten">
-      <Section title={`Klantoverzicht — ${list.total.toLocaleString("nl-NL")}`}>
+      <Section
+        title={`Klantoverzicht — ${list.total.toLocaleString("nl-NL")}`}
+        right={<a href={exportHref} className={btnSecondary}>Exporteer CSV</a>}
+      >
         <form method="get" action="/account/klanten" className="mb-4 flex flex-wrap items-end gap-2">
           <label className="block">
             <span className="text-xs text-pslate">Zoek (naam/e-mail/telefoon/SRS)</span>
