@@ -88,11 +88,11 @@ function CheckoutForm() {
   const [delivery, setDelivery] = useState<"standard" | "express">("standard");
   const [expressSurcharge, setExpressSurcharge] = useState(0);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
-  const [voucherInput, setVoucherInput] = useState("");
-  const [voucherErr, setVoucherErr] = useState("");
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
-  const [giftcardInput, setGiftcardInput] = useState("");
-  const [giftcardErr, setGiftcardErr] = useState("");
+  // Eén veld voor kortingscode óf cadeaubon — de server bepaalt welke het is.
+  const [codeInput, setCodeInput] = useState("");
+  const [codeErr, setCodeErr] = useState("");
+  const [codeBusy, setCodeBusy] = useState(false);
 
   // Adres-autofill: postcode + huisnummer → straat + plaats.
   useEffect(() => {
@@ -120,47 +120,31 @@ function CheckoutForm() {
   const giftcardCents = giftcard ? Math.min(giftcard.balanceCents, totalCents) : 0;
   const payableCents = Math.max(0, totalCents - giftcardCents);
 
-  async function applyGiftcard() {
-    setGiftcardErr("");
-    if (!giftcardInput.trim()) return;
+  async function applyCode() {
+    setCodeErr("");
+    const code = codeInput.trim();
+    if (!code) return;
+    setCodeBusy(true);
     try {
-      const r = await fetch("/api/giftcard/validate", {
+      const r = await fetch("/api/redeem-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: giftcardInput, amountCents: totalCents }),
+        body: JSON.stringify({ code, subtotalCents: cart.subtotalCents, amountCents: totalCents }),
       });
       const d = await r.json();
-      if (d.valid) {
+      if (d.type === "giftcard") {
         setGiftcard({ code: d.code, balanceCents: d.balanceCents });
-        setGiftcardErr("");
-      } else {
-        setGiftcard(null);
-        setGiftcardErr(d.error || "Ongeldige cadeaubon.");
-      }
-    } catch {
-      setGiftcardErr("Kon de cadeaubon niet controleren.");
-    }
-  }
-
-  async function applyVoucher() {
-    setVoucherErr("");
-    if (!voucherInput.trim()) return;
-    try {
-      const r = await fetch("/api/voucher/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: voucherInput, subtotalCents: cart.subtotalCents }),
-      });
-      const d = await r.json();
-      if (d.valid) {
+        setCodeInput("");
+      } else if (d.type === "voucher") {
         setVoucher({ code: d.code, discountCents: d.discountCents, label: d.label });
-        setVoucherErr("");
+        setCodeInput("");
       } else {
-        setVoucher(null);
-        setVoucherErr(d.error || "Ongeldige code.");
+        setCodeErr(d.error || "Onbekende code.");
       }
     } catch {
-      setVoucherErr("Kon de code niet controleren.");
+      setCodeErr("Kon de code niet controleren.");
+    } finally {
+      setCodeBusy(false);
     }
   }
 
@@ -390,36 +374,41 @@ function CheckoutForm() {
               />
             </div>
             <div className="mt-4 border-t border-line pt-4">
+              {/* Toegepaste codes */}
               {voucher ? (
                 <div className="flex items-center justify-between font-sans text-sm">
-                  <span className="text-success">Code {voucher.code} — {voucher.label}</span>
-                  <button type="button" onClick={() => { setVoucher(null); setVoucherInput(""); }} className="text-muted underline">verwijder</button>
+                  <span className="text-success">Kortingscode {voucher.code} — {voucher.label}</span>
+                  <button type="button" onClick={() => setVoucher(null)} className="text-muted underline">verwijder</button>
                 </div>
-              ) : (
-                <div>
-                  <div className="flex gap-2">
-                    <input value={voucherInput} onChange={(e) => setVoucherInput(e.target.value)} placeholder="Kortingscode" className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm uppercase focus:border-ink focus:outline-none" />
-                    <button type="button" onClick={applyVoucher} className="btn-ghost !px-4 !py-2 whitespace-nowrap">Toepassen</button>
-                  </div>
-                  {voucherErr ? <p className="mt-1 font-sans text-xs text-danger">{voucherErr}</p> : null}
-                </div>
-              )}
-            </div>
-            <div className="mt-3 border-t border-line pt-4">
+              ) : null}
               {giftcard ? (
-                <div className="flex items-center justify-between font-sans text-sm">
+                <div className={`flex items-center justify-between font-sans text-sm ${voucher ? "mt-2" : ""}`}>
                   <span className="text-success">Cadeaubon {giftcard.code} — saldo {formatEuro(giftcard.balanceCents)}</span>
-                  <button type="button" onClick={() => { setGiftcard(null); setGiftcardInput(""); }} className="text-muted underline">verwijder</button>
+                  <button type="button" onClick={() => setGiftcard(null)} className="text-muted underline">verwijder</button>
                 </div>
-              ) : (
-                <div>
-                  <div className="flex gap-2">
-                    <input value={giftcardInput} onChange={(e) => setGiftcardInput(e.target.value)} placeholder="Cadeaubon-code" className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm uppercase focus:border-ink focus:outline-none" />
-                    <button type="button" onClick={applyGiftcard} className="btn-ghost !px-4 !py-2 whitespace-nowrap">Inwisselen</button>
-                  </div>
-                  {giftcardErr ? <p className="mt-1 font-sans text-xs text-danger">{giftcardErr}</p> : null}
+              ) : null}
+              {/* Eén veld: kortingscode óf cadeaubon */}
+              <div className={voucher || giftcard ? "mt-3" : ""}>
+                <div className="flex gap-2">
+                  <input
+                    value={codeInput}
+                    onChange={(e) => setCodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyCode();
+                      }
+                    }}
+                    placeholder="Kortingscode of cadeaubon"
+                    aria-label="Kortingscode of cadeaubon"
+                    className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm uppercase focus:border-ink focus:outline-none"
+                  />
+                  <button type="button" onClick={applyCode} disabled={codeBusy} className="btn-ghost !px-4 !py-2 whitespace-nowrap">
+                    {codeBusy ? "…" : "Toepassen"}
+                  </button>
                 </div>
-              )}
+                {codeErr ? <p className="mt-1 font-sans text-xs text-danger">{codeErr}</p> : null}
+              </div>
             </div>
             <dl className="mt-4 space-y-1.5 border-t border-line pt-4 font-sans text-sm">
               <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(cart.subtotalCents)}</dd></div>
