@@ -138,10 +138,6 @@ function mapFinancial(fin: string): { status: string; paymentStatus: string } {
   if (f === "REFUNDED") return { status: "refunded", paymentStatus: "refunded" };
   return { status: "open", paymentStatus: f.toLowerCase() || "open" };
 }
-function mapFulfillment(ff: string): string {
-  const f = String(ff || "").toUpperCase();
-  return f === "FULFILLED" || f === "PARTIALLY_FULFILLED" ? "shipped" : "pending";
-}
 function optVal(opts: any[], re: RegExp): string {
   const o = (opts || []).find((x) => re.test(String(x?.name || "")));
   return o ? String(o.value || "") : "";
@@ -210,7 +206,8 @@ async function importOrders(db: ReturnType<typeof getDb>, emailToId: Map<string,
           currency: String(o.totalPriceSet?.shopMoney?.currencyCode || "EUR"),
           paymentStatus: fin.paymentStatus,
           paidAt: fin.status === "paid" ? new Date(o.processedAt || o.createdAt) : null,
-          fulfillmentStatus: mapFulfillment(o.displayFulfillmentStatus),
+          // 'imported' (nooit 'pending') → geen enkele SRS-push-job pakt deze op.
+          fulfillmentStatus: "imported",
           createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
         })
         .onConflictDoNothing({ target: orders.orderNumber })

@@ -18,6 +18,10 @@ export type SrsPushResult = {
 };
 
 export function srsConfigured(): boolean {
+  // Harde kill-switch: orders gaan NOOIT naar SRS tot SRS_PUSH_ENABLED === 'true'
+  // is gezet — óók niet als de creds al bestaan. Zo schiet er niets per ongeluk
+  // naar SRS (bewuste go-live-keuze).
+  if (process.env.SRS_PUSH_ENABLED !== "true") return false;
   return Boolean(process.env.SRS_API_URL && process.env.SRS_API_KEY);
 }
 
