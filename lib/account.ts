@@ -204,6 +204,16 @@ export async function getProfileData(customerId: string, email = "") {
   };
 }
 
+/** Lichte adres-lijst (default eerst) — voor checkout-prefill. */
+export async function getCustomerAddresses(customerId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(customerAddresses)
+    .where(eq(customerAddresses.customerId, customerId))
+    .orderBy(desc(customerAddresses.isDefault), desc(customerAddresses.createdAt));
+}
+
 export async function updateProfile(
   customerId: string,
   patch: { firstName?: string; lastName?: string; phone?: string; marketingOptIn?: boolean }

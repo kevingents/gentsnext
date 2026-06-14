@@ -95,6 +95,45 @@ function CheckoutForm() {
   const [codeErr, setCodeErr] = useState("");
   const [codeBusy, setCodeBusy] = useState(false);
 
+  type PrefillAddr = { id: string; label: string; firstName: string; lastName: string; street: string; houseNumber: string; postalCode: string; city: string };
+  type Prefill = { loggedIn: boolean; email?: string; firstName?: string; lastName?: string; phone?: string; defaultAddressId?: string | null; addresses?: PrefillAddr[] };
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
+  const [addrId, setAddrId] = useState("");
+
+  // Checkout-prefill: ingelogde klant → gegevens + opgeslagen adres vast invullen
+  // (alleen lege velden; we overschrijven niets wat de bezoeker al typte).
+  useEffect(() => {
+    let active = true;
+    fetch("/api/account/prefill")
+      .then((r) => r.json())
+      .then((d: Prefill) => {
+        if (!active) return;
+        setPrefill(d || { loggedIn: false });
+        if (!d?.loggedIn) return;
+        const a = (d.addresses || []).find((x) => x.id === d.defaultAddressId) || (d.addresses || [])[0];
+        setAddrId(a?.id || "");
+        setForm((p) => {
+          const next = { ...p };
+          const fill = (k: string, v?: string) => { if (!next[k] && v) next[k] = v; };
+          fill("firstName", a?.firstName || d.firstName);
+          fill("lastName", a?.lastName || d.lastName);
+          fill("email", d.email);
+          fill("phone", d.phone);
+          if (a) { fill("postalCode", a.postalCode); fill("houseNumber", a.houseNumber); fill("street", a.street); fill("city", a.city); }
+          return next;
+        });
+      })
+      .catch(() => { if (active) setPrefill({ loggedIn: false }); });
+    return () => { active = false; };
+  }, []);
+
+  function chooseAddress(id: string) {
+    setAddrId(id);
+    const a = prefill?.addresses?.find((x) => x.id === id);
+    if (!a) return;
+    setForm((p) => ({ ...p, firstName: a.firstName || p.firstName, lastName: a.lastName || p.lastName, postalCode: a.postalCode, houseNumber: a.houseNumber, street: a.street, city: a.city }));
+  }
+
   // Adres-autofill: postcode + huisnummer → straat + plaats.
   useEffect(() => {
     const pc = (form.postalCode || "").replace(/\s/g, "").toUpperCase();
@@ -229,6 +268,29 @@ function CheckoutForm() {
       {canceled ? (
         <div className="mt-6 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft">
           <span className="font-medium text-ink">Je betaling is geannuleerd.</span> Er is niets afgeschreven en je winkelwagen staat nog klaar — je kunt het zo opnieuw proberen.
+        </div>
+      ) : null}
+
+      {/* Al klant? — inloggen vult gegevens & adres vast in. Gast blijft mogelijk. */}
+      {prefill && !prefill.loggedIn ? (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm">
+          <span className="text-ink-soft"><span className="font-medium text-ink">Al klant?</span> Log in en we vullen je gegevens en bezorgadres vast in. Als gast bestellen kan gewoon door.</span>
+          <Link href="/account/login?next=/afrekenen" className="btn-ghost !px-4 !py-2 whitespace-nowrap">Inloggen</Link>
+        </div>
+      ) : null}
+      {prefill?.loggedIn ? (
+        <div className="mt-6 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-ink-soft"><span className="font-medium text-ink">Welkom terug.</span> We hebben je gegevens vast ingevuld{prefill.email ? ` (${prefill.email})` : ""}.</span>
+            {prefill.addresses && prefill.addresses.length > 1 ? (
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-muted">Bezorgadres</span>
+                <select value={addrId} onChange={(e) => chooseAddress(e.target.value)} className="border border-line bg-canvas px-2 py-1 text-sm focus:border-ink focus:outline-none">
+                  {prefill.addresses.map((a) => <option key={a.id} value={a.id}>{a.label} — {a.street} {a.houseNumber}, {a.city}</option>)}
+                </select>
+              </label>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
