@@ -1,3 +1,5 @@
 {
-  "crons": []
+  "crons": [
+    { "path": "/api/cron/sync-reviews", "schedule": "0 2 * * *" }
+  ]
 }

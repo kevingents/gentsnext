@@ -588,12 +588,17 @@ export const reviews = pgTable(
     verified: boolean("verified").notNull().default(false),
     /** 'pending' | 'published' | 'rejected'. */
     status: text("status").notNull().default("pending"),
+    /** Herkomst: 'native' (eigen) of 'judgeme' (geïmporteerd). */
+    source: text("source").notNull().default("native"),
+    /** Bron-id voor idempotente import (bv. "judgeme:123"). */
+    externalId: text("external_id").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("reviews_handle_status_idx").on(t.productHandle, t.status),
     index("reviews_status_idx").on(t.status, t.createdAt),
     index("reviews_order_idx").on(t.orderNumber),
+    index("reviews_external_idx").on(t.externalId),
   ]
 );
 
