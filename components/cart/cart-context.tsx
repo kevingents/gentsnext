@@ -24,7 +24,7 @@ type CartState = {
   isOpen: boolean;
   count: number;
   subtotalCents: number;
-  add: (line: Omit<CartLine, "id">) => void;
+  add: (line: Omit<CartLine, "id">, opts?: { open?: boolean }) => void;
   addMany: (lines: Omit<CartLine, "id">[]) => void;
   remove: (id: string) => void;
   removeGroup: (groupId: string) => void;
@@ -66,7 +66,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lines, hydrated]);
 
-  const add = useCallback((line: Omit<CartLine, "id">) => {
+  const add = useCallback((line: Omit<CartLine, "id">, opts?: { open?: boolean }) => {
     const id = lineId(line);
     track("add_to_cart", { handle: line.productHandle, valueCents: line.priceCents * line.qty });
     setLines((prev) => {
@@ -74,7 +74,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (existing) return prev.map((l) => (l.id === id ? { ...l, qty: l.qty + line.qty } : l));
       return [...prev, { ...line, id }];
     });
-    setIsOpen(true);
+    // De winkelwagen-drawer opent standaard (bv. PDP); bij het samenstellen van
+    // een look (meerdere toevoegingen achter elkaar) zetten we open:false.
+    if (opts?.open !== false) setIsOpen(true);
   }, []);
 
   const addMany = useCallback((newLines: Omit<CartLine, "id">[]) => {

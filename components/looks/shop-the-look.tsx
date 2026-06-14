@@ -47,17 +47,22 @@ export function ShopTheLook({
     if (!data || !size) return;
     const s = data.sizes.find((x) => x.size === size);
     if (!s || s.qty <= 0) return;
-    cart.add({
-      sku: s.sku,
-      productHandle: h.handle,
-      title: h.product.title,
-      size: s.size,
-      color: data.color === "Standaard" ? "" : data.color,
-      priceCents: s.priceCents,
-      imageUrl: h.product.imageUrl,
-      qty: 1,
-      hoofdgroep: data.hoofdgroep,
-    });
+    cart.add(
+      {
+        sku: s.sku,
+        productHandle: h.handle,
+        title: h.product.title,
+        size: s.size,
+        color: data.color === "Standaard" ? "" : data.color,
+        priceCents: s.priceCents,
+        imageUrl: h.product.imageUrl,
+        qty: 1,
+        hoofdgroep: data.hoofdgroep,
+      },
+      // Look samenstellen: winkelwagen niet openklappen — je voegt meerdere
+      // items toe. Inline "Toegevoegd" + de teller in de header zijn genoeg.
+      { open: false }
+    );
     setAdded((p) => ({ ...p, [i]: true }));
     track("add_to_cart", { handle: h.handle, props: { fromLook: look.slug } });
     setTimeout(() => setAdded((p) => ({ ...p, [i]: false })), 1800);
