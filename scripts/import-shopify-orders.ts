@@ -29,7 +29,7 @@ const MAX = (() => {
 const cents = (s: string | null | undefined) => Math.round(parseFloat(String(s ?? "0")) * 100);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function gql<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+async function gql(query: string, variables: Record<string, unknown> = {}): Promise<any> {
   for (let attempt = 0; attempt < 6; attempt++) {
     const res = await fetch(`https://${SHOP}/admin/api/${VERSION}/graphql.json`, {
       method: "POST",
@@ -49,7 +49,7 @@ async function gql<T = any>(query: string, variables: Record<string, unknown> = 
     if (!res.ok || j.errors) {
       throw new Error(`Shopify GraphQL ${res.status}: ${JSON.stringify(j.errors ?? j).slice(0, 400)}`);
     }
-    return j.data as T;
+    return j.data;
   }
   throw new Error("Shopify GraphQL: te vaak throttled.");
 }
@@ -71,7 +71,7 @@ async function importCustomers(db: ReturnType<typeof getDb>) {
   let seen = 0;
   let written = 0;
   for (;;) {
-    const data = await gql<any>(CUSTOMERS_Q, { cursor });
+    const data = await gql(CUSTOMERS_Q, { cursor });
     const conn = data.customers;
     for (const { node: c } of conn.edges) {
       const email = String(c.email || "").trim().toLowerCase();
@@ -156,7 +156,7 @@ async function importOrders(db: ReturnType<typeof getDb>, emailToId: Map<string,
   const sample: string[] = [];
 
   for (;;) {
-    const data = await gql<any>(ORDERS_Q, { cursor });
+    const data = await gql(ORDERS_Q, { cursor });
     const conn = data.orders;
     for (const { node: o } of conn.edges) {
       seen++;
@@ -222,7 +222,7 @@ async function importOrders(db: ReturnType<typeof getDb>, emailToId: Map<string,
       }
       inserted++;
       if (lines.length) {
-        await db.insert(orderLines).values(lines.map((l) => ({ orderId: row.id, ...l })));
+        await db.insert(orderLines).values(lines.map((l: (typeof lines)[number]) => ({ orderId: row.id, ...l })));
         lineCount += lines.length;
       }
     }
