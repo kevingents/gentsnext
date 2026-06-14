@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ProductCard } from "@/components/product-card";
 import { useWishlist } from "@/components/wishlist/wishlist-context";
+import { BrandedState } from "@/components/brand-state";
 import type { ProductCardData } from "@/lib/catalog";
 
 export default function FavorietenPage() {
@@ -49,16 +50,13 @@ export default function FavorietenPage() {
 
   if (!wl.handles.length) {
     return (
-      <div className="mx-auto max-w-page px-gutter py-20 text-center">
-        <h1 className="text-display-md">Nog geen favorieten</h1>
-        <p className="mt-3 max-w-md mx-auto font-sans text-ink-soft">
-          Bewaar producten met het hartje op de productkaart of -pagina, dan
-          vind je ze hier altijd terug.
-        </p>
-        <Link href="/collections/pakken" className="btn-primary mt-8 inline-flex">
-          Begin met shoppen
-        </Link>
-      </div>
+      <BrandedState
+        eyebrow="Bewaard"
+        title="Nog geen favorieten"
+        intro="Bewaar producten met het hartje op de productkaart of -pagina, dan vind je ze hier altijd terug."
+      >
+        <Link href="/collections/pakken" className="btn-primary">Begin met shoppen</Link>
+      </BrandedState>
     );
   }
 
