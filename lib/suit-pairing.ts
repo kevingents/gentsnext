@@ -3,6 +3,8 @@ import { getDb } from "@/db";
 import { products, productVariants, productImages } from "@/db/schema";
 import { stockForSkus } from "@/lib/stock";
 import { sortSizes } from "@/lib/sizing";
+import { BRANCH_CITY } from "@/lib/fulfillment-config";
+import { pickupInfoByCity } from "@/lib/stores";
 
 /**
  * Pak-samenstellen (mix & match): colbert + pantalon (+ gilet) worden los
@@ -126,8 +128,16 @@ export type SuitPieceDetail = {
   handle: string;
   title: string;
   image: string;
-  /** maatLabel → { size, sku, priceCents, qty, known } */
-  sizes: { sizeLabel: string; size: string; sku: string; priceCents: number; qty: number; known: boolean }[];
+  /** maatLabel → { size, sku, priceCents, qty (online), known, winkelvoorraad } */
+  sizes: {
+    sizeLabel: string;
+    size: string;
+    sku: string;
+    priceCents: number;
+    qty: number;
+    known: boolean;
+    branches: { store: string; qty: number; openNow: boolean; openLabel: string }[];
+  }[];
 };
 
 export type SuitDetail = {
@@ -183,6 +193,16 @@ export async function getSuitByColbertHandle(handle: string): Promise<SuitDetail
       priceCents: v.priceCents,
       qty: st?.online ?? 0,
       known: hasStock && Boolean(v.sku),
+      // Winkelvoorraad (click & collect) — alleen retailwinkels, open eerst.
+      branches:
+        st?.byBranch
+          .filter((b) => Boolean(BRANCH_CITY[b.branchId]))
+          .map((b) => {
+            const city = BRANCH_CITY[b.branchId];
+            const info = pickupInfoByCity(city);
+            return { store: b.store, qty: b.qty, openNow: info?.openNow ?? false, openLabel: info?.label ?? "" };
+          })
+          .sort((a, b) => Number(b.openNow) - Number(a.openNow) || b.qty - a.qty) ?? [],
     });
     byProduct.set(v.productId, list);
   }

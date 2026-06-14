@@ -3,13 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { SuitDetail, SuitPieceDetail, SuitRole } from "@/lib/suit-pairing";
+import type { SuitDetail, SuitRole } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
-import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
+import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { useCart } from "@/components/cart/cart-context";
 import { parseComposition, parseCare, careProse } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { Accordion } from "@/components/pdp/accordion";
+import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { ClickAndCollect } from "@/components/pdp/click-collect";
+import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 
 const ROLE_LABEL: Record<SuitRole, string> = {
   colbert: "Colbert",
@@ -23,18 +26,15 @@ const ROLE_HG: Record<SuitRole, string> = {
   gilet: "Gilets",
 };
 
-/** Per maat-bucket de (eerst beschikbare) variant van een onderdeel. */
-function sizeIndex(piece: SuitPieceDetail) {
-  const map = new Map<string, SuitPieceDetail["sizes"][number]>();
-  for (const s of piece.sizes) {
-    const cur = map.get(s.sizeLabel);
-    // Voorkeur: in-voorraad variant wint.
-    if (!cur || (s.known && s.qty > 0 && !(cur.known && cur.qty > 0))) map.set(s.sizeLabel, s);
-  }
-  return map;
-}
+type Props = {
+  suit: SuitDetail;
+  /** Server-belofte uit de allocatie-engine (estimateDelivery) — net als de PDP. */
+  deliveryPromise?: string | null;
+  deliveryNote?: string | null;
+  cutoffHour?: number;
+};
 
-export function SuitBuilder({ suit }: { suit: SuitDetail }) {
+export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }: Props) {
   const cart = useCart();
   const colbert = suit.pieces.find((p) => p.role === "colbert")!;
   const broek = suit.pieces.find((p) => p.role === "broek")!;
@@ -42,8 +42,8 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
 
   const pakTitle = colbert.title.replace(/^colbert[\s-]*/i, "").trim() || colbert.title;
   const [withGilet, setWithGilet] = useState(false);
-  // Maat PER ONDERDEEL — de USP: je kunt bv. een groter colbert (lange armen) met
-  // een kleinere pantalon (korte benen) combineren.
+  // Maat PER ONDERDEEL (de USP) — bv. een groter colbert met een kleinere pantalon.
+  // We bewaren de werkelijke maat (bv. "50") per rol, net als op de productpagina.
   const [sizes, setSizes] = useState<Partial<Record<SuitRole, string>>>({});
 
   const activePieces = useMemo(
@@ -51,42 +51,39 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
     [colbert, broek, gilet, withGilet]
   );
 
-  const indices = useMemo(() => activePieces.map((p) => sizeIndex(p)), [activePieces]);
-  const pieceSizes = useMemo(
-    () => indices.map((m) => [...m.keys()].sort((a, b) => rowSortIndex(a) - rowSortIndex(b))),
-    [indices]
-  );
-
-  // Bij het kiezen van een maat: vul nog-niet-gekozen onderdelen met dezelfde maat
-  // als die bestaat (snel "zelfde maat", maar elk onderdeel blijft los aanpasbaar).
-  function pickSize(role: SuitRole, label: string) {
+  // Bij het kiezen van een maat: vul nog-niet-gekozen onderdelen met dezelfde
+  // lettermaat-bucket (bv. colbert L → pantalon L) als die leverbaar bestaat.
+  function pickSize(role: SuitRole, size: string) {
     setSizes((prev) => {
-      const next: Partial<Record<SuitRole, string>> = { ...prev, [role]: label };
-      activePieces.forEach((p, i) => {
-        if (next[p.role] != null) return;
-        const v = indices[i].get(label);
-        if (v && !(v.known && v.qty <= 0)) next[p.role] = label; // alleen een leverbare maat auto-invullen
-      });
+      const next: Partial<Record<SuitRole, string>> = { ...prev, [role]: size };
+      const rowLabel = sizeRowLabel(size);
+      for (const p of activePieces) {
+        if (next[p.role] != null) continue;
+        const match = p.sizes.find((s) => sizeRowLabel(s.size) === rowLabel && !(s.known && s.qty <= 0));
+        if (match) next[p.role] = match.size;
+      }
       return next;
     });
   }
 
   // Gilet erbij → vul 'm met de colbert-maat als die bestaat.
   useEffect(() => {
-    if (!withGilet || !gilet) return;
-    const gi = activePieces.findIndex((p) => p.role === "gilet");
-    if (gi >= 0 && !sizes.gilet && sizes.colbert && indices[gi]?.has(sizes.colbert)) {
+    if (!withGilet || !gilet || sizes.gilet || !sizes.colbert) return;
+    if (gilet.sizes.some((s) => s.size === sizes.colbert)) {
       setSizes((prev) => ({ ...prev, gilet: sizes.colbert }));
     }
-  }, [withGilet, gilet, activePieces, indices, sizes.colbert, sizes.gilet]);
+  }, [withGilet, gilet, sizes.colbert, sizes.gilet]);
 
   const selection = useMemo(
-    () => activePieces.map((p, i) => ({ piece: p, variant: sizes[p.role] ? indices[i].get(sizes[p.role]!) ?? null : null })),
-    [activePieces, indices, sizes]
+    () =>
+      activePieces.map((p) => ({
+        piece: p,
+        variant: sizes[p.role] ? p.sizes.find((s) => s.size === sizes[p.role]) ?? null : null,
+      })),
+    [activePieces, sizes]
   );
   const allChosen = activePieces.every((p) => sizes[p.role]);
   const totalCents = useMemo(() => selection.reduce((sum, s) => sum + (s.variant?.priceCents ?? 0), 0), [selection]);
-
   const baseFrom = useMemo(
     () => activePieces.reduce((sum, p) => sum + Math.min(...p.sizes.map((s) => s.priceCents)), 0),
     [activePieces]
@@ -156,14 +153,7 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
               className={`relative overflow-hidden rounded-card bg-surface ${i === 0 ? "col-span-2 aspect-[4/5]" : "aspect-square"}`}
             >
               {p.image ? (
-                <Image
-                  src={p.image}
-                  alt={p.title}
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  className="object-cover"
-                  priority={i === 0}
-                />
+                <Image src={p.image} alt={p.title} fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" priority={i === 0} />
               ) : null}
               <span className="absolute left-2 top-2 bg-canvas/90 px-2 py-0.5 font-sans text-[0.65rem] uppercase tracking-wide">
                 {ROLE_LABEL[p.role]}
@@ -176,31 +166,19 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
       {/* Configurator */}
       <div className="lg:sticky lg:top-24 lg:self-start">
         <p className="label-brand">Stel je pak samen</p>
-        <h1 className="mt-2 text-display-md">{colbert.title.replace(/^colbert[\s-]*/i, "").trim()}</h1>
-        <p className="mt-2 font-display text-xl">
-          {allChosen ? formatEuro(totalCents) : `vanaf ${formatEuro(baseFrom)}`}
-        </p>
+        <h1 className="mt-2 text-display-md">{pakTitle}</h1>
+        <p className="mt-2 font-display text-xl">{allChosen ? formatEuro(totalCents) : `vanaf ${formatEuro(baseFrom)}`}</p>
 
         {/* 2- vs 3-delig */}
         {gilet ? (
           <div className="mt-6">
             <p className="font-sans text-sm font-medium">Uitvoering</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setWithGilet(false)}
-                aria-pressed={!withGilet}
-                className={`border px-4 py-3 text-left transition-colors ${!withGilet ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"}`}
-              >
+              <button type="button" onClick={() => setWithGilet(false)} aria-pressed={!withGilet} className={`border px-4 py-3 text-left transition-colors ${!withGilet ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"}`}>
                 <span className="block font-sans text-sm font-medium">2-delig</span>
                 <span className={`font-sans text-xs ${!withGilet ? "text-canvas/70" : "text-muted"}`}>Colbert + pantalon</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setWithGilet(true)}
-                aria-pressed={withGilet}
-                className={`border px-4 py-3 text-left transition-colors ${withGilet ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"}`}
-              >
+              <button type="button" onClick={() => setWithGilet(true)} aria-pressed={withGilet} className={`border px-4 py-3 text-left transition-colors ${withGilet ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"}`}>
                 <span className="block font-sans text-sm font-medium">3-delig</span>
                 <span className={`font-sans text-xs ${withGilet ? "text-canvas/70" : "text-muted"}`}>+ gilet</span>
               </button>
@@ -208,54 +186,54 @@ export function SuitBuilder({ suit }: { suit: SuitDetail }) {
           </div>
         ) : null}
 
-        {/* Maat PER ONDERDEEL — de USP: combineer gerust verschillende maten. */}
+        {/* Maat PER ONDERDEEL — Suitsupply-stijl matrix (Regular/Long/Short). */}
         <div className="mt-6">
           <div className="flex items-center justify-between">
             <p className="font-sans text-sm font-medium">Maat per onderdeel</p>
-            <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">
-              Vind mijn maat
-            </Link>
+            <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">Vind mijn maat</Link>
           </div>
-          <p className="mt-1 font-sans text-xs text-muted">
-            Kies per onderdeel je maat — handig bij bijvoorbeeld langere armen of kortere benen.
-          </p>
-          <div className="mt-3 space-y-4">
-            {activePieces.map((p, i) => (
-              <div key={p.role}>
-                <p className="font-sans text-xs uppercase tracking-wide text-muted">{ROLE_LABEL[p.role]}</p>
-                {pieceSizes[i]?.length ? (
-                  <ul className="mt-1.5 flex flex-wrap gap-2">
-                    {pieceSizes[i].map((label) => {
-                      const v = indices[i].get(label);
-                      const out = v?.known && (v?.qty ?? 0) <= 0;
-                      const on = sizes[p.role] === label;
-                      return (
-                        <li key={label}>
-                          <button
-                            type="button"
-                            disabled={out}
-                            onClick={() => pickSize(p.role, label)}
-                            aria-pressed={on}
-                            className={`min-w-[3rem] border px-3 py-1.5 text-center font-sans leading-none transition-colors ${
-                              out ? "cursor-not-allowed border-line text-muted opacity-50" : on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
-                            }`}
-                          >
-                            <span className={`block text-sm ${out ? "line-through" : ""}`}>{v?.size ?? rowDisplayLabel(label)}</span>
-                            {rowDisplayLabel(label) !== (v?.size ?? "") ? (
-                              <span className="mt-0.5 block text-[0.6rem] font-normal opacity-70">{rowDisplayLabel(label)}</span>
-                            ) : null}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="mt-1 font-sans text-sm text-muted">Geen maten beschikbaar.</p>
-                )}
-              </div>
-            ))}
+          <p className="mt-1 font-sans text-xs text-muted">Kies per onderdeel je maat — handig bij langere armen of kortere benen.</p>
+
+          <div className="mt-4 space-y-6">
+            {selection.map(({ piece, variant }) => {
+              const soldOut = Boolean(variant && variant.known && (variant.qty ?? 0) <= 0);
+              return (
+                <div key={piece.role} className="border-t border-line pt-4 first:border-t-0 first:pt-0">
+                  <p className="font-sans text-xs uppercase tracking-wide text-muted">{ROLE_LABEL[piece.role]}</p>
+                  {piece.sizes.length ? (
+                    <SizeMatrix
+                      sizes={piece.sizes}
+                      hoofdgroep={ROLE_HG[piece.role]}
+                      selected={sizes[piece.role] ?? null}
+                      onSelect={(size) => pickSize(piece.role, size)}
+                    />
+                  ) : (
+                    <p className="mt-1 font-sans text-sm text-muted">Geen maten beschikbaar.</p>
+                  )}
+
+                  {variant ? (
+                    <p className="mt-2 font-sans text-xs">
+                      {variant.qty > 0 ? (
+                        variant.qty <= 5 ? (
+                          <span className="text-danger">● Nog maar {variant.qty} — maat {variant.size}</span>
+                        ) : (
+                          <span className="text-success">● Op voorraad — maat {variant.size}</span>
+                        )
+                      ) : (
+                        <span className="text-muted">Maat {variant.size} tijdelijk uitverkocht</span>
+                      )}
+                    </p>
+                  ) : null}
+
+                  {variant && !soldOut && variant.branches.length ? <ClickAndCollect branches={variant.branches} /> : null}
+                </div>
+              );
+            })}
           </div>
         </div>
+
+        {/* Levertijd — server-belofte uit de allocatie-engine, net als de PDP. */}
+        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
 
         {/* Samenvatting onderdelen */}
         {allChosen ? (
