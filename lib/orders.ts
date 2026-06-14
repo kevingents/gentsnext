@@ -343,7 +343,11 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
       lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title, groupId: l.groupId ?? undefined })),
       { country: order.country, postalCode: order.postalCode }
     );
-    const result = await pushOrderToSRS(order, plan);
+    const result = await pushOrderToSRS(
+      order,
+      plan,
+      lines.map((l) => ({ sku: l.sku, quantity: l.quantity, title: l.title, unitPriceCents: l.unitPriceCents }))
+    );
     // Niet volledig toewijsbaar (voorraad-tekort) → markeer voor handmatige
     // review/nalevering i.p.v. stilzwijgend 'afgerond'. We pushen wél wat kan.
     const status = plan.fullyAllocated ? result.status : "review";

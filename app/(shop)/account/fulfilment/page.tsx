@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { BackofficeShell, Section } from "@/components/account/report-ui";
 import { AllocatePreview } from "@/components/account/allocate-preview";
+import { SrsXmlPreview } from "@/components/account/srs-xml-preview";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Fulfilment", robots: { index: false, follow: false } };
@@ -28,6 +29,13 @@ export default async function FulfilmentPage() {
         </p>
       </Section>
       <AllocatePreview />
+
+      <Section title="Echte SRS-koppeling (SOAP weborder)">
+        <p className="text-sm text-pslate">
+          De koppeling met SRS staat klaar (SOAP <code className="rounded bg-pnavy-50 px-1">si_weborder</code> op ws.srs.nl): na betaling wordt per zending een weborder geplaatst, ingelogd als de webshop-user (→ GENTS Webshop 90). Er gaat <strong className="text-pnavy">pas iets naar SRS als <code className="rounded bg-pnavy-50 px-1">SRS_PUSH_ENABLED=true</code></strong> staat. Valideer eerst de XML hieronder.
+        </p>
+      </Section>
+      <SrsXmlPreview />
     </BackofficeShell>
   );
 }
