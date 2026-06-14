@@ -4,19 +4,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/components/cart/cart-context";
 import { formatEuro } from "@/lib/pricing";
+import { BrandedState } from "@/components/brand-state";
 
 export default function WinkelwagenPage() {
   const cart = useCart();
 
   if (cart.lines.length === 0) {
     return (
-      <div className="mx-auto max-w-page px-gutter py-20 text-center">
-        <h1 className="text-display-md">Je winkelwagen is leeg</h1>
-        <p className="mt-3 font-sans text-ink-soft">Ontdek onze pakken, overhemden en accessoires.</p>
-        <Link href="/collections/pakken" className="btn-primary mt-8 inline-flex">
-          Begin met shoppen
-        </Link>
-      </div>
+      <BrandedState
+        eyebrow="Winkelwagen"
+        title="Je winkelwagen is leeg"
+        intro="Ontdek onze pakken, overhemden en accessoires — of laat je inspireren door de looks."
+      >
+        <div className="flex flex-wrap justify-center gap-3">
+          <Link href="/collections/pakken" className="btn-primary">Begin met shoppen</Link>
+          <Link href="/looks" className="btn-ghost">Bekijk de looks</Link>
+        </div>
+      </BrandedState>
     );
   }
 

@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { useCart } from "@/components/cart/cart-context";
 import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { FooterPayments } from "@/components/footer-payments";
+import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
 import { formatEuro } from "@/lib/pricing";
 
@@ -150,12 +151,9 @@ function CheckoutForm() {
 
   if (cart.lines.length === 0 && !notice) {
     return (
-      <div className="mx-auto max-w-page px-gutter py-20 text-center">
-        <h1 className="text-display-md">Je winkelwagen is leeg</h1>
-        <Link href="/collections/pakken" className="btn-primary mt-8 inline-flex">
-          Begin met shoppen
-        </Link>
-      </div>
+      <BrandedState eyebrow="Afrekenen" title="Je winkelwagen is leeg" intro="Leg eerst iets in je winkelwagen — dan reken je hier veilig af.">
+        <Link href="/collections/pakken" className="btn-primary">Begin met shoppen</Link>
+      </BrandedState>
     );
   }
 
@@ -217,14 +215,9 @@ function CheckoutForm() {
 
   if (notice) {
     return (
-      <div className="mx-auto max-w-page px-gutter py-20">
-        <div className="max-w-xl">
-          <p className="label-brand">Bedankt</p>
-          <h1 className="mt-2 text-display-md">Je bestelling is genoteerd</h1>
-          <p className="mt-4 font-sans text-ink-soft">{notice}</p>
-          <Link href="/" className="btn-ghost mt-8">Terug naar home</Link>
-        </div>
-      </div>
+      <BrandedState eyebrow="Bedankt" title="Je bestelling is genoteerd" intro={notice}>
+        <Link href="/" className="btn-ghost">Terug naar home</Link>
+      </BrandedState>
     );
   }
 
