@@ -369,8 +369,9 @@ function Maten({ customer }: { customer: Customer }) {
   return (
     <form onSubmit={save} className="max-w-2xl">
       <p className="font-sans text-sm text-ink-soft">
-        Bewaar je maten zodat je voortaan sneller de juiste maat kiest. We gebruiken
-        ze ook voor persoonlijk maatadvies — nooit voor iets anders.
+        Bewaar je maten en we selecteren ze voortaan automatisch op productpagina&apos;s
+        en tonen overal een knop <span className="text-ink">&ldquo;Shop in jouw maat&rdquo;</span>.
+        We gebruiken ze alleen hiervoor en voor je maatadvies — nooit voor iets anders.
       </p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {SIZE_FIELDS.map((f) => (
@@ -396,7 +397,7 @@ function Maten({ customer }: { customer: Customer }) {
         </label>
       </div>
       <button type="submit" disabled={state === "busy"} className="btn-primary mt-5">
-        {state === "busy" ? "Opslaan…" : state === "done" ? "Opgeslagen ✓" : "Maten opslaan"}
+        {state === "busy" ? "Opslaan…" : state === "done" ? "Opgeslagen" : "Maten opslaan"}
       </button>
     </form>
   );

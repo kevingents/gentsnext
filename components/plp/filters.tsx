@@ -10,6 +10,8 @@ type Props = {
   facets: Facets;
   selection: PlpSelection;
   total: number;
+  /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
+  mySize?: { row: string; raw: string } | null;
 };
 
 function priceBrackets(maxEuro: number): { label: string; min?: number; max?: number }[] {
@@ -23,11 +25,16 @@ function priceBrackets(maxEuro: number): { label: string; min?: number; max?: nu
   return b.filter((x) => (x.min ?? 0) <= maxEuro);
 }
 
-export function PlpFilters({ facets, selection, total }: Props) {
+export function PlpFilters({ facets, selection, total, mySize }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [openMobile, setOpenMobile] = useState(false);
+
+  // "Shop in jouw maat": alleen tonen als de bewaarde maat hier ook echt
+  // bestaat (in de facetten van deze categorie).
+  const myFacet = mySize ? facets.sizes.find((s) => s.value === mySize.row) : null;
+  const myActive = Boolean(myFacet && selection.sizes.length === 1 && selection.sizes[0] === mySize!.row);
 
   function apply(next: Partial<PlpSelection>) {
     const merged: PlpSelection = { ...selection, ...next, page: 1 };
@@ -53,6 +60,31 @@ export function PlpFilters({ facets, selection, total }: Props) {
 
   const body = (
     <div className={pending ? "opacity-60 transition-opacity" : ""}>
+      {/* Shop in jouw maat — één klik naar alleen je eigen maat */}
+      {myFacet && mySize ? (
+        <button
+          type="button"
+          onClick={() => apply({ sizes: myActive ? [] : [mySize.row] })}
+          aria-pressed={myActive}
+          className={`mb-4 flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors ${
+            myActive ? "border-ink bg-ink text-canvas" : "border-ink bg-canvas hover:bg-surface"
+          }`}
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" />
+          </svg>
+          <span className="min-w-0 flex-1 font-sans text-sm leading-tight">
+            <span className="block font-medium">{myActive ? "Je ziet alleen jouw maat" : "Shop in jouw maat"}</span>
+            <span className={`block text-xs ${myActive ? "text-canvas/70" : "text-muted"}`}>
+              Maat {mySize.raw} · {myFacet.count} {myFacet.count === 1 ? "artikel" : "artikelen"}
+            </span>
+          </span>
+          <span className={`shrink-0 font-sans text-xs underline underline-offset-2 ${myActive ? "text-canvas/80" : "text-ink"}`}>
+            {myActive ? "Wis" : "Toon"}
+          </span>
+        </button>
+      ) : null}
+
       {/* Type (subgroep) — bv. Chino/Pantalon/Lange mouw/2-delig */}
       {facets.types.length > 1 ? (
         <FilterGroup title="Type" defaultOpen>

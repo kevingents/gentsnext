@@ -32,6 +32,8 @@ import { parseComposition, parseCare, careProse } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { sortSizes } from "@/lib/sizing";
 import { stockForSkus, stockAvailable } from "@/lib/stock";
+import { getSessionCustomer } from "@/lib/account";
+import { resolveMySize } from "@/lib/size-match";
 
 export const dynamic = "force-dynamic";
 
@@ -151,6 +153,9 @@ export default async function ProductPage({ params }: Props) {
   })).filter((s) => s.value);
 
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
+  // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
+  const sessionCustomer = await getSessionCustomer();
+  const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
   const rating = parseRating(attrs);
   // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
   const cat = categoryByHoofdgroep(hoofdgroep);
@@ -405,6 +410,7 @@ export default async function ProductPage({ params }: Props) {
             deliveryPromise={delivery?.promise ?? null}
             deliveryNote={delivery?.note ?? null}
             cutoffHour={settings.warehouseCutoffHour}
+            mySize={mySize?.raw ?? null}
           />
 
           {String(attrs.pasvorm ?? "").trim() ? (

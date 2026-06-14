@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
@@ -44,6 +44,8 @@ type Props = {
   deliveryPromise?: string | null;
   deliveryNote?: string | null;
   cutoffHour?: number;
+  /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
+  mySize?: string | null;
 };
 
 export function BuyBox({
@@ -63,6 +65,7 @@ export function BuyBox({
   deliveryPromise,
   deliveryNote,
   cutoffHour,
+  mySize,
 }: Props) {
   const cart = useCart();
   const { setSizeLabel } = usePdpSize();
@@ -74,6 +77,23 @@ export function BuyBox({
   useEffect(() => {
     setSizeLabel(size ? sizeRowLabel(size) : null);
   }, [size, setSizeLabel]);
+
+  // Shop in jouw maat: selecteer de opgeslagen maat van de klant automatisch
+  // voor (alleen leverbare maten), exact eerst, anders dezelfde lettermaat-bucket.
+  const myBucket = mySize ? sizeRowLabel(mySize) : null;
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current || size || !mySize || !active) return;
+    const available = active.sizes.filter((s) => !s.known || s.qty > 0);
+    const pick =
+      available.find((s) => s.size === mySize) ??
+      available.find((s) => sizeRowLabel(s.size) === myBucket);
+    if (pick) {
+      setSize(pick.size);
+      autoPicked.current = true;
+    }
+  }, [active, mySize, myBucket, size]);
+  const isMySize = Boolean(size && myBucket && sizeRowLabel(size) === myBucket);
 
   const selectedSize = useMemo(
     () => active?.sizes.find((s) => s.size === size) ?? null,
@@ -187,6 +207,12 @@ export function BuyBox({
             selected={size}
             onSelect={setSize}
           />
+        ) : null}
+        {isMySize ? (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-card bg-surface px-2.5 py-1 font-sans text-xs text-ink-soft">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
+            <span><span className="font-medium text-ink">Jouw maat</span> — automatisch geselecteerd</span>
+          </p>
         ) : null}
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">

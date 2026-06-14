@@ -10,6 +10,8 @@ import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getSessionCustomer } from "@/lib/account";
+import { resolveMySize } from "@/lib/size-match";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +42,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   if (!cat) notFound();
 
   const filters = selectionToFilters(sel, { category: cat.hoofdgroep });
-  const [{ items, total }, facets] = await Promise.all([
+  const [{ items, total }, facets, sessionCustomer] = await Promise.all([
     getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE),
     getFacets({ category: cat.hoofdgroep }),
+    getSessionCustomer(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
+  const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);
+  const mySize = my ? { row: my.row, raw: my.raw } : null;
 
   function pageHref(p: number): string {
     const params = new URLSearchParams();
@@ -81,7 +87,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-24 lg:h-fit">
-          <PlpFilters facets={facets} selection={sel} total={total} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} />
         </aside>
 
         <div>

@@ -9,6 +9,8 @@ import { getCollectionByHandle, getFilteredProducts, getFacets } from "@/lib/cat
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getSessionCustomer } from "@/lib/account";
+import { resolveMySize } from "@/lib/size-match";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +44,16 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   if (!collection) notFound();
 
   const filters = selectionToFilters(sel, { collectionId: collection.id });
-  const [{ items, total }, facets] = await Promise.all([
+  const [{ items, total }, facets, sessionCustomer] = await Promise.all([
     getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE),
     getFacets({ collectionId: collection.id }),
+    getSessionCustomer(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  // Shop in jouw maat: leid de categorie af uit de collectie-naam (gemengde
+  // collecties matchen niet → geen chip).
+  const my = resolveMySize(`${collection.handle} ${collection.title}`, sessionCustomer?.sizeProfile);
+  const mySize = my ? { row: my.row, raw: my.raw } : null;
 
   function pageHref(p: number): string {
     const params = new URLSearchParams();
@@ -90,7 +97,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
         {/* Sidebar / mobiele drawer */}
         <aside className="lg:sticky lg:top-24 lg:h-fit">
-          <PlpFilters facets={facets} selection={sel} total={total} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} />
         </aside>
 
         {/* Grid */}

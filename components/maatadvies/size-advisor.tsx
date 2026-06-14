@@ -59,10 +59,40 @@ export function SizeAdvisor() {
   const [neck, setNeck] = useState("");
   const [advice, setAdvice] = useState<SizeAdvice | null>(null);
   const [error, setError] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "login" | "error">("idle");
 
   const heightCm = num(height);
   const weightKg = num(weight);
   const ready = Boolean(heightCm && weightKg);
+
+  async function saveToProfile() {
+    if (!advice) return;
+    setSaveState("saving");
+    try {
+      const res = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          section: "size",
+          merge: true,
+          sizeProfile: {
+            colbert: advice.jacket.size,
+            overhemd: advice.shirt.size,
+            pasvorm: fit === "regular" ? "modern" : fit,
+            lengte: heightCm ? String(heightCm) : "",
+            gewicht: weightKg ? String(weightKg) : "",
+          },
+        }),
+      });
+      if (res.status === 401) {
+        setSaveState("login");
+        return;
+      }
+      setSaveState(res.ok ? "saved" : "error");
+    } catch {
+      setSaveState("error");
+    }
+  }
 
   function calculate() {
     if (!heightCm || !weightKg) {
@@ -74,6 +104,7 @@ export function SizeAdvisor() {
       return;
     }
     setError("");
+    setSaveState("idle");
     setAdvice(
       recommendSizes({
         heightCm,
@@ -208,6 +239,48 @@ export function SizeAdvisor() {
               <AdviceCard title="Lengtemaat (lang)" advice={advice.trouserLength} shopHref="/collections/broeken" />
             ) : null}
             <AdviceCard title="Overhemd (boordmaat)" advice={advice.shirt} shopHref="/collections/overhemden" />
+
+            {/* Bewaar in profiel → daarna "Shop in jouw maat" overal op de site. */}
+            <div className="border border-line bg-surface p-5">
+              {saveState === "saved" ? (
+                <div className="flex items-start gap-3">
+                  <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
+                  <div>
+                    <p className="font-sans text-sm font-medium text-ink">Opgeslagen in je profiel</p>
+                    <p className="mt-1 font-sans text-xs text-ink-soft">
+                      We selecteren je maat nu automatisch op productpagina&apos;s en je kunt overal filteren op &ldquo;jouw maat&rdquo;.
+                    </p>
+                    <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">Bekijk mijn maten</Link>
+                  </div>
+                </div>
+              ) : saveState === "login" ? (
+                <div className="flex items-start gap-3">
+                  <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 11V7a4 4 0 10-8 0M5 11h14v10H5zM12 15v2" /></svg>
+                  <div>
+                    <p className="font-sans text-sm font-medium text-ink">Log in om je maat te bewaren</p>
+                    <p className="mt-1 font-sans text-xs text-ink-soft">Dan vullen we je maat automatisch in bij elk product.</p>
+                    <Link href="/account/login?next=/maatadvies" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">Inloggen of account aanmaken</Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-sans text-sm text-ink-soft">
+                    <span className="font-medium text-ink">Bewaar je maat</span> — dan selecteren we &lsquo;m voortaan automatisch.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={saveToProfile}
+                    disabled={saveState === "saving"}
+                    className="btn-ghost shrink-0 !py-2"
+                  >
+                    {saveState === "saving" ? "Opslaan…" : "Bewaar in mijn profiel"}
+                  </button>
+                </div>
+              )}
+              {saveState === "error" ? (
+                <p className="mt-2 font-sans text-xs text-danger">Opslaan lukte niet — probeer het zo nog eens.</p>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className="flex h-full flex-col justify-center border border-dashed border-line p-8 text-center">

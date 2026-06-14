@@ -16,7 +16,19 @@ export async function POST(req: Request) {
   }
 
   if (body.section === "size") {
-    await updateSizeProfile(customer.id, (body.sizeProfile || {}) as SizeProfile);
+    const incoming = (body.sizeProfile || {}) as SizeProfile;
+    if (body.merge) {
+      // Merge: alleen niet-lege velden over het bestaande profiel; zo overschrijft
+      // het maatadvies (colbert/overhemd/pasvorm) niet je schoenmaat of notities.
+      const base = (customer.sizeProfile || {}) as SizeProfile;
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(incoming)) {
+        if (typeof v === "string" && v.trim()) clean[k] = v.trim();
+      }
+      await updateSizeProfile(customer.id, { ...base, ...clean });
+    } else {
+      await updateSizeProfile(customer.id, incoming);
+    }
     return NextResponse.json({ ok: true });
   }
 
