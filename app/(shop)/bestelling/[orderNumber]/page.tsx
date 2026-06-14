@@ -8,6 +8,7 @@ import { ClearCart } from "@/components/cart/clear-cart";
 import { TrackPurchase } from "@/components/analytics/track-purchase";
 import { CareBlock } from "@/components/pdp/care-material";
 import { ProductCard } from "@/components/product-card";
+import { OrderStatusPoller } from "@/components/order/order-status-poller";
 
 export const dynamic = "force-dynamic";
 
@@ -52,9 +53,9 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <p className="label-brand">Even geduld</p>
           <h1 className="mt-2 text-display-md">We bevestigen je betaling</h1>
           <p className="mt-3 font-sans text-ink-soft">
-            Je betaling wordt verwerkt. Ververs deze pagina over een moment; je
-            ontvangt ook een bevestiging per e-mail.
+            Je betaling wordt verwerkt. Je ontvangt ook een bevestiging per e-mail.
           </p>
+          <OrderStatusPoller orderNumber={order.orderNumber} token={t} />
         </>
       ) : failed ? (
         <>
