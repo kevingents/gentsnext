@@ -135,3 +135,24 @@ const FOOTER_PROJECTION = `{ intro, columns[]{ title, links[]{ label, href } } }
 export function getSanityFooter() {
   return sanityFetch<SanityFooter>(`*[_type == "footer"][0] ${FOOTER_PROJECTION}`);
 }
+
+export type SanityOccasion = {
+  title?: string;
+  slug?: string;
+  eyebrow?: string;
+  intro?: string;
+  image?: any;
+  ctaLabel?: string;
+  ctaHref?: string;
+  links?: { label: string; href: string }[];
+  order?: number;
+};
+
+const OCCASION_PROJECTION = `{
+  title, "slug": slug.current, eyebrow, intro, image, ctaLabel, ctaHref,
+  links[]{ label, href }, order
+}`;
+
+export function getSanityOccasions() {
+  return sanityFetch<SanityOccasion[]>(`*[_type == "occasion" && defined(slug.current)] | order(order asc, _createdAt asc) ${OCCASION_PROJECTION}`);
+}

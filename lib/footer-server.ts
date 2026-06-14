@@ -17,6 +17,7 @@ const DEFAULT_COLS: FooterCol[] = [
       { label: "Pakken", href: "/categorie/pakken" },
       { label: "Overhemden", href: "/categorie/overhemden" },
       { label: "Pak samenstellen", href: "/pak-samenstellen" },
+      { label: "Gelegenheden", href: "/gelegenheden" },
       { label: "Shop the look", href: "/looks" },
       { label: "Cadeaubon", href: "/cadeaubon" },
       { label: "Favorieten", href: "/favorieten" },
