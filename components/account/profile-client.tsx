@@ -77,10 +77,11 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
         <div className="flex items-center gap-4">
           {customer.isAdmin ? (
             <>
+              <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">Statistieken</a>
               <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">Orders</a>
+              <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">Klanten</a>
+              <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">Rapportages</a>
               <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">Reviews</a>
-              <a href="/account/analytics" className="font-sans text-sm text-ink underline hover:text-ink">Analytics</a>
-              <a href="/account/productmedia" className="font-sans text-sm text-ink underline hover:text-ink">Productmedia</a>
               <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">Instellingen</a>
             </>
           ) : null}

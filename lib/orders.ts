@@ -382,6 +382,17 @@ export async function listRecentOrders(limit = 50) {
   return db.select().from(orders).orderBy(sql`created_at desc`).limit(limit);
 }
 
+/** Admin: operationele orders die nog actie vragen (excl. geïmporteerde historie). */
+export async function listOperationalOrders(limit = 40) {
+  const db = getDb();
+  return db
+    .select()
+    .from(orders)
+    .where(sql`status in ('paid','open','shipped','ready_pickup') and fulfillment_status <> 'imported'`)
+    .orderBy(sql`created_at desc`)
+    .limit(limit);
+}
+
 export async function getOrderByNumber(orderNumber: string) {
   const db = getDb();
   const rows = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);
