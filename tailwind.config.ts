@@ -34,6 +34,7 @@ const config: Config = {
         pnavy: { DEFAULT: "#0a1f33", 50: "#eef2f6", 100: "#d4dde6", 600: "#13314d", 700: "#0e2740", 800: "#0a1f33", 900: "#071521" },
         pslate: "#3a4a5a",
         pcream: "#f5f5f2",
+        cream: "#f5f5f2", // lichte tekst/akcenten op de navy sidebar (portal-huisstijl)
         // Statuskleuren (functioneel, niet merk) — bewust ingetogen.
         success: "#2F6F4E",
         danger: "#9B2C2C",
