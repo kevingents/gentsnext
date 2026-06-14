@@ -135,15 +135,20 @@ export type ResolvedLook = Look & { products: ResolvedHotspot[] };
 
 /** Koopgegevens per look-product: maten + voorraad + sku voor direct-in-winkelwagen. */
 export type LookBuySize = { size: string; sku: string; priceCents: number; qty: number };
-export type LookBuyData = { color: string; hoofdgroep: string; sizes: LookBuySize[] };
+export type LookBuyData = { color: string; hoofdgroep: string; specs: string; sizes: LookBuySize[] };
 
 export async function getLookBuyData(handles: string[]): Promise<Record<string, LookBuyData>> {
   const uniq = [...new Set(handles.filter(Boolean))];
   if (!uniq.length) return {};
   const db = getDb();
-  const rows = await db.execute<{ handle: string; color: string; size: string; sku: string; price: number; qty: number; hg: string }>(sql`
+  const rows = await db.execute<{
+    handle: string; color: string; size: string; sku: string; price: number; qty: number;
+    hg: string; materiaal: string; samenstelling: string; pasvorm: string;
+  }>(sql`
     select p.handle, coalesce(v.color,'') color, coalesce(v.size,'') size, coalesce(v.sku,'') sku,
-      v.price_cents price, v.stock_qty qty, p.attributes->>'hoofdgroep_omschrijving' hg
+      v.price_cents price, v.stock_qty qty, p.attributes->>'hoofdgroep_omschrijving' hg,
+      p.attributes->>'materiaal' materiaal, p.attributes->>'samenstelling_materiaal' samenstelling,
+      p.attributes->>'pasvorm' pasvorm
     from products p join product_variants v on v.product_id = p.id
     where p.handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)}) and coalesce(v.size,'') <> ''
     order by p.handle, v.position asc
@@ -152,7 +157,11 @@ export async function getLookBuyData(handles: string[]): Promise<Record<string, 
   for (const r of rows.rows) {
     let e = out[r.handle];
     if (!e) {
-      e = { color: r.color, hoofdgroep: r.hg || "", sizes: [] };
+      // Stijlvolle, korte spec-regel: materiaal/stof + pasvorm (zoals een atelier 'm noemt).
+      const material = String(r.materiaal || r.samenstelling || "").trim();
+      const pasvorm = String(r.pasvorm || "").trim();
+      const specs = [material, pasvorm].filter(Boolean).join(" · ").slice(0, 80);
+      e = { color: r.color, hoofdgroep: r.hg || "", specs, sizes: [] };
       out[r.handle] = e;
     }
     if (e.sizes.some((s) => s.size === r.size)) continue;

@@ -61,13 +61,6 @@ export function ShopTheLook({
     setTimeout(() => setAdded((p) => ({ ...p, [i]: false })), 1800);
   }
 
-  function addAll() {
-    look.products.forEach((h, i) => {
-      if (h.product && buy?.[h.handle] && picked[i]) addItem(i);
-    });
-  }
-
-  const pickedCount = Object.values(picked).filter(Boolean).length;
   const shoppable = Boolean(buy);
 
   return (
@@ -134,7 +127,8 @@ export function ShopTheLook({
                   <div className="min-w-0 flex-1">
                     {h.label ? <span className="block font-sans text-[0.65rem] uppercase tracking-wide text-muted">{h.label}</span> : null}
                     <Link href={`/products/${h.product!.handle}`} className="block truncate font-sans text-sm hover:underline">{h.product!.title}</Link>
-                    <span className="font-sans text-sm text-ink-soft">{formatEuro(selSize?.priceCents ?? h.product!.minPriceCents)}</span>
+                    {data?.specs ? <span className="mt-0.5 block font-sans text-[0.7rem] italic leading-snug text-ink-soft/80">{data.specs}</span> : null}
+                    <span className="mt-0.5 block font-sans text-sm text-ink-soft">{formatEuro(selSize?.priceCents ?? h.product!.minPriceCents)}</span>
                   </div>
                 </div>
 
@@ -181,17 +175,6 @@ export function ShopTheLook({
             );
           })}
         </ul>
-
-        {shoppable ? (
-          <button
-            type="button"
-            onClick={addAll}
-            disabled={pickedCount === 0}
-            className="btn-primary mt-4 w-full"
-          >
-            {pickedCount === 0 ? "Kies maten om de look toe te voegen" : `Voeg ${pickedCount} ${pickedCount === 1 ? "artikel" : "artikelen"} toe`}
-          </button>
-        ) : null}
       </div>
     </div>
   );
