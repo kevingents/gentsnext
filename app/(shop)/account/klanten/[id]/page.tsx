@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { customers } from "@/db/schema";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
 import { BackofficeShell, Kpi, Section, euro } from "@/components/account/report-ui";
+import { ImportStorePurchasesButton } from "@/components/account/import-store-purchases-button";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Klant", robots: { index: false, follow: false } };
@@ -92,7 +93,7 @@ export default async function KlantDetailPage({ params }: Props) {
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <Section title={`Winkelaankopen — ${data.storeBuys.length}`}>
+        <Section title={`Winkelaankopen — ${data.storeBuys.length}`} right={<ImportStorePurchasesButton customerId={c.id} />}>
           {data.storeBuys.length ? (
             <ul className="divide-y divide-line">
               {data.storeBuys.slice(0, 25).map((b) => (
