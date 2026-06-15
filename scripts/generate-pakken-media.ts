@@ -34,7 +34,11 @@ const MOTIONS = [
 // Vaste merk-modellen (blob-URL's), geroteerd voor diversiteit. Vul aan zodra de
 // modellen klaar zijn (gebruiker levert er 2, ik genereer er 1). Leeg = FASHN
 // kiest zelf een model (huidig gedrag).
-const MODEL_REFS: string[] = [];
+const MODEL_REFS: string[] = [
+  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-a.jpg",
+  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-b.jpg",
+  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-c.jpg",
+];
 
 /** product-to-model-inputs, met optioneel een vast merk-model via face_reference. */
 function modelInputs(img: string, prompt: string, i: number) {
