@@ -11,7 +11,6 @@ import { parseComposition, parseCare, careProse } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { Accordion } from "@/components/pdp/accordion";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
-import { ClickAndCollect } from "@/components/pdp/click-collect";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 
 const ROLE_LABEL: Record<SuitRole, string> = {
@@ -196,7 +195,6 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
 
           <div className="mt-4 space-y-6">
             {selection.map(({ piece, variant }) => {
-              const soldOut = Boolean(variant && variant.known && (variant.qty ?? 0) <= 0);
               return (
                 <div key={piece.role} className="border-t border-line pt-4 first:border-t-0 first:pt-0">
                   <p className="font-sans text-xs uppercase tracking-wide text-muted">{ROLE_LABEL[piece.role]}</p>
@@ -225,7 +223,6 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
                     </p>
                   ) : null}
 
-                  {variant && !soldOut && variant.branches.length ? <ClickAndCollect branches={variant.branches} /> : null}
                 </div>
               );
             })}

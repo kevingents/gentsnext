@@ -21,7 +21,30 @@ const SUIT = "Male model wearing THIS suit, complete with a crisp white dress sh
 const POSE1 = `${SUIT} Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera. ${STUDIO}`;
 const POSE2 = `${SUIT} Easy full-length three-quarter stance, both hands loosely in his pockets, friendly relaxed smile, looking into the camera. ${STUDIO}`;
 const DETAIL = `Close-up editorial detail of THIS suit, worn over a crisp white dress shirt with a buttoned collar — never a t-shirt — by a man. Tightly framed on the torso from the collarbone down to the waist; the head, chin and face are NOT in frame. Focus on the jacket lapel, chest pocket, buttons, the white shirt collar and the fabric texture. ${STUDIO}`;
-const MOTION = "Subtle natural movement: the model shifts his weight and turns slightly toward the camera, hands relaxed, gentle confident fashion-lookbook motion.";
+// Geroteerde video-bewegingen voor diversiteit (lachen, klappen, anders poseren).
+const MOTIONS = [
+  "The model laughs naturally with a warm genuine smile, relaxed shoulders and subtle head movement.",
+  "The model shifts his weight, turns slightly toward the camera and gives a confident easy smile.",
+  "The model adjusts his jacket cuff and looks up with a relaxed friendly expression, gentle motion.",
+  "The model brings his hands together in a relaxed clap and smiles, a casual lively gesture.",
+  "The model takes a small step forward in an easy natural walk with a light smile, arms swinging gently.",
+  "The model runs a hand through his hair and gives a laid-back smile, calm natural movement.",
+];
+
+// Vaste merk-modellen (blob-URL's), geroteerd voor diversiteit. Vul aan zodra de
+// modellen klaar zijn (gebruiker levert er 2, ik genereer er 1). Leeg = FASHN
+// kiest zelf een model (huidig gedrag).
+const MODEL_REFS: string[] = [];
+
+/** product-to-model-inputs, met optioneel een vast merk-model via face_reference. */
+function modelInputs(img: string, prompt: string, i: number) {
+  const inputs: Record<string, unknown> = { product_image: toFullRes(img), prompt, output_format: "jpeg" };
+  if (MODEL_REFS.length) {
+    inputs.face_reference = MODEL_REFS[i % MODEL_REFS.length];
+    inputs.face_reference_mode = "match_reference";
+  }
+  return inputs;
+}
 
 function toFullRes(u: string) { try { const x = new URL(u); if (x.pathname.includes("/cdn/shop") || x.hostname.endsWith("shopify.com")) { x.searchParams.delete("width"); x.searchParams.delete("height"); } return x.toString(); } catch { return u; } }
 
@@ -77,29 +100,30 @@ async function main() {
 
   let credits = await getCredits(key);
   console.log(`⏳ ${rows.rows.length} pakken te verwerken — ${credits} credits beschikbaar.`);
-  let done = 0, spent = 0;
+  let done = 0, spent = 0, idx = 0;
 
   for (const r of rows.rows) {
     if (credits < 2) { console.log(`⛔ Credits op (${credits}). Gestopt — rest blijft staan voor de volgende run.`); break; }
     if (!r.img) { console.log(`• ${r.handle} — geen productfoto, overslaan`); continue; }
+    const i = idx++;
     console.log(`• ${r.handle}`);
     const patch: Record<string, string> = {};
     let leadUrl = r.m1;
 
     if (!r.m1) {
-      const out = await run("product-to-model", { product_image: toFullRes(r.img), prompt: POSE1, output_format: "jpeg" }, key);
+      const out = await run("product-to-model", modelInputs(r.img, POSE1, i), key);
       if (out) { const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl = u; patch.modelImageAlt = `${r.title} — op model`; leadUrl = u; spent++; } }
     }
     if (!r.m2) {
-      const out = await run("product-to-model", { product_image: toFullRes(r.img), prompt: POSE2, output_format: "jpeg" }, key);
+      const out = await run("product-to-model", modelInputs(r.img, POSE2, i), key);
       if (out) { const u = await toBlob(out, `ai-models/${r.handle}-model2.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl2 = u; patch.modelImageAlt2 = `${r.title} — op model (2)`; spent++; } }
     }
     if (!r.det) {
-      const out = await run("product-to-model", { product_image: toFullRes(r.img), prompt: DETAIL, output_format: "jpeg" }, key);
+      const out = await run("product-to-model", modelInputs(r.img, DETAIL, i), key);
       if (out) { const u = await toBlob(out, `ai-models/${r.handle}-detail.jpg`, token, "image/jpeg"); if (u) { patch.detailImageUrl = u; patch.detailImageAlt = `${r.title} — detail`; spent++; } }
     }
     if (!r.vid && leadUrl) {
-      const out = await run("image-to-video", { image: leadUrl, prompt: MOTION, duration: 5, resolution: "720p" }, key);
+      const out = await run("image-to-video", { image: leadUrl, prompt: MOTIONS[i % MOTIONS.length], duration: 5, resolution: "720p" }, key);
       if (out) { const u = await toBlob(out, `ai-videos/${r.handle}.mp4`, token, "video/mp4"); if (u) { patch.modelVideoUrl = u; spent += 3; } }
     }
 
