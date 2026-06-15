@@ -13,6 +13,8 @@ import { eq, sql } from "drizzle-orm";
  *   npm run gen:lifestyle -- 60 trouw     (Pakken/Colberts/Gilets — mediterrane bruiloft)
  *   npm run gen:lifestyle -- 30 polo      (Polo-shirts — vrolijk Palermo/Sardinie)
  *   npm run gen:lifestyle -- 40 country   (Truien/Jassen/Vesten — ruig Schotland)
+ *   npm run gen:lifestyle -- 320 stad     (Overhemden/Broeken/T-Shirts — smart-casual stad)
+ *   npm run gen:lifestyle -- 20 student   (rok/jacquet — fatbike Amsterdam/Leiden)
  */
 
 const API = "https://api.fashn.ai/v1";
@@ -79,6 +81,19 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
       "walking his fatbike across a sunny canal bridge while chatting with a mate, relaxed and easy",
     ],
   },
+  stad: {
+    light: "Soft natural European city daylight, stylish, easy and relaxed.",
+    scenes: [
+      "sitting at a marble cafe table on a lively old-town terrace, espresso in hand, watching the street go by",
+      "walking a sunlit cobbled city street past grand historic facades, relaxed and unhurried",
+      "browsing a weekend vintage flea market among curious stalls, sunlight slanting between the awnings",
+      "leaning on the wrought-iron balcony of an old city apartment in the morning light, coffee in hand",
+      "crossing a grand city square past an old fountain, mid-stride, easy and quietly confident",
+      "reading by the window of a cosy bookshop cafe, a flat white on the table",
+      "stepping out of a classic barbershop onto a busy street, fresh, relaxed and smiling",
+      "leaning on a sunlit canal bridge railing, watching the boats drift past below",
+    ],
+  },
 };
 
 const CAT: Record<string, { mood: string; wear: string }> = {
@@ -89,11 +104,15 @@ const CAT: Record<string, { mood: string; wear: string }> = {
   Truien: { mood: "country", wear: "wearing THIS knitwear with trousers and leather boots" },
   Vesten: { mood: "country", wear: "wearing THIS cardigan over a shirt with trousers and boots" },
   Jassen: { mood: "country", wear: "wearing THIS coat over a knit with trousers and leather boots" },
+  Overhemden: { mood: "stad", wear: "wearing THIS shirt with the sleeves relaxed, light chino trousers and brown leather loafers" },
+  Broeken: { mood: "stad", wear: "wearing THIS pair of trousers with a tucked-in light shirt and brown leather shoes" },
+  "T-Shirts": { mood: "stad", wear: "wearing THIS t-shirt with light chino trousers, a relaxed summer city look" },
 };
 const PHASES: Record<string, string[]> = {
   trouw: ["Pakken", "Colberts", "Gilets"],
   polo: ["Polo-shirts"],
   country: ["Truien", "Vesten", "Jassen"],
+  stad: ["Overhemden", "Broeken", "T-Shirts"],
 };
 
 function toFullRes(u: string) { try { const x = new URL(u); if (x.pathname.includes("/cdn/shop") || x.hostname.endsWith("shopify.com")) { x.searchParams.delete("width"); x.searchParams.delete("height"); } return x.toString(); } catch { return u; } }
