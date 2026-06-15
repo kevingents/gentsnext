@@ -6,7 +6,9 @@ import { rowSortIndex } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 
 type SizeMedia = { threshold: string; url: string; alt: string };
-type Shot = { url: string; alt: string; badge?: boolean; video?: boolean };
+// `contain`: hele beeld tonen (object-contain) i.p.v. bijsnijden — voor staande
+// AI-modelfoto's/video (2:3) die anders kop/voeten verliezen in de 4:5-tegel.
+type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contain?: boolean };
 
 /**
  * Mr Marvis-stijl galerij: alle productfoto's in een 2-koloms grid ("2 om 2"),
@@ -14,7 +16,7 @@ type Shot = { url: string; alt: string; badge?: boolean; video?: boolean };
  * wordt vooraan gezet zodra een maat ≥ drempel gekozen is. Een (AI-)productvideo
  * leidt — autoplay/gedempt/loop in het raster, met geluid in de lightbox.
  */
-export function Gallery({ images, title, sizeMedia, video }: { images: { url: string; alt: string }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null }) {
+export function Gallery({ images, title, sizeMedia, video }: { images: { url: string; alt: string; contain?: boolean }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null }) {
   const { sizeLabel } = usePdpSize();
   const [lightbox, setLightbox] = useState<number | null>(null);
 
@@ -30,9 +32,9 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
 
   const poster = images[0]?.url || "";
   const shots: Shot[] = [
-    ...(video ? [{ url: video, alt: `${title} — video`, video: true }] : []),
+    ...(video ? [{ url: video, alt: `${title} — video`, video: true, contain: true }] : []),
     ...(showLarge ? [{ url: sizeMedia!.url, alt: sizeMedia!.alt || `${title} — grote maat`, badge: true }] : []),
-    ...images.map((img, i) => ({ url: img.url, alt: altFor(img.alt, i) })),
+    ...images.map((img, i) => ({ url: img.url, alt: altFor(img.alt, i), contain: img.contain })),
   ];
   const firstImageIdx = shots.findIndex((s) => !s.video);
 
@@ -80,7 +82,7 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
                 loop
                 playsInline
                 preload="metadata"
-                className="absolute inset-0 h-full w-full object-cover"
+                className={`absolute inset-0 h-full w-full ${shot.contain ? "object-contain" : "object-cover"}`}
               />
             ) : (
               <Image
@@ -89,7 +91,7 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
                 fill
                 priority={i === firstImageIdx}
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 30vw"
-                className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                className={`transition-transform duration-300 group-hover:scale-[1.03] ${shot.contain ? "object-contain" : "object-cover"}`}
               />
             )}
             {shot.video ? (

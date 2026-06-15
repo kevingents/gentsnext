@@ -389,8 +389,8 @@ export default async function ProductPage({ params }: Props) {
           images={[
             // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
             // → detailfoto, daarna de echte productfoto's.
-            ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title }] : []),
-            ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title }] : []),
+            ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
+            ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
             ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
             ...images.map((i) => ({ url: i.url, alt: i.alt })),
           ]}
