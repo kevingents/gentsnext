@@ -44,11 +44,18 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
   // Maat PER ONDERDEEL (de USP) — bv. een groter colbert met een kleinere pantalon.
   // We bewaren de werkelijke maat (bv. "50") per rol, net als op de productpagina.
   const [sizes, setSizes] = useState<Partial<Record<SuitRole, string>>>({});
+  // Actieve maat-tab (Colbert/Pantalon/Gilet) — één matrix tegelijk = minder scrollen.
+  const [tab, setTab] = useState<SuitRole>("colbert");
 
   const activePieces = useMemo(
     () => [colbert, broek, ...(withGilet && gilet ? [gilet] : [])],
     [colbert, broek, gilet, withGilet]
   );
+
+  // Val terug op Colbert als de actieve tab (gilet) verdwijnt bij 2-delig.
+  useEffect(() => {
+    if (!activePieces.some((p) => p.role === tab)) setTab("colbert");
+  }, [activePieces, tab]);
 
   // Bij het kiezen van een maat: vul nog-niet-gekozen onderdelen met dezelfde
   // lettermaat-bucket (bv. colbert L → pantalon L) als die leverbaar bestaat.
@@ -193,40 +200,59 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
           </div>
           <p className="mt-1 font-sans text-xs text-muted">Kies per onderdeel je maat — handig bij langere armen of kortere benen.</p>
 
-          <div className="mt-4 space-y-6">
-            {selection.map(({ piece, variant }) => {
+          {/* Tabs per onderdeel — één matrix tegelijk = minder scrollen; vinkje als de maat gekozen is. */}
+          <div className="mt-4 flex gap-1 border-b border-line">
+            {selection.map(({ piece }) => {
+              const on = piece.role === tab;
+              const chosen = Boolean(sizes[piece.role]);
               return (
-                <div key={piece.role} className="border-t border-line pt-4 first:border-t-0 first:pt-0">
-                  <p className="font-sans text-xs uppercase tracking-wide text-muted">{ROLE_LABEL[piece.role]}</p>
-                  {piece.sizes.length ? (
-                    <SizeMatrix
-                      sizes={piece.sizes}
-                      hoofdgroep={ROLE_HG[piece.role]}
-                      selected={sizes[piece.role] ?? null}
-                      onSelect={(size) => pickSize(piece.role, size)}
-                    />
-                  ) : (
-                    <p className="mt-1 font-sans text-sm text-muted">Geen maten beschikbaar.</p>
-                  )}
-
-                  {variant ? (
-                    <p className="mt-2 font-sans text-xs">
-                      {variant.qty > 0 ? (
-                        variant.qty <= 5 ? (
-                          <span className="text-danger">● Nog maar {variant.qty} — maat {variant.size}</span>
-                        ) : (
-                          <span className="text-success">● Op voorraad — maat {variant.size}</span>
-                        )
-                      ) : (
-                        <span className="text-muted">Maat {variant.size} tijdelijk uitverkocht</span>
-                      )}
-                    </p>
+                <button
+                  key={piece.role}
+                  type="button"
+                  onClick={() => setTab(piece.role)}
+                  aria-pressed={on}
+                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2.5 font-sans text-sm transition-colors ${
+                    on ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink"
+                  }`}
+                >
+                  {ROLE_LABEL[piece.role]}
+                  {chosen ? (
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-success" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
                   ) : null}
-
-                </div>
+                </button>
               );
             })}
           </div>
+
+          {selection
+            .filter(({ piece }) => piece.role === tab)
+            .map(({ piece, variant }) => (
+              <div key={piece.role} className="mt-4">
+                {piece.sizes.length ? (
+                  <SizeMatrix
+                    sizes={piece.sizes}
+                    hoofdgroep={ROLE_HG[piece.role]}
+                    selected={sizes[piece.role] ?? null}
+                    onSelect={(size) => pickSize(piece.role, size)}
+                  />
+                ) : (
+                  <p className="mt-1 font-sans text-sm text-muted">Geen maten beschikbaar.</p>
+                )}
+                {variant ? (
+                  <p className="mt-3 font-sans text-xs">
+                    {variant.qty > 0 ? (
+                      variant.qty <= 5 ? (
+                        <span className="text-danger">● Nog maar {variant.qty} — maat {variant.size}</span>
+                      ) : (
+                        <span className="text-success">● Op voorraad — maat {variant.size}</span>
+                      )
+                    ) : (
+                      <span className="text-muted">Maat {variant.size} tijdelijk uitverkocht</span>
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ))}
         </div>
 
         {/* Levertijd — server-belofte uit de allocatie-engine, net als de PDP. */}
