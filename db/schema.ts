@@ -63,6 +63,12 @@ export const products = pgTable(
     modelImageAlt: text("model_image_alt").notNull().default(""),
     /** AI-gegenereerde productvideo (uit de modelfoto, FASHN image-to-video) — speelt vooraan in de galerij. */
     modelVideoUrl: text("model_video_url").notNull().default(""),
+    /** Tweede AI-modelpose (extra galerijbeeld na de leidende modelfoto). */
+    modelImageUrl2: text("model_image_url2").notNull().default(""),
+    modelImageAlt2: text("model_image_alt2").notNull().default(""),
+    /** AI-detailfoto (close-up stof/revers) — derde galerijbeeld. */
+    detailImageUrl: text("detail_image_url").notNull().default(""),
+    detailImageAlt: text("detail_image_alt").notNull().default(""),
     /** Kleurgroep-sleutel (uit titel afgeleid) voor het samenvoegen van kleurvarianten. */
     variantGroupKey: text("variant_group_key").notNull().default(""),
     /** Eén primair product per kleurgroep wordt in listings getoond. */
