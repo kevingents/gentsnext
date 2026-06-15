@@ -156,10 +156,10 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
           {activePieces.map((p, i) => (
             <div
               key={p.role}
-              className={`relative overflow-hidden rounded-card bg-surface ${i === 0 ? "col-span-2 aspect-[4/5]" : "aspect-square"}`}
+              className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface"
             >
               {p.image ? (
-                <Image src={p.image} alt={p.title} fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" priority={i === 0} />
+                <Image src={p.image} alt={p.title} fill sizes="(max-width: 1024px) 50vw, 25vw" className="object-cover" priority={i === 0} />
               ) : null}
               <span className="absolute left-2 top-2 bg-canvas/90 px-2 py-0.5 font-sans text-[0.65rem] uppercase tracking-wide">
                 {ROLE_LABEL[p.role]}
@@ -255,9 +255,6 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
             ))}
         </div>
 
-        {/* Levertijd — server-belofte uit de allocatie-engine, net als de PDP. */}
-        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
-
         {/* Samenvatting onderdelen */}
         {allChosen ? (
           <ul className="mt-6 divide-y divide-line border-y border-line">
@@ -293,6 +290,9 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
           Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.
           Gratis retour binnen 14 dagen; veilig afrekenen met o.a. iDEAL.
         </p>
+
+        {/* Levertijd — onder de bestelknop (zoals gevraagd). */}
+        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
       </div>
 
       {/* Materiaal, onderhoud & pasvorm — net als op de productpagina */}
