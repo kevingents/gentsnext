@@ -28,6 +28,10 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
       "sitting on a large sun-warmed rock at the water's edge, forearms on his knees, a calm half-smile looking over the turquoise sea",
       "leaning casually against a sun-warmed whitewashed wall in a narrow Mediterranean street, hands in pockets, a relaxed natural half-smile",
       "with a small group of stylish male wedding guests on the village steps, laughing and talking, a natural candid group moment",
+      "at a relaxed casual outdoor beach wedding celebration at dusk, warm string lights and guests dancing behind, laughing with a drink in hand",
+      "at a lively garden party among olive trees and flowers, a long festive table behind him, laughing mid-conversation with a glass in hand",
+      "at a cheerful beach party by the sea at golden hour, a relaxed barefoot-on-the-sand summer vibe, a big carefree laugh",
+      "raising a glass in a toast at a sunny vineyard terrace celebration, friends around the table, a warm genuine laugh",
     ],
   },
   polo: {
@@ -92,13 +96,14 @@ async function main() {
   const cats = PHASES[phase] || (CAT[phase] ? [phase] : Object.keys(CAT));
   const db = getDb();
 
-  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary and p.lifestyle_image_url=''`;
+  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary and (p.lifestyle_image_url='' or p.lifestyle_image_url2='' or p.lifestyle_image_url3='')`;
   const filter = isStudent
     ? sql`(lower(p.handle) like '%rok%' or lower(p.title) like '%rokkostuum%' or lower(p.title) like '%rokjas%' or lower(p.handle) like 'jacquet%' or lower(p.title) like '%jacquet%')`
     : sql`p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})`;
-  const queryRows = () => db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
+  const queryRows = () => db.execute<{ id: string; handle: string; title: string; hg: string; img: string; l1: string; l2: string; l3: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
-      (select url from product_images pi where pi.product_id=p.id order by position limit 1) img
+      (select url from product_images pi where pi.product_id=p.id order by position limit 1) img,
+      p.lifestyle_image_url l1, p.lifestyle_image_url2 l2, p.lifestyle_image_url3 l3
     from products p
     where ${base} and ${filter}
     order by p.stock_qty desc limit ${limit}`);
@@ -117,21 +122,30 @@ async function main() {
     const mood = conf ? MOODS[conf.mood] : MOODS.trouw;
     if (!conf || !r.img) { console.log(`• ${r.handle} — overslaan`); continue; }
     const i = idx++;
-    const scene = mood.scenes[i % mood.scenes.length];
     console.log(`• ${r.handle} (${r.hg} · ${conf.mood})`);
     try {
-      const prompt = `A man ${conf.wear}, ${scene}. ${mood.light} ${EVERYMAN}`;
-      const out = await run({ product_image: toFullRes(r.img), prompt, output_format: "jpeg" }, key);
-      if (out) {
-        const u = await toBlob(out, `ai-lifestyle/${r.handle}.jpg`, token);
-        if (u) {
-          let saved = false;
-          for (let a = 1; a <= 4 && !saved; a++) { try { await db.update(products).set({ lifestyleImageUrl: u, lifestyleImageAlt: `${r.title} — sfeerbeeld` }).where(eq(products.id, r.id)); saved = true; } catch { await new Promise((rr) => setTimeout(rr, 2000 * a)); } }
-          if (saved) { done++; console.log("   ✓"); }
-        }
+      const slots = [
+        { col: "lifestyleImageUrl", cur: r.l1, path: `ai-lifestyle/${r.handle}.jpg` },
+        { col: "lifestyleImageUrl2", cur: r.l2, path: `ai-lifestyle/${r.handle}-2.jpg` },
+        { col: "lifestyleImageUrl3", cur: r.l3, path: `ai-lifestyle/${r.handle}-3.jpg` },
+      ];
+      const patch: Record<string, string> = {};
+      for (let s = 0; s < 3; s++) {
+        if (slots[s].cur) continue;
+        if (credits < 1) break;
+        const scene = mood.scenes[(i * 3 + s) % mood.scenes.length];
+        const prompt = `A man ${conf.wear}, ${scene}. ${mood.light} ${EVERYMAN}`;
+        const out = await run({ product_image: toFullRes(r.img), prompt, output_format: "jpeg" }, key);
+        if (out) { const u = await toBlob(out, slots[s].path, token); if (u) patch[slots[s].col] = u; }
+        credits = await getCredits(key);
+      }
+      if (patch.lifestyleImageUrl) patch.lifestyleImageAlt = `${r.title} — sfeerbeeld`;
+      if (Object.keys(patch).length) {
+        let saved = false;
+        for (let a = 1; a <= 4 && !saved; a++) { try { await db.update(products).set(patch).where(eq(products.id, r.id)); saved = true; } catch { await new Promise((rr) => setTimeout(rr, 2000 * a)); } }
+        if (saved) { done++; console.log(`   ✓ +${Object.keys(patch).filter((k) => k.startsWith("lifestyleImageUrl")).length}`); }
       }
     } catch (e) { console.error(`   fout ${r.handle}:`, String((e as Error)?.message || e).slice(0, 100)); }
-    credits = await getCredits(key);
   }
   console.log(`\n✓ Klaar — ${done} sfeerbeelden, ${credits} credits over.`);
   process.exit(0);

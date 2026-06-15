@@ -64,6 +64,13 @@
       "when": 1781548314030,
       "tag": "0008_lean_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781552099335,
+      "tag": "0009_light_brood",
+      "breakpoints": true
     }
   ]
 }

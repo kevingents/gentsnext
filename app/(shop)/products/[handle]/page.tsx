@@ -454,8 +454,12 @@ export default async function ProductPage({ params }: Props) {
         <section className="mt-20">
           <p className="label-brand">In het echt</p>
           <h2 className="mt-2 text-display-md">Zo draag je het</h2>
-          <div className="relative mx-auto mt-8 aspect-[2/3] w-full max-w-md overflow-hidden rounded-card bg-surface">
-            <Image src={product.lifestyleImageUrl} alt={product.lifestyleImageAlt || product.title} fill sizes="(max-width: 768px) 100vw, 28rem" className="object-cover" />
+          <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[product.lifestyleImageUrl, product.lifestyleImageUrl2, product.lifestyleImageUrl3].filter(Boolean).map((src, i) => (
+              <div key={i} className="relative aspect-[2/3] overflow-hidden rounded-card bg-surface">
+                <Image src={src} alt={product.lifestyleImageAlt || product.title} fill sizes="(max-width: 768px) 100vw, 30vw" className="object-cover" />
+              </div>
+            ))}
           </div>
         </section>
       ) : null}
