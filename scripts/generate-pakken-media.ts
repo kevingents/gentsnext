@@ -1,5 +1,6 @@
 import "@/lib/load-env";
 import { put } from "@vercel/blob";
+import sharp from "sharp";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -71,10 +72,41 @@ async function run(model_name: string, inputs: any, key: string) {
   return poll(id, key);
 }
 
+/**
+ * Pad een beeld naar exact 4:5 met z'n EIGEN randkleur (studio-grijs), zodat het
+ * de 4:5-galerijtegel precies vult — geen "kader" (object-contain-opvulling) en
+ * geen bijgesneden model. We samplen de hoek voor de opvulkleur, dus de naad valt
+ * weg in de studio-achtergrond.
+ */
+async function padTo45(buf: Buffer): Promise<Buffer> {
+  try {
+    const meta = await sharp(buf).metadata();
+    const w = meta.width ?? 0, h = meta.height ?? 0;
+    if (!w || !h) return buf;
+    const target = 4 / 5; // breedte/hoogte
+    const ratio = w / h;
+    if (Math.abs(ratio - target) < 0.01) return buf;
+    const { data } = await sharp(buf).extract({ left: 0, top: 0, width: 2, height: 2 }).raw().toBuffer({ resolveWithObject: true });
+    const background = { r: data[0], g: data[1], b: data[2], alpha: 1 };
+    if (ratio < target) {
+      const tw = Math.round(h * target);
+      const left = Math.floor((tw - w) / 2);
+      return sharp(buf).extend({ left, right: tw - w - left, top: 0, bottom: 0, background }).jpeg({ quality: 90 }).toBuffer();
+    }
+    const th = Math.round(w / target);
+    const top = Math.floor((th - h) / 2);
+    return sharp(buf).extend({ top, bottom: th - h - top, left: 0, right: 0, background }).jpeg({ quality: 90 }).toBuffer();
+  } catch {
+    return buf;
+  }
+}
+
 async function toBlob(srcUrl: string, path: string, token: string, contentType: string) {
   const res = await fetch(srcUrl);
   if (!res.ok) return null;
-  const blob = await put(path, await res.arrayBuffer(), { access: "public", token, contentType, allowOverwrite: true });
+  let body: Buffer | ArrayBuffer = await res.arrayBuffer();
+  if (contentType === "image/jpeg") body = await padTo45(Buffer.from(body));
+  const blob = await put(path, body, { access: "public", token, contentType, allowOverwrite: true });
   return blob.url;
 }
 
