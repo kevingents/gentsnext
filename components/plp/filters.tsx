@@ -88,23 +88,11 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
       {/* Type (subgroep) — bv. Chino/Pantalon/Lange mouw/2-delig */}
       {facets.types.length > 1 ? (
         <FilterGroup title="Type" defaultOpen>
-          <div className="space-y-1.5">
-            {facets.types.map((tp) => {
-              const active = selection.types.includes(tp.value);
-              return (
-                <label key={tp.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => apply({ types: toggle(selection.types, tp.value) })}
-                    className="h-4 w-4 accent-ink"
-                  />
-                  <span>{tp.label}</span>
-                  <span className="text-muted">{tp.count}</span>
-                </label>
-              );
-            })}
-          </div>
+          <CheckList
+            items={facets.types.map((tp) => ({ value: tp.value, label: tp.label, count: tp.count }))}
+            selected={selection.types}
+            onToggle={(v) => apply({ types: toggle(selection.types, v) })}
+          />
         </FilterGroup>
       ) : null}
 
@@ -168,92 +156,44 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
       {/* Pasvorm */}
       {facets.fits.length > 0 ? (
         <FilterGroup title="Pasvorm">
-          <div className="space-y-1.5">
-            {facets.fits.map((fit) => {
-              const active = selection.fits.includes(fit.value);
-              return (
-                <label key={fit.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => apply({ fits: toggle(selection.fits, fit.value) })}
-                    className="h-4 w-4 accent-ink"
-                  />
-                  <span>{fit.value}</span>
-                  <span className="text-muted">{fit.count}</span>
-                </label>
-              );
-            })}
-          </div>
+          <CheckList
+            items={facets.fits.map((fit) => ({ value: fit.value, label: fit.value, count: fit.count }))}
+            selected={selection.fits}
+            onToggle={(v) => apply({ fits: toggle(selection.fits, v) })}
+          />
         </FilterGroup>
       ) : null}
 
       {/* Materiaal */}
       {facets.materials.length > 1 ? (
         <FilterGroup title="Materiaal">
-          <div className="space-y-1.5">
-            {facets.materials.map((m) => {
-              const active = selection.materials.includes(m.value);
-              return (
-                <label key={m.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => apply({ materials: toggle(selection.materials, m.value) })}
-                    className="h-4 w-4 accent-ink"
-                  />
-                  <span>{m.value}</span>
-                  <span className="text-muted">{m.count}</span>
-                </label>
-              );
-            })}
-          </div>
+          <CheckList
+            items={facets.materials.map((m) => ({ value: m.value, label: m.value, count: m.count }))}
+            selected={selection.materials}
+            onToggle={(v) => apply({ materials: toggle(selection.materials, v) })}
+          />
         </FilterGroup>
       ) : null}
 
       {/* Dessin (print_design) */}
       {facets.patterns.length > 1 ? (
         <FilterGroup title="Dessin">
-          <div className="space-y-1.5">
-            {facets.patterns.map((pt) => {
-              const active = selection.patterns.includes(pt.value);
-              return (
-                <label key={pt.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => apply({ patterns: toggle(selection.patterns, pt.value) })}
-                    className="h-4 w-4 accent-ink"
-                  />
-                  <span>{pt.value}</span>
-                  <span className="text-muted">{pt.count}</span>
-                </label>
-              );
-            })}
-          </div>
+          <CheckList
+            items={facets.patterns.map((pt) => ({ value: pt.value, label: pt.value, count: pt.count }))}
+            selected={selection.patterns}
+            onToggle={(v) => apply({ patterns: toggle(selection.patterns, v) })}
+          />
         </FilterGroup>
       ) : null}
 
       {/* Seizoen */}
       {facets.seasons.length > 1 ? (
         <FilterGroup title="Seizoen">
-          <div className="space-y-1.5">
-            {facets.seasons.map((s) => {
-              const active = selection.seasons.includes(s.value);
-              return (
-                <label key={s.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => apply({ seasons: toggle(selection.seasons, s.value) })}
-                    className="h-4 w-4 accent-ink"
-                  />
-                  <span>{s.value}</span>
-                  <span className="text-muted">{s.count}</span>
-                </label>
-              );
-            })}
-          </div>
+          <CheckList
+            items={facets.seasons.map((s) => ({ value: s.value, label: s.value, count: s.count }))}
+            selected={selection.seasons}
+            onToggle={(v) => apply({ seasons: toggle(selection.seasons, v) })}
+          />
         </FilterGroup>
       ) : null}
 
@@ -379,5 +319,50 @@ function FilterGroup({
       </summary>
       <div className="pb-4">{children}</div>
     </details>
+  );
+}
+
+/**
+ * Aanvinklijst met "toon meer": lange facetten (bv. Type met 18 waarden, veel
+ * losse 1-tjes) tonen standaard de eerste `maxVisible` (op telling gesorteerd
+ * door de server) en klappen de rest pas uit op verzoek — houdt de sidebar netjes.
+ */
+function CheckList({
+  items,
+  selected,
+  onToggle,
+  maxVisible = 8,
+}: {
+  items: { value: string; label: string; count: number }[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  maxVisible?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, maxVisible);
+  return (
+    <div className="space-y-1.5">
+      {visible.map((it) => (
+        <label key={it.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+          <input
+            type="checkbox"
+            checked={selected.includes(it.value)}
+            onChange={() => onToggle(it.value)}
+            className="h-4 w-4 accent-ink"
+          />
+          <span className="flex-1">{it.label}</span>
+          <span className="text-muted">{it.count}</span>
+        </label>
+      ))}
+      {items.length > maxVisible ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="pt-1 font-sans text-xs text-ink underline underline-offset-2"
+        >
+          {expanded ? "Toon minder" : `Toon alle ${items.length}`}
+        </button>
+      ) : null}
+    </div>
   );
 }

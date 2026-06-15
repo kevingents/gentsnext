@@ -61,6 +61,8 @@ export const products = pgTable(
     /** AI-gegenereerde modelfoto (reguliere pasvorm) — leidt de galerij ("model eerst"). */
     modelImageUrl: text("model_image_url").notNull().default(""),
     modelImageAlt: text("model_image_alt").notNull().default(""),
+    /** AI-gegenereerde productvideo (uit de modelfoto, FASHN image-to-video) — speelt vooraan in de galerij. */
+    modelVideoUrl: text("model_video_url").notNull().default(""),
     /** Kleurgroep-sleutel (uit titel afgeleid) voor het samenvoegen van kleurvarianten. */
     variantGroupKey: text("variant_group_key").notNull().default(""),
     /** Eén primair product per kleurgroep wordt in listings getoond. */

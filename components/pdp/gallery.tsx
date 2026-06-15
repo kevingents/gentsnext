@@ -6,14 +6,15 @@ import { rowSortIndex } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 
 type SizeMedia = { threshold: string; url: string; alt: string };
-type Shot = { url: string; alt: string; badge?: boolean };
+type Shot = { url: string; alt: string; badge?: boolean; video?: boolean };
 
 /**
  * Mr Marvis-stijl galerij: alle productfoto's in een 2-koloms grid ("2 om 2"),
  * klik op een foto voor een schermvullende zoom (lightbox). De grote-maat-foto
- * wordt vooraan gezet zodra een maat ≥ drempel gekozen is.
+ * wordt vooraan gezet zodra een maat ≥ drempel gekozen is. Een (AI-)productvideo
+ * leidt — autoplay/gedempt/loop in het raster, met geluid in de lightbox.
  */
-export function Gallery({ images, title, sizeMedia }: { images: { url: string; alt: string }[]; title: string; sizeMedia?: SizeMedia | null }) {
+export function Gallery({ images, title, sizeMedia, video }: { images: { url: string; alt: string }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null }) {
   const { sizeLabel } = usePdpSize();
   const [lightbox, setLightbox] = useState<number | null>(null);
 
@@ -27,10 +28,13 @@ export function Gallery({ images, title, sizeMedia }: { images: { url: string; a
     return trimmed;
   }
 
+  const poster = images[0]?.url || "";
   const shots: Shot[] = [
+    ...(video ? [{ url: video, alt: `${title} — video`, video: true }] : []),
     ...(showLarge ? [{ url: sizeMedia!.url, alt: sizeMedia!.alt || `${title} — grote maat`, badge: true }] : []),
     ...images.map((img, i) => ({ url: img.url, alt: altFor(img.alt, i) })),
   ];
+  const firstImageIdx = shots.findIndex((s) => !s.video);
 
   const close = useCallback(() => setLightbox(null), []);
   const step = useCallback(
@@ -67,14 +71,33 @@ export function Gallery({ images, title, sizeMedia }: { images: { url: string; a
             aria-label={`Vergroot ${shot.alt}`}
             className="group relative aspect-[4/5] overflow-hidden rounded-card bg-surface"
           >
-            <Image
-              src={shot.url}
-              alt={shot.alt}
-              fill
-              priority={i === 0}
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 30vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-            />
+            {shot.video ? (
+              <video
+                src={shot.url}
+                poster={poster || undefined}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <Image
+                src={shot.url}
+                alt={shot.alt}
+                fill
+                priority={i === firstImageIdx}
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 30vw"
+                className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              />
+            )}
+            {shot.video ? (
+              <span className="absolute left-3 top-3 flex items-center gap-1.5 bg-ink/85 px-2.5 py-1 font-sans text-[0.65rem] uppercase tracking-wide text-canvas">
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden><path d="M8 5v14l11-7z" /></svg>
+                Video
+              </span>
+            ) : null}
             {shot.badge ? (
               <span className="absolute left-3 top-3 bg-ink/85 px-2.5 py-1 font-sans text-[0.65rem] uppercase tracking-wide text-canvas">
                 Getoond in grote maat
@@ -105,7 +128,11 @@ export function Gallery({ images, title, sizeMedia }: { images: { url: string; a
             </>
           ) : null}
           <div className="relative h-[85vh] w-[92vw] max-w-3xl">
-            <Image src={shots[lightbox].url} alt={shots[lightbox].alt} fill sizes="92vw" className="object-contain" />
+            {shots[lightbox].video ? (
+              <video src={shots[lightbox].url} poster={poster || undefined} controls autoPlay loop playsInline className="h-full w-full object-contain" />
+            ) : (
+              <Image src={shots[lightbox].url} alt={shots[lightbox].alt} fill sizes="92vw" className="object-contain" />
+            )}
           </div>
           <span className="absolute bottom-5 left-1/2 -translate-x-1/2 font-sans text-sm text-canvas/80">
             {lightbox + 1} / {shots.length}

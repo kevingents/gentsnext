@@ -43,6 +43,13 @@
       "when": 1781411973594,
       "tag": "0005_newsletter_subscribers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781523615147,
+      "tag": "0006_spicy_zzzax",
+      "breakpoints": true
     }
   ]
 }

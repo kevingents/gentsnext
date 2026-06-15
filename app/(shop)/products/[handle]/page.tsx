@@ -393,6 +393,7 @@ export default async function ProductPage({ params }: Props) {
           ]}
           title={product.title}
           sizeMedia={sizeMedia}
+          video={product.modelVideoUrl || null}
         />
 
         <div className="lg:sticky lg:top-24 lg:self-start">
