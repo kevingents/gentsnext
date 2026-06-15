@@ -16,6 +16,7 @@ import { buildModelLook, resolveLook } from "@/lib/looks";
 import { smartModelLook } from "@/lib/model-styling";
 import { getSettings } from "@/lib/settings";
 import { getColorSiblings } from "@/lib/color-siblings";
+import { sortBySwatch } from "@/lib/colors";
 import { sizeChartFor } from "@/lib/size-charts";
 import { faqFor } from "@/lib/pdp-faq";
 import { categoryByHoofdgroep } from "@/lib/categories";
@@ -197,8 +198,9 @@ export default async function ProductPage({ params }: Props) {
   const resolvedModelLook = modelLook ? await resolveLook(modelLook) : null;
 
   // Voorkeur: kleurvarianten uit de titel-groepering (dekt o.a. de 235 dassen-
-  // /pochet-/strik-groepen); val terug op Shopify group_data-metafield.
-  const colorSiblings =
+  // /pochet-/strik-groepen); val terug op Shopify group_data-metafield. Daarna
+  // op palet-volgorde sorteren (familie + licht→donker) i.p.v. alfabetisch.
+  const colorSiblings = sortBySwatch(
     variantSiblings.length >= 2
       ? variantSiblings.map((s) => ({
           handle: s.handle,
@@ -207,7 +209,8 @@ export default async function ProductPage({ params }: Props) {
           isCurrent: s.isCurrent,
           inStock: s.inStock,
         }))
-      : metafieldSiblings;
+      : metafieldSiblings,
+  );
 
   const productJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",

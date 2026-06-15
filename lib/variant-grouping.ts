@@ -23,7 +23,7 @@ const COLOR_WORDS = new Set([
   "bruin", "cognac", "camel", "taupe", "chocolade", "khaki", "kaki",
   "groen", "lichtgroen", "donkergroen", "olijfgroen", "olijf", "mintgroen", "mint", "flessengroen", "legergroen",
   "rood", "donkerrood", "bordeaux", "wijnrood", "kersrood", "rood-wit", "roodwit",
-  "beige", "zand", "taupe", "champagne", "champagnebeige", "kaki",
+  "beige", "zand", "sand", "taupe", "champagne", "champagnebeige", "kaki",
   "roze", "oudroze", "fuchsia", "lila", "paars", "lichtpaars", "donkerpaars", "aubergine",
   "geel", "goudgeel", "okergeel", "oker", "mosterd", "mosterdgeel",
   "oranje", "zalm", "koraal",

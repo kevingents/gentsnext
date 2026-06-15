@@ -19,30 +19,63 @@ import { eq, sql } from "drizzle-orm";
  *
  *   npm run generate:model-photos -- 25                    (25 producten deze run)
  *   npm run generate:model-photos -- 1 lakschoen           (één product gericht (her)genereren)
+ *   npm run generate:model-photos -- 9 "a,b,c"             (meerdere handles gericht (her)genereren, komma-gescheiden)
  *   npm run generate:model-photos -- 25 "" Schoenen        (beperk tot één hoofdgroep)
  */
 
 const API = "https://api.fashn.ai/v1";
 
-/** Per-categorie prompt: bepaalt styling + uitsnede zodat de catalogus consistent oogt. */
-const STUDIO = "Clean seamless white studio background, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
-const FULL = "Full-length photograph, natural confident standing pose, hands relaxed.";
-const UPPER = "Photograph framed from roughly the knees up, natural confident pose.";
-const LOWER = "Photograph framed from roughly the waist down, focus on the lower body and footwear.";
+/**
+ * Styling per categorie + een ROTERENDE set relaxte poses (Mr Marvis-stijl:
+ * ontspannen houding, hand in zak, warme glimlach). We kiezen de pose op
+ * volgnummer zodat opeenvolgende producten niet identiek/stijf ogen — de
+ * catalogus oogt gevarieerd en lifestyle i.p.v. paspoort-recht. Achtergrond is
+ * vast (zelfde neutrale lichtgrijs) zodat alles ondanks de variatie één lijn houdt.
+ */
+const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
 
-const PROMPTS: Record<string, string> = {
-  Pakken: `Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes. ${FULL} ${STUDIO}`,
-  Colberts: `Male model wearing THIS blazer over a crisp white dress shirt, with matching trousers and black leather shoes. ${FULL} ${STUDIO}`,
-  Gilets: `Male model wearing THIS waistcoat over a white dress shirt, with matching trousers and black leather shoes. ${FULL} ${STUDIO}`,
-  Jassen: `Male model wearing THIS coat over neat menswear, with trousers and leather shoes. ${FULL} ${STUDIO}`,
-  Broeken: `Male model wearing THESE trousers with a tucked light dress shirt and leather shoes. ${FULL} ${STUDIO}`,
-  Overhemden: `Male model wearing THIS shirt, neatly styled with trousers. ${UPPER} ${STUDIO}`,
-  Truien: `Male model wearing THIS knitwear, styled with neat trousers. ${UPPER} ${STUDIO}`,
-  Vesten: `Male model wearing THIS cardigan/vest over a shirt, styled with neat trousers. ${UPPER} ${STUDIO}`,
-  "Polo-shirts": `Male model wearing THIS polo shirt, styled with neat trousers. ${UPPER} ${STUDIO}`,
-  "T-Shirts": `Male model wearing THIS t-shirt, styled casually with neat trousers. ${UPPER} ${STUDIO}`,
-  Schoenen: `Male model wearing THESE shoes with well-fitted trousers. ${LOWER} ${STUDIO}`,
+// Meeste poses camera-gericht + warme glimlach; een paar candid (lopend/zijwaarts) voor afwisseling.
+const POSES_FULL = [
+  "Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.",
+  "Easy full-length stance at a slight three-quarter angle, both hands loosely in his pockets, friendly relaxed smile, looking into the camera.",
+  "Laid-back full-length contrapposto pose, arms relaxed at his sides, head tilted slightly, approachable natural smile, looking into the camera.",
+  "Candid full-length shot, caught mid-stride walking slowly toward the camera, relaxed shoulders, light spontaneous smile.",
+  "Relaxed full-length pose, one hand adjusting his shirt cuff, soft confident smile, glancing just off to the side.",
+];
+const POSES_UPPER = [
+  "Relaxed pose framed from the knees up, one hand in his pocket, warm genuine smile, looking softly into the camera.",
+  "Easy knees-up framing, casual three-quarter turn, arms loosely crossed, friendly relaxed smile, looking into the camera.",
+  "Laid-back knees-up shot, one hand running lightly through his hair, natural spontaneous smile, glancing off to the side.",
+  "Knees-up framing, at ease with both hands in his pockets, head tilted slightly, approachable warm smile, looking into the camera.",
+];
+const POSES_LOWER = [
+  "Framed from the waist down, focus on the lower body and footwear, relaxed stance with weight on one leg and one foot slightly forward.",
+  "Framed from the waist down, focus on the lower body and footwear, caught mid-stride in an easy natural walk.",
+  "Framed from the waist down, focus on the lower body and footwear, casual stance with feet slightly apart and weight shifted to one side.",
+];
+
+type Frame = "full" | "upper" | "lower";
+const STYLE: Record<string, { garment: string; frame: Frame }> = {
+  Pakken: { garment: "Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes.", frame: "full" },
+  Colberts: { garment: "Male model wearing THIS blazer over a crisp white dress shirt, with matching trousers and black leather shoes.", frame: "full" },
+  Gilets: { garment: "Male model wearing THIS waistcoat over a white dress shirt, with matching trousers and black leather shoes.", frame: "full" },
+  Jassen: { garment: "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.", frame: "full" },
+  Broeken: { garment: "Male model wearing THESE trousers with a tucked light dress shirt and leather shoes.", frame: "full" },
+  Overhemden: { garment: "Male model wearing THIS shirt, neatly styled with trousers.", frame: "upper" },
+  Truien: { garment: "Male model wearing THIS knitwear, styled with neat trousers.", frame: "upper" },
+  Vesten: { garment: "Male model wearing THIS cardigan/vest over a shirt, styled with neat trousers.", frame: "upper" },
+  "Polo-shirts": { garment: "Male model wearing THIS polo shirt, styled with neat trousers.", frame: "upper" },
+  "T-Shirts": { garment: "Male model wearing THIS t-shirt, styled casually with neat trousers.", frame: "upper" },
+  Schoenen: { garment: "Male model wearing THESE shoes with well-fitted trousers.", frame: "lower" },
 };
+
+/** Bouwt de prompt: styling + een relaxte pose (geroteerd op volgnummer) + vaste studio. */
+function buildPrompt(cat: string, i: number): string | null {
+  const s = STYLE[cat];
+  if (!s) return null;
+  const pool = s.frame === "full" ? POSES_FULL : s.frame === "upper" ? POSES_UPPER : POSES_LOWER;
+  return `${s.garment} ${pool[i % pool.length]} ${STUDIO}`;
+}
 
 /** Shopify-CDN-URL → master zonder width/height-cap (scherpste FASHN-input). */
 function toFullRes(url: string): string {
@@ -106,17 +139,18 @@ async function main() {
     process.exit(1);
   }
   const limit = Math.max(1, Math.min(300, Number(process.argv[2]) || 20));
-  const onlyHandle = (process.argv[3] || "").trim();
+  // Eén of meer handles (komma-gescheiden) → gerichte (her)generatie, negeert de "nog geen modelfoto"-filter.
+  const handleList = (process.argv[3] || "").split(",").map((h) => h.trim()).filter(Boolean);
   const onlyHg = (process.argv[4] || "").trim(); // optioneel: beperk tot één hoofdgroep
   const db = getDb();
 
-  const cats = onlyHg ? [onlyHg] : Object.keys(PROMPTS);
+  const cats = onlyHg ? [onlyHg] : Object.keys(STYLE);
   const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
       (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
-      ${onlyHandle ? sql`and p.handle = ${onlyHandle}` : sql`and p.model_image_url=''`}
+      ${handleList.length ? sql`and p.handle in (${sql.join(handleList.map((h) => sql`${h}`), sql`, `)})` : sql`and p.model_image_url=''`}
       and p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((k) => sql`${k}`), sql`, `)})
     order by p.stock_qty desc
     limit ${limit}
@@ -124,8 +158,9 @@ async function main() {
   console.log(`⏳ ${rows.rows.length} producten te verwerken (product-to-model)…`);
 
   let done = 0;
+  let idx = 0;
   for (const r of rows.rows) {
-    const prompt = PROMPTS[r.hg];
+    const prompt = buildPrompt(r.hg, idx++);
     if (!prompt || !r.img) continue;
     console.log(`• ${r.handle} (${r.hg})`);
     const out = await runProductToModel(r.img, prompt, apiKey);
