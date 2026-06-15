@@ -129,7 +129,14 @@ async function toBlob(srcUrl: string, path: string, token: string, contentType: 
 }
 
 async function getCredits(key: string): Promise<number> {
-  try { const r = await fetch(`${API}/credits`, { headers: { Authorization: `Bearer ${key}` } }); const j = await r.json(); return Number(j?.credits?.total ?? 0); } catch { return 0; }
+  // Bij een transient fout NIET 0 teruggeven (dat zou de credit-stop onterecht
+  // triggeren) — geef een hoog getal, zodat alleen een ECHTE 0 de bulk stopt.
+  try {
+    const r = await fetch(`${API}/credits`, { headers: { Authorization: `Bearer ${key}` } });
+    const j = await r.json();
+    const n = Number(j?.credits?.total);
+    return Number.isFinite(n) ? n : 999999;
+  } catch { return 999999; }
 }
 
 async function main() {
@@ -151,12 +158,18 @@ async function main() {
     order by p.stock_qty desc
     limit ${limit}
   `);
-  // Eerste DB-query met één retry (Neon-verbinding kan transient falen).
-  const rows = await queryRows().catch(async (e) => {
-    console.error("    DB-query mislukt, opnieuw over 4s…", String((e as Error)?.message || e).slice(0, 100));
-    await new Promise((r) => setTimeout(r, 4000));
-    return queryRows();
-  });
+  // Eerste DB-query met meerdere retries + backoff (Neon-verbinding kan transient
+  // falen; dit was de crash-oorzaak van een eerdere run).
+  let rows: Awaited<ReturnType<typeof queryRows>> | null = null;
+  for (let attempt = 1; attempt <= 6 && !rows; attempt++) {
+    try {
+      rows = await queryRows();
+    } catch (e) {
+      console.error(`    DB-query mislukt (poging ${attempt}/6), opnieuw…`, String((e as Error)?.message || e).slice(0, 100));
+      await new Promise((r) => setTimeout(r, 3000 * attempt));
+    }
+  }
+  if (!rows) { console.error("DB blijft onbereikbaar — gestopt (idempotent: volgende run pakt 't op)."); process.exit(1); }
 
   let credits = await getCredits(key);
   console.log(`⏳ ${rows.rows.length} pakken te verwerken — ${credits} credits beschikbaar.`);
@@ -189,9 +202,13 @@ async function main() {
     }
 
     if (Object.keys(patch).length) {
-      await db.update(products).set(patch).where(eq(products.id, r.id));
-      done++;
-      console.log(`   ✓ ${Object.keys(patch).filter((k) => !k.endsWith("Alt")).join(", ")}`);
+      let saved = false;
+      for (let a = 1; a <= 4 && !saved; a++) {
+        try { await db.update(products).set(patch).where(eq(products.id, r.id)); saved = true; }
+        catch { await new Promise((rr) => setTimeout(rr, 2000 * a)); }
+      }
+      if (saved) { done++; console.log(`   ✓ ${Object.keys(patch).filter((k) => !k.endsWith("Alt")).join(", ")}`); }
+      else console.error(`   opslaan ${r.handle} mislukt na retries — volgende run doet 't opnieuw`);
     }
     } catch (e) {
       console.error(`   fout bij ${r.handle}, overslaan:`, String((e as Error)?.message || e).slice(0, 120));
