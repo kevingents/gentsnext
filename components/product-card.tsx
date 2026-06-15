@@ -5,7 +5,11 @@ import { formatEuro } from "@/lib/pricing";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { ProductCardBadge } from "@/components/product-card-badge";
 
+// Brede/kleine accessoires passen niet in de 3:4-tegel met object-cover → heel tonen.
+const FIT_CONTAIN = new Set(["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"]);
+
 export function ProductCard({ product }: { product: ProductCardData }) {
+  const contain = FIT_CONTAIN.has(product.category || "");
   return (
     <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
       {product.hasSale ? (
@@ -23,7 +27,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             alt={product.imageAlt}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="object-cover transition duration-500 ease-brand group-hover:scale-[1.04]"
+            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain p-4" : "object-cover"}`}
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">

@@ -154,6 +154,9 @@ export default async function ProductPage({ params }: Props) {
   })).filter((s) => s.value);
 
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
+  // Brede/kleine accessoires (riem, das, strik, manchetknoop, pochet) passen niet
+  // in de 4:5-tegel met object-cover → toon ze heel met object-contain.
+  const fitContain = ["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"].includes(hoofdgroep);
   // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
   const sessionCustomer = await getSessionCustomer();
   const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
@@ -392,7 +395,7 @@ export default async function ProductPage({ params }: Props) {
             ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
             ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
             ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
-            ...images.map((i) => ({ url: i.url, alt: i.alt })),
+            ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain })),
           ]}
           title={product.title}
           sizeMedia={sizeMedia}
