@@ -20,7 +20,7 @@ const STUDIO = "Clean seamless studio background in a soft neutral light grey, s
 const SUIT = "Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes.";
 const POSE1 = `${SUIT} Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera. ${STUDIO}`;
 const POSE2 = `${SUIT} Easy full-length three-quarter stance, both hands loosely in his pockets, friendly relaxed smile, looking into the camera. ${STUDIO}`;
-const DETAIL = `Close-up editorial detail shot of THIS suit worn by a man, framed from the shoulders to the waist with no face in frame, focus on the jacket lapel, chest pocket, buttons and fabric weave. ${STUDIO}`;
+const DETAIL = `Close-up editorial detail of THIS suit, worn over a crisp white dress shirt with a buttoned collar — never a t-shirt — by a man. Tightly framed on the torso from the collarbone down to the waist; the head, chin and face are NOT in frame. Focus on the jacket lapel, chest pocket, buttons, the white shirt collar and the fabric texture. ${STUDIO}`;
 const MOTION = "Subtle natural movement: the model shifts his weight and turns slightly toward the camera, hands relaxed, gentle confident fashion-lookbook motion.";
 
 function toFullRes(u: string) { try { const x = new URL(u); if (x.pathname.includes("/cdn/shop") || x.hostname.endsWith("shopify.com")) { x.searchParams.delete("width"); x.searchParams.delete("height"); } return x.toString(); } catch { return u; } }
@@ -106,7 +106,7 @@ async function main() {
     if (Object.keys(patch).length) {
       await db.update(products).set(patch).where(eq(products.id, r.id));
       done++;
-      console.log(`   ✓ ${Object.keys(patch).filter((k) => k.endsWith("Url")).join(", ")}`);
+      console.log(`   ✓ ${Object.keys(patch).filter((k) => !k.endsWith("Alt")).join(", ")}`);
     }
     credits = await getCredits(key);
   }
