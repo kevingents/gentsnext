@@ -113,48 +113,55 @@ export function ShopTheLook({
         <h2 className="mt-1 text-display-md">{look.title}</h2>
         {look.subtitle ? <p className="mt-1 font-sans text-sm text-ink-soft">{look.subtitle}</p> : null}
 
-        <ul className="mt-5 space-y-3">
+        <ul className="mt-6">
           {items.map((h) => {
             const i = look.products.indexOf(h);
             const data = buy?.[h.handle];
             const num = items.indexOf(h) + 1;
             const sel = picked[i];
             const selSize = data?.sizes.find((s) => s.size === sel);
+            const price = formatEuro(selSize?.priceCents ?? h.product!.minPriceCents);
             return (
               <li
                 key={i}
                 ref={(el) => { cardRefs.current[i] = el; }}
                 onMouseEnter={() => setActive(i)}
-                className={`rounded-card border p-3 transition-colors ${active === i ? "border-ink" : "border-line"}`}
+                className={`group flex items-start gap-4 border-b border-line py-4 transition-colors first:border-t last:border-b-0 ${active === i ? "bg-surface/70" : ""}`}
               >
-                <div className="flex items-start gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ink font-sans text-[0.65rem] text-canvas">{num}</span>
-                  <Link href={`/products/${h.product!.handle}`} className="relative h-20 w-14 shrink-0 overflow-hidden rounded-card bg-surface">
-                    {h.product!.imageUrl ? <Image src={h.product!.imageUrl} alt={h.product!.title} fill sizes="60px" className="object-cover" /> : null}
-                  </Link>
-                  <div className="min-w-0 flex-1">
-                    {h.label ? <span className="block font-sans text-[0.65rem] uppercase tracking-wide text-muted">{h.label}</span> : null}
-                    <Link href={`/products/${h.product!.handle}`} className="block truncate font-sans text-sm hover:underline">{h.product!.title}</Link>
-                    {data?.specs ? <span className="mt-0.5 block font-sans text-[0.7rem] italic leading-snug text-ink-soft/80">{data.specs}</span> : null}
-                    <span className="mt-0.5 block font-sans text-sm text-ink-soft">{formatEuro(selSize?.priceCents ?? h.product!.minPriceCents)}</span>
-                  </div>
-                </div>
+                <Link href={`/products/${h.product!.handle}`} className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-card bg-surface">
+                  {h.product!.imageUrl ? <Image src={h.product!.imageUrl} alt={h.product!.title} fill sizes="72px" className="object-cover transition-transform duration-500 group-hover:scale-[1.04]" /> : null}
+                  <span className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/85 font-sans text-[0.6rem] font-medium text-canvas">{num}</span>
+                </Link>
 
-                {shoppable && data && data.sizes.length ? (
-                  <div className="mt-3 pl-8">
-                    <button
-                      type="button"
-                      onClick={() => setSizeDrawer(i)}
-                      className={`w-full !py-2 text-sm ${added[i] || !sel ? "btn-primary" : "btn-ghost"}`}
-                    >
-                      {added[i] ? "Toegevoegd" : sel ? `Maat ${sel} gekozen — wijzigen` : "Kies maat"}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-2 pl-8">
-                    <Link href={`/products/${h.product!.handle}`} className="font-sans text-sm text-ink underline underline-offset-4">Bekijk & kies maat →</Link>
-                  </div>
-                )}
+                <div className="min-w-0 flex-1">
+                  {h.label ? <span className="block font-sans text-[0.6rem] uppercase tracking-[0.14em] text-muted">{h.label}</span> : null}
+                  <Link href={`/products/${h.product!.handle}`} className="mt-0.5 block truncate font-sans text-sm font-medium text-ink transition-colors group-hover:text-ink">{h.product!.title}</Link>
+                  {data?.specs ? <span className="mt-0.5 block font-sans text-[0.7rem] italic leading-snug text-muted">{data.specs}</span> : null}
+
+                  {shoppable && data && data.sizes.length ? (
+                    <div className="mt-2.5 flex items-center justify-between gap-3">
+                      <span className="font-sans text-sm text-ink">{price}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSizeDrawer(i)}
+                        className={`shrink-0 rounded-card border px-3.5 py-1.5 font-sans text-xs font-medium transition-colors ${
+                          added[i]
+                            ? "border-success bg-success/10 text-success"
+                            : sel
+                              ? "border-ink bg-ink text-canvas"
+                              : "border-ink text-ink hover:bg-ink hover:text-canvas"
+                        }`}
+                      >
+                        {added[i] ? "Toegevoegd" : sel ? `Maat ${sel}` : "Kies maat"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-2.5 flex items-center justify-between gap-3">
+                      <span className="font-sans text-sm text-ink">{price}</span>
+                      <Link href={`/products/${h.product!.handle}`} className="shrink-0 font-sans text-xs font-medium text-ink underline underline-offset-4">Bekijk →</Link>
+                    </div>
+                  )}
+                </div>
               </li>
             );
           })}
