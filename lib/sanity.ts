@@ -87,12 +87,13 @@ export type SanityLook = {
   occasion?: string;
   subtitle?: string;
   image?: any;
+  gallery?: any[];
   order?: number;
   hotspots?: { label?: string; handle?: string; x?: number; y?: number }[];
 };
 
 const LOOK_PROJECTION = `{
-  title, "slug": slug.current, occasion, subtitle, image, order,
+  title, "slug": slug.current, occasion, subtitle, image, gallery, order,
   hotspots[]{label, handle, x, y}
 }`;
 

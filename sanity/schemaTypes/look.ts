@@ -22,10 +22,17 @@ export const lookType = defineType({
     defineField({ name: "subtitle", title: "Ondertitel", type: "text", rows: 2 }),
     defineField({
       name: "image",
-      title: "Modelfoto",
+      title: "Modelfoto (met hotspots)",
       type: "image",
       options: { hotspot: true },
       validation: (r) => r.required(),
+    }),
+    defineField({
+      name: "gallery",
+      title: "Sfeerbeelden (extra)",
+      description: "Extra foto's voor meer sfeer — detail, andere hoek, lifestyle. Verschijnen onder de hoofdfoto.",
+      type: "array",
+      of: [defineArrayMember({ type: "image", options: { hotspot: true } })],
     }),
     defineField({
       name: "order",

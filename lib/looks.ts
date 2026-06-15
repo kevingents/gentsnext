@@ -20,6 +20,8 @@ export type Look = {
   subtitle: string;
   occasion: string;
   image: string;
+  /** Extra sfeerbeelden onder de hoofd-modelfoto (geen hotspots). */
+  images?: string[];
   hotspots: Hotspot[];
 };
 
@@ -30,6 +32,7 @@ export const LOOKS: Look[] = [
     subtitle: "Stijlvol en zomers — net iets meer dan gemiddeld.",
     occasion: "Bruiloft",
     image: "/brand/brand-model-navy.jpg",
+    images: ["/brand/brand-impression-wedding.jpg", "/brand/brand-product-lifestyle.jpg", "/brand/brand-product-fabric.jpg"],
     hotspots: [
       { x: 50, y: 30, handle: "colbert-sjas-blauw", label: "Colbert" },
       { x: 50, y: 45, handle: "smoking-ov-vadermoord-plisse", label: "Overhemd" },
@@ -43,6 +46,7 @@ export const LOOKS: Look[] = [
     subtitle: "Onberispelijk voor de boardroom.",
     occasion: "Zakelijk",
     image: "/brand/brand-model-charcoal.jpg",
+    images: ["/brand/brand-impression-interview.jpg", "/brand/brand-product-fabric.jpg", "/brand/brand-model-grey3piece.jpg"],
     hotspots: [
       { x: 50, y: 28, handle: "colbert-sjas-blauw", label: "Colbert" },
       { x: 50, y: 46, handle: "smoking-ov-vadermoord-plisse", label: "Overhemd" },
@@ -59,16 +63,19 @@ function fromSanity(s: {
   occasion?: string;
   subtitle?: string;
   image?: unknown;
+  gallery?: unknown[];
   hotspots?: { label?: string; handle?: string; x?: number; y?: number }[];
 }): Look | null {
   const image = urlForImage(s.image, 1200);
   if (!image) return null;
+  const images = (s.gallery || []).map((g) => urlForImage(g, 1000)).filter(Boolean);
   return {
     slug: s.slug,
     title: s.title,
     subtitle: s.subtitle || "",
     occasion: s.occasion || "",
     image,
+    ...(images.length ? { images } : {}),
     hotspots: (s.hotspots || [])
       .filter((h) => h.handle)
       .map((h) => ({ x: Number(h.x ?? 50), y: Number(h.y ?? 50), handle: h.handle!, label: h.label })),

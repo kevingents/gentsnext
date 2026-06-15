@@ -73,7 +73,8 @@ export function ShopTheLook({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
-      {/* Modelfoto met genummerde hotspots */}
+      {/* Modelfoto (met hotspots) + sfeerbeelden */}
+      <div className="space-y-3">
       <div className={`relative ${aspectClass} overflow-hidden rounded-card bg-surface`}>
         <Image src={look.image} alt={look.title} fill priority sizes="(max-width:1024px) 100vw, 50vw" className="object-cover" />
         {items.map((h) => {
@@ -105,6 +106,18 @@ export function ShopTheLook({
         <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-canvas/85 px-3 py-1 font-sans text-[0.7rem] text-ink-soft shadow-pop">
           Tik op een cijfer om het artikel te shoppen
         </span>
+      </div>
+
+      {/* Sfeerbeelden onder de hoofdfoto */}
+      {look.images && look.images.length ? (
+        <div className="grid grid-cols-2 gap-3">
+          {look.images.map((img, idx) => (
+            <div key={idx} className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface">
+              <Image src={img} alt={`${look.title} — sfeerbeeld ${idx + 1}`} fill sizes="(max-width:1024px) 50vw, 25vw" className="object-cover transition-transform duration-500 hover:scale-[1.03]" />
+            </div>
+          ))}
+        </div>
+      ) : null}
       </div>
 
       {/* Koop-paneel */}
