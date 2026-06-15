@@ -39,6 +39,8 @@ const MODEL_REFS: string[] = [
   "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-a.jpg",
   "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-b.jpg",
   "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-c.jpg",
+  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-d.jpg",
+  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-e.jpg",
 ];
 
 /** product-to-model-inputs, met optioneel een vast merk-model via face_reference. */
@@ -107,7 +109,9 @@ async function toBlob(srcUrl: string, path: string, token: string, contentType: 
   let body: Buffer | ArrayBuffer = await res.arrayBuffer();
   if (contentType === "image/jpeg") body = await padTo45(Buffer.from(body));
   const blob = await put(path, body, { access: "public", token, contentType, allowOverwrite: true });
-  return blob.url;
+  // Cache-bust: zelfde blob-pad wordt overschreven, maar een unieke ?v dwingt
+  // Next/Image om het verse beeld op te halen i.p.v. de oude (gecachte) versie.
+  return `${blob.url}?v=${Date.now()}`;
 }
 
 async function getCredits(key: string): Promise<number> {
