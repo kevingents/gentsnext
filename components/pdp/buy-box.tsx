@@ -220,7 +220,7 @@ export function BuyBox({
               selectedSize.qty <= 5 ? (
                 <span className="text-danger">● Nog maar {selectedSize.qty} op voorraad — wees er snel bij</span>
               ) : (
-                <span className="text-success">● Op voorraad — maat {selectedSize.size}</span>
+                <span className="text-success">● Op voorraad</span>
               )
             ) : (
               <span className="text-muted">Maat {selectedSize.size} tijdelijk uitverkocht</span>
@@ -237,17 +237,6 @@ export function BuyBox({
             color={active?.color}
             variant="compact"
           />
-        ) : null}
-        {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
-          <ClickAndCollect branches={selectedSize.branches} />
-        ) : null}
-        {active && active.sizes.length >= 2 ? (
-          <Link href="/maatadvies" className="mt-3 flex items-center gap-2.5 rounded-card bg-surface px-3 py-2 transition-colors hover:bg-line/40">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            <span className="font-sans text-xs text-ink-soft">
-              <span className="font-medium text-ink">Twijfel je over je maat?</span> Doe het maatadvies (30 sec.) en bestel in één keer raak.
-            </span>
-          </Link>
         ) : null}
       </div>
 
@@ -287,6 +276,11 @@ export function BuyBox({
           </p>
         </>
       )}
+
+      {/* Ophalen in de winkel — secundaire optie, ónder de bestelknop */}
+      {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
+        <ClickAndCollect branches={selectedSize.branches} />
+      ) : null}
 
       {/* Sticky mobiele bestelbalk */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 backdrop-blur lg:hidden">
