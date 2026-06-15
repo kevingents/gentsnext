@@ -49,6 +49,15 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
       "beside a still Scottish loch with rugged hills and drifting low mist, quiet and contemplative",
     ],
   },
+  student: {
+    light: "Bright natural Dutch daylight, lively, playful and a little funny.",
+    scenes: [
+      "riding a chunky fat-tyre e-bike (fatbike) along a sunny Amsterdam canal, tall narrow gabled canal houses and a humpback bridge behind, a big cheerful grin, caught mid-ride",
+      "on a fatbike crossing a picturesque old canal bridge in historic Leiden, weathered Dutch brick buildings and bikes leaning on the railings, a lively candid student moment",
+      "laughing with a couple of fellow students just outside a characterful old Dutch student-society building on a canal, candid and lively",
+      "cycling a fatbike across a sunlit cobbled Dutch university-town square, an old bell-tower behind, cheerful and carefree",
+    ],
+  },
 };
 
 const CAT: Record<string, { mood: string; wear: string }> = {
@@ -79,15 +88,19 @@ async function main() {
   if (!key || !token) { console.error("env ontbreekt"); process.exit(1); }
   const limit = Math.max(1, Math.min(800, Number(process.argv[2]) || 40));
   const phase = (process.argv[3] || "trouw").trim();
+  const isStudent = phase === "student";
   const cats = PHASES[phase] || (CAT[phase] ? [phase] : Object.keys(CAT));
   const db = getDb();
 
+  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary and p.lifestyle_image_url=''`;
+  const filter = isStudent
+    ? sql`(lower(p.handle) like '%rok%' or lower(p.title) like '%rokkostuum%' or lower(p.title) like '%rokjas%' or lower(p.handle) like 'jacquet%' or lower(p.title) like '%jacquet%')`
+    : sql`p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})`;
   const queryRows = () => db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
       (select url from product_images pi where pi.product_id=p.id order by position limit 1) img
     from products p
-    where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
-      and p.lifestyle_image_url='' and p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})
+    where ${base} and ${filter}
     order by p.stock_qty desc limit ${limit}`);
   let rows: Awaited<ReturnType<typeof queryRows>> | null = null;
   for (let a = 1; a <= 6 && !rows; a++) { try { rows = await queryRows(); } catch (e) { console.error(`  DB poging ${a}/6…`); await new Promise((r) => setTimeout(r, 3000 * a)); } }
@@ -98,7 +111,9 @@ async function main() {
   let done = 0, idx = 0;
   for (const r of rows.rows) {
     if (credits < 1) { console.log("⛔ Credits op."); break; }
-    const conf = CAT[r.hg];
+    const conf = isStudent
+      ? { mood: "student", wear: "A cheerful young Dutch student wearing THIS formal item as part of a full white-tie tailcoat outfit — crisp white dress shirt, white bow tie and formal black trousers" }
+      : CAT[r.hg];
     const mood = conf ? MOODS[conf.mood] : MOODS.trouw;
     if (!conf || !r.img) { console.log(`• ${r.handle} — overslaan`); continue; }
     const i = idx++;
