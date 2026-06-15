@@ -69,6 +69,9 @@ export const products = pgTable(
     /** AI-detailfoto (close-up stof/revers) — derde galerijbeeld. */
     detailImageUrl: text("detail_image_url").notNull().default(""),
     detailImageAlt: text("detail_image_alt").notNull().default(""),
+    /** AI-lifestyle/sfeerbeeld (model in setting, bv. mediterrane bruiloft of ruig Schotland) — apart van de studio-galerij, getoond als groot sfeerblok. */
+    lifestyleImageUrl: text("lifestyle_image_url").notNull().default(""),
+    lifestyleImageAlt: text("lifestyle_image_alt").notNull().default(""),
     /** Kleurgroep-sleutel (uit titel afgeleid) voor het samenvoegen van kleurvarianten. */
     variantGroupKey: text("variant_group_key").notNull().default(""),
     /** Eén primair product per kleurgroep wordt in listings getoond. */

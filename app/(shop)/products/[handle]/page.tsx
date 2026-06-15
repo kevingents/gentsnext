@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/json-ld";
@@ -447,6 +448,17 @@ export default async function ProductPage({ params }: Props) {
         </div>
       </div>
       </PdpSizeProvider>
+
+      {/* Sfeerbeeld — AI-lifestyle (model in setting), groot en ongecropt */}
+      {product.lifestyleImageUrl ? (
+        <section className="mt-20">
+          <p className="label-brand">In het echt</p>
+          <h2 className="mt-2 text-display-md">Zo draag je het</h2>
+          <div className="relative mx-auto mt-8 aspect-[2/3] w-full max-w-md overflow-hidden rounded-card bg-surface">
+            <Image src={product.lifestyleImageUrl} alt={product.lifestyleImageAlt || product.title} fill sizes="(max-width: 768px) 100vw, 28rem" className="object-cover" />
+          </div>
+        </section>
+      ) : null}
 
       {/* Shop de look — de outfit van het model klikbaar/shoppbaar */}
       {resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? (
