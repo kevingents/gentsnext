@@ -55,11 +55,25 @@ function modelInputs(img: string, prompt: string, i: number) {
 
 function toFullRes(u: string) { try { const x = new URL(u); if (x.pathname.includes("/cdn/shop") || x.hostname.endsWith("shopify.com")) { x.searchParams.delete("width"); x.searchParams.delete("height"); } return x.toString(); } catch { return u; } }
 
+/** fetch met retry op transient netwerkfouten (DNS/timeout), zodat een blip de
+ *  3-uurs-run niet laat crashen. Geeft null terug als het na de retries blijft falen. */
+async function safeFetch(url: string, opts?: RequestInit, retries = 4): Promise<Response | null> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fetch(url, opts);
+    } catch (e) {
+      if (i === retries) { console.error("    netwerk-fout (opgegeven):", String((e as Error)?.message || e).slice(0, 120)); return null; }
+      await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
+    }
+  }
+  return null;
+}
+
 async function poll(id: string, key: string, tries = 160) {
   for (let i = 0; i < tries; i++) {
     await new Promise((r) => setTimeout(r, 2500));
-    const st = await fetch(`${API}/status/${id}`, { headers: { Authorization: `Bearer ${key}` } });
-    if (!st.ok) continue;
+    const st = await safeFetch(`${API}/status/${id}`, { headers: { Authorization: `Bearer ${key}` } });
+    if (!st || !st.ok) continue;
     const j = await st.json();
     if (j.status === "completed" && j.output?.[0]) return j.output[0] as string;
     if (j.status === "failed") { console.error("    faalde:", JSON.stringify(j.error).slice(0, 200)); return null; }
@@ -68,8 +82,8 @@ async function poll(id: string, key: string, tries = 160) {
 }
 
 async function run(model_name: string, inputs: any, key: string) {
-  const s = await fetch(`${API}/run`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name, inputs }) });
-  if (!s.ok) { console.error("    start-fout", model_name, s.status, (await s.text()).slice(0, 200)); return null; }
+  const s = await safeFetch(`${API}/run`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name, inputs }) });
+  if (!s || !s.ok) { console.error("    start-fout", model_name, s?.status, (s ? (await s.text()).slice(0, 200) : "geen response")); return null; }
   const { id } = await s.json();
   return poll(id, key);
 }
@@ -104,8 +118,8 @@ async function padTo45(buf: Buffer): Promise<Buffer> {
 }
 
 async function toBlob(srcUrl: string, path: string, token: string, contentType: string) {
-  const res = await fetch(srcUrl);
-  if (!res.ok) return null;
+  const res = await safeFetch(srcUrl);
+  if (!res || !res.ok) return null;
   let body: Buffer | ArrayBuffer = await res.arrayBuffer();
   if (contentType === "image/jpeg") body = await padTo45(Buffer.from(body));
   const blob = await put(path, body, { access: "public", token, contentType, allowOverwrite: true });
@@ -126,7 +140,7 @@ async function main() {
   const onlyHandle = (process.argv[3] || "").trim();
   const db = getDb();
 
-  const rows = await db.execute<{ id: string; handle: string; title: string; img: string; m1: string; m2: string; det: string; vid: string }>(sql`
+  const queryRows = () => db.execute<{ id: string; handle: string; title: string; img: string; m1: string; m2: string; det: string; vid: string }>(sql`
     select p.id, p.handle, p.title,
       (select url from product_images pi where pi.product_id=p.id order by position limit 1) img,
       p.model_image_url m1, p.model_image_url2 m2, p.detail_image_url det, p.model_video_url vid
@@ -137,6 +151,12 @@ async function main() {
     order by p.stock_qty desc
     limit ${limit}
   `);
+  // Eerste DB-query met één retry (Neon-verbinding kan transient falen).
+  const rows = await queryRows().catch(async (e) => {
+    console.error("    DB-query mislukt, opnieuw over 4s…", String((e as Error)?.message || e).slice(0, 100));
+    await new Promise((r) => setTimeout(r, 4000));
+    return queryRows();
+  });
 
   let credits = await getCredits(key);
   console.log(`⏳ ${rows.rows.length} pakken te verwerken — ${credits} credits beschikbaar.`);
@@ -147,6 +167,7 @@ async function main() {
     if (!r.img) { console.log(`• ${r.handle} — geen productfoto, overslaan`); continue; }
     const i = idx++;
     console.log(`• ${r.handle}`);
+    try {
     const patch: Record<string, string> = {};
     let leadUrl = r.m1;
 
@@ -171,6 +192,9 @@ async function main() {
       await db.update(products).set(patch).where(eq(products.id, r.id));
       done++;
       console.log(`   ✓ ${Object.keys(patch).filter((k) => !k.endsWith("Alt")).join(", ")}`);
+    }
+    } catch (e) {
+      console.error(`   fout bij ${r.handle}, overslaan:`, String((e as Error)?.message || e).slice(0, 120));
     }
     credits = await getCredits(key);
   }
