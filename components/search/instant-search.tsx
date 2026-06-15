@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatEuro } from "@/lib/pricing";
 import { track } from "@/lib/track-client";
 import type { ProductCardData } from "@/lib/catalog";
@@ -64,7 +65,10 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
 
   const POPULAIR = ["pakken", "overhemden", "smoking", "stropdassen"];
 
-  return (
+  // Via portal naar document.body: de header heeft backdrop-blur, wat een
+  // containing block voor fixed-kinderen maakt — anders klemt deze overlay in op
+  // de header-hoogte i.p.v. fullscreen (zelfde reden als de mobiele menu-drawer).
+  const tree = (
     <div className="fixed inset-0 z-[70]" role="dialog" aria-label="Zoeken" aria-modal="true">
       <div className="absolute inset-0 bg-ink/30" onClick={onClose} />
       <div className="absolute inset-x-0 top-0 max-h-[90vh] overflow-y-auto bg-canvas shadow-pop">
@@ -160,4 +164,5 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
       </div>
     </div>
   );
+  return createPortal(tree, document.body);
 }

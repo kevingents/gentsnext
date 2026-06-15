@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { MenuItem } from "@/lib/main-menu";
 
 /** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
@@ -157,7 +158,11 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
     };
   }, [onClose]);
 
-  return (
+  // Belangrijk: via een portal naar document.body renderen. De drawer is "fixed
+  // inset-0", maar de header eromheen heeft backdrop-blur (= backdrop-filter), en
+  // dat maakt de header het containing block voor fixed-kinderen — waardoor de
+  // drawer anders ingeklemd raakt op de header-hoogte i.p.v. het hele scherm.
+  const tree = (
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="absolute inset-0 animate-[fadeIn_.2s_ease] bg-ink/40" onClick={onClose} />
       <div
@@ -219,4 +224,5 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
       </div>
     </div>
   );
+  return typeof document === "undefined" ? null : createPortal(tree, document.body);
 }

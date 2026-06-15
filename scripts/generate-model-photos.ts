@@ -20,6 +20,7 @@ import { eq, sql } from "drizzle-orm";
  *   npm run generate:model-photos -- 25                    (25 producten deze run)
  *   npm run generate:model-photos -- 1 lakschoen           (één product gericht (her)genereren)
  *   npm run generate:model-photos -- 9 "a,b,c"             (meerdere handles gericht (her)genereren, komma-gescheiden)
+ *   npm run generate:model-photos -- 60 redo "a,b"         (bestaande modelfoto's HERgeneren, m.u.v. handles a,b)
  *   npm run generate:model-photos -- 25 "" Schoenen        (beperk tot één hoofdgroep)
  */
 
@@ -139,9 +140,14 @@ async function main() {
     process.exit(1);
   }
   const limit = Math.max(1, Math.min(300, Number(process.argv[2]) || 20));
-  // Eén of meer handles (komma-gescheiden) → gerichte (her)generatie, negeert de "nog geen modelfoto"-filter.
-  const handleList = (process.argv[3] || "").split(",").map((h) => h.trim()).filter(Boolean);
-  const onlyHg = (process.argv[4] || "").trim(); // optioneel: beperk tot één hoofdgroep
+  const arg3 = (process.argv[3] || "").trim();
+  // "redo" → bestaande modelfoto's HERgeneren (bv. na een pose-wijziging); argv[4]
+  // = optionele uitsluitlijst. Anders: één of meer handles (komma-gescheiden) voor
+  // gerichte (her)generatie. Standaard: alleen producten zónder modelfoto.
+  const redoExisting = arg3.toLowerCase() === "redo";
+  const handleList = redoExisting ? [] : arg3.split(",").map((h) => h.trim()).filter(Boolean);
+  const excludeList = redoExisting ? (process.argv[4] || "").split(",").map((h) => h.trim()).filter(Boolean) : [];
+  const onlyHg = redoExisting ? "" : (process.argv[4] || "").trim(); // optioneel: beperk tot één hoofdgroep
   const db = getDb();
 
   const cats = onlyHg ? [onlyHg] : Object.keys(STYLE);
@@ -150,7 +156,12 @@ async function main() {
       (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
-      ${handleList.length ? sql`and p.handle in (${sql.join(handleList.map((h) => sql`${h}`), sql`, `)})` : sql`and p.model_image_url=''`}
+      ${handleList.length
+        ? sql`and p.handle in (${sql.join(handleList.map((h) => sql`${h}`), sql`, `)})`
+        : redoExisting
+          ? sql`and p.model_image_url <> ''`
+          : sql`and p.model_image_url = ''`}
+      ${excludeList.length ? sql`and p.handle not in (${sql.join(excludeList.map((h) => sql`${h}`), sql`, `)})` : sql``}
       and p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((k) => sql`${k}`), sql`, `)})
     order by p.stock_qty desc
     limit ${limit}
