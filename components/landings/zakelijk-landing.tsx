@@ -29,7 +29,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
       {/* Hero */}
       <section className="relative h-[58vh] min-h-[420px] w-full overflow-hidden bg-ink">
         <Image
-          src="/brand/brand-impression-interview.jpg"
+          src="https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-hero/landing-zakelijk.jpg"
           alt="GENTS Zakelijk"
           fill
           priority

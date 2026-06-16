@@ -28,7 +28,7 @@ export function StudentsLanding({ highlights }: Props) {
       {/* Hero */}
       <section className="relative h-[60vh] min-h-[440px] w-full overflow-hidden bg-ink">
         <Image
-          src="/brand/brand-model-tuxedo.jpg"
+          src="https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-hero/landing-students.jpg"
           alt="GENTS Students"
           fill
           priority

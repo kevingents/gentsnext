@@ -8,7 +8,7 @@ export function EtiquetteHub() {
       {/* Hero */}
       <section className="relative h-[50vh] min-h-[380px] w-full overflow-hidden bg-ink">
         <Image
-          src="/brand/brand-model-tuxedo.jpg"
+          src="https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-hero/landing-etiquette.jpg"
           alt="Etiquette & dresscodes"
           fill
           priority

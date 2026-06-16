@@ -46,6 +46,13 @@ const HEROES: Hero[] = [
     prompt: "A distinguished man in a charcoal business suit and white shirt standing calm and confident in a bright modern interior with soft daylight, understated luxury, clean refined composition." },
   { slug: "autumn-knitwear", aspect: "21:9",
     prompt: "A man in fine autumn knitwear over a shirt collar and tailored trousers walking a misty tree-lined lane in soft overcast light, warm earthy tones, refined countryside elegance." },
+  // — Landingspagina's (full-bleed hero) —
+  { slug: "landing-zakelijk", aspect: "3:2",
+    prompt: "A confident businessman in a sharp charcoal tailored suit and crisp white shirt standing in a bright modern glass-walled office boardroom, professional and approachable, soft clean daylight, plenty of space on the left for a headline." },
+  { slug: "landing-students", aspect: "3:2",
+    prompt: "A lively group of young men in black-tie tuxedos and white-tie tailcoats raising a toast at an elegant candle-lit student-society gala dinner, celebratory and warm, golden ambient light, characterful and joyful." },
+  { slug: "landing-etiquette", aspect: "3:2",
+    prompt: "An impeccably dressed man in formal black-tie attire adjusting his black bow tie, refined detail on the wing-collar white shirt, cufflinks and pocket square, classic and educational, warm soft directional light, elegant and timeless." },
 ];
 
 async function generate(prompt: string, aspect: string, key: string): Promise<string | null> {
