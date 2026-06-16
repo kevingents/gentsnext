@@ -98,6 +98,37 @@ export const LOOKS: Look[] = [
       { x: 50, y: 92, handle: "veterschoen-glad-tan", label: "Schoenen" },
     ],
   },
+  {
+    slug: "smoking-compleet",
+    title: "Smoking compleet",
+    subtitle: "Black tie van top tot teen — jas, overhemd, strik, broek en lakschoen.",
+    occasion: "Gala",
+    theme: "Compleet",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/jas-smoking-punt-pv-zwart-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "smoking-ov-vadermoord-plisse", label: "Overhemd" },
+      { x: 55, y: 28, handle: "strik-poly-zwart", label: "Strik" },
+      { x: 50, y: 36, handle: "jas-smoking-punt-pv-zwart", label: "Smoking jas" },
+      { x: 50, y: 72, handle: "broek-rok-smok-pv", label: "Pantalon" },
+      { x: 50, y: 93, handle: "lakschoen", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "rokkostuum-compleet",
+    title: "Rokkostuum compleet",
+    subtitle: "White tie compleet — rokjas, rokvest, wing-overhemd, witte rokstrik, broek en lakschoen.",
+    occasion: "Gala",
+    theme: "Compleet",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/rokjas-pv-model.jpg",
+    hotspots: [
+      { x: 50, y: 20, handle: "smokingoverhemd-wingtip-wit", label: "Wing-overhemd" },
+      { x: 55, y: 26, handle: "rokstrik-zelfstrik-pique", label: "Rokstrik" },
+      { x: 50, y: 34, handle: "rokjas-pv", label: "Rokjas" },
+      { x: 47, y: 46, handle: "rokvest-zwart", label: "Rokvest" },
+      { x: 50, y: 72, handle: "broek-rok-smok-pv", label: "Pantalon" },
+      { x: 50, y: 93, handle: "lakschoen", label: "Schoenen" },
+    ],
+  },
 ];
 
 /** Sanity-look → component-vorm (afbeelding via Sanity-CDN). */
