@@ -4,6 +4,7 @@ import { StoreLocator, type LocatorStore } from "@/components/stores/store-locat
 import { StorePage } from "@/components/stores/store-page";
 import { LandingPage } from "@/components/landing-page";
 import { ContentPage, heroForPage } from "@/components/content-page";
+import { RichArticle } from "@/components/rich-article";
 import { EtiquetteHub } from "@/components/etiquette-hub";
 import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
 import { StudentsLanding } from "@/components/landings/students-landing";
@@ -171,6 +172,12 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
   }
   const mp = getMigratedPage(handle);
   if (mp) {
+    // ≥2 koppen → visuele RichArticle (hero + iconen + beeld/tekst-secties + CTA);
+    // anders de eenvoudige content-template.
+    const h2count = (mp.html.match(/<h2/gi) || []).length;
+    if (h2count >= 2) {
+      return <RichArticle handle={handle} title={mp.title} html={mp.html} heroImage={heroForPage(handle, mp.title)} />;
+    }
     return (
       <ContentPage title={mp.title} image={heroForPage(handle, mp.title)}>
         <div className="prose-gents" dangerouslySetInnerHTML={{ __html: mp.html }} />

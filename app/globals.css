@@ -94,6 +94,13 @@
   .prose-gents th, .prose-gents td { @apply border border-line px-3 py-2 text-left; }
   .prose-gents strong { @apply text-ink; }
   .prose-gents hr { @apply my-8 border-line; }
+
+  /* Rich-article secties: nette links + accessoire-lijst als chips. */
+  .rich-prose a { @apply text-ink underline underline-offset-2; }
+  .rich-prose p { @apply my-3; }
+  .rich-prose ul { @apply mt-4 flex list-none flex-wrap gap-2 p-0; }
+  .rich-prose ul li { @apply rounded-full border border-line px-3.5 py-1.5 text-sm text-ink; }
+  .rich-prose ul li a { @apply no-underline hover:text-ink; }
 }
 
 /* Subtiele animaties — fashion-gevoel zonder druk te worden. */
