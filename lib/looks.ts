@@ -56,6 +56,50 @@ export const LOOKS: Look[] = [
       { x: 50, y: 74, handle: "m-m-pantalon-blend-navy", label: "Pantalon" },
     ],
   },
+  {
+    slug: "gala-black-tie",
+    title: "Gala & black tie",
+    subtitle: "Onberispelijk in smoking — voor de meest formele avond.",
+    occasion: "Gala",
+    theme: "Black tie",
+    image: "/brand/brand-model-tuxedo.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "smoking-ov-plat-glad", label: "Overhemd" },
+      { x: 55, y: 28, handle: "strik-poly-zwart", label: "Strik" },
+      { x: 50, y: 36, handle: "m-m-colbert-blend-zwart", label: "Colbert" },
+      { x: 50, y: 72, handle: "broek-rok-smok-pv", label: "Pantalon" },
+      { x: 50, y: 93, handle: "lakschoen", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "driedelig-klassiek",
+    title: "Driedelig klassiek",
+    subtitle: "Het driedelige pak — gezag met stijl.",
+    occasion: "Zakelijk",
+    image: "/brand/brand-model-grey3piece.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 50, y: 34, handle: "colbert-blend-navy-mixmatch", label: "Colbert" },
+      { x: 50, y: 48, handle: "m-m-gilet-wol-blauw", label: "Gilet" },
+      { x: 50, y: 72, handle: "m-m-pantalon-blend-navy", label: "Pantalon" },
+      { x: 50, y: 93, handle: "veterschoen-glad-zwart", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "zomerse-bruiloftsgast",
+    title: "Zomerse bruiloftsgast",
+    subtitle: "Licht en zonnig — perfect voor een zomerbruiloft in het zuiden.",
+    occasion: "Bruiloft",
+    theme: "Italiaanse zomer",
+    image: "/brand/brand-model-tan.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
+      { x: 50, y: 34, handle: "colbert-sjas-blauw", label: "Colbert" },
+      { x: 50, y: 70, handle: "m-m-pantalon-blend-royalblue", label: "Pantalon" },
+      { x: 50, y: 92, handle: "veterschoen-glad-tan", label: "Schoenen" },
+    ],
+  },
 ];
 
 /** Sanity-look → component-vorm (afbeelding via Sanity-CDN). */
