@@ -101,6 +101,30 @@
   .rich-prose ul { @apply mt-4 flex list-none flex-wrap gap-2 p-0; }
   .rich-prose ul li { @apply rounded-full border border-line px-3.5 py-1.5 text-sm text-ink; }
   .rich-prose ul li a { @apply no-underline hover:text-ink; }
+
+  /* Migrated dresscode-/gelegenheidspagina's met bespoke structuur-classes
+     (gents-*-hero/-label/-highlight/-grid/-card/-columns/-box/-tip): suffix-
+     gebaseerde styling, dekt alle namespaces (white-tie, gala, black-tie, …). */
+  .gents-doc :where([class*="-label"]) { @apply hidden; }
+  .gents-doc :where([class*="-hero"]) { @apply mb-8 text-center; }
+  .gents-doc :where([class*="-hero"]) h1 { @apply hidden; }
+  .gents-doc :where([class*="-hero"]) p { @apply text-lg leading-relaxed text-ink-soft; }
+  .gents-doc :where(h2) { @apply mt-12 font-display text-2xl font-light text-ink; }
+  .gents-doc :where(h3) { @apply mt-8 font-display text-xl font-light text-ink; }
+  .gents-doc :where(p) { @apply mt-4 font-sans leading-relaxed text-ink-soft; }
+  .gents-doc :where(a) { @apply text-ink underline underline-offset-2; }
+  .gents-doc :where(ul) { @apply mt-2 list-disc space-y-1 pl-5 text-ink-soft; }
+  .gents-doc :where([class*="-highlight"]) { @apply my-8 rounded-card border-l-2 border-gold bg-surface p-6 text-ink-soft; }
+  .gents-doc :where([class*="-grid"]) { @apply my-8 grid gap-4 sm:grid-cols-3; }
+  .gents-doc :where([class*="-card"]) { @apply rounded-card border border-line bg-canvas p-5 text-sm leading-relaxed text-ink-soft; }
+  .gents-doc :where([class*="-columns"]) { @apply my-8 grid gap-4 sm:grid-cols-2; }
+  .gents-doc :where([class*="-box"]) { @apply rounded-card border border-line bg-surface p-5 text-sm leading-relaxed text-ink-soft; }
+  .gents-doc :where([class*="-tip"]) { @apply my-8 rounded-card bg-ink p-6 text-canvas; }
+  .gents-doc :where([class*="-tip"]) strong, .gents-doc :where([class*="-tip"]) a { @apply text-canvas; }
+  .gents-doc :where([class*="-highlight"]) strong,
+  .gents-doc :where([class*="-card"]) strong,
+  .gents-doc :where([class*="-box"]) strong,
+  .gents-doc :where([class*="-tip"]) strong { @apply mb-2 block font-display text-lg font-light; }
 }
 
 /* Subtiele animaties — fashion-gevoel zonder druk te worden. */

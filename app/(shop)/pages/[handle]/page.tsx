@@ -172,6 +172,15 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
   }
   const mp = getMigratedPage(handle);
   if (mp) {
+    // Bespoke structuur-classes (dresscode-/gelegenheidspagina's) → gents-doc-styling
+    // (kaarten, kolommen, highlight/tip-boxen) onder een beeld-hero.
+    if (/class=["']gents-/.test(mp.html)) {
+      return (
+        <ContentPage title={mp.title} image={heroForPage(handle, mp.title)}>
+          <div className="gents-doc" dangerouslySetInnerHTML={{ __html: mp.html }} />
+        </ContentPage>
+      );
+    }
     // ≥2 koppen → visuele RichArticle (hero + iconen + beeld/tekst-secties + CTA);
     // anders de eenvoudige content-template.
     const h2count = (mp.html.match(/<h2/gi) || []).length;
