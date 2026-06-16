@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
+import { cleanModelTo45 } from "./clean-model";
 
 /**
  * AI-modelfoto's genereren met FASHN.ai **Product to Model** (model_name
@@ -195,7 +196,11 @@ async function main() {
     console.log(`• ${r.handle} (${r.hg})`);
     const out = await runProductToModel(r.img, prompt, apiKey);
     if (out) {
-      const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken);
+      // Nieuw formaat: model uitknippen op égale 4:5-studio (geen kader); val terug op padding.
+      const clean = await cleanModelTo45(out, process.env.FAL_KEY || "");
+      const u = clean
+        ? `${(await put(`ai-models/${r.handle}-model.jpg`, clean, { access: "public", token: blobToken, contentType: "image/jpeg", allowOverwrite: true })).url}?v=${Date.now()}`
+        : await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken);
       if (u) {
         await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.title} — op model` }).where(eq(products.id, r.id));
         done++;

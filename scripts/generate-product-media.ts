@@ -1,5 +1,6 @@
 import "@/lib/load-env";
 import { put } from "@vercel/blob";
+import { cleanModelTo45 } from "./clean-model";
 import sharp from "sharp";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
@@ -167,7 +168,14 @@ async function main() {
       const patch: Record<string, string> = {};
       const p1 = await run("product-to-model", modelInputs(r.img, `Male model ${conf.wear}. ${poseFor(conf.frame, i)} ${STUDIO}`, i), key);
       let leadUrl = "";
-      if (p1) { const u = await toBlob(p1, `ai-models/${r.handle}-model.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl = u; patch.modelImageAlt = `${r.title} — op model`; leadUrl = u; } }
+      if (p1) {
+        // Nieuw formaat: model uitknippen op égale 4:5-studio (geen kader); val terug op padding.
+        const clean = await cleanModelTo45(p1, process.env.FAL_KEY || "");
+        let u: string | null;
+        if (clean) { const b = await put(`ai-models/${r.handle}-model.jpg`, clean, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true }); u = `${b.url}?v=${Date.now()}`; }
+        else u = await toBlob(p1, `ai-models/${r.handle}-model.jpg`, token, "image/jpeg");
+        if (u) { patch.modelImageUrl = u; patch.modelImageAlt = `${r.title} — op model`; leadUrl = u; }
+      }
 
       if (conf.kind === "garment" && leadUrl) {
         const vid = await run("image-to-video", { image: leadUrl, prompt: MOTIONS[i % MOTIONS.length], duration: 5, resolution: "720p" }, key);

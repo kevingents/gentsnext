@@ -1,6 +1,7 @@
 import "@/lib/load-env";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
+import { cleanModelTo45 } from "./clean-model";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -197,11 +198,19 @@ async function main() {
 
     if (!r.m1) {
       const out = await run("product-to-model", modelInputs(r.img, poseSuit(i, 0), i), key);
-      if (out) { const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl = u; patch.modelImageAlt = `${r.title} — op model`; leadUrl = u; spent++; } }
+      if (out) {
+        const clean = await cleanModelTo45(out, process.env.FAL_KEY || "");
+        const u = clean ? `${(await put(`ai-models/${r.handle}-model.jpg`, clean, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true })).url}?v=${Date.now()}` : await toBlob(out, `ai-models/${r.handle}-model.jpg`, token, "image/jpeg");
+        if (u) { patch.modelImageUrl = u; patch.modelImageAlt = `${r.title} — op model`; leadUrl = u; spent++; }
+      }
     }
     if (!r.m2) {
       const out = await run("product-to-model", modelInputs(r.img, poseSuit(i, 1), i), key);
-      if (out) { const u = await toBlob(out, `ai-models/${r.handle}-model2.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl2 = u; patch.modelImageAlt2 = `${r.title} — op model (2)`; spent++; } }
+      if (out) {
+        const clean = await cleanModelTo45(out, process.env.FAL_KEY || "");
+        const u = clean ? `${(await put(`ai-models/${r.handle}-model2.jpg`, clean, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true })).url}?v=${Date.now()}` : await toBlob(out, `ai-models/${r.handle}-model2.jpg`, token, "image/jpeg");
+        if (u) { patch.modelImageUrl2 = u; patch.modelImageAlt2 = `${r.title} — op model (2)`; spent++; }
+      }
     }
     if (!r.det) {
       const out = await run("product-to-model", modelInputs(r.img, DETAIL, i), key);
