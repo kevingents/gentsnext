@@ -60,8 +60,12 @@ const MAP: Record<string, Swatch> = {
   mintgroen: { hex: "#A7C9AE", family: "groen" },
   mint: { hex: "#A7C9AE", family: "groen" },
   legergroen: { hex: "#5A6240", family: "groen" },
-  // Rood
+  // Rood — steenrood (baksteen/terracotta) bewust warmer/lichter dan diep rood.
   rood: { hex: "#8E2B2B", family: "rood" },
+  steenrood: { hex: "#A8442E", family: "rood" },
+  baksteen: { hex: "#A8442E", family: "rood" },
+  terracotta: { hex: "#B5613F", family: "rood" },
+  roest: { hex: "#9C5230", family: "rood" },
   bordeaux: { hex: "#5C1F2B", family: "rood" },
   // Beige / zand — bewust uit elkaar getrokken zodat ze in de kleurenbalk goed
   // te onderscheiden zijn (beige licht/koel, zand donkerder/goudwarm).

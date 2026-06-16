@@ -64,6 +64,8 @@ function rolesFor(hg: string, formality: Formality): Role[] {
     case "Vesten": return ["trousers", "shoes"];
     case "Polo-shirts":
     case "T-Shirts": return ["trousers", "shoes"];
+    case "Schoenen": return ["shirt", "trousers", "belt"]; // outfit ROND de schoen — geen schoen-bij-schoen
+    case "Riemen": return ["shirt", "trousers", "shoes"];
     default: return ["trousers", "shoes"];
   }
 }
@@ -172,7 +174,10 @@ export async function smartModelLook(
 
   const formality = formalityOf(target.hoofdgroep, target.title, target.handle);
   const targetFam = famOf(target.colorLabel, target.title, target.handle);
-  const roles = rolesFor(target.hoofdgroep, formality);
+  let roles = rolesFor(target.hoofdgroep, formality);
+  // Nooit de eigen categorie aanbevelen (geen schoen-bij-schoen, broek-bij-broek, …).
+  const ownRoles = (Object.keys(HG_FOR_ROLE) as Role[]).filter((r) => HG_FOR_ROLE[r].includes(target.hoofdgroep));
+  roles = roles.filter((r) => !ownRoles.includes(r));
   if (!roles.length) return null;
 
   // Eén query: alle in-aanmerking-komende hoofdgroepen, ruim op voorraad.
@@ -207,6 +212,9 @@ export async function smartModelLook(
     const pool = byHg(hg);
     let plan = colorPlan(role, formality, targetFam);
     if (role === "belt" && shoeFam) plan = { pref: [shoeFam, "brown", "black"], forbid: ["white", "pink"] };
+    // Schoen-PDP: de studiofoto toont een neutrale grijze broek → kies die ook,
+    // niet een van de schoenkleur afgeleide zand-broek (anders ≠ het model).
+    if (target.hoofdgroep === "Schoenen" && role === "trousers") plan = { pref: ["grey", "navy", "charcoal", "beige"], forbid: [] };
 
     // Admin-voorkeur respecteren als die ruim op voorraad is én niet verboden.
     const prefHandle = prefByHg.get(hg[0]);

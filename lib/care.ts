@@ -6,6 +6,17 @@
  * SVG-iconen op basis van de `key`.
  */
 
+/**
+ * Strip emoji's + was-/strijk-symbolen uit SRS-tekst (no-emoji-regel in de UI).
+ * Dekt emoji-blokken, pijlen, technische/geometrische symbolen, variation-selectors
+ * en ZWJ, plus de losse symbolen die SRS gebruikt (△◯▭♨Ⓟ•|).
+ */
+const SYMBOL_RE =
+  /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{25A0}-\u{25FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}△◯▭♨Ⓟⓕ•|]/gu;
+export function stripSymbols(s: string | undefined | null): string {
+  return String(s || "").replace(SYMBOL_RE, " ").replace(/\s+/g, " ").replace(/^[\s·,-]+/, "").trim();
+}
+
 export type Composition = { pct: number; material: string };
 export type CareKey =
   | "wash30" | "wash40" | "wash60" | "handwash" | "nowash"
@@ -129,6 +140,6 @@ export function careProse(wasvoorschrift: string | undefined | null): string[] {
     .map((l) => l.trim())
     .filter((l) => l && !/^#+\s/.test(l) && !/^\[/.test(l)) // koppen + symbool-only regels eruit
     .filter((l) => /[a-z]{4,}/i.test(l) && l.length > 30) // alleen echte zinnen
-    .map((l) => l.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}△◯▭♨️Ⓟⓕ•|]+/gu, " ").replace(/\s+/g, " ").trim())
+    .map((l) => stripSymbols(l))
     .filter(Boolean);
 }

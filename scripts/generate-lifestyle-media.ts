@@ -52,7 +52,6 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
       "lingering over an espresso at a tiny sunny piazza cafe, a folded newspaper on the marble table",
       "browsing a colourful morning flower market, warm sunlight streaming through the awnings",
       "stepping off a small wooden boat onto a sun-baked stone jetty, laughing, sea sparkling behind",
-      "cruising a winding coastal road in a vintage convertible, wind in his hair, a big carefree grin",
       "playing cards with friends at a shaded harbour-side table, lively, relaxed and laughing",
     ],
   },
@@ -128,11 +127,14 @@ async function main() {
   if (!key || !token) { console.error("env ontbreekt"); process.exit(1); }
   const limit = Math.max(1, Math.min(800, Number(process.argv[2]) || 40));
   const phase = (process.argv[3] || "trouw").trim();
+  const redo = process.argv.includes("redo"); // overschrijf bestaande slots i.p.v. alleen lege vullen
   const isStudent = phase === "student";
   const cats = PHASES[phase] || (CAT[phase] ? [phase] : Object.keys(CAT));
   const db = getDb();
 
-  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary and (p.lifestyle_image_url='' or p.lifestyle_image_url2='' or p.lifestyle_image_url3='')`;
+  // Normaal: alleen producten met ≥1 leeg slot. Redo: alle producten (overschrijf alles).
+  const emptySlot = sql`and (p.lifestyle_image_url='' or p.lifestyle_image_url2='' or p.lifestyle_image_url3='')`;
+  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary ${redo ? sql`` : emptySlot}`;
   const filter = isStudent
     ? sql`(lower(p.handle) like '%rok%' or lower(p.title) like '%rokkostuum%' or lower(p.title) like '%rokjas%' or lower(p.handle) like 'jacquet%' or lower(p.title) like '%jacquet%')`
     : sql`p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})`;
@@ -167,7 +169,7 @@ async function main() {
       ];
       const patch: Record<string, string> = {};
       for (let s = 0; s < 3; s++) {
-        if (slots[s].cur) continue;
+        if (!redo && slots[s].cur) continue;
         if (credits < 1) break;
         const scene = mood.scenes[(i * 3 + s) % mood.scenes.length];
         const prompt = `A man ${conf.wear}, ${scene}. ${mood.light} ${EVERYMAN}`;

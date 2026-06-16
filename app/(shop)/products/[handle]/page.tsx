@@ -13,7 +13,7 @@ import { RecentStrip } from "@/components/recent/recent-strip";
 import { ShareRow } from "@/components/pdp/share-row";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
-import { buildModelLook, resolveLook } from "@/lib/looks";
+import { buildModelLook, resolveLook, getLookBuyData } from "@/lib/looks";
 import { smartModelLook } from "@/lib/model-styling";
 import { getSettings } from "@/lib/settings";
 import { getColorSiblings } from "@/lib/color-siblings";
@@ -30,7 +30,7 @@ import { estimateDelivery } from "@/lib/fulfillment";
 import { getReferencePrices } from "@/lib/pricing";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
-import { parseComposition, parseCare, careProse } from "@/lib/care";
+import { parseComposition, parseCare, careProse, stripSymbols } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { sortSizes } from "@/lib/sizing";
 import { stockForSkus, stockAvailable } from "@/lib/stock";
@@ -51,7 +51,7 @@ const SPEC_LABELS: [key: string, label: string][] = [
   ["manchet", "Manchet"],
   ["zakken", "Zakken"],
   ["seizoen", "Seizoen"],
-  ["wasvoorschrift", "Wasvoorschrift"],
+  // Geen rauwe 'wasvoorschrift' hier — dat staat schoon (SVG-iconen) onder Onderhoud.
 ];
 
 const TRUST = [
@@ -151,7 +151,7 @@ export default async function ProductPage({ params }: Props) {
 
   const specs = SPEC_LABELS.map(([key, label]) => ({
     label,
-    value: String(attrs[key] ?? "").trim(),
+    value: stripSymbols(String(attrs[key] ?? "")), // emoji's/symbolen weg uit SRS-waarden
   })).filter((s) => s.value);
 
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
@@ -200,6 +200,10 @@ export default async function ProductPage({ params }: Props) {
       )
     : null;
   const resolvedModelLook = modelLook ? await resolveLook(modelLook) : null;
+  // Koopdata (maten/sku/voorraad) per look-item → inline maat kiezen + toevoegen.
+  const lookBuy = resolvedModelLook
+    ? await getLookBuyData(resolvedModelLook.products.filter((h) => h.product).map((h) => h.handle))
+    : undefined;
 
   // Voorkeur: kleurvarianten uit de titel-groepering (dekt o.a. de 235 dassen-
   // /pochet-/strik-groepen); val terug op Shopify group_data-metafield. Daarna
@@ -389,6 +393,7 @@ export default async function ProductPage({ params }: Props) {
 
       <PdpSizeProvider>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
+        <div>
         <Gallery
           images={[
             // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
@@ -402,6 +407,18 @@ export default async function ProductPage({ params }: Props) {
           sizeMedia={sizeMedia}
           video={product.modelVideoUrl || null}
         />
+        {resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? (
+          <a
+            href="#shop-de-look"
+            className="mt-3 flex items-center justify-center gap-2 rounded-card border border-ink px-4 py-3 font-sans text-sm font-medium text-ink transition-colors hover:bg-ink hover:text-canvas"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+              <path d="M5 8h14l-1 12H6L5 8Z" /><path d="M9 8a3 3 0 0 1 6 0" strokeLinecap="round" />
+            </svg>
+            Shop de look
+          </a>
+        ) : null}
+        </div>
 
         <div className="lg:sticky lg:top-24 lg:self-start">
           <BuyBox
@@ -452,8 +469,8 @@ export default async function ProductPage({ params }: Props) {
       {/* Sfeerbeeld — AI-lifestyle (model in setting), groot en ongecropt */}
       {product.lifestyleImageUrl ? (
         <section className="mt-20">
-          <p className="label-brand">In het echt</p>
-          <h2 className="mt-2 text-display-md">Zo draag je het</h2>
+          <p className="label-brand">Lifestyle</p>
+          <h2 className="mt-2 text-display-md">In the moment</h2>
           <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[product.lifestyleImageUrl, product.lifestyleImageUrl2, product.lifestyleImageUrl3].filter(Boolean).map((src, i) => (
               <div key={i} className="relative aspect-[2/3] overflow-hidden rounded-card bg-surface">
@@ -466,14 +483,14 @@ export default async function ProductPage({ params }: Props) {
 
       {/* Shop de look — de outfit van het model klikbaar/shoppbaar */}
       {resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? (
-        <section className="mt-20">
+        <section id="shop-de-look" className="mt-20 scroll-mt-24">
           <p className="label-brand">Shop de look</p>
           <h2 className="mt-2 text-display-md">Zo draag je het</h2>
           <p className="mt-2 max-w-prose font-sans text-ink-soft">
             Gestyled op ons model. Klik op een onderdeel om het te shoppen — of shop de hele outfit in één keer.
           </p>
           <div className="mt-8">
-            <ShopTheLook look={resolvedModelLook} aspectClass="aspect-[2/3]" />
+            <ShopTheLook look={resolvedModelLook} aspectClass="aspect-[2/3]" buy={lookBuy} />
           </div>
         </section>
       ) : null}

@@ -38,7 +38,7 @@ export function HelpButton() {
   }
 
   return (
-    <div className="fixed bottom-20 right-4 z-30 lg:bottom-6 lg:right-6">
+    <div className="fixed bottom-20 right-4 z-30 flex flex-col items-end lg:bottom-6 lg:right-6">
       {open ? (
         <div className="mb-3 w-80 border border-line bg-canvas p-4 shadow-pop">
           <p className="label-brand mb-2">Hulp nodig?</p>
@@ -81,13 +81,13 @@ export function HelpButton() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label="Hulp nodig"
-        className="flex h-12 items-center gap-2 rounded-full border border-line bg-canvas px-5 font-sans text-sm shadow-card hover:border-ink"
+        className="flex h-12 w-12 items-center justify-center gap-2 rounded-full border border-line bg-canvas font-sans text-sm shadow-card hover:border-ink sm:w-auto sm:px-5"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden className="shrink-0">
           <circle cx="12" cy="12" r="9" />
           <path d="M9.5 9a2.5 2.5 0 014.9.5c0 1.5-2.4 2-2.4 3.5M12 16h.01" strokeLinecap="round" />
         </svg>
-        Hulp nodig?
+        <span className="hidden sm:inline">Hulp nodig?</span>
       </button>
     </div>
   );
