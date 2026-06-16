@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect } from "react";
 import { useCart } from "@/components/cart/cart-context";
+import { CartSuggestions } from "@/components/cart/cart-suggestions";
 import { formatEuro } from "@/lib/pricing";
 
 /**
@@ -18,7 +19,7 @@ export function AddedToCartToast() {
 
   useEffect(() => {
     if (!added) return;
-    const t = setTimeout(() => cart.dismissAdded(), 5000);
+    const t = setTimeout(() => cart.dismissAdded(), 8000);
     return () => clearTimeout(t);
     // Opnieuw aftellen bij elke nieuwe toevoeging (nonce).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -56,6 +57,14 @@ export function AddedToCartToast() {
           </div>
           <p className="shrink-0 font-sans text-sm text-ink">{formatEuro(l.priceCents)}</p>
         </div>
+
+        <CartSuggestions
+          hoofdgroepen={[l.hoofdgroep].filter(Boolean) as string[]}
+          excludeHandles={[l.productHandle]}
+          onNavigate={cart.dismissAdded}
+          title="Maak je look compleet"
+          className="mt-4 border-t border-line pt-4"
+        />
 
         <div className="mt-4 grid gap-2">
           <button
