@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { rowSortIndex } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 
@@ -19,6 +19,18 @@ type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contai
 export function Gallery({ images, title, sizeMedia, video }: { images: { url: string; alt: string; contain?: boolean }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null }) {
   const { sizeLabel } = usePdpSize();
   const [lightbox, setLightbox] = useState<number | null>(null);
+
+  // Mobiele swipe-slider (scroll-snap): bijhouden welke foto in beeld is + erheen springen.
+  const sliderRef = useRef<HTMLDivElement | null>(null);
+  const [slide, setSlide] = useState(0);
+  const onSliderScroll = () => {
+    const el = sliderRef.current;
+    if (el) setSlide(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+  };
+  const goSlide = (i: number) => {
+    const el = sliderRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  };
 
   const showLarge = !!sizeMedia && !!sizeLabel && rowSortIndex(sizeLabel) >= rowSortIndex(sizeMedia.threshold);
 
@@ -64,14 +76,18 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+      <div
+        ref={sliderRef}
+        onScroll={onSliderScroll}
+        className="flex snap-x snap-mandatory overflow-x-auto [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible"
+      >
         {shots.map((shot, i) => (
           <button
             key={i}
             type="button"
             onClick={() => setLightbox(i)}
             aria-label={`Vergroot ${shot.alt}`}
-            className="group relative aspect-[4/5] overflow-hidden rounded-card bg-surface"
+            className="group relative aspect-[4/5] w-full shrink-0 snap-start overflow-hidden rounded-card bg-surface sm:w-auto"
           >
             {shot.video ? (
               <video
@@ -113,6 +129,22 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
           </button>
         ))}
       </div>
+
+      {/* Slider-stippen (alleen mobiel) — tik om naar een foto te springen. */}
+      {shots.length > 1 ? (
+        <div className="mt-3 flex justify-center gap-1.5 sm:hidden">
+          {shots.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => goSlide(i)}
+              aria-label={`Ga naar afbeelding ${i + 1}`}
+              aria-current={slide === i}
+              className={`h-1.5 rounded-full transition-all ${slide === i ? "w-5 bg-ink" : "w-1.5 bg-line"}`}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {lightbox !== null ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4" role="dialog" aria-modal="true" aria-label="Foto vergroot">

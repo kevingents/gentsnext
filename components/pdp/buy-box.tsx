@@ -287,7 +287,12 @@ export function BuyBox({
         <div className="mx-auto flex max-w-page items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate font-sans text-xs text-muted">{title}</p>
-            <p className="font-display text-base">{priceLabel}</p>
+            <p className="flex items-baseline gap-2 font-display text-base">
+              {priceLabel}
+              {size ? (
+                <span className="rounded-full bg-surface px-2 py-0.5 font-sans text-xs font-medium text-ink">Maat {size}</span>
+              ) : null}
+            </p>
           </div>
           <button
             type="button"
