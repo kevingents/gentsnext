@@ -3,6 +3,7 @@ import Link from "next/link";
 import { StoreLocator, type LocatorStore } from "@/components/stores/store-locator";
 import { StorePage } from "@/components/stores/store-page";
 import { LandingPage } from "@/components/landing-page";
+import { ContentPage, heroForPage } from "@/components/content-page";
 import { EtiquetteHub } from "@/components/etiquette-hub";
 import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
 import { StudentsLanding } from "@/components/landings/students-landing";
@@ -159,25 +160,21 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
   const sanityPage = await getSanityPage(handle);
   if (sanityPage) {
     return (
-      <article className="mx-auto max-w-3xl px-gutter py-12">
-        <h1 className="text-display-md">{sanityPage.title}</h1>
+      <ContentPage title={sanityPage.title} image={heroForPage(handle, sanityPage.title)}>
         {sanityPage.body?.length ? (
-          <div className="mt-8">
-            <PortableContent value={sanityPage.body} />
-          </div>
+          <PortableContent value={sanityPage.body} />
         ) : sanityPage.legacyHtml ? (
-          <div className="prose-gents mt-8" dangerouslySetInnerHTML={{ __html: sanityPage.legacyHtml }} />
+          <div className="prose-gents" dangerouslySetInnerHTML={{ __html: sanityPage.legacyHtml }} />
         ) : null}
-      </article>
+      </ContentPage>
     );
   }
   const mp = getMigratedPage(handle);
   if (mp) {
     return (
-      <article className="mx-auto max-w-3xl px-gutter py-12">
-        <h1 className="text-display-md">{mp.title}</h1>
-        <div className="prose-gents mt-8" dangerouslySetInnerHTML={{ __html: mp.html }} />
-      </article>
+      <ContentPage title={mp.title} image={heroForPage(handle, mp.title)}>
+        <div className="prose-gents" dangerouslySetInnerHTML={{ __html: mp.html }} />
+      </ContentPage>
     );
   }
 
