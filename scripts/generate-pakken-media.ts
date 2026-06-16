@@ -19,8 +19,19 @@ import { eq, sql } from "drizzle-orm";
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
 const SUIT = "Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes.";
-const POSE1 = `${SUIT} Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera. ${STUDIO}`;
-const POSE2 = `${SUIT} Easy full-length three-quarter stance, both hands loosely in his pockets, friendly relaxed smile, looking into the camera. ${STUDIO}`;
+// Geroteerde pose-pool: niet elk pak dezelfde 2 poses (was hardcoded → eentonig).
+// Per product 2 opeenvolgende, dus altijd verschillend, en verschoven over de catalogus.
+const POSE_VARIANTS = [
+  "Relaxed full-length pose, standing with one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.",
+  "Easy full-length three-quarter stance, both hands loosely in his pockets, friendly relaxed smile, looking into the camera.",
+  "Full-length contrapposto, one hand on his hip and the other relaxed at his side, confident easy smile, looking into the camera.",
+  "Candid full-length shot, caught mid-stride walking slowly toward the camera, relaxed shoulders, light spontaneous smile.",
+  "Full-length editorial pose, leaning a shoulder lightly against a wall, hands relaxed, calm natural expression, glancing just off to the side.",
+  "Full-length pose, half-turned away looking back over his shoulder toward the camera, one hand in pocket, a subtle confident smile.",
+  "Full-length stance, arms loosely folded, weight on one leg, an easy candid smile, looking into the camera.",
+  "Full-length pose, buttoning his jacket with both hands, eyes down on the button, a relaxed natural moment, not looking at the camera.",
+];
+const poseSuit = (i: number, slot: 0 | 1) => `${SUIT} ${POSE_VARIANTS[(i * 2 + slot) % POSE_VARIANTS.length]} ${STUDIO}`;
 const DETAIL = `Close-up editorial detail of THIS suit, worn over a crisp white dress shirt with a buttoned collar — never a t-shirt — by a man. Tightly framed on the torso from the collarbone down to the waist; the head, chin and face are NOT in frame. Focus on the jacket lapel, chest pocket, buttons, the white shirt collar and the fabric texture. ${STUDIO}`;
 // Geroteerde video-bewegingen voor diversiteit (lachen, klappen, anders poseren).
 const MOTIONS = [
@@ -185,11 +196,11 @@ async function main() {
     let leadUrl = r.m1;
 
     if (!r.m1) {
-      const out = await run("product-to-model", modelInputs(r.img, POSE1, i), key);
+      const out = await run("product-to-model", modelInputs(r.img, poseSuit(i, 0), i), key);
       if (out) { const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl = u; patch.modelImageAlt = `${r.title} — op model`; leadUrl = u; spent++; } }
     }
     if (!r.m2) {
-      const out = await run("product-to-model", modelInputs(r.img, POSE2, i), key);
+      const out = await run("product-to-model", modelInputs(r.img, poseSuit(i, 1), i), key);
       if (out) { const u = await toBlob(out, `ai-models/${r.handle}-model2.jpg`, token, "image/jpeg"); if (u) { patch.modelImageUrl2 = u; patch.modelImageAlt2 = `${r.title} — op model (2)`; spent++; } }
     }
     if (!r.det) {

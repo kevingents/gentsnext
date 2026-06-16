@@ -20,22 +20,31 @@ const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
 
 const POSES_FULL = [
-  "Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.",
+  "Relaxed full-length pose, standing with one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.",
   "Easy full-length stance at a slight three-quarter angle, both hands loosely in his pockets, friendly relaxed smile, looking into the camera.",
-  "Laid-back full-length contrapposto pose, arms relaxed at his sides, head tilted slightly, approachable natural smile, looking into the camera.",
+  "Full-length contrapposto, standing with one hand on his hip and the other relaxed at his side, confident easy smile, looking into the camera.",
   "Candid full-length shot, caught mid-stride walking slowly toward the camera, relaxed shoulders, light spontaneous smile.",
-  "Relaxed full-length pose, one hand adjusting his shirt cuff, soft confident smile, glancing just off to the side.",
+  "Full-length editorial pose, leaning back against a wall with one foot up, arms relaxed, calm natural expression, glancing just off to the side.",
+  "Full-length pose, half-turned away looking back over his shoulder toward the camera, one hand in pocket, a subtle confident smile.",
+  "Full-length stance, arms loosely folded, weight on one leg, an easy candid smile, looking into the camera.",
+  "Full-length pose, adjusting his jacket or shirt cuff with both hands, eyes down, a relaxed natural moment, not looking at the camera.",
 ];
 const POSES_UPPER = [
-  "Relaxed pose framed from the knees up, one hand in his pocket, warm genuine smile, looking softly into the camera.",
-  "Easy knees-up framing, casual three-quarter turn, arms loosely crossed, friendly relaxed smile, looking into the camera.",
-  "Laid-back knees-up shot, one hand running lightly through his hair, natural spontaneous smile, glancing off to the side.",
-  "Knees-up framing, at ease with both hands in his pockets, head tilted slightly, approachable warm smile, looking into the camera.",
+  "Relaxed pose framed from the knees up, standing with one hand in his pocket, warm genuine smile, looking softly into the camera.",
+  "Knees-up framing, standing at a three-quarter angle with arms loosely crossed, friendly relaxed smile, looking into the camera.",
+  "Knees-up shot, standing with one hand on his hip and the other at his side, confident easy smile, glancing off to the side.",
+  "Knees-up framing, standing with both hands in his pockets, head tilted slightly, approachable warm smile, looking into the camera.",
+  "Knees-up editorial pose, leaning a shoulder lightly against a wall, hands relaxed, calm natural expression, looking just past the camera.",
+  "Knees-up shot, half-turned away with his face looking back over his shoulder toward the camera, a subtle confident smile.",
+  "Knees-up framing, arms folded loosely, weight on one leg, a relaxed candid smile, looking into the camera.",
+  "Knees-up pose, adjusting his sleeve with both hands, eyes down on the cuff, a relaxed natural moment, not looking at the camera.",
 ];
 const POSES_LOWER = [
-  "Framed from the waist down, focus on the lower body and footwear, relaxed stance with weight on one leg and one foot slightly forward.",
+  "Framed from the waist down, focus on the lower body and footwear, standing relaxed with weight on one leg and one foot slightly forward.",
   "Framed from the waist down, focus on the lower body and footwear, caught mid-stride in an easy natural walk.",
-  "Framed from the waist down, focus on the lower body and footwear, casual stance with feet slightly apart.",
+  "Framed from the waist down, focus on the lower body and footwear, standing with feet slightly apart, one hand in his pocket.",
+  "Framed from the waist down, focus on the lower body and footwear, seated with one ankle resting on the other knee.",
+  "Framed from the waist down, focus on the lower body and footwear, stepping up onto a low ledge with one foot raised.",
 ];
 const MOTIONS = [
   "The model laughs naturally with a warm genuine smile, relaxed shoulders and subtle head movement.",
