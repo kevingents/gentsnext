@@ -86,6 +86,19 @@ function CheckoutForm() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm).
+  type PayMethod = { id: string; description: string; image: string };
+  const [methods, setMethods] = useState<PayMethod[]>([]);
+  const [payMethod, setPayMethod] = useState("");
+  useEffect(() => {
+    let active = true;
+    fetch("/api/payment-methods")
+      .then((r) => r.json())
+      .then((d) => { if (active) { const ms: PayMethod[] = d.methods || []; setMethods(ms); setPayMethod((cur) => cur || ms[0]?.id || ""); } })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   const [delivery, setDelivery] = useState<"standard" | "express">("standard");
   const [expressSurcharge, setExpressSurcharge] = useState(0);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
@@ -229,6 +242,7 @@ function CheckoutForm() {
         body: JSON.stringify({
           contact: form,
           deliveryMethod: delivery,
+          method: payMethod,
           voucherCode: voucher?.code || "",
           giftcardCode: giftcard?.code || "",
           items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty, groupId: l.groupId, roleLabel: l.roleLabel })),
@@ -368,6 +382,30 @@ function CheckoutForm() {
             </label>
           </div>
 
+          {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm. */}
+          {payableCents > 0 && methods.length ? (
+            <>
+              <p className="label-brand mt-6">Betaalmethode</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {methods.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setPayMethod(m.id)}
+                    aria-pressed={payMethod === m.id}
+                    className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-left font-sans text-sm transition-colors ${payMethod === m.id ? "border-ink bg-surface" : "border-line hover:border-ink"}`}
+                  >
+                    {m.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.image} alt="" className="h-6 w-6 shrink-0" />
+                    ) : null}
+                    <span className="truncate">{m.description}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+
           <label className="mt-6 flex items-start gap-2 font-sans text-sm">
             <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink" />
             <span className="text-ink-soft">Houd me per e-mail op de hoogte van nieuwe collecties en aanbiedingen. (Je kunt je altijd weer uitschrijven.)</span>
@@ -395,7 +433,7 @@ function CheckoutForm() {
             <span className="font-sans text-xs text-muted">
               {payableCents === 0
                 ? "Je cadeaubon dekt het volledige bedrag — geen betaling nodig."
-                : "Je rondt de betaling af via iDEAL/Mollie. Totaal incl. btw · gratis retour binnen 14 dagen."}
+                : `Je rondt af via ${methods.find((m) => m.id === payMethod)?.description || "Mollie"} · totaal incl. btw · gratis retour binnen 14 dagen.`}
             </span>
           </div>
         </form>

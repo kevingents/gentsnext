@@ -6,7 +6,7 @@ import {
   type CheckoutItem,
   type DeliveryMethod,
 } from "@/lib/orders";
-import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
+import { mollieConfigured, createMolliePayment, isKnownMethod } from "@/lib/mollie";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -32,6 +32,8 @@ export async function POST(req: Request) {
   }
 
   const deliveryMethod: DeliveryMethod = body?.deliveryMethod === "express" ? "express" : "standard";
+  // Vooraf gekozen betaalmethode (gevalideerd) → Mollie slaat z'n keuzescherm over.
+  const payMethod = isKnownMethod(body?.method) ? String(body.method) : undefined;
   const voucherCode = String(body?.voucherCode || "").trim();
   const giftcardCode = String(body?.giftcardCode || "").trim();
   let order;
@@ -73,6 +75,7 @@ export async function POST(req: Request) {
       webhookUrl: `${origin}/api/webhooks/mollie`,
       metadata: { orderNumber: order.orderNumber },
       idempotencyKey: `order-${order.id}`,
+      method: payMethod,
     });
     await attachMolliePayment(order.id, payment.id);
     if (!payment.checkoutUrl) return bad("Betaling kon niet worden gestart.");

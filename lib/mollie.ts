@@ -96,6 +96,50 @@ export async function createMolliePayment(input: {
   return parsePayment(await res.json());
 }
 
+export type MollieMethod = { id: string; description: string; image: string };
+
+// Bekende Mollie-method-id's — we geven alleen een gevalideerde method door.
+const KNOWN_METHODS = new Set([
+  "ideal", "creditcard", "paypal", "bancontact", "banktransfer", "kbc", "belfius",
+  "eps", "przelewy24", "applepay", "giftcard", "in3", "klarna", "billie",
+  "klarnapaylater", "klarnasliceit", "paysafecard", "sofort", "trustly",
+]);
+export function isKnownMethod(m: string | undefined | null): boolean {
+  return Boolean(m) && KNOWN_METHODS.has(String(m));
+}
+
+/**
+ * Actieve betaalmethodes van het Mollie-profiel (voor de eigen methodekeuze op de
+ * afrekenpagina, zodat de klant niet eerst Mollie's keuzescherm ziet). Bedrag-
+ * bewust zodat alleen geldige methodes terugkomen. Faalt zacht → lege lijst
+ * (dan valt checkout terug op Mollie's gehoste keuze).
+ */
+export async function getMollieMethods(amountCents?: number): Promise<MollieMethod[]> {
+  if (!mollieConfigured()) return [];
+  const qs = new URLSearchParams();
+  if (amountCents && amountCents > 0) {
+    qs.set("amount[value]", centsToValue(amountCents));
+    qs.set("amount[currency]", "EUR");
+  }
+  if (usesAccessToken()) {
+    if (process.env.MOLLIE_PROFILE_ID) qs.set("profileId", process.env.MOLLIE_PROFILE_ID);
+    qs.set("testmode", String(testmode()));
+  }
+  try {
+    const res = await fetch(`${API}/methods${qs.toString() ? `?${qs}` : ""}`, {
+      headers: { Authorization: `Bearer ${apiKey()}` },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const methods = json?._embedded?.methods ?? [];
+    return methods
+      .map((m: any) => ({ id: String(m.id), description: String(m.description || m.id), image: m?.image?.svg || m?.image?.size2x || "" }))
+      .filter((m: MollieMethod) => isKnownMethod(m.id));
+  } catch {
+    return [];
+  }
+}
+
 export async function getMolliePayment(id: string): Promise<MolliePayment> {
   const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
   const res = await fetch(`${API}/payments/${encodeURIComponent(id)}${qs}`, {
