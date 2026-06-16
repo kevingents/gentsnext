@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { GentsLogo } from "@/components/gents-logo";
 
 const USPS = [
   "Volg je bestellingen, van order tot bezorging",
@@ -62,7 +63,7 @@ export default function LoginPage() {
         <Image src="/brand/brand-impression-gala.jpg" alt="" fill priority sizes="50vw" className="object-cover opacity-25" />
         <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-ink/90 via-ink/70 to-ink/90" />
         <div className="relative">
-          <Image src="/brand/brand-logo-wit.png" alt="GENTS — Suits You" width={512} height={244} priority className="h-12 w-auto" />
+          <GentsLogo className="h-9 text-canvas" />
         </div>
         <div className="relative">
           <h2 className="font-display text-display-md leading-tight text-canvas">Welkom in<br />jouw GENTS.</h2>
@@ -84,7 +85,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobiel merk-kopje */}
           <div className="mb-8 lg:hidden">
-            <Image src="/brand/brand-logo-zwart-slogan.png" alt="GENTS — Suits You" width={512} height={244} className="h-9 w-auto" />
+            <GentsLogo className="h-7 text-ink" />
           </div>
 
           <p className="label-brand">Mijn GENTS</p>
