@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
 import { ContactRequestForm } from "@/components/contact-request-form";
 import type { ProductCardData } from "@/lib/catalog";
+import { VISUAL } from "@/lib/visuals";
 
 const USPS = [
   { title: "Specialist in rokkostuums & smokings", body: "Voor gala's, corpsactiviteiten en diners waar uitstraling telt." },
@@ -28,7 +29,7 @@ export function StudentsLanding({ highlights }: Props) {
       {/* Hero */}
       <section className="relative h-[60vh] min-h-[440px] w-full overflow-hidden bg-ink">
         <Image
-          src="https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-hero/landing-students.jpg"
+          src={VISUAL.student}
           alt="GENTS Students"
           fill
           priority

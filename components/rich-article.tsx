@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { SECTION_VISUALS, VISUAL } from "@/lib/visuals";
 
 /**
  * Zet platte migrated-content (h2 + p + lijst) automatisch om in een visuele
@@ -15,15 +16,6 @@ const ICONS = [
   "M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0-4l2 3h-4l2-3Z", // ring
   "M20 8H4v12h16V8ZM9 8a3 3 0 0 1 6 0", // tas
   "M12 3l2.2 5.8L20 9l-4.5 4 1.4 6L12 16l-4.9 3 1.4-6L4 9l5.8-.2L12 3Z", // ster
-];
-const IMAGES = [
-  "/brand/brand-model-navy.jpg",
-  "/brand/brand-product-fabric.jpg",
-  "/brand/brand-model-tuxedo.jpg",
-  "/brand/brand-product-flatlay.jpg",
-  "/brand/brand-model-grey3piece.jpg",
-  "/brand/brand-product-lifestyle.jpg",
-  "/brand/brand-model-charcoal.jpg",
 ];
 
 function stripTags(s: string): string {
@@ -82,7 +74,7 @@ export function RichArticle({ handle, title, html, heroImage }: { handle: string
               <div className="rich-prose mt-3 font-sans leading-relaxed text-ink-soft" dangerouslySetInnerHTML={{ __html: s.html }} />
             </div>
             <div className={`relative aspect-[4/3] overflow-hidden rounded-card bg-surface ${i % 2 === 1 ? "md:order-1" : ""}`}>
-              <Image src={IMAGES[i % IMAGES.length]} alt={s.title} fill sizes="(max-width:768px) 100vw, 45vw" className="object-cover" />
+              <Image src={SECTION_VISUALS[i % SECTION_VISUALS.length]} alt={s.title} fill sizes="(max-width:768px) 100vw, 45vw" className="object-cover" />
             </div>
           </section>
         ))}
@@ -93,7 +85,7 @@ export function RichArticle({ handle, title, html, heroImage }: { handle: string
         <section className="bg-surface">
           <div className="mx-auto grid max-w-page items-center gap-8 px-gutter py-14 md:grid-cols-[1fr_1.2fr]">
             <div className="relative aspect-[4/3] overflow-hidden rounded-card bg-canvas">
-              <Image src="/brand/brand-impression-interview.jpg" alt="Persoonlijk advies" fill sizes="(max-width:768px) 100vw, 40vw" className="object-cover" />
+              <Image src={VISUAL.zakelijk} alt="Persoonlijk advies" fill sizes="(max-width:768px) 100vw, 40vw" className="object-cover" />
             </div>
             <div>
               <h2 className="text-display-md">{help.title}</h2>

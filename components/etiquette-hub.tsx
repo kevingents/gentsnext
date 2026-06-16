@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ETIQUETTE } from "@/lib/etiquette-hub";
+import { VISUAL } from "@/lib/visuals";
 
 export function EtiquetteHub() {
   return (
@@ -8,7 +9,7 @@ export function EtiquetteHub() {
       {/* Hero */}
       <section className="relative h-[50vh] min-h-[380px] w-full overflow-hidden bg-ink">
         <Image
-          src="https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-hero/landing-etiquette.jpg"
+          src={VISUAL.formal}
           alt="Etiquette & dresscodes"
           fill
           priority

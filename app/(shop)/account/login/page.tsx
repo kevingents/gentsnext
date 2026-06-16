@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { VISUAL } from "@/lib/visuals";
 
 const USPS = [
   "Volg je bestellingen, van order tot bezorging",
@@ -59,7 +60,7 @@ export default function LoginPage() {
       {/* Merkpaneel */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-ink px-12 py-14 text-canvas lg:flex">
         {/* Echte merkfoto als sfeer (geen AI), met donkere overlay voor leesbaarheid. */}
-        <Image src="/brand/brand-impression-gala.jpg" alt="" fill priority sizes="50vw" className="object-cover opacity-25" />
+        <Image src={VISUAL.formal} alt="" fill priority sizes="50vw" className="object-cover opacity-25" />
         <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-ink/90 via-ink/70 to-ink/90" />
         <div className="relative">
           <Image src="/brand/brand-logo-wit.png" alt="GENTS — Suits You" width={512} height={244} priority className="h-12 w-auto" />

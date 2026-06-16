@@ -1,24 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import { heroVisualFor } from "@/lib/visuals";
 
 /**
  * Visuele wrapper voor platte content-pagina's (migrated HTML / Sanity-tekst):
- * full-bleed hero met onderwerp-passende ECHTE merkfoto + nette prose + advies-CTA.
- * Zo wordt elke "kale tekstpagina" meteen een verzorgde, visuele pagina.
+ * full-bleed hero met een onderwerp-passend ECHT-PRODUCT-beeld (FASHN) + nette
+ * prose + advies-CTA. Geen stock/FAL — altijd onze eigen producten.
  */
 
-// Onderwerp → echte merkfoto (geen AI). Eerste match wint; anders een nette default.
-const HERO_BY_TOPIC: [RegExp, string][] = [
-  [/trouw|bruiloft|huwelijk|wedding|getrouwd/i, "/brand/brand-impression-wedding.jpg"],
-  [/uitvaart|rouw|condoleance|begrafenis|funeral/i, "/brand/brand-impression-funeral.jpg"],
-  [/gala|black.?tie|smoking|rokkostuum|verenig|corps|student|diner/i, "/brand/brand-impression-gala.jpg"],
-  [/zakelijk|business|sollicit|interview|werk|kantoor/i, "/brand/brand-impression-interview.jpg"],
-];
-
+/** Onderwerp → passend echt-product-bannerbeeld (FASHN). */
 export function heroForPage(handle: string, title: string): string {
-  const t = `${handle} ${title}`;
-  for (const [re, img] of HERO_BY_TOPIC) if (re.test(t)) return img;
-  return "/brand/brand-model-charcoal.jpg";
+  return heroVisualFor(`${handle} ${title}`);
 }
 
 export function ContentPage({

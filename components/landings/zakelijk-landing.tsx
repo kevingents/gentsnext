@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
 import { ContactRequestForm } from "@/components/contact-request-form";
 import type { ProductCardData } from "@/lib/catalog";
+import { VISUAL } from "@/lib/visuals";
 
 const USPS = [
   { title: "Direct uit voorraad leverbaar", body: "Voor veel aanvragen kunnen we direct schakelen dankzij sterke basis- en NOS-collecties." },
@@ -29,7 +30,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
       {/* Hero */}
       <section className="relative h-[58vh] min-h-[420px] w-full overflow-hidden bg-ink">
         <Image
-          src="https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-hero/landing-zakelijk.jpg"
+          src={VISUAL.zakelijk}
           alt="GENTS Zakelijk"
           fill
           priority
