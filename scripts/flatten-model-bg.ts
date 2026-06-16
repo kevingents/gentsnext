@@ -6,31 +6,13 @@ import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 /**
- * Haalt de zichtbare "kader"/vignet weg uit de modelfoto's: trim de oude platte-
- * kleur-padding, herpad naar 4:5 met een VERVAAGDE cover-achtergrond van het beeld
- * zelf → naadloze studio-grijze zijkanten, geen rand meer. Géén FASHN-credits.
+ * Trekt de studio-achtergrond vlak: licht de vignet-randen op naar uniform licht
+ * (linear 1.22, -16) zodat er geen zichtbaar "kader" meer in de modelfoto zit.
+ * Pak blijft diep zwart, model natuurlijk. Géén FASHN-credits.
  *
- *   npx tsx scripts/reframe-model-images.ts          (alle model1+model2)
- *   npx tsx scripts/reframe-model-images.ts rok       (alleen handles met 'rok')
+ *   npx tsx scripts/flatten-model-bg.ts        (alle model1+model2)
+ *   npx tsx scripts/flatten-model-bg.ts smoking
  */
-const TARGET = 4 / 5;
-
-async function reframe(buf: Buffer): Promise<Buffer | null> {
-  const meta0 = await sharp(buf).metadata();
-  const area0 = (meta0.width || 0) * (meta0.height || 0);
-  const trimmed = await sharp(buf).trim({ threshold: 8 }).toBuffer().catch(() => buf);
-  const m = await sharp(trimmed).metadata();
-  const w = m.width || 0, h = m.height || 0;
-  if (!w || !h) return null;
-  if (w * h < area0 * 0.25) return null; // te veel weggetrimd → laat met rust
-  let cw: number, ch: number;
-  if (w / h < TARGET) { ch = h; cw = Math.round(h * TARGET); }
-  else { cw = w; ch = Math.round(w / TARGET); }
-  const bg = await sharp(trimmed).resize(cw, ch, { fit: "cover" }).blur(60).modulate({ brightness: 1.04 }).toBuffer();
-  // + vlaktrek: licht de vignet-randen op naar uniform licht (geen kader meer).
-  return sharp(bg).composite([{ input: trimmed, gravity: "center" }]).linear(1.22, -16).jpeg({ quality: 90 }).toBuffer();
-}
-
 async function main() {
   const token = (process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN)!;
   if (!token) { console.error("blob-token ontbreekt"); process.exit(1); }
@@ -41,7 +23,7 @@ async function main() {
     `select id, handle, model_image_url m1, model_image_url2 m2 from products
      where model_image_url <> '' ${filter} order by handle`,
   ))).rows;
-  console.log(`⏳ ${rows.length} producten reframen…`);
+  console.log(`⏳ ${rows.length} producten vlaktrekken…`);
   let done = 0, err = 0;
   for (const r of rows) {
     for (const [col, url] of [["modelImageUrl", r.m1], ["modelImageUrl2", r.m2]] as const) {
@@ -51,8 +33,7 @@ async function main() {
         const path = new URL(clean).pathname.replace(/^\//, "");
         const res = await fetch(clean);
         if (!res.ok) { err++; continue; }
-        const out = await reframe(Buffer.from(await res.arrayBuffer()));
-        if (!out) continue;
+        const out = await sharp(Buffer.from(await res.arrayBuffer())).linear(1.22, -16).jpeg({ quality: 90 }).toBuffer();
         let saved = "";
         for (let a = 1; a <= 3 && !saved; a++) {
           try { const b = await put(path, out, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true }); saved = `${b.url}?v=${Date.now()}`; }
