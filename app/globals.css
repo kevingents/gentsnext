@@ -105,26 +105,27 @@
   /* Migrated dresscode-/gelegenheidspagina's met bespoke structuur-classes
      (gents-*-hero/-label/-highlight/-grid/-card/-columns/-box/-tip): suffix-
      gebaseerde styling, dekt alle namespaces (white-tie, gala, black-tie, …). */
-  .gents-doc :where([class*="-label"]) { @apply hidden; }
-  .gents-doc :where([class*="-hero"]) { @apply mb-8 text-center; }
-  .gents-doc :where([class*="-hero"]) h1 { @apply hidden; }
-  .gents-doc :where([class*="-hero"]) p { @apply text-lg leading-relaxed text-ink-soft; }
-  .gents-doc :where(h2) { @apply mt-12 font-display text-2xl font-light text-ink; }
-  .gents-doc :where(h3) { @apply mt-8 font-display text-xl font-light text-ink; }
-  .gents-doc :where(p) { @apply mt-4 font-sans leading-relaxed text-ink-soft; }
-  .gents-doc :where(a) { @apply text-ink underline underline-offset-2; }
-  .gents-doc :where(ul) { @apply mt-2 list-disc space-y-1 pl-5 text-ink-soft; }
-  .gents-doc :where([class*="-highlight"]) { @apply my-8 rounded-card border-l-2 border-gold bg-surface p-6 text-ink-soft; }
-  .gents-doc :where([class*="-grid"]) { @apply my-8 grid gap-4 sm:grid-cols-3; }
-  .gents-doc :where([class*="-card"]) { @apply rounded-card border border-line bg-canvas p-5 text-sm leading-relaxed text-ink-soft; }
-  .gents-doc :where([class*="-columns"]) { @apply my-8 grid gap-4 sm:grid-cols-2; }
-  .gents-doc :where([class*="-box"]) { @apply rounded-card border border-line bg-surface p-5 text-sm leading-relaxed text-ink-soft; }
-  .gents-doc :where([class*="-tip"]) { @apply my-8 rounded-card bg-ink p-6 text-canvas; }
-  .gents-doc :where([class*="-tip"]) strong, .gents-doc :where([class*="-tip"]) a { @apply text-canvas; }
-  .gents-doc :where([class*="-highlight"]) strong,
-  .gents-doc :where([class*="-card"]) strong,
-  .gents-doc :where([class*="-box"]) strong,
-  .gents-doc :where([class*="-tip"]) strong { @apply mb-2 block font-display text-lg font-light; }
+  .gents-doc [class*="-label"] { @apply hidden; }
+  .gents-doc [class*="-hero"] { @apply mb-10 text-center; }
+  .gents-doc [class*="-hero"] h1 { @apply hidden; }
+  .gents-doc [class*="-hero"] p { @apply text-lg leading-relaxed text-ink-soft; }
+  .gents-doc h2 { @apply mt-12 font-display text-2xl font-light text-ink; }
+  .gents-doc h3 { @apply mt-8 font-display text-xl font-light text-ink; }
+  .gents-doc p { @apply mt-4 font-sans leading-relaxed text-ink-soft; }
+  .gents-doc a { @apply text-ink underline underline-offset-2; }
+  .gents-doc ul { @apply mt-2 list-disc space-y-1 pl-5 text-ink-soft; }
+  .gents-doc [class*="-highlight"] { @apply my-8 rounded-card border-l-2 border-gold bg-surface p-6 text-ink-soft; }
+  .gents-doc [class*="-grid"] { @apply my-8 grid gap-4 sm:grid-cols-3; }
+  .gents-doc [class*="-card"] { @apply rounded-card border border-line bg-canvas p-5 text-sm leading-relaxed text-ink-soft; }
+  .gents-doc [class*="-columns"] { @apply my-8 grid gap-4 sm:grid-cols-2; }
+  .gents-doc [class*="-box"] { @apply rounded-card border border-line bg-surface p-5 text-sm leading-relaxed text-ink-soft; }
+  .gents-doc [class*="-tip"] { @apply my-8 rounded-card bg-ink p-6 text-canvas; }
+  .gents-doc [class*="-tip"] strong, .gents-doc [class*="-tip"] a { @apply text-canvas; }
+  .gents-doc [class*="-highlight"] strong,
+  .gents-doc [class*="-card"] strong,
+  .gents-doc [class*="-box"] strong,
+  .gents-doc [class*="-tip"] strong { @apply mb-2 block font-display text-lg font-light; }
+  .gents-doc [class*="-card"] ul, .gents-doc [class*="-box"] ul { @apply list-none p-0; }
 }
 
 /* Subtiele animaties — fashion-gevoel zonder druk te worden. */
