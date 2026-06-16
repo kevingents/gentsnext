@@ -393,7 +393,6 @@ export default async function ProductPage({ params }: Props) {
 
       <PdpSizeProvider>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
-        <div>
         <Gallery
           images={[
             // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
@@ -406,19 +405,8 @@ export default async function ProductPage({ params }: Props) {
           title={product.title}
           sizeMedia={sizeMedia}
           video={product.modelVideoUrl || null}
+          lookHref={resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? "#shop-de-look" : undefined}
         />
-        {resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? (
-          <a
-            href="#shop-de-look"
-            className="mt-3 flex items-center justify-center gap-2 rounded-card border border-ink px-4 py-3 font-sans text-sm font-medium text-ink transition-colors hover:bg-ink hover:text-canvas"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
-              <path d="M5 8h14l-1 12H6L5 8Z" /><path d="M9 8a3 3 0 0 1 6 0" strokeLinecap="round" />
-            </svg>
-            Shop de look
-          </a>
-        ) : null}
-        </div>
 
         <div className="lg:sticky lg:top-24 lg:self-start">
           <BuyBox

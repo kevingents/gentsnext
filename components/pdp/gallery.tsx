@@ -16,7 +16,7 @@ type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contai
  * wordt vooraan gezet zodra een maat ≥ drempel gekozen is. Een (AI-)productvideo
  * leidt — autoplay/gedempt/loop in het raster, met geluid in de lightbox.
  */
-export function Gallery({ images, title, sizeMedia, video }: { images: { url: string; alt: string; contain?: boolean }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null }) {
+export function Gallery({ images, title, sizeMedia, video, lookHref }: { images: { url: string; alt: string; contain?: boolean }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null; lookHref?: string }) {
   const { sizeLabel } = usePdpSize();
   const [lightbox, setLightbox] = useState<number | null>(null);
 
@@ -82,13 +82,11 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
         className="flex snap-x snap-mandatory overflow-x-auto [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible"
       >
         {shots.map((shot, i) => (
-          <button
+          <div
             key={i}
-            type="button"
-            onClick={() => setLightbox(i)}
-            aria-label={`Vergroot ${shot.alt}`}
             className="group relative aspect-[4/5] w-full shrink-0 snap-start overflow-hidden rounded-card bg-surface sm:w-auto"
           >
+            <button type="button" onClick={() => setLightbox(i)} aria-label={`Vergroot ${shot.alt}`} className="block h-full w-full">
             {shot.video ? (
               <video
                 src={shot.url}
@@ -126,7 +124,20 @@ export function Gallery({ images, title, sizeMedia, video }: { images: { url: st
                 <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3M11 8v6M8 11h6" strokeLinecap="round" />
               </svg>
             </span>
-          </button>
+            </button>
+            {lookHref && i === firstImageIdx ? (
+              <a
+                href={lookHref}
+                aria-label="Shop de look"
+                className="absolute bottom-3 right-3 z-10 flex items-center gap-2 rounded-full bg-canvas/90 px-4 py-2 font-sans text-sm font-medium text-ink shadow-pop backdrop-blur transition-colors hover:bg-canvas"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+                  <path d="M5 8h14l-1 12H6L5 8Z" /><path d="M9 8a3 3 0 0 1 6 0" strokeLinecap="round" />
+                </svg>
+                Shop de look
+              </a>
+            ) : null}
+          </div>
         ))}
       </div>
 
