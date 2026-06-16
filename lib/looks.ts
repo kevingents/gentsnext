@@ -33,8 +33,7 @@ export const LOOKS: Look[] = [
     title: "De bruiloftsgast",
     subtitle: "Stijlvol en zomers — net iets meer dan gemiddeld.",
     occasion: "Bruiloft",
-    image: "/brand/brand-model-navy.jpg",
-    images: ["/brand/brand-impression-wedding.jpg", "/brand/brand-product-lifestyle.jpg", "/brand/brand-product-fabric.jpg"],
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/colbert-sjas-blauw-model.jpg",
     hotspots: [
       { x: 50, y: 30, handle: "colbert-sjas-blauw", label: "Colbert" },
       { x: 50, y: 45, handle: "smoking-ov-vadermoord-plisse", label: "Overhemd" },
@@ -47,8 +46,7 @@ export const LOOKS: Look[] = [
     title: "Business klassiek",
     subtitle: "Onberispelijk voor de boardroom.",
     occasion: "Zakelijk",
-    image: "/brand/brand-model-charcoal.jpg",
-    images: ["/brand/brand-impression-interview.jpg", "/brand/brand-product-fabric.jpg", "/brand/brand-model-grey3piece.jpg"],
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/m-m-colbert-pw-antra-model.jpg",
     hotspots: [
       { x: 50, y: 28, handle: "colbert-sjas-blauw", label: "Colbert" },
       { x: 50, y: 46, handle: "smoking-ov-vadermoord-plisse", label: "Overhemd" },
@@ -62,7 +60,7 @@ export const LOOKS: Look[] = [
     subtitle: "Onberispelijk in smoking — voor de meest formele avond.",
     occasion: "Gala",
     theme: "Black tie",
-    image: "/brand/brand-model-tuxedo.jpg",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/jas-smoking-punt-pv-zwart-model.jpg",
     hotspots: [
       { x: 50, y: 22, handle: "smoking-ov-plat-glad", label: "Overhemd" },
       { x: 55, y: 28, handle: "strik-poly-zwart", label: "Strik" },
@@ -76,7 +74,7 @@ export const LOOKS: Look[] = [
     title: "Driedelig klassiek",
     subtitle: "Het driedelige pak — gezag met stijl.",
     occasion: "Zakelijk",
-    image: "/brand/brand-model-grey3piece.jpg",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/colbert-blend-navy-mixmatch-model.jpg",
     hotspots: [
       { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
       { x: 50, y: 34, handle: "colbert-blend-navy-mixmatch", label: "Colbert" },
@@ -91,7 +89,7 @@ export const LOOKS: Look[] = [
     subtitle: "Licht en zonnig — perfect voor een zomerbruiloft in het zuiden.",
     occasion: "Bruiloft",
     theme: "Italiaanse zomer",
-    image: "/brand/brand-model-tan.jpg",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/colbert-ruit-katoen-linnen-lichtblauw-model.jpg",
     hotspots: [
       { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
       { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
