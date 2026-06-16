@@ -1,5 +1,5 @@
+import Image from "next/image";
 import Link from "next/link";
-import { GentsLogo } from "@/components/gents-logo";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { FooterPayments } from "@/components/footer-payments";
 import { CookieSettingsLink } from "@/components/cookie-settings-link";
@@ -28,7 +28,7 @@ export async function SiteFooter() {
       <div className="mx-auto max-w-page px-gutter py-14">
         <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-[1.6fr_repeat(4,1fr)]">
           <div>
-            <GentsLogo className="h-8 text-canvas" />
+            <Image src="/brand/brand-logo-wit.png" alt="GENTS — Suits You" width={512} height={244} className="h-11 w-auto" />
             <p className="mt-4 max-w-xs font-sans text-sm leading-relaxed text-canvas/70">
               {intro}
             </p>

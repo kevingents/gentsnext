@@ -1,5 +1,5 @@
+import Image from "next/image";
 import Link from "next/link";
-import { GentsLogo } from "@/components/gents-logo";
 import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
 import { CartButton } from "@/components/cart/cart-button";
 import { WishlistLink } from "@/components/wishlist/wishlist-link";
@@ -36,7 +36,14 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
           aria-label="GENTS — naar de homepage"
           className="shrink-0 lg:absolute lg:left-1/2 lg:-translate-x-1/2"
         >
-          <GentsLogo className="h-8 text-ink lg:h-9" />
+          <Image
+            src="/brand/brand-logo-zwart.png"
+            alt="GENTS — Suits You"
+            width={512}
+            height={244}
+            priority
+            className="h-10 w-auto lg:h-11"
+          />
         </Link>
 
         <div className="flex items-center gap-5 lg:flex-1 lg:justify-end">
