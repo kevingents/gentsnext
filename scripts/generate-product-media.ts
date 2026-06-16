@@ -62,7 +62,7 @@ const CAT: Record<string, { wear: string; frame: Frame; kind: Kind }> = {
   Truien: { wear: "wearing THIS knitwear over a crisp white shirt collar, with neat trousers", frame: "upper", kind: "garment" },
   Vesten: { wear: "wearing THIS cardigan over a shirt, with neat trousers", frame: "upper", kind: "garment" },
   Broeken: { wear: "wearing THESE trousers with a tucked crisp white dress shirt and leather shoes", frame: "full", kind: "garment" },
-  Gilets: { wear: "wearing THIS waistcoat over a crisp white dress shirt, with matching trousers and leather shoes", frame: "full", kind: "garment" },
+  Gilets: { wear: "wearing THIS waistcoat over a crisp white dress shirt, with matching trousers and leather shoes — the bottom button of the waistcoat is always left undone (open)", frame: "full", kind: "garment" },
   Jassen: { wear: "wearing THIS coat over neat menswear, with trousers and leather shoes", frame: "full", kind: "garment" },
   "Polo-shirts": { wear: "wearing THIS polo shirt, styled with neat trousers", frame: "upper", kind: "garment" },
   "T-Shirts": { wear: "wearing THIS t-shirt, styled casually with neat trousers", frame: "upper", kind: "garment" },

@@ -19,7 +19,7 @@ const MODEL = process.env.FAL_HERO_MODEL || "fal-ai/flux-pro/v1.1-ultra";
 
 // Kwaliteits-/merkcues, neutraal qua licht zodat elk thema z'n eigen sfeer kan zetten.
 const STYLE =
-  "Editorial menswear campaign photograph for an upscale, refined men's formalwear brand — aspirational yet wearable. Impeccably tailored suits worn over a crisp collared dress shirt — never a t-shirt under a jacket. Photorealistic high-end fashion photography, sharp and elegant, subtle film grain, generous negative space for a headline. Absolutely no text, no logo, no watermark, no caption anywhere in the image.";
+  "Editorial menswear campaign photograph for an upscale, refined men's formalwear brand — aspirational yet wearable. Impeccably tailored suits worn over a crisp collared dress shirt — never a t-shirt under a jacket. When a waistcoat or three-piece suit appears, the bottom button of the waistcoat is always left undone (open). Photorealistic high-end fashion photography, sharp and elegant, subtle film grain, generous negative space for a headline. Absolutely no text, no logo, no watermark, no caption anywhere in the image.";
 
 type Hero = { slug: string; aspect: string; prompt: string };
 

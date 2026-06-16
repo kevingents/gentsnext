@@ -18,7 +18,7 @@ import { eq, sql } from "drizzle-orm";
 
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
-const SUIT = "Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes.";
+const SUIT = "Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes. If the suit is a three-piece with a waistcoat, the bottom button of the waistcoat is always left undone (open).";
 // Geroteerde pose-pool: niet elk pak dezelfde 2 poses (was hardcoded → eentonig).
 // Per product 2 opeenvolgende, dus altijd verschillend, en verschoven over de catalogus.
 const POSE_VARIANTS = [

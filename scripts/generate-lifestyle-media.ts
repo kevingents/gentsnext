@@ -98,7 +98,7 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
 const CAT: Record<string, { mood: string; wear: string }> = {
   Pakken: { mood: "trouw", wear: "wearing THIS suit with a crisp white dress shirt and brown leather shoes" },
   Colberts: { mood: "trouw", wear: "wearing THIS blazer over a crisp white dress shirt with sand trousers and brown suede loafers" },
-  Gilets: { mood: "trouw", wear: "wearing THIS waistcoat over a crisp white dress shirt with sand trousers and brown loafers" },
+  Gilets: { mood: "trouw", wear: "wearing THIS waistcoat over a crisp white dress shirt with sand trousers and brown loafers — the bottom button of the waistcoat is always left undone (open)" },
   "Polo-shirts": { mood: "polo", wear: "wearing THIS polo shirt with light sand chino trousers and brown suede loafers" },
   Truien: { mood: "country", wear: "wearing THIS knitwear with trousers and leather boots" },
   Vesten: { mood: "country", wear: "wearing THIS cardigan over a shirt with trousers and boots" },
