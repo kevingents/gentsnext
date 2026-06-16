@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -57,10 +58,11 @@ export default function LoginPage() {
     <div className="grid min-h-[80vh] lg:grid-cols-2">
       {/* Merkpaneel */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-ink px-12 py-14 text-canvas lg:flex">
-        <span aria-hidden className="pointer-events-none absolute -bottom-16 -right-8 select-none font-display text-[18rem] leading-none text-canvas/[0.035]">G</span>
+        {/* Echte merkfoto als sfeer (geen AI), met donkere overlay voor leesbaarheid. */}
+        <Image src="/brand/brand-impression-gala.jpg" alt="" fill priority sizes="50vw" className="object-cover opacity-25" />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-ink/90 via-ink/70 to-ink/90" />
         <div className="relative">
-          <p className="font-display text-3xl tracking-brand">GENTS</p>
-          <p className="mt-1.5 font-sans text-[0.7rem] uppercase tracking-[0.35em] text-gold">— Suits You —</p>
+          <Image src="/brand/brand-logo-wit.png" alt="GENTS — Suits You" width={512} height={244} priority className="h-12 w-auto" />
         </div>
         <div className="relative">
           <h2 className="font-display text-display-md leading-tight text-canvas">Welkom in<br />jouw GENTS.</h2>
@@ -82,8 +84,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobiel merk-kopje */}
           <div className="mb-8 lg:hidden">
-            <p className="font-display text-2xl tracking-brand">GENTS</p>
-            <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.35em] text-gold">— Suits You —</p>
+            <Image src="/brand/brand-logo-zwart-slogan.png" alt="GENTS — Suits You" width={512} height={244} className="h-9 w-auto" />
           </div>
 
           <p className="label-brand">Mijn GENTS</p>
