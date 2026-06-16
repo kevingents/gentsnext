@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 
 type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: string };
 
@@ -44,7 +45,7 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
         </button>
       </div>
 
-      {open ? (
+      {open && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Voorraad per winkel" aria-modal="true">
           <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer">
@@ -86,7 +87,8 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
               </Link>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );
