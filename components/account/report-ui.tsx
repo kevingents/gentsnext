@@ -13,6 +13,7 @@ const ICONS: Record<string, string> = {
   gear: "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-2.9 1.2V21a2 2 0 11-4 0v-.1A1.7 1.7 0 005.1 19l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00-1.2-2.9H1a2 2 0 110-4h.1A1.7 1.7 0 003 5.1l-.1-.1A2 2 0 115.7 2.2l.1.1A1.7 1.7 0 009 1.5V1a2 2 0 114 0v.1a1.7 1.7 0 002.9 1.2l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9",
   image: "M3 5h18v14H3V5zm0 11l5-5 4 4 3-3 6 6M16 9a1 1 0 100-2 1 1 0 000 2z",
   truck: "M3 16V6h11v10M14 9h4l3 3v4h-3M6 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
+  gift: "M20 12v9H4v-9M2 7h20v5H2V7zM12 22V7M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z",
 };
 
 const NAV = [
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/account/reviews", label: "Reviews", icon: "star" },
   { href: "/account/analytics", label: "Funnel", icon: "funnel" },
   { href: "/account/productmedia", label: "Productmedia", icon: "image" },
+  { href: "/account/cadeaubonnen", label: "Cadeaubonnen", icon: "gift" },
   { href: "/account/instellingen", label: "Instellingen", icon: "gear" },
 ];
 

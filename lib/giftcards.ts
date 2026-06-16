@@ -254,6 +254,67 @@ export async function sendGiftcardEmailOnce(molliePaymentId: string): Promise<vo
   }
 }
 
+/* ── In de winkel verzilveren (back-office / kassa) ── */
+
+export type GiftcardTx = { deltaCents: number; reason: string; orderNumber: string; at: string };
+export type GiftcardAdminInfo = {
+  found: boolean;
+  code: string;
+  status?: string;
+  initialCents?: number;
+  balanceCents?: number;
+  expiresAt?: string | null;
+  recipientName?: string;
+  transactions?: GiftcardTx[];
+};
+
+/** Volledige bon-info voor een medewerker (saldo, status, laatste transacties). */
+export async function lookupGiftcardForStaff(rawCode: string): Promise<GiftcardAdminInfo> {
+  const code = norm(rawCode);
+  if (!code) return { found: false, code };
+  const g = await getGiftcardByCode(code);
+  if (!g) return { found: false, code };
+  const db = getDb();
+  const tx = await db
+    .select({ deltaCents: giftcardTransactions.deltaCents, reason: giftcardTransactions.reason, orderNumber: giftcardTransactions.orderNumber, at: giftcardTransactions.createdAt })
+    .from(giftcardTransactions)
+    .where(eq(giftcardTransactions.giftcardId, g.id))
+    .orderBy(desc(giftcardTransactions.createdAt))
+    .limit(12);
+  return {
+    found: true,
+    code: g.code,
+    status: g.status,
+    initialCents: g.initialCents,
+    balanceCents: g.balanceCents,
+    expiresAt: g.expiresAt ? g.expiresAt.toISOString() : null,
+    recipientName: g.recipientName || "",
+    transactions: tx.map((t) => ({ deltaCents: t.deltaCents, reason: t.reason, orderNumber: t.orderNumber, at: t.at ? new Date(t.at).toISOString() : "" })),
+  };
+}
+
+/**
+ * Boekt een bedrag af aan de kassa. Valideert eerst (status/saldo/verloop),
+ * gebruikt een unieke winkel-referentie per verzilvering (idempotent per ref).
+ */
+export async function redeemGiftcardInStore(rawCode: string, amountCents: number): Promise<{ ok: boolean; error?: string; redeemedCents: number; newBalanceCents: number }> {
+  const code = norm(rawCode);
+  const want = Math.max(0, Math.floor(Number(amountCents) || 0));
+  if (!code) return { ok: false, error: "Vul een code in.", redeemedCents: 0, newBalanceCents: 0 };
+  if (want <= 0) return { ok: false, error: "Vul een geldig bedrag in.", redeemedCents: 0, newBalanceCents: 0 };
+  const v = await validateGiftcard(code, want);
+  if (!v.valid) return { ok: false, error: v.error, redeemedCents: 0, newBalanceCents: v.balanceCents };
+  const ref = `WINKEL-${code}-${Date.now()}`;
+  const redeemed = await redeemGiftcard(code, ref, want);
+  const g = await getGiftcardByCode(code);
+  return {
+    ok: redeemed > 0,
+    error: redeemed > 0 ? undefined : "Verzilveren mislukte — probeer opnieuw.",
+    redeemedCents: redeemed,
+    newBalanceCents: g?.balanceCents ?? 0,
+  };
+}
+
 /** Cadeaubonnen gekocht door of gericht aan deze klant (voor 'Mijn GENTS'). */
 export async function getGiftcardsForCustomer(customerId: string, email: string): Promise<Giftcard[]> {
   const db = getDb();
