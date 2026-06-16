@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { getAllLooks } from "@/lib/looks";
 import { localeAlternates } from "@/lib/seo";
+import { LooksGrid } from "@/components/looks/looks-grid";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -23,20 +22,7 @@ export default async function LooksPage() {
         Complete, door onze stylisten samengestelde outfits — per gelegenheid.
         Klik op een look en shop alle items in één keer.
       </p>
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {looks.map((l) => (
-          <Link key={l.slug} href={`/looks/${l.slug}`} className="group">
-            <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface">
-              <Image src={l.image} alt={l.title} fill sizes="(max-width:1024px) 50vw, 33vw" className="object-cover transition duration-500 group-hover:scale-105" />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink/60 to-transparent" />
-              <div className="absolute bottom-4 left-4">
-                <p className="label-brand !text-canvas/80">{l.occasion}</p>
-                <p className="mt-1 font-display text-xl font-light text-canvas">{l.title}</p>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <LooksGrid looks={looks.map((l) => ({ slug: l.slug, title: l.title, occasion: l.occasion, theme: l.theme, image: l.image }))} />
     </div>
   );
 }

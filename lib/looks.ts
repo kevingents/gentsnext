@@ -19,6 +19,8 @@ export type Look = {
   title: string;
   subtitle: string;
   occasion: string;
+  /** Optioneel thema (bv. "Peaky Blinders", "Italiaanse zomer") — naast gelegenheid filterbaar. */
+  theme?: string;
   image: string;
   /** Extra sfeerbeelden onder de hoofd-modelfoto (geen hotspots). */
   images?: string[];
@@ -61,6 +63,7 @@ function fromSanity(s: {
   title: string;
   slug: string;
   occasion?: string;
+  theme?: string;
   subtitle?: string;
   image?: unknown;
   gallery?: unknown[];
@@ -74,6 +77,7 @@ function fromSanity(s: {
     title: s.title,
     subtitle: s.subtitle || "",
     occasion: s.occasion || "",
+    ...(s.theme ? { theme: s.theme } : {}),
     image,
     ...(images.length ? { images } : {}),
     hotspots: (s.hotspots || [])

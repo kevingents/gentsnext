@@ -17,12 +17,23 @@ import { put } from "@vercel/blob";
 
 const MODEL = process.env.FAL_HERO_MODEL || "fal-ai/flux-pro/v1.1-ultra";
 
+// Kwaliteits-/merkcues, neutraal qua licht zodat elk thema z'n eigen sfeer kan zetten.
 const STYLE =
-  "Editorial menswear campaign photograph for an upscale, refined men's formalwear brand. Warm, sophisticated, aspirational yet approachable. Beautiful soft natural light, subtle 35mm film grain, cinematic and timeless colour. Impeccably tailored suits worn over a crisp white dress shirt with a collar — never a t-shirt under a jacket. Absolutely no text, no logo, no watermark, no caption anywhere in the image. Photorealistic high-end fashion photography, sharp and elegant, generous negative space for a headline.";
+  "Editorial menswear campaign photograph for an upscale, refined men's formalwear brand — aspirational yet wearable. Impeccably tailored suits worn over a crisp collared dress shirt — never a t-shirt under a jacket. Photorealistic high-end fashion photography, sharp and elegant, subtle film grain, generous negative space for a headline. Absolutely no text, no logo, no watermark, no caption anywhere in the image.";
 
 type Hero = { slug: string; aspect: string; prompt: string };
 
 const HEROES: Hero[] = [
+  // — Thema's —
+  { slug: "peaky-blinders", aspect: "21:9",
+    prompt: "Three sharply dressed men in 1920s-style tweed and herringbone three-piece suits with buttoned waistcoats, ties and flat caps, standing confident and brooding on a moody cobblestone industrial street at dusk, dramatic overcast light, atmospheric haze, cinematic vintage colour grade." },
+  { slug: "italiaanse-zomer", aspect: "21:9",
+    prompt: "An effortlessly elegant man in a light linen summer suit and loafers leaning on a sun-bleached balustrade above a glittering Italian coastline, warm midday Mediterranean light, relaxed dolce-vita mood, vivid and bright." },
+  { slug: "gala-black-tie", aspect: "21:9",
+    prompt: "A distinguished man in an impeccable black tuxedo with a black bow tie and white dress shirt in a grand dimly-lit classical hall, warm chandelier glow, refined black-tie elegance, cinematic and moody." },
+  { slug: "dandy", aspect: "16:9",
+    prompt: "A stylish modern dandy in a bold patterned three-piece suit with a pocket square and confident flair, against a richly coloured vintage interior with velvet and brass, warm directional light, characterful and elegant." },
+  // — Algemeen / gelegenheid —
   { slug: "wedding-golden-hour", aspect: "21:9",
     prompt: "Two stylish male wedding guests in elegant light-toned suits laughing together on the sun-drenched whitewashed steps of a Mediterranean coastal village at golden hour, the turquoise sea glittering behind them, relaxed and joyful." },
   { slug: "city-editorial", aspect: "21:9",

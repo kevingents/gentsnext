@@ -39,10 +39,10 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
           <Image
             src="/brand/brand-logo-zwart.png"
             alt="GENTS"
-            width={132}
-            height={52}
+            width={176}
+            height={69}
             priority
-            className="h-9 w-auto"
+            className="h-11 w-auto lg:h-12"
           />
         </Link>
 
