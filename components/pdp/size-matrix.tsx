@@ -34,22 +34,16 @@ function Cell({
   onSelect: (size: string) => void;
 }) {
   if (!cell) return <span aria-hidden className="block" />;
-  const out = cell.known && cell.qty <= 0;
   const low = cell.known && cell.qty > 0 && cell.qty <= 3;
   const on = selected === cell.size;
   return (
     <button
       type="button"
-      disabled={out}
       onClick={() => onSelect(cell.size)}
       aria-pressed={on}
-      title={out ? "Niet op voorraad" : low ? `Nog ${cell.qty} op voorraad` : undefined}
+      title={low ? `Nog ${cell.qty} op voorraad` : undefined}
       className={`relative flex h-10 w-full items-center justify-center border font-sans text-sm transition-colors ${
-        out
-          ? "cursor-not-allowed border-line text-muted line-through decoration-muted"
-          : on
-            ? "border-ink bg-ink text-canvas"
-            : "border-line text-ink hover:border-ink"
+        on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
       }`}
     >
       {sizeToken(cell.size)}
@@ -69,18 +63,19 @@ export function SizeMatrix({
   selected: string | null;
   onSelect: (size: string) => void;
 }) {
-  const layout = sizeLayoutFor(
-    hoofdgroep,
-    sizes.map((s) => s.size)
-  );
+  // Uitverkochte maten niet tonen (i.p.v. doorstrepen).
+  const live = sizes.filter((s) => !(s.known && s.qty <= 0));
+  if (!live.length) {
+    return <p className="mt-2 font-sans text-sm text-muted">Tijdelijk uitverkocht.</p>;
+  }
 
-  // Eén kolom (truien/schoenen/accessoires): platte rij maatknoppen.
-  if (layout === "regular-only") {
-    // Numeriek sorteren als de maten getallen zijn (riemen 75–115), anders op
-    // lettermaat-bucket (XS…6XL).
+  const layout = sizeLayoutFor(hoofdgroep, live.map((s) => s.size));
+
+  // Platte, horizontale rij maatknoppen.
+  const flatRow = (list: BuySize[]) => {
     const num = (s: string) => parseInt(sizeToken(s), 10);
-    const allNumeric = sizes.every((s) => !Number.isNaN(num(s.size)));
-    const sorted = [...sizes].sort((a, b) =>
+    const allNumeric = list.every((s) => !Number.isNaN(num(s.size)));
+    const sorted = [...list].sort((a, b) =>
       allNumeric
         ? num(a.size) - num(b.size)
         : rowSortIndex(sizeRowLabel(a.size)) - rowSortIndex(sizeRowLabel(b.size))
@@ -88,40 +83,42 @@ export function SizeMatrix({
     return (
       <ul className="mt-2 flex flex-wrap gap-2">
         {sorted.map((s) => {
-          const out = s.known && s.qty <= 0;
           const low = s.known && s.qty > 0 && s.qty <= 3;
           const on = selected === s.size;
           return (
             <li key={s.size}>
               <button
                 type="button"
-                disabled={out}
                 onClick={() => onSelect(s.size)}
                 aria-pressed={on}
-                title={out ? "Niet op voorraad" : low ? `Nog ${s.qty} op voorraad` : undefined}
+                title={low ? `Nog ${s.qty} op voorraad` : undefined}
                 className={`flex min-w-[3rem] flex-col items-center border px-3 py-2 text-center font-sans text-sm transition-colors ${
-                  out
-                    ? "cursor-not-allowed border-line text-muted line-through decoration-muted"
-                    : on
-                      ? "border-ink bg-ink text-canvas"
-                      : "border-line text-ink hover:border-ink"
+                  on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
                 }`}
               >
                 {sizeToken(s.size)}
-                {low ? <span className="mt-0.5 text-[0.6rem] text-danger no-underline">nog {s.qty}</span> : null}
+                {low ? <span className="mt-0.5 text-[0.6rem] text-danger">nog {s.qty}</span> : null}
               </button>
             </li>
           );
         })}
       </ul>
     );
-  }
+  };
 
-  const columns = COLUMNS[layout] ?? COLUMNS["regular-long-short"];
+  // Eén kolom (truien/schoenen/accessoires): platte rij.
+  if (layout === "regular-only") return flatRow(live);
 
-  // Bouw cell-map: rij (lettermaat) → groep → maat.
+  const allColumns = COLUMNS[layout] ?? COLUMNS["regular-long-short"];
+  // Alleen kolommen die ná het weghalen van uitverkocht nog maten hebben.
+  const columns = allColumns.filter((c) => live.some((s) => sizeGroup(s.size, layout) === c.key));
+
+  // Geen tweede dimensie (bv. geen mouwlengte) → gewoon horizontaal.
+  if (columns.length <= 1) return flatRow(live);
+
+  // Cell-map: rij (lettermaat) → groep → maat.
   const cellMap = new Map<string, Partial<Record<SizeGroup, BuySize>>>();
-  for (const s of sizes) {
+  for (const s of live) {
     const row = sizeRowLabel(s.size);
     const group = sizeGroup(s.size, layout);
     if (!cellMap.has(row)) cellMap.set(row, {});
@@ -133,7 +130,6 @@ export function SizeMatrix({
   return (
     <div className="mt-2 overflow-x-auto">
       <div className="min-w-[16rem]">
-        {/* Kolomkoppen */}
         <div className="grid items-end gap-1.5 pb-2" style={{ gridTemplateColumns: gridCols }}>
           <span />
           {columns.map((c) => (
@@ -143,7 +139,6 @@ export function SizeMatrix({
             </div>
           ))}
         </div>
-        {/* Rijen */}
         <div className="space-y-1.5">
           {rows.map((row) => (
             <div key={row} className="grid items-center gap-1.5" style={{ gridTemplateColumns: gridCols }}>
