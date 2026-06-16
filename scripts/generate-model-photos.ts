@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import sharp from "sharp";
 
 /**
  * AI-modelfoto's genereren met FASHN.ai **Product to Model** (model_name
@@ -120,12 +121,30 @@ async function runProductToModel(productImage: string, prompt: string, apiKey: s
   return null;
 }
 
+// Pad naar exact 4:5 zodat de modelfoto de 4:5-galerijtegel naadloos vult (geen
+// cream zijbanden). Rand-gemiddelde als achtergrond → blendt met de studio.
+async function padTo45(buf: Buffer): Promise<Buffer> {
+  try {
+    const m = await sharp(buf).metadata();
+    const w = m.width ?? 0, h = m.height ?? 0;
+    if (!w || !h) return buf;
+    const target = 4 / 5, ratio = w / h;
+    if (Math.abs(ratio - target) < 0.01) return buf;
+    const stripe = ratio < target
+      ? await sharp(buf).extract({ left: 0, top: 0, width: Math.max(2, Math.floor(w * 0.04)), height: h }).stats()
+      : await sharp(buf).extract({ left: 0, top: 0, width: w, height: Math.max(2, Math.floor(h * 0.04)) }).stats();
+    const background = { r: Math.round(stripe.channels[0].mean), g: Math.round(stripe.channels[1].mean), b: Math.round(stripe.channels[2].mean), alpha: 1 };
+    if (ratio < target) { const tw = Math.round(h * target); const left = Math.floor((tw - w) / 2); return sharp(buf).extend({ left, right: tw - w - left, background }).jpeg({ quality: 90 }).toBuffer(); }
+    const th = Math.round(w / target); const top = Math.floor((th - h) / 2); return sharp(buf).extend({ top, bottom: th - h - top, background }).jpeg({ quality: 90 }).toBuffer();
+  } catch { return buf; }
+}
 async function toBlob(url: string, path: string, token: string): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
-    const blob = await put(path, await res.arrayBuffer(), { access: "public", token, contentType: "image/jpeg", allowOverwrite: true });
-    return blob.url;
+    const padded = await padTo45(Buffer.from(await res.arrayBuffer()));
+    const blob = await put(path, padded, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true });
+    return `${blob.url}?v=${Date.now()}`;
   } catch (e) {
     console.error("  blob-upload-fout:", e);
     return null;
