@@ -27,13 +27,24 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             alt={product.imageAlt}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain p-4" : "object-cover"}`}
+            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain p-4" : "object-cover"} ${product.hoverImageUrl ? "group-hover:opacity-0" : ""}`}
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">
             Geen afbeelding
           </div>
         )}
+        {/* Modelfoto (of sfeerbeeld) faded in bij hover — toont het kledingstuk gedragen. */}
+        {product.hoverImageUrl ? (
+          <Image
+            src={product.hoverImageUrl}
+            alt=""
+            aria-hidden
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="absolute inset-0 object-cover opacity-0 transition-opacity duration-500 ease-brand group-hover:opacity-100"
+          />
+        ) : null}
       </div>
       <div className="flex flex-col gap-0.5">
         {product.vendor ? (

@@ -39,6 +39,8 @@ export type ProductCardData = {
   vendor: string;
   imageUrl: string;
   imageAlt: string;
+  /** AI-modelfoto (of sfeerbeeld als terugval) — getoond bij hover over de kaart. */
+  hoverImageUrl?: string;
   minPriceCents: number;
   hasPriceRange: boolean;
   isNew?: boolean;
@@ -108,6 +110,8 @@ async function buildProductCards(
         groupColorCount: products.groupColorCount,
         variantColorLabel: products.variantColorLabel,
         stockQty: products.stockQty,
+        modelImageUrl: products.modelImageUrl,
+        lifestyleImageUrl: products.lifestyleImageUrl,
       })
       .from(products)
       .where(inArray(products.id, ids)),
@@ -116,6 +120,8 @@ async function buildProductCards(
   const colorCount = new Map(prodMeta.map((m) => [m.id, m.groupColorCount]));
   const colorLabel = new Map(prodMeta.map((m) => [m.id, m.variantColorLabel]));
   const stockQtyById = new Map(prodMeta.map((m) => [m.id, m.stockQty]));
+  // Hover-beeld: modelfoto wint, anders sfeerbeeld. Leeg = geen swap.
+  const hoverById = new Map(prodMeta.map((m) => [m.id, (m.modelImageUrl || m.lifestyleImageUrl || "").trim()]));
   const categoryById = new Map(
     prodMeta.map((m) => [m.id, String((m.attributes as Record<string, unknown>)?.hoofdgroep_omschrijving || "")])
   );
@@ -190,6 +196,7 @@ async function buildProductCards(
       vendor: p.vendor,
       imageUrl: img?.url || "",
       imageAlt: cleanAlt,
+      hoverImageUrl: hoverById.get(p.id) || "",
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,
