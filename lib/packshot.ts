@@ -245,6 +245,69 @@ export async function generatePackshotFromImage(input: { imageBase64: string; de
   }
 }
 
+/**
+ * ControlNet (FLUX canny): neemt een ECHTE GENTS-foto als sjabloon, zet de vorm
+ * (contouren) vast en kleurt het kledingstuk vrij om via de prompt. Zo krijg je
+ * de strakke onzichtbare ghost-mannequin-stijl betrouwbaar in elke kleur — i.p.v.
+ * de wisselvallige tekst-naar-beeld (die te vaak een zichtbare paspop toont).
+ */
+async function cannyGen(controlUrl: string, prompt: string, key: string, strength = 0.75): Promise<Buffer | null> {
+  for (let a = 1; a <= 3; a++) {
+    try {
+      const res = await fetch(`${FAL}/fal-ai/flux-control-lora-canny`, {
+        method: "POST", headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, control_lora_image_url: controlUrl, control_lora_strength: strength, num_images: 1, output_format: "jpeg" }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        const u = j?.images?.[0]?.url;
+        if (!u) return null;
+        const r = await fetch(u);
+        return r.ok ? Buffer.from(await r.arrayBuffer()) : null;
+      }
+      if (res.status === 429 || res.status >= 500) { await new Promise((s) => setTimeout(s, 2500 * a)); continue; }
+      return null;
+    } catch { await new Promise((s) => setTimeout(s, 2500 * a)); }
+  }
+  return null;
+}
+
+/**
+ * Packshot uit een SJABLOON-foto (ControlNet): voor producten zonder eigen foto
+ * waar wél een echte GENTS-foto van een soortgelijk artikel bestaat. Vorm uit het
+ * sjabloon, kleur/type uit de tekst → BiRefNet → puur wit. Betrouwbaar on-brand.
+ */
+export async function generatePackshotFromTemplate(input: { controlUrl: string; title: string; color?: string | null; hoofdgroep?: string | null; ref?: string | null }): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const key = process.env.FAL_KEY || "";
+  const token = (process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN) || "";
+  if (!key) return { ok: false, error: "FAL_KEY ontbreekt." };
+  if (!token) return { ok: false, error: "Blob-token ontbreekt." };
+  const controlUrl = String(input.controlUrl || "");
+  if (!/^https?:\/\//i.test(controlUrl)) return { ok: false, error: "Geen geldige sjabloon-URL." };
+
+  const title = String(input.title || "").trim();
+  const type = inferType(title, input.hoofdgroep);
+  const color = translateColor(String(input.color || (title.match(COLOR_RE) || [])[0] || "").trim());
+  const prompt =
+    `A ${color ? color + " " : ""}men's ${type}, clean men's fashion e-commerce product packshot, ` +
+    `invisible ghost-mannequin (no person, no visible mannequin, no dress form, no stand) on a pure white background (#FFFFFF), ` +
+    `front view, soft even studio lighting, true-to-life colour, crisp sharp focus, photorealistic. ${title}.`;
+
+  const gen = await cannyGen(controlUrl, prompt, key, 0.75);
+  if (!gen) return { ok: false, error: "ControlNet-generatie mislukt." };
+  const tmp = await uploadTmp(gen, token);
+  const white = (await whiten(tmp, key)) || gen;
+  await del(tmp, { token }).catch(() => {});
+
+  const name = slug(input.ref || title);
+  try {
+    const b = await put(`ai-packshots/${name}.jpg`, white, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true });
+    return { ok: true, url: `${b.url}?v=${Date.now()}` };
+  } catch (e) {
+    return { ok: false, error: `Opslaan mislukt: ${(e as Error).message}` };
+  }
+}
+
 /** BiRefNet heeft een URL nodig; zet de FLUX-jpeg eerst op blob. */
 async function uploadTmp(buf: Buffer, token: string): Promise<string> {
   const b = await put(`ai-packshots/_tmp/${Date.now()}-${Math.round(Math.random() * 1e6)}.jpg`, buf, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true });
