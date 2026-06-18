@@ -43,6 +43,29 @@ export function inferType(title: string, hoofdgroep?: string | null): string {
   return (hoofdgroep && TYPE_EN[hoofdgroep]) || "premium menswear item";
 }
 
+/**
+ * Presentatie-instructie per producttype — matcht de GENTS-huisstijl (puur wit):
+ * gedragen kleding = ghost-mannequin (onzichtbare paspop, 3D-vorm), stropdas =
+ * opgerold, riem = opgerold, schoenen = paar onder hoek, accessoire = gestyled plat.
+ */
+function styleFor(type: string): string {
+  const t = type.toLowerCase();
+  if (/bow tie/.test(t))
+    return "presented as a pre-tied bow tie, laid flat and symmetrical, front view, with a soft natural drop shadow";
+  if (/necktie|\btie\b/.test(t))
+    return "presented as a luxury silk necktie with the wide blade neatly ROLLED into a tight coil on the right, the rest of the tie laid out at a slight diagonal showing the full pattern and the pointed tip, shot from a slight top-down three-quarter angle, with a soft natural drop shadow";
+  if (/belt/.test(t))
+    return "presented as a leather belt coiled into a neat round spiral with the buckle visible, slight top-down three-quarter angle, soft natural drop shadow";
+  if (/shoe|loafer|sneaker|boot|derby|brogue/.test(t))
+    return "presented as a matching pair shown together at a flattering three-quarter front angle, soft natural drop shadow";
+  if (/sock/.test(t))
+    return "presented as a neatly folded pair, front view, soft natural drop shadow";
+  if (/scarf|pocket|pochet/.test(t))
+    return "neatly folded and styled flat, front view, soft natural drop shadow";
+  // Gedragen kleding → ghost-mannequin
+  return "shown in GHOST-MANNEQUIN (invisible mannequin / hollow-man) style, as if worn by an invisible person: natural three-dimensional shape and body volume, structured shoulders, the hollow neckline with the dark inner lining/back panel visible, sleeves and body with realistic drape and a soft natural drop shadow — absolutely NOT laid flat";
+}
+
 function slug(s: string): string {
   return String(s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "packshot";
 }
@@ -117,12 +140,12 @@ export async function generatePackshot(input: PackshotInput): Promise<{ ok: true
   const color = (input.color || (title.match(COLOR_RE) || [])[0] || "").trim();
 
   const prompt =
-    `Top-down flat-lay product photograph of a single men's ${type}` +
+    `Professional men's fashion e-commerce product packshot of a single ${type}` +
     (color ? ` in ${color}` : "") + ", " +
-    `neatly laid out flat and straight (full length), centered on a clean seamless PURE WHITE studio background (#FFFFFF), only a very subtle soft shadow. ` +
-    `The garment: ${title}. ` +
-    `Isolated garment ONLY — absolutely no person, no model, no body, no legs, no mannequin, no hands, no face, nothing else in the frame. ` +
-    `Premium menswear e-commerce packshot on white, soft even diffused studio lighting, true-to-life accurate colour, crisp sharp focus, fine fabric and stitching detail, photorealistic.`;
+    `${styleFor(type)}. ` +
+    `Product: ${title}. ` +
+    `Centered on a clean seamless PURE WHITE studio background (#FFFFFF), bright soft even diffused studio lighting, true-to-life accurate colour, crisp sharp focus, fine fabric and stitching detail, photorealistic. ` +
+    `Product ONLY — absolutely no person, no model, no visible mannequin, no body, no skin, no hands, no face, no head, no hanger, nothing else in the frame.`;
 
   const raw = await flux(prompt, key);
   if (!raw) return { ok: false, error: "FLUX-generatie mislukt." };
