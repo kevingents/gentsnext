@@ -2,6 +2,7 @@ import "@/lib/load-env";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
 import { cleanModelTo45 } from "./clean-model";
+import { newCollectionCond } from "@/lib/new-collection";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -156,7 +157,8 @@ async function main() {
   const token = (process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN)!;
   if (!key || !token) { console.error("FASHN_API_KEY en blob-token nodig."); process.exit(1); }
   const limit = Math.max(1, Math.min(200, Number(process.argv[2]) || 14));
-  const onlyHandle = (process.argv[3] || "").trim();
+  const onlyNew = process.argv.includes("new"); // alleen nieuwe collectie
+  const onlyHandle = (process.argv[3] && process.argv[3] !== "new" ? process.argv[3] : "").trim();
   const db = getDb();
 
   const queryRows = () => db.execute<{ id: string; handle: string; title: string; img: string; m1: string; m2: string; det: string; vid: string }>(sql`
@@ -166,6 +168,7 @@ async function main() {
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
       and p.attributes->>'hoofdgroep_omschrijving'='Pakken'
+      ${onlyNew ? sql`and ${newCollectionCond}` : sql``}
       ${onlyHandle ? sql`and p.handle=${onlyHandle}` : sql`and (p.model_image_url='' or p.model_image_url2='' or p.detail_image_url='' or p.model_video_url='')`}
     order by p.stock_qty desc
     limit ${limit}

@@ -1,6 +1,7 @@
 import "@/lib/load-env";
 import { put } from "@vercel/blob";
 import { cleanModelTo45 } from "./clean-model";
+import { newCollectionCond } from "@/lib/new-collection";
 import sharp from "sharp";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
@@ -137,7 +138,8 @@ async function main() {
   const token = (process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN)!;
   if (!key || !token) { console.error("env ontbreekt"); process.exit(1); }
   const limit = Math.max(1, Math.min(800, Number(process.argv[2]) || 50));
-  const onlyCat = (process.argv[3] || "").trim();
+  const onlyNew = process.argv.includes("new"); // alleen nieuwe collectie
+  const onlyCat = (process.argv[3] && process.argv[3] !== "new" ? process.argv[3] : "").trim();
   const cats = onlyCat ? [onlyCat] : Object.keys(CAT);
   const db = getDb();
 
@@ -146,6 +148,7 @@ async function main() {
       (select url from product_images pi where pi.product_id=p.id order by position limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
+      ${onlyNew ? sql`and ${newCollectionCond}` : sql``}
       and p.model_image_url='' and p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})
     order by p.stock_qty desc limit ${limit}`);
   let rows: Awaited<ReturnType<typeof queryRows>> | null = null;

@@ -80,9 +80,10 @@ const COLOR_WORDS: [RegExp, Family][] = [
   [/cognac|camel|tabak|tabacco|tan\b|caramel/, "tan"],
   [/bruin|brown|chocolade|mokka|whisky|roodbruin/, "brown"],
   [/beige|zand|sand|ecru|creme|crème|cream|kaki|khaki|taupe|naturel/, "beige"],
-  [/bordeaux|wijnrood|burgundy|wine/, "burgundy"],
-  [/groen|green|olijf|olive/, "green"],
-  [/roze|pink|rose/, "pink"],
+  [/bordeaux|wijnrood|burgundy|wine|cherry|kers/, "burgundy"],
+  [/terracotta|terra\b|roest|rust|steenrood|baksteen|brique/, "brown"],
+  [/groen|green|olijf|olive|mos|moss|salie|sage|jade|loden/, "green"],
+  [/roze|pink|rose|koraal|coral|zalm|salmon|mauve|lila|lilac|poeder/, "pink"],
   [/wit|white|optisch/, "white"],
 ];
 
@@ -135,9 +136,14 @@ function colorPlan(role: Role, formality: Formality, targetFam: Family): { pref:
     }
     case "shoes": {
       if (blackTie) return { pref: ["black"], forbid: ["brown", "tan", "beige", "white", "green", "burgundy", "pink"], patent: true };
-      // bruin/cognac bij blauw/grijs/tan/groen; zwart bij antraciet/zwart
+      // zwart alléén bij antraciet/zwart pak
       const darkSuit = targetFam === "black" || targetFam === "charcoal";
       if (darkSuit) return { pref: ["black"], forbid: ["tan", "beige"] };
+      // Warme/gekleurde pakken (tan, beige, bruin, roze, bordeaux, groen of onbekend)
+      // → ALTIJD onze bruine/cognac schoenen, NOOIT zwart.
+      const warm = (["tan", "beige", "brown", "pink", "burgundy", "green", "other"] as Family[]).includes(targetFam);
+      if (warm) return { pref: ["brown", "tan"], forbid: ["black", "white", "pink"] };
+      // navy/grijs/blauw: bruin voorop, zwart mag als alternatief
       return { pref: ["brown", "tan", "black"], forbid: ["white", "pink"] };
     }
     case "belt":

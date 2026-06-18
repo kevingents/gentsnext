@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { newCollectionCond } from "@/lib/new-collection";
 
 /**
  * AI-lifestyle/sfeerbeelden per product → products.lifestyle_image_url. Everyman
@@ -29,15 +30,15 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
       "standing on a stone harbour quay lined with traditional wooden boats, the sea behind, hands in pockets, glancing aside with a relaxed grin",
       "sitting on a large sun-warmed rock at the water's edge, forearms on his knees, a calm half-smile looking over the turquoise sea",
       "leaning casually against a sun-warmed whitewashed wall in a narrow Mediterranean street, hands in pockets, a relaxed natural half-smile",
-      "with a small group of stylish male wedding guests on the village steps, laughing and talking, a natural candid group moment",
+      "on the sunlit whitewashed village steps just after the ceremony, adjusting a cuff, a natural candid moment",
       "at a relaxed casual outdoor beach wedding celebration at dusk, warm string lights and guests dancing behind, laughing with a drink in hand",
       "at a lively garden party among olive trees and flowers, a long festive table behind him, laughing mid-conversation with a glass in hand",
       "at a cheerful beach party by the sea at golden hour, a relaxed barefoot-on-the-sand summer vibe, a big carefree laugh",
-      "raising a glass in a toast at a sunny vineyard terrace celebration, friends around the table, a warm genuine laugh",
+      "raising a glass in a toast at a sunny vineyard terrace celebration, a long festive table beside him, a warm genuine laugh",
       "on the dance floor at an evening wedding party, jacket open, arms loose and up, mid-laugh under warm fairy lights",
-      "clinking champagne glasses with friends on a sunlit rooftop terrace, the sea or skyline behind",
-      "sharing a quiet laugh with a friend just after the ceremony, confetti drifting through the air",
-      "walking and laughing side by side with a partner along a golden-hour seaside promenade",
+      "raising a champagne glass on a sunlit rooftop terrace, the sea or skyline behind",
+      "a quiet confident smile just after the ceremony, confetti drifting through the air",
+      "walking with an easy confident stride along a golden-hour seaside promenade, hands relaxed",
       "leaning back against a balustrade at a late-afternoon reception, drink in hand, a relaxed contented smile",
     ],
   },
@@ -52,7 +53,7 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
       "lingering over an espresso at a tiny sunny piazza cafe, a folded newspaper on the marble table",
       "browsing a colourful morning flower market, warm sunlight streaming through the awnings",
       "stepping off a small wooden boat onto a sun-baked stone jetty, laughing, sea sparkling behind",
-      "playing cards with friends at a shaded harbour-side table, lively, relaxed and laughing",
+      "sitting at a shaded harbour-side table with a cold drink, lively, relaxed and laughing",
     ],
   },
   country: {
@@ -73,11 +74,11 @@ const MOODS: Record<string, { light: string; scenes: string[] }> = {
     scenes: [
       "riding a chunky fat-tyre e-bike (fatbike) along a sunny Amsterdam canal, tall narrow gabled canal houses and a humpback bridge behind, a big cheerful grin, caught mid-ride",
       "on a fatbike crossing a picturesque old canal bridge in historic Leiden, weathered Dutch brick buildings and bikes leaning on the railings, a lively candid student moment",
-      "laughing with a couple of fellow students just outside a characterful old Dutch student-society building on a canal, candid and lively",
+      "standing just outside a characterful old Dutch student-society building on a canal, candid and lively",
       "cycling a fatbike across a sunlit cobbled Dutch university-town square, an old bell-tower behind, cheerful and carefree",
-      "laughing with a couple of friends on the worn stone steps of a grand old university building",
+      "sitting on the worn stone steps of a grand old university building, relaxed and cheerful",
       "raising a glass at a long candle-lit student-society dinner table, lively and a little rowdy",
-      "walking his fatbike across a sunny canal bridge while chatting with a mate, relaxed and easy",
+      "walking his fatbike across a sunny canal bridge, relaxed and easy",
     ],
   },
   stad: {
@@ -128,13 +129,15 @@ async function main() {
   const limit = Math.max(1, Math.min(800, Number(process.argv[2]) || 40));
   const phase = (process.argv[3] || "trouw").trim();
   const redo = process.argv.includes("redo"); // overschrijf bestaande slots i.p.v. alleen lege vullen
+  const onlyNew = process.argv.includes("new"); // alleen nieuwe collectie
   const isStudent = phase === "student";
   const cats = PHASES[phase] || (CAT[phase] ? [phase] : Object.keys(CAT));
   const db = getDb();
 
   // Normaal: alleen producten met ≥1 leeg slot. Redo: alle producten (overschrijf alles).
   const emptySlot = sql`and (p.lifestyle_image_url='' or p.lifestyle_image_url2='' or p.lifestyle_image_url3='')`;
-  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary ${redo ? sql`` : emptySlot}`;
+  const newColl = onlyNew ? sql`and ${newCollectionCond}` : sql``;
+  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary ${redo ? sql`` : emptySlot} ${newColl}`;
   const filter = isStudent
     ? sql`(lower(p.handle) like '%rok%' or lower(p.title) like '%rokkostuum%' or lower(p.title) like '%rokjas%' or lower(p.handle) like 'jacquet%' or lower(p.title) like '%jacquet%')`
     : sql`p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})`;

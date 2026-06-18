@@ -3,20 +3,21 @@ import { put } from "@vercel/blob";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import sharp from "sharp";
+import { frameCutoutTo45 } from "./clean-model";
 
 /**
- * Definitieve fix voor de "kaders": knip het model uit met fal.ai (BiRefNet) en
- * zet het op een ÉGALE lichte studio-achtergrond, in net 4:5. Geen vignet/rand
- * meer, consistent over alle producten. Gebruikt FAL-credits (~$0,01–0,02/beeld).
+ * Definitieve fix voor de achtergrond/kadering: knip het model uit met fal.ai
+ * (BiRefNet) en zet het via de gedeelde helper (frameCutoutTo45) op de égale
+ * site-achtergrond #F6F5F2, schoon 4:5, model met nette marge. Geen vignet/rand
+ * en geen dof grijs meer. Gebruikt alleen FAL-credits (~$0,01–0,02/beeld), géén
+ * FASHN — dus veilig om over bestaande (grijze) modelfoto's te draaien.
  *
  *   npx tsx scripts/clean-model-bg.ts          (alle model1+model2)
  *   npx tsx scripts/clean-model-bg.ts smoking   (alleen handles met 'smoking')
  */
 const KEY = process.env.FAL_KEY || "";
-const BG = { r: 239, g: 238, b: 235 }; // schone zachte studio-lichtgrijs
 
-async function cutout(imageUrl: string): Promise<string | null> {
+async function cutout(imageUrl: string): Promise<Buffer | null> {
   for (let a = 1; a <= 3; a++) {
     try {
       const res = await fetch("https://fal.run/fal-ai/birefnet", {
@@ -24,7 +25,13 @@ async function cutout(imageUrl: string): Promise<string | null> {
         headers: { Authorization: `Key ${KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ image_url: imageUrl }),
       });
-      if (res.ok) { const j = await res.json(); return j?.image?.url || j?.images?.[0]?.url || null; }
+      if (res.ok) {
+        const j = await res.json();
+        const u = j?.image?.url || j?.images?.[0]?.url;
+        if (!u) return null;
+        const r = await fetch(u);
+        return r.ok ? Buffer.from(await r.arrayBuffer()) : null;
+      }
       if (res.status === 429 || res.status >= 500) { await new Promise((r) => setTimeout(r, 2000 * a)); continue; }
       return null;
     } catch { await new Promise((r) => setTimeout(r, 2000 * a)); }
@@ -35,15 +42,7 @@ async function cutout(imageUrl: string): Promise<string | null> {
 async function clean(imageUrl: string): Promise<Buffer | null> {
   const cut = await cutout(imageUrl);
   if (!cut) return null;
-  const res = await fetch(cut);
-  if (!res.ok) return null;
-  const png = Buffer.from(await res.arrayBuffer());
-  const m = await sharp(png).metadata();
-  const w = m.width || 998, h = m.height || 1248;
-  return sharp({ create: { width: w, height: h, channels: 3, background: BG } })
-    .composite([{ input: png, gravity: "center" }])
-    .jpeg({ quality: 92 })
-    .toBuffer();
+  return frameCutoutTo45(cut);
 }
 
 async function main() {
