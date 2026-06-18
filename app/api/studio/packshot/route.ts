@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
-import { generatePackshot } from "@/lib/packshot";
+import { generatePackshot, generatePackshotFromImage } from "@/lib/packshot";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,11 +28,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
 
-  let body: { title?: unknown; color?: unknown; hoofdgroep?: unknown; ref?: unknown };
+  let body: { title?: unknown; color?: unknown; hoofdgroep?: unknown; ref?: unknown; imageBase64?: unknown; description?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
+  }
+
+  // Staalfoto-modus: hergenereer uit een geüploade referentiefoto (image-to-image).
+  if (body?.imageBase64) {
+    const r = await generatePackshotFromImage({
+      imageBase64: String(body.imageBase64),
+      description: body?.description ? String(body.description) : body?.title ? String(body.title) : null,
+      ref: body?.ref ? String(body.ref) : null,
+    });
+    return NextResponse.json(r, { status: r.ok ? 200 : 400 });
   }
 
   const res = await generatePackshot({
