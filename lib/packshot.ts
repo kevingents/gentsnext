@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import sharp from "sharp";
 
 /**
@@ -126,7 +126,9 @@ export async function generatePackshot(input: PackshotInput): Promise<{ ok: true
 
   const raw = await flux(prompt, key);
   if (!raw) return { ok: false, error: "FLUX-generatie mislukt." };
-  const white = (await whiten(await uploadTmp(raw, token), key)) || raw;
+  const tmpUrl = await uploadTmp(raw, token);
+  const white = (await whiten(tmpUrl, key)) || raw;
+  await del(tmpUrl, { token }).catch(() => {}); // tijdelijke FLUX-upload opruimen
 
   const name = slug(input.ref || title);
   try {
