@@ -165,7 +165,8 @@ export async function generatePackshot(input: PackshotInput): Promise<{ ok: true
     `${styleFor(type)}. ` +
     `Product: ${title}. ` +
     `Centered on a clean seamless PURE WHITE studio background (#FFFFFF), bright soft even diffused studio lighting, true-to-life accurate colour, crisp sharp focus, fine fabric and stitching detail, photorealistic. ` +
-    `Product ONLY, completely isolated — absolutely NO person, no model, no visible mannequin, no dress form, no tailor's dummy, no mannequin stand or pole, no wooden neck block, no body, no skin, no hands, no face, no head, no hanger, nothing else in the frame.`;
+    `Product ONLY, completely isolated — absolutely NO person, no model, no visible mannequin, no dress form, no tailor's dummy, no mannequin stand or pole, no wooden neck block, no body, no skin, no hands, no face, no head, no hanger, nothing else in the frame. ` +
+    `NO brand label, NO logo, NO printed text, no letters, no numbers or writing anywhere on the garment; any neck/inner label is plain and blank.`;
 
   const raw = await flux(prompt, key);
   if (!raw) return { ok: false, error: "FLUX-generatie mislukt." };
@@ -291,7 +292,8 @@ export async function generatePackshotFromTemplate(input: { controlUrl: string; 
   const prompt =
     `A ${color ? color + " " : ""}men's ${type}, clean men's fashion e-commerce product packshot, ` +
     `invisible ghost-mannequin (no person, no visible mannequin, no dress form, no stand) on a pure white background (#FFFFFF), ` +
-    `front view, soft even studio lighting, true-to-life colour, crisp sharp focus, photorealistic. ${title}.`;
+    `front view, soft even studio lighting, true-to-life colour, crisp sharp focus, photorealistic. ${title}. ` +
+    `NO brand label, NO logo, NO printed text, no letters or writing anywhere on the garment; any neck label is plain and blank.`;
 
   const gen = await cannyGen(controlUrl, prompt, key, 0.75);
   if (!gen) return { ok: false, error: "ControlNet-generatie mislukt." };
