@@ -62,8 +62,28 @@ function styleFor(type: string): string {
     return "presented as a neatly folded pair, front view, soft natural drop shadow";
   if (/scarf|pocket|pochet/.test(t))
     return "neatly folded and styled flat, front view, soft natural drop shadow";
-  // Gedragen kleding → ghost-mannequin
-  return "shown in GHOST-MANNEQUIN (invisible mannequin / hollow-man) style, as if worn by an invisible person: natural three-dimensional shape and body volume, structured shoulders, the hollow neckline with the dark inner lining/back panel visible, sleeves and body with realistic drape and a soft natural drop shadow — absolutely NOT laid flat";
+  if (/trouser|pantalon|chino|jeans|short|broek|bermuda/.test(t))
+    return "an ISOLATED CUT-OUT packshot of a single complete pair of men's trousers ALONE on pure white, floating in mid-air and holding a soft natural shape (invisible ghost-mannequin effect), shown FULL LENGTH from the shaped waistband down to the hems with the legs gently tapering — there is NO mannequin, no dress form, no stand, no legs, no person inside; NOT cropped, NOT laid flat, soft natural drop shadow";
+  // Bovenlijf-kleding → ghost-mannequin
+  return "an ISOLATED CUT-OUT packshot of the garment ALONE on pure white, floating and holding a soft natural three-dimensional shape (invisible ghost-mannequin / hollow-man effect): gently structured shoulders, the hollow neckline showing the inner back panel, sleeves with natural drape — there is absolutely NO mannequin, no dress form, no bust, no stand, no person inside the garment; NOT laid flat, soft natural drop shadow";
+}
+
+/** Nederlandse kleurnamen → Engels, zodat FLUX de kleur goed treft. */
+const COLOR_NL_EN: Record<string, string> = {
+  blauw: "blue", donkerblauw: "dark blue", lichtblauw: "light blue", navy: "navy", kobalt: "cobalt blue",
+  grijs: "grey", antraciet: "charcoal grey", zwart: "black", wit: "white", ecru: "ecru", creme: "cream", crème: "cream",
+  bruin: "brown", cognac: "cognac brown", camel: "camel", taupe: "taupe", beige: "beige", zand: "sand", strandzand: "sand",
+  olijf: "olive green", groen: "green", donkergroen: "dark green", mos: "moss green", jade: "jade green",
+  bordeaux: "burgundy", wijnrood: "wine red burgundy", steenrood: "brick red", terracotta: "terracotta",
+  rood: "red", roze: "pink", koraal: "coral", zalm: "salmon", paars: "purple", mauve: "mauve", "multi color": "multicolour", multi: "multicolour",
+};
+
+function translateColor(c: string): string {
+  const k = String(c || "").toLowerCase().trim();
+  if (!k) return "";
+  if (COLOR_NL_EN[k]) return COLOR_NL_EN[k];
+  for (const [nl, en] of Object.entries(COLOR_NL_EN)) if (k.includes(nl)) return en;
+  return c;
 }
 
 function slug(s: string): string {
@@ -141,11 +161,11 @@ export async function generatePackshot(input: PackshotInput): Promise<{ ok: true
 
   const prompt =
     `Professional men's fashion e-commerce product packshot of a single ${type}` +
-    (color ? ` in ${color}` : "") + ", " +
+    (color ? ` in ${translateColor(color)}` : "") + ", " +
     `${styleFor(type)}. ` +
     `Product: ${title}. ` +
     `Centered on a clean seamless PURE WHITE studio background (#FFFFFF), bright soft even diffused studio lighting, true-to-life accurate colour, crisp sharp focus, fine fabric and stitching detail, photorealistic. ` +
-    `Product ONLY — absolutely no person, no model, no visible mannequin, no body, no skin, no hands, no face, no head, no hanger, nothing else in the frame.`;
+    `Product ONLY, completely isolated — absolutely NO person, no model, no visible mannequin, no dress form, no tailor's dummy, no mannequin stand or pole, no wooden neck block, no body, no skin, no hands, no face, no head, no hanger, nothing else in the frame.`;
 
   const raw = await flux(prompt, key);
   if (!raw) return { ok: false, error: "FLUX-generatie mislukt." };
