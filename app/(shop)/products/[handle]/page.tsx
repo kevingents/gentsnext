@@ -40,6 +40,7 @@ import { getProductViewStats } from "@/lib/social-proof";
 import { SocialProof } from "@/components/pdp/social-proof";
 import { getCachedReviewAiSummary } from "@/lib/review-summary";
 import { AiReviewSummary } from "@/components/reviews/ai-summary";
+import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 
 export const dynamic = "force-dynamic";
 
@@ -74,12 +75,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getProductByHandle(handle);
   if (!data) return {};
   const { product, images } = data;
-  return {
+  const meta: Metadata = {
     title: product.seoTitle || product.title,
     description: product.seoDescription || stripHtml(product.descriptionHtml).slice(0, 160),
     alternates: await localeAlternates(`/products/${handle}`),
     openGraph: images[0] ? { images: [{ url: images[0].url }] } : undefined,
   };
+  // Portal-beheerbare override (meta-titel/omschrijving/noindex per pad).
+  return applySeoOverride(meta, await getSeoOverride(`/products/${handle}`));
 }
 
 export default async function ProductPage({ params }: Props) {

@@ -10,6 +10,7 @@ import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
 
@@ -27,11 +28,12 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const sel = parsePlpParams(await searchParams);
   const cat = categoryBySlug(slug);
   if (!cat) return {};
-  return {
+  const meta: Metadata = {
     title: cat.label,
     description: `${cat.label} bij GENTS — betaalbare luxe voor elk formeel moment.`,
     alternates: await localeAlternates(sel.page > 1 ? `/categorie/${slug}?page=${sel.page}` : `/categorie/${slug}`),
   };
+  return applySeoOverride(meta, await getSeoOverride(`/categorie/${slug}`));
 }
 
 export default async function CategoryPage({ params, searchParams }: Props) {
