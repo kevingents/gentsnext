@@ -38,6 +38,8 @@ import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
 import { getProductViewStats } from "@/lib/social-proof";
 import { SocialProof } from "@/components/pdp/social-proof";
+import { getCachedReviewAiSummary } from "@/lib/review-summary";
+import { AiReviewSummary } from "@/components/reviews/ai-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -172,7 +174,7 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
@@ -180,6 +182,7 @@ export default async function ProductPage({ params }: Props) {
     getPublishedReviews(product.handle, 30),
     representativeSku ? estimateDelivery([{ sku: representativeSku, qty: 1 }]) : Promise.resolve(null),
     getProductViewStats(product.handle),
+    getCachedReviewAiSummary(product.handle),
   ]);
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
@@ -500,6 +503,8 @@ export default async function ProductPage({ params }: Props) {
           </div>
         </section>
       ) : null}
+
+      <AiReviewSummary summary={reviewAi} />
 
       <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
 
