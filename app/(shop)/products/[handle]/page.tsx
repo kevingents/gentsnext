@@ -36,6 +36,8 @@ import { sortSizes } from "@/lib/sizing";
 import { stockForSkus, stockAvailable } from "@/lib/stock";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
+import { getProductViewStats } from "@/lib/social-proof";
+import { SocialProof } from "@/components/pdp/social-proof";
 
 export const dynamic = "force-dynamic";
 
@@ -170,13 +172,14 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
     getReviewSummary(product.handle),
     getPublishedReviews(product.handle, 30),
     representativeSku ? estimateDelivery([{ sku: representativeSku, qty: 1 }]) : Promise.resolve(null),
+    getProductViewStats(product.handle),
   ]);
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
@@ -428,6 +431,8 @@ export default async function ProductPage({ params }: Props) {
             cutoffHour={delivery?.cutoffHour ?? 16}
             mySize={mySize?.raw ?? null}
           />
+
+          <SocialProof stats={viewStats} />
 
           {String(attrs.pasvorm ?? "").trim() ? (
             <p className="mt-6 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
