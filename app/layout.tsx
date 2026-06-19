@@ -24,12 +24,28 @@ const body = Montserrat({
 const indexable = process.env.SITE_INDEXABLE === "true";
 const siteUrl = getSiteUrl();
 
+const SITE_DESC =
+  "GENTS is dé specialist voor je formele momenten. Pakken, overhemden, smoking en meer — betaalbare luxe voor elke gelegenheid.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: { default: "GENTS — Suits You", template: "%s | GENTS" },
-  description:
-    "GENTS is dé specialist voor je formele momenten. Pakken, overhemden, smoking en meer — betaalbare luxe voor elke gelegenheid.",
+  description: SITE_DESC,
   robots: indexable ? undefined : { index: false, follow: false },
+  // Site-brede social-cards (per-pagina metadata overschrijft titel/omschrijving/
+  // beeld). Het beeld komt automatisch uit app/opengraph-image.
+  openGraph: {
+    type: "website",
+    siteName: "GENTS",
+    title: "GENTS — Suits You",
+    description: SITE_DESC,
+    url: siteUrl,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GENTS — Suits You",
+    description: SITE_DESC,
+  },
 };
 
 /**
