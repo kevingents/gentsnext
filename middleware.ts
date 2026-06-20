@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALE_HEADER, PATH_HEADER, isLocale, type Locale } from "@/lib/i18n";
+import { matchRedirect } from "@/lib/redirects";
 
 /**
  * Centrale locale-resolver + legacy-redirects.
@@ -13,7 +14,7 @@ import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALE_HEADER, PATH_HEADER, isLocale, ty
  * Legacy (Shopify-tijdperk): /collections/<x>/products/<handle> → /products/<handle>,
  * met behoud van een eventueel locale-prefix.
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const url = request.nextUrl;
   const pathname = url.pathname;
   const seg = pathname.split("/")[1] || "";
@@ -37,6 +38,17 @@ export function middleware(request: NextRequest) {
   } else {
     const cookie = request.cookies.get(LOCALE_COOKIE)?.value || "";
     if (isLocale(cookie)) locale = cookie;
+  }
+
+  // Portal-beheerde redirects (op het canonieke, locale-loze pad). Fail-soft +
+  // gecachet (30s) zodat dit de routing nooit vertraagt of breekt.
+  const rd = await matchRedirect(path);
+  if (rd) {
+    if (/^https?:\/\//i.test(rd.target)) return NextResponse.redirect(rd.target, rd.status);
+    const to = url.clone();
+    to.pathname = (prefixed ? `/${locale}` : "") + (rd.target.startsWith("/") ? rd.target : `/${rd.target}`);
+    to.search = "";
+    return NextResponse.redirect(to, rd.status);
   }
 
   // Legacy collectie-product-URL → canonieke product-URL (locale-prefix behouden).
