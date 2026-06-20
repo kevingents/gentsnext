@@ -41,6 +41,7 @@ import { SocialProof } from "@/components/pdp/social-proof";
 import { getCachedReviewAiSummary } from "@/lib/review-summary";
 import { AiReviewSummary } from "@/components/reviews/ai-summary";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
+import { getProductContentOverride } from "@/lib/product-content";
 
 export const dynamic = "force-dynamic";
 
@@ -177,7 +178,7 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
@@ -186,7 +187,10 @@ export default async function ProductPage({ params }: Props) {
     representativeSku ? estimateDelivery([{ sku: representativeSku, qty: 1 }]) : Promise.resolve(null),
     getProductViewStats(product.handle),
     getCachedReviewAiSummary(product.handle),
+    getProductContentOverride(product.handle),
   ]);
+  // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde tekst.
+  const descriptionHtml = contentOverride?.descriptionHtml || product.descriptionHtml;
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
   // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
@@ -233,7 +237,7 @@ export default async function ProductPage({ params }: Props) {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.title,
-    description: stripHtml(product.descriptionHtml).slice(0, 5000),
+    description: stripHtml(descriptionHtml).slice(0, 5000),
     image: images.map((img) => img.url),
     brand: { "@type": "Brand", name: String(attrs.merk || product.vendor || "GENTS") },
     url: `${siteUrl}/products/${product.handle}`,
@@ -301,14 +305,14 @@ export default async function ProductPage({ params }: Props) {
   const materiaal = String(attrs.materiaal ?? "").trim();
 
   const accordionItems = [
-    ...(product.descriptionHtml
+    ...(descriptionHtml
       ? [
           {
             title: "Productomschrijving",
             content: (
               <div
                 className="max-w-none font-sans text-sm leading-relaxed text-ink-soft [&_a]:underline [&_h3]:mt-3 [&_h3]:font-medium [&_h3]:text-ink"
-                dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+                dangerouslySetInnerHTML={{ __html: descriptionHtml }}
               />
             ),
           },
