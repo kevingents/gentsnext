@@ -31,7 +31,11 @@ const MAP: Record<string, Swatch> = {
   lichtblauw: { hex: "#8FB3D9", family: "blauw" },
   donkerblauw: { hex: "#1E2F4D", family: "blauw" },
   navy: { hex: "#1A1A2E", family: "blauw" },
+  marine: { hex: "#1E2F4D", family: "blauw" },
+  marineblauw: { hex: "#1E2F4D", family: "blauw" },
+  kobalt: { hex: "#2B4FA2", family: "blauw" },
   "royal blue": { hex: "#2B4FA2", family: "blauw" },
+  royalblue: { hex: "#2B4FA2", family: "blauw" },
   "blauw wit": { hex: "#9DB7D4", family: "blauw", gradient: "linear-gradient(135deg,#2F4A6B 50%,#FFFFFF 50%)" },
   witblauw: { hex: "#C7D6E8", family: "blauw" },
   blauwgrijs: { hex: "#6B7A8F", family: "blauw" },
@@ -116,6 +120,20 @@ export function colorSwatch(name: string): Swatch {
     if (n.includes(needle)) return { hex, family };
   }
   return { hex: "#C9C7C2", family: "grijs" };
+}
+
+/**
+ * Haal een nette kleur-LABEL uit een vrije string (handle/titel) — de eerste
+ * herkende kleurterm. Voor als de bron geen losse kleurnaam heeft (bv. een
+ * MixMatch-handle "colbert-blend-navy-mixmatch" → "Navy"). Leeg als niets matcht.
+ */
+const KNOWN_COLOR_WORDS = Object.keys(MAP).sort((a, b) => b.length - a.length);
+export function extractColorLabel(s: string): string {
+  const n = normalize(s).replace(/[-_]+/g, " ");
+  for (const w of KNOWN_COLOR_WORDS) {
+    if (n.includes(w)) return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  return "";
 }
 
 export const COLOR_FAMILIES: { key: ColorFamily; label: string; hex: string }[] = [

@@ -13,8 +13,9 @@ import { RecentStrip } from "@/components/recent/recent-strip";
 import { ShareRow } from "@/components/pdp/share-row";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
-import { buildModelLook, resolveLook, getLookBuyData } from "@/lib/looks";
+import { buildModelLook, buildSuitLook, resolveLook, getLookBuyData } from "@/lib/looks";
 import { smartModelLook } from "@/lib/model-styling";
+import { getSuitPieceHandles } from "@/lib/suit-pairing";
 import { getSettings } from "@/lib/settings";
 import { getColorSiblings } from "@/lib/color-siblings";
 import { sortBySwatch } from "@/lib/colors";
@@ -198,22 +199,43 @@ export default async function ProductPage({ params }: Props) {
   // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
   // we maken die (samen met dit product) klikbaar/shoppbaar.
   const settings = await getSettings();
-  const modelLook = product.modelImageUrl
-    ? await smartModelLook(
-        {
-          handle: product.handle,
-          hoofdgroep,
-          title: product.title,
-          colorLabel: product.variantColorLabel,
-          modelImageUrl: product.modelImageUrl,
-        },
-        settings.modelLook,
-        settings.modelLook.minStock,
-      ).catch(() =>
-        // Val terug op de statische config als de slimme query faalt.
-        buildModelLook({ handle: product.handle, hoofdgroep, modelImageUrl: product.modelImageUrl, title: product.title }, settings.modelLook),
-      )
-    : null;
+  // MixMatch (USP): toon het samenstelbare pak — colbert + broek + gilet in dezelfde
+  // stof — i.p.v. de generieke basis-outfit. Valt terug op de slimme look.
+  const isMixMatch = String(attrs.mix_and_match || "") === "Ja" && ["Colberts", "Broeken", "Gilets"].includes(hoofdgroep);
+  let modelLook: Awaited<ReturnType<typeof smartModelLook>> = null;
+  if (isMixMatch && product.modelImageUrl) {
+    const suit = await getSuitPieceHandles(product.handle).catch(() => null);
+    if (suit) {
+      const baseItems = settings.modelLook.items || [];
+      const shirt = baseItems.find((i) => i.hoofdgroep === "Overhemden");
+      const shoes = baseItems.find((i) => i.hoofdgroep === "Schoenen");
+      modelLook = buildSuitLook({
+        currentHandle: product.handle,
+        modelImageUrl: product.modelImageUrl,
+        colbertHandle: suit.colbert,
+        broekHandle: suit.broek,
+        giletHandle: suit.gilet,
+        shirtHandle: shirt?.handle,
+        shoesHandle: shoes?.handle,
+      });
+    }
+  }
+  if (!modelLook && product.modelImageUrl) {
+    modelLook = await smartModelLook(
+      {
+        handle: product.handle,
+        hoofdgroep,
+        title: product.title,
+        colorLabel: product.variantColorLabel,
+        modelImageUrl: product.modelImageUrl,
+      },
+      settings.modelLook,
+      settings.modelLook.minStock,
+    ).catch(() =>
+      // Val terug op de statische config als de slimme query faalt.
+      buildModelLook({ handle: product.handle, hoofdgroep, modelImageUrl: product.modelImageUrl, title: product.title }, settings.modelLook),
+    );
+  }
   const resolvedModelLook = modelLook ? await resolveLook(modelLook) : null;
   // Koopdata (maten/sku/voorraad) per look-item → inline maat kiezen + toevoegen.
   const lookBuy = resolvedModelLook

@@ -1,6 +1,7 @@
 import { inArray, sql, asc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { products, productImages } from "@/db/schema";
+import { extractColorLabel } from "@/lib/colors";
 
 /**
  * Kleurvarianten van hetzelfde model ("ook verkrijgbaar in"). Bron: het
@@ -60,7 +61,9 @@ export async function getColorSiblings(
     if (!hit) continue;
     siblings.push({
       handle: hit.handle,
-      colorName: m.name,
+      // Naam uit de metafield; valt terug op een kleurwoord uit de handle (bv. de
+      // huidige variant heeft vaak een lege naam → "Navy" uit de handle).
+      colorName: m.name || extractColorLabel(hit.handle),
       imageUrl: hit.image || "",
       isCurrent: hit.handle === currentHandle,
     });

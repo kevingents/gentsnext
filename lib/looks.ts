@@ -363,6 +363,36 @@ export function buildModelLook(
   };
 }
 
+/**
+ * MixMatch-pak als "look": colbert + broek + gilet (de losse, in dezelfde stof
+ * combineerbare stukken — de GENTS-USP) + een wit overhemd en schoenen uit de
+ * basis-outfit. Gebruikt op de PDP van een MixMatch-stuk i.p.v. de generieke look.
+ */
+export function buildSuitLook(opts: {
+  currentHandle: string;
+  modelImageUrl: string;
+  colbertHandle?: string;
+  broekHandle?: string;
+  giletHandle?: string;
+  shirtHandle?: string;
+  shoesHandle?: string;
+}): Look {
+  const hotspots: Hotspot[] = [];
+  if (opts.shirtHandle) hotspots.push({ x: 50, y: 24, handle: opts.shirtHandle, label: "Overhemd" });
+  if (opts.colbertHandle) hotspots.push({ x: 50, y: 34, handle: opts.colbertHandle, label: "Colbert" });
+  if (opts.giletHandle) hotspots.push({ x: 50, y: 48, handle: opts.giletHandle, label: "Gilet" });
+  if (opts.broekHandle) hotspots.push({ x: 50, y: 72, handle: opts.broekHandle, label: "Pantalon" });
+  if (opts.shoesHandle) hotspots.push({ x: 50, y: 93, handle: opts.shoesHandle, label: "Schoenen" });
+  return {
+    slug: opts.currentHandle,
+    title: "Stel dit pak samen",
+    subtitle: "Mix & match — colbert, broek en gilet los te combineren in dezelfde stof.",
+    occasion: "Pak samenstellen",
+    image: opts.modelImageUrl,
+    hotspots,
+  };
+}
+
 export type ResolvedHotspot = Hotspot & { product: ProductCardData | null };
 export type ResolvedLook = Look & { products: ResolvedHotspot[] };
 

@@ -16,8 +16,12 @@ import { pickupInfoByCity } from "@/lib/stores";
  *  data en verschijnen daarom niet als samenstelbaar pak.)
  */
 
-const PREFIXES = ["COLBERT", "PANTALON", "BROEK", "GILET", "COL", "JAS", "PAN", "BRO", "TRO", "GIL", "VES", "VST", "WAI"]
-  .sort((a, b) => b.length - a.length);
+const PREFIXES = [
+  "COLBERT", "PANTALON", "BROEK", "GILET",
+  "DBCOL", "DPAN", "DGIL", "DCOL",
+  "COL", "JAS", "PAN", "BRO", "TRO", "GIL", "VES", "VST", "WAI", "BLZ",
+  "JK", "TS", "GL",
+].sort((a, b) => b.length - a.length);
 
 const ROLE_BY_HG: Record<string, "colbert" | "broek" | "gilet"> = {
   Colberts: "colbert",
@@ -121,6 +125,21 @@ export async function listSuits(): Promise<SuitCard[]> {
     });
   }
   return suits.sort((a, b) => a.fromCents - b.fromCents);
+}
+
+/** Snelle koppeling: geef voor een willekeurig MixMatch-stuk (colbert/broek/gilet)
+ *  de handles van het hele pak terug. Null als 't geen samenstelbaar pak is. */
+export async function getSuitPieceHandles(handle: string): Promise<{ colbert?: string; broek?: string; gilet?: string } | null> {
+  const groups = await fetchPieces();
+  for (const [, pieces] of groups) {
+    if (pieces.some((p) => p.handle === handle)) {
+      const out: { colbert?: string; broek?: string; gilet?: string } = {};
+      for (const p of pieces) out[p.role] = p.handle;
+      // Alleen een "pak" als er minstens colbert + broek is.
+      return out.colbert && out.broek ? out : null;
+    }
+  }
+  return null;
 }
 
 export type SuitPieceDetail = {
