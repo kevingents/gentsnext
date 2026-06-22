@@ -4,7 +4,6 @@ import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
-import { cleanModelTo45 } from "./clean-model";
 import { modelStylePrompt } from "@/lib/model-styling";
 
 /**
@@ -202,11 +201,9 @@ async function main() {
     console.log(`• ${r.handle} (${r.hg})`);
     const out = await runProductToModel(r.img, prompt, apiKey);
     if (out) {
-      // Nieuw formaat: model uitknippen op égale 4:5-studio (geen kader); val terug op padding.
-      const clean = await cleanModelTo45(out, process.env.FAL_KEY || "");
-      const u = clean
-        ? `${(await put(`ai-models/${r.handle}-model.jpg`, clean, { access: "public", token: blobToken, contentType: "image/jpeg", allowOverwrite: true })).url}?v=${Date.now()}`
-        : await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken);
+      // Behoud de zachte FASHN-studio-gradient (huisstijl) — pad naar 4:5, GEEN
+      // vlakke uitknip (die haalde de gradient eraf en gaf een 'kader').
+      const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken);
       if (u) {
         await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.title} — op model` }).where(eq(products.id, r.id));
         done++;

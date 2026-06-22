@@ -17,7 +17,7 @@
  */
 console.error(
   "✗ flatten-model-bg is afgeschaft (maakte achtergronden wit).\n" +
-    "  Gebruik in plaats daarvan:  npx tsx scripts/clean-model-bg.ts [handle-filter]\n" +
-    "  Dat zet modelfoto's op de site-achtergrond #F6F5F2 (uniform, geen wit).",
+    "  Gebruik:  npx tsx scripts/generate-model-photos.ts <aantal> <handles|redo>\n" +
+    "  Dat (her)genereert modelfoto's mét de zachte FASHN-studio-gradient (huisstijl).",
 );
 process.exit(1);
