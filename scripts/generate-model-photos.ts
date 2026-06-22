@@ -5,6 +5,7 @@ import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { cleanModelTo45 } from "./clean-model";
+import { modelStylePrompt } from "@/lib/model-styling";
 
 /**
  * AI-modelfoto's genereren met FASHN.ai **Product to Model** (model_name
@@ -58,26 +59,31 @@ const POSES_LOWER = [
 ];
 
 type Frame = "full" | "upper" | "lower";
-const STYLE: Record<string, { garment: string; frame: Frame }> = {
-  Pakken: { garment: "Male model wearing THIS suit, complete with a crisp white dress shirt and black leather oxford shoes.", frame: "full" },
-  Colberts: { garment: "Male model wearing THIS blazer over a crisp white dress shirt, with matching trousers and black leather shoes.", frame: "full" },
-  Gilets: { garment: "Male model wearing THIS waistcoat over a white dress shirt, with matching trousers and black leather shoes.", frame: "full" },
-  Jassen: { garment: "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.", frame: "full" },
-  Broeken: { garment: "Male model wearing THESE trousers with a tucked light dress shirt and leather shoes.", frame: "full" },
-  Overhemden: { garment: "Male model wearing THIS shirt, neatly styled with trousers.", frame: "upper" },
-  Truien: { garment: "Male model wearing THIS knitwear, styled with neat trousers.", frame: "upper" },
-  Vesten: { garment: "Male model wearing THIS cardigan/vest over a shirt, styled with neat trousers.", frame: "upper" },
-  "Polo-shirts": { garment: "Male model wearing THIS polo shirt, styled with neat trousers.", frame: "upper" },
-  "T-Shirts": { garment: "Male model wearing THIS t-shirt, styled casually with neat trousers.", frame: "upper" },
-  Schoenen: { garment: "Male model wearing THESE shoes with well-fitted trousers.", frame: "lower" },
+type StyleParts = { shirt: string; shoes: string };
+const STYLE: Record<string, { garment: (s: StyleParts) => string; frame: Frame }> = {
+  Pakken: { garment: (s) => `Male model wearing THIS suit, complete with ${s.shirt} and ${s.shoes}.`, frame: "full" },
+  Colberts: { garment: (s) => `Male model wearing THIS blazer over ${s.shirt}, with matching trousers and ${s.shoes}.`, frame: "full" },
+  Gilets: { garment: (s) => `Male model wearing THIS waistcoat over ${s.shirt}, with matching trousers and ${s.shoes}. The lowest button of the waistcoat is left open.`, frame: "full" },
+  Jassen: { garment: () => "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.", frame: "full" },
+  Broeken: { garment: (s) => `Male model wearing THESE trousers with a tucked ${s.shirt} and ${s.shoes}.`, frame: "full" },
+  Overhemden: { garment: () => "Male model wearing THIS shirt, neatly styled with trousers.", frame: "upper" },
+  Truien: { garment: () => "Male model wearing THIS knitwear, styled with neat trousers.", frame: "upper" },
+  Vesten: { garment: () => "Male model wearing THIS cardigan/vest over a shirt, styled with neat trousers.", frame: "upper" },
+  "Polo-shirts": { garment: () => "Male model wearing THIS polo shirt, styled with neat trousers.", frame: "upper" },
+  "T-Shirts": { garment: () => "Male model wearing THIS t-shirt, styled casually with neat trousers.", frame: "upper" },
+  Schoenen: { garment: () => "Male model wearing THESE shoes with well-fitted trousers.", frame: "lower" },
 };
 
-/** Bouwt de prompt: styling + een relaxte pose (geroteerd op volgnummer) + vaste studio. */
-function buildPrompt(cat: string, i: number): string | null {
+/**
+ * Bouwt de prompt: kleur-bewuste styling (warm pak → cognac/bruine schoenen,
+ * wit kraag-overhemd; volgens model-styling.ts) + een relaxte pose + vaste studio.
+ */
+function buildPrompt(cat: string, i: number, ctx: { color?: string | null; title: string; handle: string }): string | null {
   const s = STYLE[cat];
   if (!s) return null;
+  const style = modelStylePrompt(cat, ctx.color, ctx.title, ctx.handle);
   const pool = s.frame === "full" ? POSES_FULL : s.frame === "upper" ? POSES_UPPER : POSES_LOWER;
-  return `${s.garment} ${pool[i % pool.length]} ${STUDIO}`;
+  return `${s.garment(style)} ${pool[i % pool.length]} ${STUDIO}`;
 }
 
 /** Shopify-CDN-URL → master zonder width/height-cap (scherpste FASHN-input). */
@@ -171,8 +177,8 @@ async function main() {
   const db = getDb();
 
   const cats = onlyHg ? [onlyHg] : Object.keys(STYLE);
-  const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
-    select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
+  const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; vcl: string | null; img: string }>(sql`
+    select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg, p.variant_color_label vcl,
       (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
@@ -191,7 +197,7 @@ async function main() {
   let done = 0;
   let idx = 0;
   for (const r of rows.rows) {
-    const prompt = buildPrompt(r.hg, idx++);
+    const prompt = buildPrompt(r.hg, idx++, { color: r.vcl, title: r.title, handle: r.handle });
     if (!prompt || !r.img) continue;
     console.log(`• ${r.handle} (${r.hg})`);
     const out = await runProductToModel(r.img, prompt, apiKey);

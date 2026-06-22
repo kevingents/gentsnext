@@ -168,6 +168,35 @@ function pick(cands: Cand[], plan: { pref: Family[]; forbid: Family[]; patent?: 
 }
 
 /**
+ * Natuurlijke-taal styling voor de modelfoto-/look-generator (FASHN-prompt),
+ * volgens de GENTS-stijlregels: warme/gekleurde pakken (zand, koraal, groen,
+ * bordeaux, bruin…) → cognac/bruine schoenen; zwart alléén bij antraciet/zwart
+ * of black-tie (dan zwarte lak); altijd een net WIT overhemd met kraag.
+ * Hergebruikt dezelfde kleur-/formaliteitslogica als smartModelLook.
+ */
+export function modelStylePrompt(
+  hg: string,
+  colorLabel: string | null | undefined,
+  title: string,
+  handle: string,
+): { shirt: string; shoes: string } {
+  const formality = formalityOf(hg, title, handle);
+  const fam = famOf(colorLabel, title, handle);
+  const topShoe = colorPlan("shoes", formality, fam).pref[0];
+  const shoes =
+    formality === "black-tie"
+      ? "black patent leather formal shoes"
+      : topShoe === "brown" || topShoe === "tan"
+        ? "cognac brown leather shoes"
+        : "black leather shoes";
+  const shirt =
+    formality === "black-tie"
+      ? "a crisp white formal dress shirt"
+      : "a crisp white collared dress shirt";
+  return { shirt, shoes };
+}
+
+/**
  * Bouwt een slimme, voorraad-/etiquette-correcte Look rond de modelfoto.
  * Retourneert null als de feature uit staat of het product geen modelfoto heeft.
  */
