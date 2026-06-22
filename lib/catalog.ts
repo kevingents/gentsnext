@@ -76,6 +76,12 @@ export async function getCollectionByHandle(handle: string) {
   return rows[0] ?? null;
 }
 
+// Categorieën waar de PLP-kaart met de MODELFOTO leidt (apparel, gedragen oogt
+// editorial). Accessoires/schoenen blijven op de packshot — die tonen we 'heel'.
+const MODEL_LEAD_CATS = new Set([
+  "Pakken", "Colberts", "Gilets", "Broeken", "Overhemden", "Truien", "Vesten", "Polo-shirts", "T-Shirts", "Jassen",
+]);
+
 async function buildProductCards(
   base: { id: string; handle: string; title: string; vendor: string }[]
 ): Promise<ProductCardData[]> {
@@ -122,6 +128,7 @@ async function buildProductCards(
   const stockQtyById = new Map(prodMeta.map((m) => [m.id, m.stockQty]));
   // Hover-beeld: modelfoto wint, anders sfeerbeeld. Leeg = geen swap.
   const hoverById = new Map(prodMeta.map((m) => [m.id, (m.modelImageUrl || m.lifestyleImageUrl || "").trim()]));
+  const modelById = new Map(prodMeta.map((m) => [m.id, (m.modelImageUrl || "").trim()]));
   const categoryById = new Map(
     prodMeta.map((m) => [m.id, String((m.attributes as Record<string, unknown>)?.hoofdgroep_omschrijving || "")])
   );
@@ -189,14 +196,19 @@ async function buildProductCards(
     }
     // Vertaling (indien aanwezig) wint voor de weergavetitel.
     if (tl) displayTitle = tl;
+    // Apparel met een modelfoto: leid met de modelfoto (editorial), packshot op hover.
+    // Accessoires/schoenen of geen modelfoto: packshot leidt, modelfoto/sfeerbeeld op hover.
+    const pack = img?.url || "";
+    const model = modelById.get(p.id) || "";
+    const leadModel = Boolean(model) && MODEL_LEAD_CATS.has(categoryById.get(p.id) || "");
     return {
       id: p.id,
       handle: p.handle,
       title: displayTitle,
       vendor: p.vendor,
-      imageUrl: img?.url || "",
-      imageAlt: cleanAlt,
-      hoverImageUrl: hoverById.get(p.id) || "",
+      imageUrl: leadModel ? model : pack,
+      imageAlt: leadModel ? `${displayTitle} — op model` : cleanAlt,
+      hoverImageUrl: leadModel ? pack : hoverById.get(p.id) || "",
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,
