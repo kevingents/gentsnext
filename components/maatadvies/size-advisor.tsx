@@ -8,6 +8,13 @@ import {
   type SizeAdvice,
   type CategoryAdvice,
 } from "@/lib/sizing";
+import {
+  REFERENCE_BRANDS,
+  REFERENCE_LETTERS,
+  referenceAdvice,
+  type ReferenceBrand,
+  type ReferenceLetter,
+} from "@/lib/size-reference";
 
 const FITS: { key: FitPreference; label: string; hint: string }[] = [
   { key: "slim", label: "Slim", hint: "Strak, modern silhouet" },
@@ -64,6 +71,12 @@ export function SizeAdvisor() {
   const heightCm = num(height);
   const weightKg = num(weight);
   const ready = Boolean(heightCm && weightKg);
+
+  // Snelstart: bekende merkmaat → indicatief GENTS-advies (geen meting nodig).
+  const [showRef, setShowRef] = useState(false);
+  const [refBrand, setRefBrand] = useState<ReferenceBrand | "">("");
+  const [refLetter, setRefLetter] = useState<ReferenceLetter | "">("");
+  const refResult = refBrand && refLetter ? referenceAdvice(refBrand, refLetter, fit) : null;
 
   async function saveToProfile() {
     if (!advice) return;
@@ -128,6 +141,69 @@ export function SizeAdvisor() {
         className="space-y-7"
         noValidate
       >
+        {/* Snelstart: ken je je maat al bij een ander merk? */}
+        <div className="border border-line bg-surface p-4">
+          <button
+            type="button"
+            onClick={() => setShowRef((v) => !v)}
+            aria-expanded={showRef}
+            className="font-sans text-sm font-medium text-ink underline underline-offset-4"
+          >
+            {showRef ? "Verberg snelstart" : "Ken je je maat al bij een ander merk? (snelstart)"}
+          </button>
+          {showRef ? (
+            <div className="mt-4 space-y-4">
+              <div>
+                <span className="font-sans text-xs text-muted">Merk</span>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {REFERENCE_BRANDS.map((b) => (
+                    <button
+                      key={b.key}
+                      type="button"
+                      onClick={() => setRefBrand(b.key)}
+                      aria-pressed={refBrand === b.key}
+                      className={`border px-3 py-1.5 font-sans text-sm transition-colors ${refBrand === b.key ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"}`}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span className="font-sans text-xs text-muted">Jouw maat daar</span>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {REFERENCE_LETTERS.map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => setRefLetter(l)}
+                      aria-pressed={refLetter === l}
+                      className={`border px-3 py-1.5 font-sans text-sm transition-colors ${refLetter === l ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"}`}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {refResult ? (
+                <div className="border border-line bg-canvas p-4">
+                  <p className="label-brand">Indicatie GENTS-maat</p>
+                  <dl className="mt-2 space-y-1 font-sans text-sm">
+                    <div className="flex justify-between gap-4"><dt className="text-muted">Colbert / pak</dt><dd className="font-medium text-ink">{refResult.colbert.range ?? refResult.colbert.size}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-muted">Overhemd (boord)</dt><dd className="font-medium text-ink">{refResult.overhemd.size}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-muted">Pantalon</dt><dd className="font-medium text-ink">{refResult.broek.size}</dd></div>
+                  </dl>
+                  <p className="mt-3 font-sans text-xs leading-relaxed text-muted">
+                    Indicatie — merkmaten verschillen onderling. Vul hieronder je lengte &amp; gewicht in voor een zekerder advies, of pas je pasvorm aan.
+                  </p>
+                </div>
+              ) : (
+                <p className="font-sans text-xs text-muted">Kies een merk én je maat daar voor een indicatie.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
             <span className="font-sans text-sm font-medium text-ink">Lengte (cm)</span>
