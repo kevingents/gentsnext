@@ -51,8 +51,8 @@ export const LOOKS: Look[] = [
     occasion: "Zakelijk",
     image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/m-m-colbert-pw-antra-model.jpg",
     hotspots: [
-      { x: 50, y: 28, handle: "colbert-sjas-blauw", label: "Colbert" },
-      { x: 50, y: 46, handle: "smoking-ov-vadermoord-plisse", label: "Overhemd" },
+      { x: 50, y: 28, handle: "m-m-colbert-pw-antra", label: "Colbert" },
+      { x: 50, y: 46, handle: "overhemd-nos-wit", label: "Overhemd" },
       { x: 52, y: 40, handle: "set-das-manchet-pochet-wit", label: "Das & pochet" },
       { x: 50, y: 74, handle: "m-m-pantalon-blend-navy", label: "Pantalon" },
     ],
@@ -96,7 +96,7 @@ export const LOOKS: Look[] = [
     hotspots: [
       { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
       { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
-      { x: 50, y: 34, handle: "colbert-sjas-blauw", label: "Colbert" },
+      { x: 50, y: 34, handle: "colbert-ruit-katoen-linnen-lichtblauw", label: "Colbert" },
       { x: 50, y: 70, handle: "m-m-pantalon-blend-royalblue", label: "Pantalon" },
       { x: 50, y: 92, handle: "veterschoen-glad-tan", label: "Schoenen" },
     ],
