@@ -42,6 +42,7 @@ import { getCachedReviewAiSummary } from "@/lib/review-summary";
 import { AiReviewSummary } from "@/components/reviews/ai-summary";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getProductContentOverride } from "@/lib/product-content";
+import { getBlogPostsForProduct } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -178,7 +179,7 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride] = await Promise.all([
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
@@ -188,6 +189,7 @@ export default async function ProductPage({ params }: Props) {
     getProductViewStats(product.handle),
     getCachedReviewAiSummary(product.handle),
     getProductContentOverride(product.handle),
+    getBlogPostsForProduct(product.handle),
   ]);
   // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde tekst.
   const descriptionHtml = contentOverride?.descriptionHtml || product.descriptionHtml;
@@ -514,6 +516,26 @@ export default async function ProductPage({ params }: Props) {
       <AiReviewSummary summary={reviewAi} />
 
       <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
+
+      {blogPosts.length > 0 ? (
+        <section className="mt-20">
+          <p className="label-brand">In onze stijlgids</p>
+          <h2 className="mt-2 text-display-md">Lees hoe je dit draagt</h2>
+          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
+            {blogPosts.map((b) => (
+              <Link key={b.slug} href={`/blog/${b.slug}`} className="group block">
+                <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface">
+                  {b.heroImage ? (
+                    <Image src={b.heroImage} alt={b.title} fill sizes="(max-width: 640px) 100vw, 30vw" className="object-cover transition-transform duration-500 ease-brand group-hover:scale-[1.04]" />
+                  ) : null}
+                </div>
+                <p className="mt-2 label-brand !text-[0.62rem]">{b.occasion || "Stijlgids"}</p>
+                <h3 className="mt-0.5 font-sans text-sm leading-snug text-ink group-hover:underline">{b.title}</h3>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <RecentStrip exclude={product.handle} />
     </div>
