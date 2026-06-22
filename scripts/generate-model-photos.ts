@@ -136,12 +136,14 @@ async function padTo45(buf: Buffer): Promise<Buffer> {
     if (!w || !h) return buf;
     const target = 4 / 5, ratio = w / h;
     if (Math.abs(ratio - target) < 0.01) return buf;
-    const stripe = ratio < target
-      ? await sharp(buf).extract({ left: 0, top: 0, width: Math.max(2, Math.floor(w * 0.04)), height: h }).stats()
-      : await sharp(buf).extract({ left: 0, top: 0, width: w, height: Math.max(2, Math.floor(h * 0.04)) }).stats();
-    const background = { r: Math.round(stripe.channels[0].mean), g: Math.round(stripe.channels[1].mean), b: Math.round(stripe.channels[2].mean), alpha: 1 };
-    if (ratio < target) { const tw = Math.round(h * target); const left = Math.floor((tw - w) / 2); return sharp(buf).extend({ left, right: tw - w - left, background }).jpeg({ quality: 90 }).toBuffer(); }
-    const th = Math.round(w / target); const top = Math.floor((th - h) / 2); return sharp(buf).extend({ top, bottom: th - h - top, background }).jpeg({ quality: 90 }).toBuffer();
+    // 4:5-canvas dat het hele beeld omvat.
+    const cw = ratio < target ? Math.round(h * target) : w;
+    const ch = ratio < target ? h : Math.round(w / target);
+    // Vul de pad-zones met een uitvergrote, sterk geblurde versie van hetzelfde
+    // beeld → de zachte studio-gradient loopt NAADLOOS door naar boven/onder
+    // (geen vlakke balk/kader). Het scherpe beeld komt gecentreerd erbovenop.
+    const backdrop = await sharp(buf).resize(cw, ch, { fit: "cover" }).blur(40).toBuffer();
+    return sharp(backdrop).composite([{ input: buf, gravity: "center" }]).jpeg({ quality: 90 }).toBuffer();
   } catch { return buf; }
 }
 async function toBlob(url: string, path: string, token: string): Promise<string | null> {
