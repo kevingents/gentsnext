@@ -101,32 +101,48 @@ function toFullRes(url: string): string {
 }
 
 async function runProductToModel(productImage: string, prompt: string, apiKey: string): Promise<string | null> {
-  const start = await fetch(`${API}/run`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model_name: "product-to-model",
-      // FASHN levert meteen 4:5 (= onze tegel-ratio) → geen pad/crop, gradient
-      // loopt native tot de randen. padTo45 blijft als vangnet (no-op bij 4:5).
-      inputs: { product_image: toFullRes(productImage), prompt, output_format: "jpeg", aspect_ratio: "4:5" },
-    }),
-  });
-  if (!start.ok) {
-    console.error("  FASHN start-fout:", start.status, (await start.text()).slice(0, 200));
-    return null;
-  }
-  const { id } = await start.json();
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 2500));
-    const st = await fetch(`${API}/status/${id}`, { headers: { Authorization: `Bearer ${apiKey}` } });
-    if (!st.ok) continue;
-    const j = await st.json();
-    if (j.status === "completed" && j.output?.[0]) return j.output[0];
-    if (j.status === "failed") {
-      console.error("  FASHN faalde:", JSON.stringify(j.error).slice(0, 200));
+  // Retry+backoff: FASHN geeft onder load "UnavailableError/high load" — opnieuw
+  // proberen i.p.v. meteen opgeven (anders veel valse mislukkingen).
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let start: Response;
+    try {
+      start = await fetch(`${API}/run`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        // FASHN levert meteen 4:5 (= onze tegel-ratio) → geen pad/crop, gradient native.
+        body: JSON.stringify({ model_name: "product-to-model", inputs: { product_image: toFullRes(productImage), prompt, output_format: "jpeg", aspect_ratio: "4:5" } }),
+      });
+    } catch {
+      await new Promise((r) => setTimeout(r, 6000 * (attempt + 1)));
+      continue;
+    }
+    if (!start.ok) {
+      if (start.status === 429 || start.status >= 500) { await new Promise((r) => setTimeout(r, 8000 * (attempt + 1))); continue; }
+      console.error("  FASHN start-fout:", start.status, (await start.text()).slice(0, 160));
       return null;
     }
+    const { id } = await start.json();
+    let transient = false;
+    for (let i = 0; i < 80; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      let j: { status?: string; output?: string[]; error?: unknown };
+      try {
+        const st = await fetch(`${API}/status/${id}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!st.ok) continue;
+        j = await st.json();
+      } catch { continue; }
+      if (j.status === "completed" && j.output?.[0]) return j.output[0];
+      if (j.status === "failed") {
+        const msg = JSON.stringify(j.error || "").slice(0, 200);
+        if (/unavailable|high load|temporarily|rate|timeout/i.test(msg)) { transient = true; break; } // → retry
+        console.error("  FASHN faalde:", msg);
+        return null;
+      }
+    }
+    void transient;
+    await new Promise((r) => setTimeout(r, 6000 * (attempt + 1))); // backoff vóór nieuwe poging
   }
+  console.error("  opgegeven na retries");
   return null;
 }
 
@@ -206,7 +222,7 @@ async function main() {
 
   let done = 0, err = 0, seen = 0;
   const rowsArr = rows.rows;
-  const CONC = 5; // onder FASHN's 6-concurrency-limiet
+  const CONC = 3; // gentler onder FASHN-load (minder valse high-load-fouten)
   async function handle(r: (typeof rowsArr)[number], i: number) {
     try {
       const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
