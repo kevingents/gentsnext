@@ -172,7 +172,7 @@ async function main() {
     console.error("Zet FASHN_API_KEY en een blob-token (STOREGENTS_BLOB_READ_WRITE_TOKEN).");
     process.exit(1);
   }
-  const limit = Math.max(1, Math.min(300, Number(process.argv[2]) || 20));
+  const limit = Math.max(1, Math.min(500, Number(process.argv[2]) || 20));
   const arg3 = (process.argv[3] || "").trim();
   // "redo" → bestaande modelfoto's HERgeneren (bv. na een pose-wijziging); argv[4]
   // = optionele uitsluitlijst. Anders: één of meer handles (komma-gescheiden) voor
@@ -180,10 +180,10 @@ async function main() {
   const redoExisting = arg3.toLowerCase() === "redo";
   const handleList = redoExisting ? [] : arg3.split(",").map((h) => h.trim()).filter(Boolean);
   const excludeList = redoExisting ? (process.argv[4] || "").split(",").map((h) => h.trim()).filter(Boolean) : [];
-  const onlyHg = redoExisting ? "" : (process.argv[4] || "").trim(); // optioneel: beperk tot één hoofdgroep
+  const onlyHg = redoExisting ? "" : (process.argv[4] || "").trim(); // optioneel: beperk tot hoofdgroep(en), komma-gescheiden
   const db = getDb();
 
-  const cats = onlyHg ? [onlyHg] : Object.keys(STYLE);
+  const cats = onlyHg ? onlyHg.split(",").map((s) => s.trim()).filter(Boolean) : Object.keys(STYLE);
   const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; vcl: string | null; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg, p.variant_color_label vcl,
       (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
