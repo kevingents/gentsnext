@@ -4,6 +4,7 @@ import type { Settings } from "@/lib/settings";
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 import { sortSizes } from "@/lib/sizing";
+import { colorSwatch } from "@/lib/colors";
 
 /**
  * "Shop the look" — gecureerde outfits met klikbare hotspots op een modelfoto
@@ -24,6 +25,8 @@ export type Look = {
   image: string;
   /** Extra sfeerbeelden onder de hoofd-modelfoto (geen hotspots). */
   images?: string[];
+  /** Verhaal/styling-uitleg bij de look (storytelling) — alinea's gescheiden door \n\n. */
+  story?: string;
   hotspots: Hotspot[];
 };
 
@@ -224,6 +227,49 @@ export const LOOKS: Look[] = [
   },
 ];
 
+/**
+ * Storytelling per look (waarom deze combinatie + styling-logica, on-brand). Apart
+ * gehouden van de outfit-data zodat 't makkelijk te onderhouden/uit te breiden is.
+ * Sanity (look.story) overschrijft dit indien aanwezig.
+ */
+const LOOK_STORIES: Record<string, string> = {
+  bruiloftsgast:
+    "Een bruiloft vraagt om net iets meer dan doordeweeks, zonder de bruidegom te overschaduwen. Een blauw colbert met een wit overhemd en een nette pantalon zit precies goed: verzorgd, zomers en feestelijk.\n\nHoud de das subtiel en laat het colbert het werk doen — een outfit die past van de ceremonie tot het diner.",
+  "business-klassiek":
+    "Niets straalt zoveel rust en gezag uit als een onberispelijk antraciet pak. In de boardroom werkt ingetogen het sterkst: een wit overhemd, een verzorgde das en strakke lijnen.\n\nHoud accessoires subtiel — een pochet in wit of ijsblauw maakt het af zonder te schreeuwen.",
+  "gala-black-tie":
+    "Black tie is de meest formele dresscode die je tegenkomt, en juist daarom de makkelijkste: de regels doen het werk. Een zwarte smoking, een wit smokingoverhemd, een zwarte zelfstrik en lakschoenen — meer is het niet.\n\nDe onderste knoop van een gilet blijft open, en lakschoenen maken het plaatje compleet.",
+  "driedelig-klassiek":
+    "Het driedelige pak voegt een laag toe — letterlijk en figuurlijk. Het gilet geeft structuur en maakt elke verschijning net wat formeler en doordachter.\n\nDraag het gilet met de onderste knoop open, een wit overhemd eronder, en zwarte veterschoenen bij dit donkere navy.",
+  "zomerse-bruiloftsgast":
+    "Een zomerbruiloft in het zuiden vraagt om lucht en licht. Katoen-linnen in lichtblauw ademt mee met de dag en oogt moeiteloos elegant.\n\nCombineer met een wit overhemd, een lichtblauwe das en cognac schoenen — warme, lichte tinten vragen om bruin leer, nooit zwart.",
+  "smoking-compleet":
+    "De complete smoking, van jas tot lakschoen. Alles is op elkaar afgestemd zodat je je geen seconde druk hoeft te maken over de dresscode.\n\nZwarte zelfstrik, wit overhemd en lakschoenen — klassiek black tie, zonder twijfel.",
+  "rokkostuum-compleet":
+    "White tie is de hoogste dresscode die er is, gereserveerd voor de meest plechtige avonden. Het rokkostuum is compleet: rokjas, rokvest, wing-overhemd, witte piqué-strik, broek en lakschoen.\n\nHet rokvest hoort altijd bij de volledige rokjas — nooit los — en de witte strik onderscheidt white tie van black tie.",
+  uitvaart:
+    "Bij een uitvaart draait alles om respect en ingetogenheid. Een donker pak, een wit overhemd, een sobere das en zwarte schoenen — niets wat de aandacht trekt.\n\nKies gedekte tinten en houd accessoires tot een minimum; correct en stil is hier het uitgangspunt.",
+  "zakelijk-glencheck":
+    "Glen check geeft een klassiek pak net iets meer karakter zonder de zakelijke toon te verliezen. In blauw blijft het verzorgd en krachtig — ideaal voor wie wil opvallen met inhoud.\n\nEen wit overhemd en cognac schoenen houden het modern; het warme blauw vraagt om bruin leer.",
+  "bruiloft-linnen":
+    "Licht katoen-linnen in lichtblauw is gemaakt voor warme dagen buiten. Het valt soepel, kreukt met gratie en oogt altijd ontspannen-elegant.\n\nMet een wit overhemd, een lichtblauwe das en cognac schoenen ben je perfect gekleed voor een zomerbruiloft.",
+  examengala:
+    "Je gala is hét moment om net iets gewaagder te gaan. Midnight teal is donker genoeg om formeel te blijven, maar onderscheidt je van de zee aan zwarte pakken.\n\nEen zwarte strik en lakschoenen houden het feestelijk en af.",
+  "communie-lentefeest":
+    "Een communie of lentefeest is licht en vrolijk — je kleding mag dat weerspiegelen. Fris lichtblauw, driedelig, geeft een verzorgde maar ontspannen indruk.\n\nWit overhemd, een zachte das en cognac schoenen maken het compleet.",
+  sollicitatie:
+    "Bij een sollicitatie wil je betrouwbaar en scherp overkomen. Navy nailhead is precies dat: ingetogen van dichtbij, met diepte van veraf.\n\nHoud het clean — wit overhemd, subtiele das, cognac schoenen — en laat je verhaal de rest doen.",
+  feestdagen:
+    "De feestdagen mogen warmte uitstralen. Kastanjerood is feestelijk zonder te overdrijven en staat prachtig bij kaarslicht en diner.\n\nEen wit overhemd met een paisley das-en-pochet en cognac schoenen — warme tinten vragen om bruin leer.",
+};
+
+/** Voegt storytelling toe aan een look als die nog geen eigen story heeft. */
+function withStory(look: Look): Look {
+  if (look.story) return look;
+  const story = LOOK_STORIES[look.slug];
+  return story ? { ...look, story } : look;
+}
+
 /** Sanity-look → component-vorm (afbeelding via Sanity-CDN). */
 function fromSanity(s: {
   title: string;
@@ -231,6 +277,7 @@ function fromSanity(s: {
   occasion?: string;
   theme?: string;
   subtitle?: string;
+  story?: string;
   image?: unknown;
   gallery?: unknown[];
   hotspots?: { label?: string; handle?: string; x?: number; y?: number }[];
@@ -244,6 +291,7 @@ function fromSanity(s: {
     subtitle: s.subtitle || "",
     occasion: s.occasion || "",
     ...(s.theme ? { theme: s.theme } : {}),
+    ...(s.story ? { story: s.story } : {}),
     image,
     ...(images.length ? { images } : {}),
     hotspots: (s.hotspots || [])
@@ -262,19 +310,21 @@ export async function getAllLooks(): Promise<Look[]> {
   const fromCms = (sanity || []).map(fromSanity).filter(Boolean) as Look[];
   const bySlug = new Map<string, Look>(LOOKS.map((l) => [l.slug, l]));
   for (const l of fromCms) bySlug.set(l.slug, l);
-  return [...bySlug.values()];
+  return [...bySlug.values()].map(withStory);
 }
 
 /** Eén look op slug — Sanity eerst, dan statisch. */
 export async function getLookBySlug(slug: string): Promise<Look | null> {
   const s = await getSanityLook(slug);
   const fromCms = s ? fromSanity(s) : null;
-  return fromCms ?? LOOKS.find((l) => l.slug === slug) ?? null;
+  const look = fromCms ?? LOOKS.find((l) => l.slug === slug) ?? null;
+  return look ? withStory(look) : null;
 }
 
 /** Synchrone statische lookup (alleen fallback-data). */
 export function getLook(slug: string): Look | null {
-  return LOOKS.find((l) => l.slug === slug) ?? null;
+  const look = LOOKS.find((l) => l.slug === slug);
+  return look ? withStory(look) : null;
 }
 
 /**
@@ -363,4 +413,88 @@ export async function resolveLook(look: Look): Promise<ResolvedLook> {
     ...look,
     products: look.hotspots.map((h) => ({ ...h, product: byHandle.get(h.handle) ?? null })),
   };
+}
+
+/**
+ * Sfeerbeeld-galerij voor de look-detailpagina: verzamelt de sfeerbeelden
+ * (lifestyle_image_url) van de look-producten — hoofdgarment (pak/colbert) eerst —
+ * en kiest het mooiste als hero. Modelfoto's vullen de galerij aan. Zo wordt de
+ * look een editorial sfeerbeeld i.p.v. één studio-modelshot. Valt terug op de
+ * look-modelfoto als er nog geen sfeerbeelden zijn.
+ */
+export type LookGalleryImage = { url: string; alt: string; kind: "sfeer" | "model" };
+const GARMENT_PRIORITY = ["Pakken", "Colberts", "Jassen", "Gilets", "Broeken"];
+
+export async function getLookGallery(look: Look): Promise<{ hero: string; gallery: LookGalleryImage[] }> {
+  const handles = [...new Set(look.hotspots.map((h) => h.handle))];
+  if (!handles.length) return { hero: look.image, gallery: [] };
+  const db = getDb();
+  const rows = (
+    await db.execute<{ handle: string; hg: string; l1: string; l2: string; l3: string; m1: string }>(sql`
+      select p.handle, coalesce(p.attributes->>'hoofdgroep_omschrijving','') hg,
+        split_part(p.lifestyle_image_url,'?',1) l1, split_part(p.lifestyle_image_url2,'?',1) l2,
+        split_part(p.lifestyle_image_url3,'?',1) l3, split_part(p.model_image_url,'?',1) m1
+      from products p
+      where p.handle in (${sql.join(handles.map((h) => sql`${h}`), sql`, `)})
+    `)
+  ).rows;
+
+  const order = (hg: string) => { const i = GARMENT_PRIORITY.indexOf(hg); return i < 0 ? 99 : i; };
+  const sorted = [...rows].sort((a, b) => order(a.hg) - order(b.hg));
+
+  const sfeer: LookGalleryImage[] = [];
+  const model: LookGalleryImage[] = [];
+  const seen = new Set<string>();
+  for (const r of sorted) {
+    for (const u of [r.l1, r.l2, r.l3]) {
+      if (u && !seen.has(u)) { seen.add(u); sfeer.push({ url: u, alt: `${look.title} — sfeerbeeld`, kind: "sfeer" }); }
+    }
+    if (r.m1 && !seen.has(r.m1)) { seen.add(r.m1); model.push({ url: r.m1, alt: `${look.title} — op model`, kind: "model" }); }
+  }
+  const hero = sfeer[0]?.url || look.image;
+  const gallery = [...sfeer, ...model].filter((g) => g.url !== hero).slice(0, 8);
+  return { hero, gallery };
+}
+
+/**
+ * Kleurvarianten per look-product (zelfde variant_group_key, group_color_count>1).
+ * Geeft per basis-handle de kiesbare kleuren met swatch + modelfoto, zodat de
+ * look-detailpagina een kleur-switcher kan tonen die het product-/pakbeeld wisselt.
+ */
+export type LookColorOption = { handle: string; colorLabel: string; imageUrl: string; hex: string; gradient?: string; inStock: boolean };
+
+export async function getLookColorOptions(handles: string[]): Promise<Record<string, LookColorOption[]>> {
+  const uniq = [...new Set(handles.filter(Boolean))];
+  if (!uniq.length) return {};
+  const db = getDb();
+  const rows = (
+    await db.execute<{ base: string; handle: string; label: string; in_stock: boolean; m1: string; pack: string | null }>(sql`
+      with base as (
+        select handle, variant_group_key gk, group_color_count gc
+        from products where handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)})
+      )
+      select b.handle base, p.handle, coalesce(p.variant_color_label,'') label, p.in_stock,
+        split_part(p.model_image_url,'?',1) m1,
+        (select pi.url from product_images pi where pi.product_id = p.id order by pi.position asc limit 1) pack
+      from base b
+      join products p on p.variant_group_key = b.gk
+      where b.gk <> '' and b.gc > 1 and p.status = 'active' and p.has_image = true
+      order by b.handle, p.in_stock desc, p.variant_color_label asc
+    `)
+  ).rows;
+
+  const out: Record<string, LookColorOption[]> = {};
+  for (const r of rows) {
+    const sw = colorSwatch(r.label);
+    (out[r.base] ||= []).push({
+      handle: r.handle,
+      colorLabel: r.label || "Variant",
+      imageUrl: r.m1 || r.pack || "",
+      hex: sw.hex,
+      ...(sw.gradient ? { gradient: sw.gradient } : {}),
+      inStock: r.in_stock,
+    });
+  }
+  for (const k of Object.keys(out)) if (out[k].length < 2) delete out[k];
+  return out;
 }

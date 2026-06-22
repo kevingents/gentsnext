@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { CartProvider } from "@/components/cart/cart-context";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddedToCartToast } from "@/components/cart/added-toast";
+import { CartToast } from "@/components/cart/cart-toast";
 import { WishlistProvider } from "@/components/wishlist/wishlist-context";
 import { BackToTop } from "@/components/back-to-top";
 import { CookieNotice } from "@/components/cookie-notice";
@@ -27,6 +28,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           <SiteFooter />
           <CartDrawer />
           <AddedToCartToast />
+          <CartToast />
           <BackToTop />
           <HelpButton />
           <CookieNotice />
