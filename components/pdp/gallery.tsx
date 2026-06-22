@@ -44,7 +44,7 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
 
   const poster = images[0]?.url || "";
   const shots: Shot[] = [
-    ...(video ? [{ url: video, alt: `${title} — video`, video: true, contain: true }] : []),
+    ...(video ? [{ url: video, alt: `${title} — video`, video: true, contain: false }] : []),
     ...(showLarge ? [{ url: sizeMedia!.url, alt: sizeMedia!.alt || `${title} — grote maat`, badge: true }] : []),
     ...images.map((img, i) => ({ url: img.url, alt: altFor(img.alt, i), contain: img.contain })),
   ];
