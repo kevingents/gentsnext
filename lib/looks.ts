@@ -457,6 +457,36 @@ export async function getLookGallery(look: Look): Promise<{ hero: string; galler
 }
 
 /**
+ * Sfeerbeeld-hero per look in ÉÉN query — voor de looks-overzichtspagina, zodat de
+ * kaarten een sfeerbeeld tonen i.p.v. een studio-modelshot. Pakt per look het
+ * sfeerbeeld van het hoofdgarment (pak/colbert eerst). Looks zonder sfeerbeeld
+ * staan niet in de map → de pagina valt daar terug op look.image.
+ */
+export async function getLooksHeroes(looks: Look[]): Promise<Record<string, string>> {
+  const allHandles = [...new Set(looks.flatMap((l) => l.hotspots.map((h) => h.handle)))];
+  if (!allHandles.length) return {};
+  const db = getDb();
+  const rows = (
+    await db.execute<{ handle: string; hg: string; l1: string }>(sql`
+      select p.handle, coalesce(p.attributes->>'hoofdgroep_omschrijving','') hg, split_part(p.lifestyle_image_url, '?', 1) l1
+      from products p
+      where p.handle in (${sql.join(allHandles.map((h) => sql`${h}`), sql`, `)})
+    `)
+  ).rows;
+  const byHandle = new Map(rows.map((r) => [r.handle, r]));
+  const order = (hg: string) => { const i = GARMENT_PRIORITY.indexOf(hg); return i < 0 ? 99 : i; };
+  const out: Record<string, string> = {};
+  for (const look of looks) {
+    const best = [...new Set(look.hotspots.map((h) => h.handle))]
+      .map((h) => byHandle.get(h))
+      .filter((r): r is { handle: string; hg: string; l1: string } => Boolean(r && r.l1))
+      .sort((a, b) => order(a.hg) - order(b.hg))[0];
+    if (best) out[look.slug] = best.l1;
+  }
+  return out;
+}
+
+/**
  * Kleurvarianten per look-product (zelfde variant_group_key, group_color_count>1).
  * Geeft per basis-handle de kiesbare kleuren met swatch + modelfoto, zodat de
  * look-detailpagina een kleur-switcher kan tonen die het product-/pakbeeld wisselt.
