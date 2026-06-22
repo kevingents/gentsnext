@@ -136,14 +136,17 @@ async function padTo45(buf: Buffer): Promise<Buffer> {
     if (!w || !h) return buf;
     const target = 4 / 5, ratio = w / h;
     if (Math.abs(ratio - target) < 0.01) return buf;
-    // 4:5-canvas dat het hele beeld omvat.
-    const cw = ratio < target ? Math.round(h * target) : w;
-    const ch = ratio < target ? h : Math.round(w / target);
-    // Vul de pad-zones met een uitvergrote, sterk geblurde versie van hetzelfde
-    // beeld → de zachte studio-gradient loopt NAADLOOS door naar boven/onder
-    // (geen vlakke balk/kader). Het scherpe beeld komt gecentreerd erbovenop.
-    const backdrop = await sharp(buf).resize(cw, ch, { fit: "cover" }).blur(40).toBuffer();
-    return sharp(backdrop).composite([{ input: buf, gravity: "center" }]).jpeg({ quality: 90 }).toBuffer();
+    // Trek de RANDPIXELS door in de pad-zones (extendWith 'copy'). Boven het hoofd
+    // en onder de voeten is dat pure studio-achtergrond, dus de zachte gradient
+    // loopt naadloos door — GEEN vlakke balk én GEEN model-echo/spiegeling.
+    if (ratio > target) {
+      const th = Math.round(w / target);
+      const top = Math.floor((th - h) / 2);
+      return sharp(buf).extend({ top, bottom: th - h - top, extendWith: "copy" }).jpeg({ quality: 90 }).toBuffer();
+    }
+    const tw = Math.round(h * target);
+    const left = Math.floor((tw - w) / 2);
+    return sharp(buf).extend({ left, right: tw - w - left, extendWith: "copy" }).jpeg({ quality: 90 }).toBuffer();
   } catch { return buf; }
 }
 async function toBlob(url: string, path: string, token: string): Promise<string | null> {
