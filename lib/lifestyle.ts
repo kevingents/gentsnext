@@ -143,6 +143,11 @@ function blobPath(handle: string, slot: 1 | 2 | 3): string {
   return slot === 1 ? `ai-lifestyle/${handle}.jpg` : `ai-lifestyle/${handle}-${slot}.jpg`;
 }
 
+/** Apart pad voor een NIET-live kandidaat (overschrijft nooit het live-beeld). */
+function candidatePath(handle: string, slot: 1 | 2 | 3): string {
+  return `ai-lifestyle/_candidates/${handle}-${slot}-${Date.now()}.jpg`;
+}
+
 type ProdRow = { id: string; handle: string; title: string; hg: string; img: string; l1: string; l2: string; l3: string };
 
 async function loadProduct(handle: string): Promise<ProdRow | null> {
@@ -179,16 +184,35 @@ export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): 
 
   const out = await run({ product_image: toFullRes(r.img), prompt, output_format: "jpeg" }, key);
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
-  const url = await toBlob(out, blobPath(handle, slot), token);
+  /* KANDIDAAT: naar een apart pad → het live-beeld blijft ongemoeid tot goedkeuren. */
+  const url = await toBlob(out, candidatePath(handle, slot), token);
   if (!url) return { ok: false, error: "Upload naar blob mislukt." };
-
-  const patch: Record<string, string> = {};
-  if (slot === 1) { patch.lifestyleImageUrl = url; patch.lifestyleImageAlt = `${r.title} — sfeerbeeld`; }
-  else if (slot === 2) patch.lifestyleImageUrl2 = url;
-  else patch.lifestyleImageUrl3 = url;
-  await getDb().update(products).set(patch).where(eq(products.id, r.id));
-
   return { ok: true, url };
+}
+
+/** Zet een goedgekeurde kandidaat live op het slot (DB) en ruim de oude live-blob op. */
+export async function approveLifestyleCandidate(handle: string, slot: 1 | 2 | 3, url: string): Promise<{ ok: boolean; error?: string }> {
+  const u = String(url || "").trim();
+  if (!u) return { ok: false, error: "Geen kandidaat-URL." };
+  const r = await loadProduct(handle);
+  if (!r) return { ok: false, error: "Product niet gevonden." };
+  const prev = slot === 1 ? r.l1 : slot === 2 ? r.l2 : r.l3;
+  const patch: Record<string, string> = {};
+  if (slot === 1) { patch.lifestyleImageUrl = u; patch.lifestyleImageAlt = `${r.title} — sfeerbeeld`; }
+  else if (slot === 2) patch.lifestyleImageUrl2 = u;
+  else patch.lifestyleImageUrl3 = u;
+  await getDb().update(products).set(patch).where(eq(products.id, r.id));
+  if (prev && prev.split("?")[0] !== u.split("?")[0]) {
+    try { await del(prev.split("?")[0], { token: blobToken() }); } catch { /* blob al weg */ }
+  }
+  return { ok: true };
+}
+
+/** Verwerp een kandidaat die nooit live ging — verwijder de kandidaat-blob. */
+export async function discardLifestyleCandidate(url: string): Promise<{ ok: boolean }> {
+  const u = String(url || "").trim();
+  if (u) { try { await del(u.split("?")[0], { token: blobToken() }); } catch { /* al weg */ } }
+  return { ok: true };
 }
 
 /** Wis één sfeerbeeld-slot (db-veld leeg + blob verwijderen) — na afkeuren. */

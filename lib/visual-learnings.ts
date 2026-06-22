@@ -33,6 +33,8 @@ export type Learning = {
   url?: string;
   category: string;
   reason: string;
+  /** 'negative' = afgekeurd (vermijden), 'positive' = top/geweldig (zo houden). */
+  kind?: "positive" | "negative";
   at: string;
 };
 
@@ -56,7 +58,7 @@ export async function getVisualLearnings(): Promise<LearningsStore> {
 }
 
 /** Voeg een afkeuring/learning toe (nieuwste eerst, gecapt op 500). */
-export async function addLearning(input: { handle?: string; slot?: number; url?: string; category: string; reason: string }): Promise<LearningsStore> {
+export async function addLearning(input: { handle?: string; slot?: number; url?: string; category: string; reason: string; kind?: "positive" | "negative" }): Promise<LearningsStore> {
   const store = await getVisualLearnings();
   const entry: Learning = {
     handle: input.handle,
@@ -64,6 +66,7 @@ export async function addLearning(input: { handle?: string; slot?: number; url?:
     url: input.url,
     category: String(input.category || "kwaliteit"),
     reason: String(input.reason || "").trim().slice(0, 280),
+    kind: input.kind === "positive" ? "positive" : "negative",
     at: new Date().toISOString(),
   };
   const next: LearningsStore = {
@@ -87,13 +90,22 @@ export async function addLearning(input: { handle?: string; slot?: number; url?:
  */
 export function learningsPromptBlock(store: LearningsStore): string {
   if (!store.learnings.length) return "";
-  const cats = [...new Set(store.learnings.map((l) => l.category))];
+  const negatives = store.learnings.filter((l) => l.kind !== "positive");
+  const positives = store.learnings.filter((l) => l.kind === "positive");
+
+  const cats = [...new Set(negatives.map((l) => l.category))];
   const rules = cats
     .map((c) => REJECT_CATEGORIES[c as RejectCategory]?.rule)
     .filter(Boolean);
-  const reasons = [...new Set(store.learnings.map((l) => l.reason).filter((r) => r && r.length > 2))].slice(0, 15);
+  const avoid = [...new Set(negatives.map((l) => l.reason).filter((r) => r && r.length > 2))].slice(0, 15);
+  const liked = [...new Set(positives.map((l) => l.reason).filter((r) => r && r.length > 2))].slice(0, 15);
+
   let block = "";
   if (rules.length) block += ` IMPORTANT — style rules learned from team feedback, STRICTLY follow: ${rules.join("; ")}.`;
-  if (reasons.length) block += ` Also specifically avoid these noted problems: ${reasons.join("; ")}.`;
+  if (avoid.length) block += ` Also specifically avoid these noted problems: ${avoid.join("; ")}.`;
+  if (positives.length) {
+    block += ` The team marked ${positives.length} earlier image(s) as EXCELLENT — match that premium, on-brand editorial quality and feel.`;
+    if (liked.length) block += ` Specifically keep doing: ${liked.join("; ")}.`;
+  }
   return block;
 }

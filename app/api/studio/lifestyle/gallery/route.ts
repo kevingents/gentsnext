@@ -44,9 +44,11 @@ export async function GET(req: Request) {
     }));
 
     const learnings = await getVisualLearnings();
-    /* Afgewezen beelden (met bewaarde URL) voor de "Afgewezen"-tab in de portal —
+    const negatives = learnings.learnings.filter((l) => l.kind !== "positive");
+    const positives = learnings.learnings.filter((l) => l.kind === "positive");
+    /* Afgewezen beelden (negatief, met bewaarde URL) voor de "Afgewezen"-tab —
        nieuwste eerst, gecapt. Categorie-label erbij voor weergave. */
-    const rejected = learnings.learnings
+    const rejected = negatives
       .filter((l) => l.url)
       .slice(0, 120)
       .map((l) => ({
@@ -65,7 +67,8 @@ export async function GET(req: Request) {
       pageSize,
       items,
       categories: Object.entries(REJECT_CATEGORIES).map(([key, v]) => ({ key, label: v.label })),
-      learnings: { count: learnings.learnings.length, recent: learnings.learnings.slice(0, 30), updatedAt: learnings.updatedAt },
+      learnings: { count: negatives.length, recent: negatives.slice(0, 30), updatedAt: learnings.updatedAt },
+      likedCount: positives.length,
       rejected,
     });
   } catch (e) {

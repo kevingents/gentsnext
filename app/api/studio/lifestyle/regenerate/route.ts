@@ -8,8 +8,9 @@ export const maxDuration = 300; // FASHN product-to-model kan minuten duren
 
 /**
  * POST /api/studio/lifestyle/regenerate { handle, slot:1|2|3 }
- * Genereert één sfeerbeeld-slot opnieuw, mét de geleerde stijl-regels in de prompt.
- * Kost FASHN-credits → alleen op expliciete aanvraag. Auth: admin OF STUDIO_API_TOKEN.
+ * Genereert een KANDIDAAT-sfeerbeeld (mét de geleerde stijl-regels), nog NIET live —
+ * pas na /approve wordt het slot bijgewerkt. Kost FASHN-credits → alleen op expliciete
+ * aanvraag. Auth: admin OF STUDIO_API_TOKEN.
  */
 export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
