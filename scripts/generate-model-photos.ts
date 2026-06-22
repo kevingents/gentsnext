@@ -207,10 +207,10 @@ async function main() {
     try {
       const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
       if (!prompt || !r.img) return;
-      const out = await runProductToModel(r.img, prompt, apiKey);
+      const out = await runProductToModel(r.img, prompt, apiKey!);
       if (!out) { err++; return; }
       // FASHN levert native 4:5 (aspect_ratio); padTo45 is dan een no-op.
-      const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken);
+      const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken!);
       if (!u) { err++; return; }
       await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.title} — op model` }).where(eq(products.id, r.id));
       done++;
