@@ -105,7 +105,9 @@ async function runProductToModel(productImage: string, prompt: string, apiKey: s
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model_name: "product-to-model",
-      inputs: { product_image: toFullRes(productImage), prompt, output_format: "jpeg" },
+      // FASHN levert meteen 4:5 (= onze tegel-ratio) → geen pad/crop, gradient
+      // loopt native tot de randen. padTo45 blijft als vangnet (no-op bij 4:5).
+      inputs: { product_image: toFullRes(productImage), prompt, output_format: "jpeg", aspect_ratio: "4:5" },
     }),
   });
   if (!start.ok) {
