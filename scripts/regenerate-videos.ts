@@ -87,10 +87,11 @@ async function main() {
   const db = getDb();
   const arg = (process.argv[2] || "").trim();
 
-  // "failed": alleen video's die niet in de afgelopen 3u ververst zijn (v=-timestamp).
-  const cutoff = Date.now() - 3 * 3600 * 1000;
-  const onlyFailed = arg === "failed";
-  const onlyHandle = arg && arg !== "failed" ? arg : "";
+  // "failed"/"stale": alleen video's die OUDER zijn dan hun bron-modelfoto (de
+  // modelfoto is opnieuw gegenereerd ná de video → video is verouderd). Absoluut
+  // i.p.v. tijd-relatief, zodat al-correcte video's NIET opnieuw gedraaid worden.
+  const onlyFailed = arg === "failed" || arg === "stale";
+  const onlyHandle = arg && !onlyFailed ? arg : "";
 
   const rows = (
     await db.execute<Row>(sql`
@@ -98,7 +99,10 @@ async function main() {
       from products p
       where p.model_video_url <> '' and p.model_image_url <> ''
         ${onlyHandle ? sql`and p.handle = ${onlyHandle}` : sql``}
-        ${onlyFailed ? sql`and coalesce(cast(nullif(split_part(p.model_video_url, 'v=', 2), '') as bigint), 0) < ${cutoff}` : sql``}
+        ${onlyFailed
+          ? sql`and coalesce(cast(nullif(split_part(p.model_video_url, 'v=', 2), '') as bigint), 0)
+                  < coalesce(cast(nullif(split_part(p.model_image_url, 'v=', 2), '') as bigint), 0)`
+          : sql``}
       order by p.handle`)
   ).rows;
 
