@@ -95,6 +95,12 @@ export function BuyBox({
   }, [active, mySize, myBucket, size]);
   const isMySize = Boolean(size && myBucket && sizeRowLabel(size) === myBucket);
 
+  // One-size (bv. accessoires met maat "One"): meteen selecteren — geen maatkeuze nodig.
+  const oneSize = Boolean(active && active.sizes.length === 1);
+  useEffect(() => {
+    if (oneSize && active && !size) setSize(active.sizes[0].size);
+  }, [oneSize, active, size]);
+
   const selectedSize = useMemo(
     () => active?.sizes.find((s) => s.size === size) ?? null,
     [active, size]
@@ -185,28 +191,32 @@ export function BuyBox({
         </p>
       ) : null}
 
-      {/* Maat */}
+      {/* Maat — verborgen bij one-size (niets te kiezen). */}
       <div className="mt-6">
-        <div className="flex items-center justify-between">
-          <p className="font-sans text-sm font-medium">Maat</p>
-          <div className="flex items-center gap-3 font-sans text-xs">
-            {sizeChartHandle ? (
-              <Link href={`/pages/${sizeChartHandle}`} className="text-ink-soft underline underline-offset-4 hover:text-ink">
-                Maattabel
-              </Link>
+        {!oneSize ? (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="font-sans text-sm font-medium">Maat</p>
+              <div className="flex items-center gap-3 font-sans text-xs">
+                {sizeChartHandle ? (
+                  <Link href={`/pages/${sizeChartHandle}`} className="text-ink-soft underline underline-offset-4 hover:text-ink">
+                    Maattabel
+                  </Link>
+                ) : null}
+                <Link href="/maatadvies" className="text-ink underline underline-offset-4">
+                  Vind mijn maat
+                </Link>
+              </div>
+            </div>
+            {active ? (
+              <SizeMatrix
+                sizes={active.sizes}
+                hoofdgroep={hoofdgroep}
+                selected={size}
+                onSelect={setSize}
+              />
             ) : null}
-            <Link href="/maatadvies" className="text-ink underline underline-offset-4">
-              Vind mijn maat
-            </Link>
-          </div>
-        </div>
-        {active ? (
-          <SizeMatrix
-            sizes={active.sizes}
-            hoofdgroep={hoofdgroep}
-            selected={size}
-            onSelect={setSize}
-          />
+          </>
         ) : null}
         {isMySize ? (
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-card bg-surface px-2.5 py-1 font-sans text-xs text-ink-soft">
@@ -267,7 +277,7 @@ export function BuyBox({
               disabled={!size || soldOut}
               className="btn-primary w-full"
             >
-              {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : `In winkelwagen — maat ${size}`}
+              {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : oneSize ? "In winkelwagen" : `In winkelwagen — maat ${size}`}
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
