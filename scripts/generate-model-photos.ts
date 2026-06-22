@@ -5,6 +5,7 @@ import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { modelStylePrompt } from "@/lib/model-styling";
+import { getModelLearnings, modelLearningsBlock } from "@/lib/model-learnings";
 
 /**
  * AI-modelfoto's genereren met FASHN.ai **Product to Model** (model_name
@@ -200,6 +201,9 @@ async function main() {
   `);
   console.log(`⏳ ${rows.rows.length} producten te verwerken (product-to-model)…`);
 
+  // Geleerde model-smaak (goed-/afkeuringen uit de portal Modellen-studio).
+  const learnBlock = modelLearningsBlock(await getModelLearnings());
+
   let done = 0, err = 0, seen = 0;
   const rowsArr = rows.rows;
   const CONC = 5; // onder FASHN's 6-concurrency-limiet
@@ -207,7 +211,7 @@ async function main() {
     try {
       const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
       if (!prompt || !r.img) return;
-      const out = await runProductToModel(r.img, prompt, apiKey!);
+      const out = await runProductToModel(r.img, prompt + learnBlock, apiKey!);
       if (!out) { err++; return; }
       // FASHN levert native 4:5 (aspect_ratio); padTo45 is dan een no-op.
       const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken!);
