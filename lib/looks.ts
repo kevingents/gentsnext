@@ -129,6 +129,99 @@ export const LOOKS: Look[] = [
       { x: 50, y: 93, handle: "lakschoen", label: "Schoenen" },
     ],
   },
+  {
+    slug: "uitvaart",
+    title: "Gepast bij een uitvaart",
+    subtitle: "Sober en correct — een donker pak, wit overhemd, ingetogen das en zwarte schoenen.",
+    occasion: "Uitvaart",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-persignori-ruit-donkergrijs-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-clip-on-donkerblauw", label: "Das" },
+      { x: 50, y: 40, handle: "pak-persignori-ruit-donkergrijs", label: "Pak" },
+      { x: 50, y: 93, handle: "veterschoen-glad-zwart", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "zakelijk-glencheck",
+    title: "Zakelijk met karakter",
+    subtitle: "Glen check in blauw — krachtig en verzorgd voor de boardroom.",
+    occasion: "Zakelijk",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-glen-check-blauw-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
+      { x: 50, y: 40, handle: "pak-glen-check-blauw", label: "Pak" },
+      { x: 50, y: 93, handle: "leder-classic-cognac", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "bruiloft-linnen",
+    title: "Bruiloftsgast in linnen",
+    subtitle: "Licht katoen-linnen in lichtblauw — zomers, elegant en comfortabel.",
+    occasion: "Bruiloft",
+    theme: "Italiaanse zomer",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-katoen-linnen-lichtblauw-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
+      { x: 50, y: 40, handle: "pak-katoen-linnen-lichtblauw", label: "Pak" },
+      { x: 50, y: 93, handle: "leder-classic-cognac", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "examengala",
+    title: "Examengala",
+    subtitle: "Midnight teal met een zwarte strik — opvallend en gepast op je gala.",
+    occasion: "Examengala",
+    theme: "Galabal",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-midnight-teal-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "strik-poly-zwart", label: "Strik" },
+      { x: 50, y: 40, handle: "pak-midnight-teal", label: "Pak" },
+      { x: 50, y: 93, handle: "lakschoen", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "communie-lentefeest",
+    title: "Communie & lentefeest",
+    subtitle: "Fris lichtblauw, driedelig — net gekleed voor het feest.",
+    occasion: "Communie",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-lichtblauw-3-delig-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
+      { x: 50, y: 40, handle: "pak-lichtblauw-3-delig", label: "Pak" },
+      { x: 50, y: 93, handle: "leder-classic-cognac", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "sollicitatie",
+    title: "Sollicitatiegesprek",
+    subtitle: "Verzorgd navy nailhead — betrouwbaar, scherp en zelfverzekerd.",
+    occasion: "Sollicitatie",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-nailhead-blauw-1-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-pe-lichtblauw", label: "Das" },
+      { x: 50, y: 40, handle: "pak-nailhead-blauw-1", label: "Pak" },
+      { x: 50, y: 93, handle: "leder-classic-cognac", label: "Schoenen" },
+    ],
+  },
+  {
+    slug: "feestdagen",
+    title: "Feestdagen",
+    subtitle: "Kastanjerood — warm en feestelijk voor de kerstdagen en het diner.",
+    occasion: "Feestdagen",
+    image: "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/ai-models/pak-kastanje-rood-1-model.jpg",
+    hotspots: [
+      { x: 50, y: 22, handle: "overhemd-nos-wit", label: "Overhemd" },
+      { x: 55, y: 28, handle: "stropdas-met-pochet-paisley-ecru", label: "Das & pochet" },
+      { x: 50, y: 40, handle: "pak-kastanje-rood-1", label: "Pak" },
+      { x: 50, y: 93, handle: "leder-classic-cognac", label: "Schoenen" },
+    ],
+  },
 ];
 
 /** Sanity-look → component-vorm (afbeelding via Sanity-CDN). */
@@ -159,11 +252,17 @@ function fromSanity(s: {
   };
 }
 
-/** Alle looks — uit Sanity (beheerbaar), met statische fallback. */
+/**
+ * Alle looks — de in code gedefinieerde LOOKS als basis (altijd aanwezig),
+ * met Sanity-looks die op slug overschrijven of toevoegen (beheerbaar op /studio).
+ * Zo verschijnen de vaste occasion-looks gegarandeerd, en blijft de CMS uitbreidbaar.
+ */
 export async function getAllLooks(): Promise<Look[]> {
   const sanity = await getSanityLooks();
   const fromCms = (sanity || []).map(fromSanity).filter(Boolean) as Look[];
-  return fromCms.length ? fromCms : LOOKS;
+  const bySlug = new Map<string, Look>(LOOKS.map((l) => [l.slug, l]));
+  for (const l of fromCms) bySlug.set(l.slug, l);
+  return [...bySlug.values()];
 }
 
 /** Eén look op slug — Sanity eerst, dan statisch. */
