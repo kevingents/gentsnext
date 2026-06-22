@@ -425,6 +425,24 @@ export async function resolveLook(look: Look): Promise<ResolvedLook> {
 export type LookGalleryImage = { url: string; alt: string; kind: "sfeer" | "model" };
 const GARMENT_PRIORITY = ["Pakken", "Colberts", "Jassen", "Gilets", "Broeken"];
 
+/**
+ * Per-look, gelegenheid-passende sfeerbeelden (gegenereerd door
+ * scripts/generate-look-sfeer.ts, opgeslagen in app_settings 'lookSfeer' als
+ * { looks: { <slug>: [hero, ...galerij] } }). Krijgt voorrang boven de
+ * product-sfeerbeelden, zodat een zakelijke look een stads-scène toont en een
+ * gala een avond-scène, i.p.v. de categorie-mood. Leeg = nog niet gegenereerd.
+ */
+async function getLookSfeerStore(): Promise<Record<string, string[]>> {
+  try {
+    const db = getDb();
+    const rows = await db.execute<{ data: unknown }>(sql`select data from app_settings where id = 'lookSfeer' limit 1`);
+    const d = rows.rows[0]?.data as { looks?: Record<string, string[]> } | undefined;
+    return d?.looks && typeof d.looks === "object" ? d.looks : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function getLookGallery(look: Look): Promise<{ hero: string; gallery: LookGalleryImage[] }> {
   const handles = [...new Set(look.hotspots.map((h) => h.handle))];
   if (!handles.length) return { hero: look.image, gallery: [] };
@@ -451,6 +469,13 @@ export async function getLookGallery(look: Look): Promise<{ hero: string; galler
     }
     if (r.m1 && !seen.has(r.m1)) { seen.add(r.m1); model.push({ url: r.m1, alt: `${look.title} — op model`, kind: "model" }); }
   }
+  // Gelegenheid-specifieke look-sfeerbeelden krijgen voorrang (hero + galerij).
+  const own = (await getLookSfeerStore())[look.slug] || [];
+  if (own.length) {
+    const ownGallery: LookGalleryImage[] = own.slice(1).map((u) => ({ url: u, alt: `${look.title} — sfeerbeeld`, kind: "sfeer" }));
+    const extra = [...sfeer, ...model].filter((g) => !own.includes(g.url));
+    return { hero: own[0], gallery: [...ownGallery, ...extra].slice(0, 8) };
+  }
   const hero = sfeer[0]?.url || look.image;
   const gallery = [...sfeer, ...model].filter((g) => g.url !== hero).slice(0, 8);
   return { hero, gallery };
@@ -475,8 +500,11 @@ export async function getLooksHeroes(looks: Look[]): Promise<Record<string, stri
   ).rows;
   const byHandle = new Map(rows.map((r) => [r.handle, r]));
   const order = (hg: string) => { const i = GARMENT_PRIORITY.indexOf(hg); return i < 0 ? 99 : i; };
+  const store = await getLookSfeerStore();
   const out: Record<string, string> = {};
   for (const look of looks) {
+    // Gelegenheid-specifiek look-sfeerbeeld wint; anders het hoofdgarment-sfeerbeeld.
+    if (store[look.slug]?.[0]) { out[look.slug] = store[look.slug][0]; continue; }
     const best = [...new Set(look.hotspots.map((h) => h.handle))]
       .map((h) => byHandle.get(h))
       .filter((r): r is { handle: string; hg: string; l1: string } => Boolean(r && r.l1))
