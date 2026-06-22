@@ -44,6 +44,20 @@ export async function GET(req: Request) {
     }));
 
     const learnings = await getVisualLearnings();
+    /* Afgewezen beelden (met bewaarde URL) voor de "Afgewezen"-tab in de portal —
+       nieuwste eerst, gecapt. Categorie-label erbij voor weergave. */
+    const rejected = learnings.learnings
+      .filter((l) => l.url)
+      .slice(0, 120)
+      .map((l) => ({
+        url: l.url as string,
+        handle: l.handle || "",
+        slot: l.slot ?? null,
+        category: l.category,
+        categoryLabel: REJECT_CATEGORIES[l.category as keyof typeof REJECT_CATEGORIES]?.label || l.category,
+        reason: l.reason || "",
+        at: l.at,
+      }));
     return NextResponse.json({
       ok: true,
       total: Number(n) || 0,
@@ -52,6 +66,7 @@ export async function GET(req: Request) {
       items,
       categories: Object.entries(REJECT_CATEGORIES).map(([key, v]) => ({ key, label: v.label })),
       learnings: { count: learnings.learnings.length, recent: learnings.learnings.slice(0, 30), updatedAt: learnings.updatedAt },
+      rejected,
     });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
