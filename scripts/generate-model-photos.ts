@@ -200,24 +200,29 @@ async function main() {
   `);
   console.log(`⏳ ${rows.rows.length} producten te verwerken (product-to-model)…`);
 
-  let done = 0;
-  let idx = 0;
-  for (const r of rows.rows) {
-    const prompt = buildPrompt(r.hg, idx++, { color: r.vcl, title: r.title, handle: r.handle });
-    if (!prompt || !r.img) continue;
-    console.log(`• ${r.handle} (${r.hg})`);
-    const out = await runProductToModel(r.img, prompt, apiKey);
-    if (out) {
-      // Behoud de zachte FASHN-studio-gradient (huisstijl) — pad naar 4:5, GEEN
-      // vlakke uitknip (die haalde de gradient eraf en gaf een 'kader').
+  let done = 0, err = 0, seen = 0;
+  const rowsArr = rows.rows;
+  const CONC = 5; // onder FASHN's 6-concurrency-limiet
+  async function handle(r: (typeof rowsArr)[number], i: number) {
+    try {
+      const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
+      if (!prompt || !r.img) return;
+      const out = await runProductToModel(r.img, prompt, apiKey);
+      if (!out) { err++; return; }
+      // FASHN levert native 4:5 (aspect_ratio); padTo45 is dan een no-op.
       const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken);
-      if (u) {
-        await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.title} — op model` }).where(eq(products.id, r.id));
-        done++;
-      }
-    }
+      if (!u) { err++; return; }
+      await db.update(products).set({ modelImageUrl: u, modelImageAlt: `${r.title} — op model` }).where(eq(products.id, r.id));
+      done++;
+    } catch { err++; }
   }
-  console.log(`\n✓ Klaar — ${done} modelfoto's gegenereerd. Controleer/keur ze; ze leiden nu de galerij.`);
+  for (let i = 0; i < rowsArr.length; i += CONC) {
+    const chunk = rowsArr.slice(i, i + CONC);
+    await Promise.all(chunk.map((r, j) => handle(r, i + j)));
+    seen = Math.min(i + CONC, rowsArr.length);
+    console.log(`  …${seen}/${rowsArr.length} (klaar ${done}, fout ${err})`);
+  }
+  console.log(`\n✓ Klaar — ${done} modelfoto's gegenereerd, ${err} fout. Ze leiden de galerij.`);
   process.exit(0);
 }
 
