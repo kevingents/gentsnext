@@ -1,4 +1,5 @@
 import type { Locale } from "@/lib/i18n";
+import { SITE_CATALOG } from "@/lib/messages-catalog";
 
 /**
  * UI-teksten per taal. Ontbrekende sleutels/talen vallen terug op Nederlands,
@@ -159,16 +160,20 @@ const es: Dict = {
 
 const DICTS: Record<Locale, Dict> = { nl, en, de, fr, es };
 
+// NL-bron voor de hele site = handmatig gecureerde dict bovenop de auto-catalogus
+// (lib/messages-catalog, uit de i18n-inventarisatie). Handmatige nl wint bij overlap.
+const NL_ALL: Dict = { ...SITE_CATALOG, ...nl };
+
 /** Alle bekende NL-bronsleutels (voor de vertaal-cron: dit is de bron-van-waarheid). */
 export function uiSourceKeys(): { key: string; source: string }[] {
-  return Object.entries(nl).map(([key, source]) => ({ key, source }));
+  return Object.entries(NL_ALL).map(([key, source]) => ({ key, source }));
 }
 
 export function t(key: string, locale: Locale): string {
-  return DICTS[locale]?.[key] ?? nl[key] ?? key;
+  return DICTS[locale]?.[key] ?? NL_ALL[key] ?? key;
 }
 
 /** Hele woordenboek voor een locale (voor de client-provider). */
 export function messagesFor(locale: Locale): Dict {
-  return { ...nl, ...(DICTS[locale] || {}) };
+  return { ...NL_ALL, ...(DICTS[locale] || {}) };
 }

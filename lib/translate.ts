@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings, productTranslations } from "@/db/schema";
 import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
-import { messagesFor, uiSourceKeys } from "@/lib/messages";
+import { uiSourceKeys } from "@/lib/messages";
 
 /**
  * Vertaal-engine (server). Eén bron voor de CLI-scripts én de nachtelijke cron.
@@ -160,17 +160,19 @@ export function ensureUi(locale: Locale) {
 }
 
 /**
- * Volledige UI-dictionary voor de client-provider: statische dict (nl + locale)
- * met de cron-vertalingen uit de store eroverheen. Server-only (DB-lezen).
+ * Cron-vertalingen (UI) voor de client-provider — alléén de overrides voor deze
+ * locale, niet de hele NL-catalogus (die zit al in de client-bundle via t()).
+ * Zo blijft de per-pagina payload klein. NL → undefined (client gebruikt bundle).
+ * Server-only (DB-lezen).
  */
-export async function getUiMessages(locale: Locale): Promise<Record<string, string>> {
-  const base = messagesFor(locale);
-  if (locale === DEFAULT_LOCALE) return base;
+export async function getUiMessages(locale: Locale): Promise<Record<string, string> | undefined> {
+  if (locale === DEFAULT_LOCALE) return undefined;
   const store = await getTranslationStore(locale);
+  const out: Record<string, string> = {};
   for (const [k, val] of Object.entries(store)) {
-    if (k.startsWith("ui:") && val?.v) base[k.slice(3)] = val.v;
+    if (k.startsWith("ui:") && val?.v) out[k.slice(3)] = val.v;
   }
-  return base;
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Eén content-veld vertaald ophalen (sync, uit een eerder geladen store). */
