@@ -437,6 +437,47 @@ export async function getOrderForViewer(
   return tokenOk || ownerOk ? data : null;
 }
 
+/**
+ * "Bestel opnieuw": resolve de regels van een eerdere order naar de HUIDIGE
+ * varianten (sku/prijs/voorraad op handle+maat). Alleen op voorraad zijnde regels
+ * zijn toevoegbaar; de rest komt als "unavailable" terug. Viewer-beveiligd.
+ */
+export type ReorderLine = {
+  sku: string; productHandle: string; title: string; size: string; color: string;
+  priceCents: number; imageUrl: string; qty: number; hoofdgroep?: string;
+};
+export async function resolveReorder(
+  orderNumber: string,
+  opts: { token?: string | null; customerId?: string | null },
+): Promise<{ addable: ReorderLine[]; unavailable: string[] } | null> {
+  const data = await getOrderForViewer(orderNumber, opts);
+  if (!data) return null;
+  const db = getDb();
+  const addable: ReorderLine[] = [];
+  const unavailable: string[] = [];
+  for (const l of data.lines) {
+    if (!l.productHandle) { unavailable.push(l.title); continue; }
+    const r = (
+      await db.execute<{ sku: string; price_cents: number; stock_qty: number; hg: string | null; img: string | null }>(sql`
+        select v.sku, v.price_cents, v.stock_qty, p.attributes->>'hoofdgroep_omschrijving' hg,
+          (select pi.url from product_images pi where pi.product_id = p.id order by pi.position asc limit 1) img
+        from products p join product_variants v on v.product_id = p.id
+        where p.handle = ${l.productHandle} and p.status = 'active' and coalesce(v.size, '') = ${l.size || ""}
+        limit 1`)
+    ).rows[0];
+    if (r && Number(r.stock_qty) > 0) {
+      addable.push({
+        sku: r.sku, productHandle: l.productHandle, title: l.title, size: l.size || "",
+        color: l.color || "", priceCents: Number(r.price_cents) || 0, imageUrl: r.img || "",
+        qty: Math.max(1, l.quantity), hoofdgroep: r.hg || undefined,
+      });
+    } else {
+      unavailable.push(l.title + (l.size ? ` (maat ${l.size})` : ""));
+    }
+  }
+  return { addable, unavailable };
+}
+
 /** Post-purchase extra's voor de bedankpagina: verzorgingstips + cross-sell. */
 export async function getPostPurchase(
   handles: string[]

@@ -9,6 +9,7 @@ import { TrackPurchase } from "@/components/analytics/track-purchase";
 import { CareBlock } from "@/components/pdp/care-material";
 import { ProductCard } from "@/components/product-card";
 import { OrderStatusPoller } from "@/components/order/order-status-poller";
+import { ReorderButton } from "@/components/order/reorder-button";
 
 export const dynamic = "force-dynamic";
 
@@ -146,9 +147,12 @@ export default async function OrderPage({ params, searchParams }: Props) {
         </section>
       ) : null}
 
-      <Link href="/" className="btn-ghost mt-12">
-        Verder winkelen
-      </Link>
+      <div className="mt-12 flex flex-wrap items-center gap-3">
+        <Link href="/" className="btn-ghost">
+          Verder winkelen
+        </Link>
+        {paid ? <ReorderButton orderNumber={order.orderNumber} token={t} /> : null}
+      </div>
     </div>
   );
 }
