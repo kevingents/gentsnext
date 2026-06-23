@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrderForViewer, getPostPurchase } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";
+import { allocateOrder, type FulfillmentPlan } from "@/lib/fulfillment";
 import { getSessionCustomer } from "@/lib/account";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
@@ -34,6 +35,15 @@ function addBusinessDays(from: Date, days: number): Date {
 }
 function fmtDate(d: Date): string {
   return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+}
+
+// Verzonnen picker-namen — deterministisch per filiaal, zodat dezelfde winkel
+// altijd dezelfde "collega" toont (persoonlijke touch op de bevestiging).
+const PICKERS = ["Tom", "Lars", "Sem", "Daan", "Bram", "Niek", "Ruben", "Joost", "Tim", "Stijn", "Koen", "Bas", "Mark", "Jeroen", "Pim", "Thijs", "Wouter", "Gijs", "Rik", "Sven"];
+function pickerName(branchId: string): string {
+  let h = 0;
+  for (const c of String(branchId || "0")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return PICKERS[h % PICKERS.length];
 }
 
 /** Eén stap in het "wat er nu gebeurt"-stappenplan (Coolblue-stijl). */
@@ -77,6 +87,19 @@ export default async function OrderPage({ params, searchParams }: Props) {
   const deliveryDate = settings
     ? addBusinessDays(new Date(order.createdAt), isExpress ? Math.max(1, settings.expressTransitDays) : settings.standardMaxDays)
     : null;
+
+  // Fulfilment-routing voor de bevestiging: welke winkel(s)/magazijn pakt wat in,
+  // en of het in meerdere zendingen komt. Gebruik het opgeslagen plan; anders live.
+  let plan: FulfillmentPlan | null = null;
+  if (paid) {
+    const stored = order.fulfillmentPlan as FulfillmentPlan | null;
+    plan = stored?.shipments?.length
+      ? stored
+      : await allocateOrder(
+          lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title, groupId: l.groupId ?? undefined })),
+          { country: order.country, postalCode: order.postalCode },
+        ).catch(() => null);
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-gutter py-16">
@@ -159,6 +182,47 @@ export default async function OrderPage({ params, searchParams }: Props) {
         {order.giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>Cadeaubon</dt><dd>− {formatEuro(order.giftcardCents)}</dd></div>) : null}
         <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>{order.giftcardCents > 0 ? "Betaald" : "Totaal"}</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
       </dl>
+
+      {paid && plan && plan.shipments.length ? (
+        <section className="mt-10">
+          <p className="label-brand">{plan.splitCount > 1 ? `Je bestelling — ${plan.splitCount} zendingen` : "Je bestelling wordt klaargemaakt"}</p>
+          <h2 className="mt-2 font-display text-xl">{plan.splitCount > 1 ? "We versturen 'm in meerdere zendingen" : "We maken 'm met zorg voor je klaar"}</h2>
+          {plan.splitCount > 1 ? (
+            <p className="mt-1 font-sans text-sm text-ink-soft">Je artikelen komen uit verschillende locaties en worden los bezorgd — je betaalt niets extra.</p>
+          ) : null}
+          <div className="mt-5 space-y-3">
+            {plan.shipments.map((s, i) => (
+              <div key={i} className="flex items-start gap-4 rounded-card border border-line p-4">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-ink">
+                  {s.isWarehouse ? (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M3 9l9-5 9 5v10a1 1 0 01-1 1H4a1 1 0 01-1-1V9z" strokeLinecap="round" strokeLinejoin="round" /><path d="M8 21V12h8v9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M3 9l1.5-4.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 14h6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-sans text-sm font-medium text-ink">
+                    {plan.splitCount > 1 ? `Zending ${i + 1} van ${plan.splitCount} · ` : ""}
+                    {s.isWarehouse ? "Vanuit ons magazijn" : `Onze winkel in ${s.store}`}
+                  </p>
+                  <p className="mt-0.5 font-sans text-sm text-ink-soft">
+                    {s.isWarehouse ? "Ons magazijnteam maakt" : `${pickerName(s.branchId)} maakt`} {s.units === 1 ? "je artikel" : `je ${s.units} artikelen`} met zorg klaar.
+                  </p>
+                  <ul className="mt-1.5 font-sans text-xs text-muted">
+                    {s.lines.map((l, j) => (
+                      <li key={j}>{l.title || l.sku}{l.qty > 1 ? ` · ${l.qty}×` : ""}</li>
+                    ))}
+                  </ul>
+                  {s.dispatchLabel ? <p className="mt-1.5 font-sans text-xs text-ink-soft">{s.dispatchLabel}</p> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+          {!plan.fullyAllocated ? (
+            <p className="mt-3 font-sans text-xs text-muted">Een enkel artikel volgt mogelijk iets later na — we houden je per e-mail op de hoogte.</p>
+          ) : null}
+        </section>
+      ) : null}
 
       {paid ? (
         <div className="mt-8 flex flex-col items-start gap-2 rounded-card bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
