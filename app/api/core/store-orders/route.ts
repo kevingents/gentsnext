@@ -53,25 +53,42 @@ export async function POST(req: Request) {
       limit 200
     `);
 
+    const afhaalorders: unknown[] = [];
     const weborders: unknown[] = [];
+    const locLower = location.toLowerCase();
     for (const r of rows.rows) {
       const plan = r.fulfillment_plan as { shipments?: PlanShip[] } | null;
-      const ship = (plan?.shipments || []).find(
-        (s) => String(s.store || "").toLowerCase() === location.toLowerCase() && !s.isWarehouse,
-      );
+      const ship = (plan?.shipments || []).find((s) => String(s.store || "").toLowerCase() === locLower);
       if (!ship) continue;
-      weborders.push({
-        orderNumber: r.order_number,
-        customer: `${r.first_name} ${r.last_name}`.trim() || r.email,
-        status: r.status,
-        statusLabel: r.status === "ready_pickup" ? "Klaar voor afhalen" : "Betaald",
-        totalCents: r.total_cents,
-        items: (ship.lines || []).map((l) => ({ title: l.title || l.sku || "", sku: l.sku || "", qty: Number(l.qty) || 1 })),
-      });
-    }
+      const customer = `${r.first_name} ${r.last_name}`.trim() || r.email;
+      const items = (ship.lines || []).map((l) => ({ title: l.title || l.sku || "", sku: l.sku || "", qty: Number(l.qty) || 1 }));
 
-    // Click&collect-checkout bestaat nog niet op de nieuwe site → voorlopig leeg.
-    const afhaalorders: unknown[] = [];
+      if (r.delivery_method === "pickup") {
+        // Afhaalorder: klant haalt op in déze winkel (click&collect, al betaald).
+        afhaalorders.push({
+          id: r.order_number,
+          name: r.order_number,
+          customer,
+          email: r.email,
+          phone: "",
+          items: items.map((it) => ({ title: it.title, sku: it.sku, quantity: it.qty })),
+          totalPrice: ((Number(r.total_cents) || 0) / 100).toFixed(2),
+          currency: "EUR",
+          pickupStatusLabel: r.status === "ready_pickup" ? "Klaar om af te halen" : "Betaald",
+          financialStatus: "paid",
+        });
+      } else if (!ship.isWarehouse) {
+        // Weborder die deze winkel moet versturen (ship-from-store).
+        weborders.push({
+          orderNumber: r.order_number,
+          customer,
+          status: r.status,
+          statusLabel: r.status === "ready_pickup" ? "Klaar voor afhalen" : "Betaald",
+          totalCents: r.total_cents,
+          items,
+        });
+      }
+    }
 
     return NextResponse.json({ ok: true, afhaalorders, weborders });
   } catch (e) {

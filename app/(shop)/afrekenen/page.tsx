@@ -101,6 +101,18 @@ function CheckoutForm() {
 
   const [delivery, setDelivery] = useState<"standard" | "express">("standard");
   const [expressSurcharge, setExpressSurcharge] = useState(0);
+  // Afhalen in winkel (click & collect): gratis, geen adres nodig.
+  const [pickupMode, setPickupMode] = useState(false);
+  const [pickupStore, setPickupStore] = useState("");
+  const [stores, setStores] = useState<{ name: string; city: string }[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/stores")
+      .then((r) => r.json())
+      .then((d) => { if (active) { const s = d.stores || []; setStores(s); setPickupStore((cur) => cur || s[0]?.name || ""); } })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
   const [tiered, setTiered] = useState<TieredDiscountCfg | null>(null);
@@ -170,8 +182,8 @@ function CheckoutForm() {
     };
   }, [form.postalCode, form.houseNumber]);
 
-  const baseShipping = cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
-  const surcharge = delivery === "express" ? expressSurcharge : 0;
+  const baseShipping = pickupMode ? 0 : cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
+  const surcharge = pickupMode ? 0 : delivery === "express" ? expressSurcharge : 0;
   const shippingCents = baseShipping + surcharge;
   const itemCount = cart.lines.reduce((n, l) => n + l.qty, 0);
   const tieredCents = tieredDiscountCents(itemCount, cart.subtotalCents, tiered);
@@ -221,14 +233,18 @@ function CheckoutForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    // Lichte validatie (datakwaliteit → minder mislukte bezorgingen).
-    if (!POSTCODE_RE.test(form.postalCode || "")) {
-      setError("Vul een geldige postcode in (bijv. 1234 AB).");
-      return;
-    }
-    if (!HOUSENR_RE.test((form.houseNumber || "").trim())) {
-      setError("Vul een geldig huisnummer in (begint met een cijfer).");
-      return;
+    if (pickupMode) {
+      if (!pickupStore) { setError("Kies een winkel om af te halen."); return; }
+    } else {
+      // Lichte validatie (datakwaliteit → minder mislukte bezorgingen).
+      if (!POSTCODE_RE.test(form.postalCode || "")) {
+        setError("Vul een geldige postcode in (bijv. 1234 AB).");
+        return;
+      }
+      if (!HOUSENR_RE.test((form.houseNumber || "").trim())) {
+        setError("Vul een geldig huisnummer in (begint met een cijfer).");
+        return;
+      }
     }
     if (business && !(form.companyName || "").trim()) {
       setError("Vul de bedrijfsnaam in voor een zakelijke bestelling.");
@@ -250,7 +266,8 @@ function CheckoutForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contact: form,
-          deliveryMethod: delivery,
+          deliveryMethod: pickupMode ? "pickup" : delivery,
+          pickupStore: pickupMode ? pickupStore : "",
           method: payMethod,
           voucherCode: voucher?.code || "",
           giftcardCode: giftcard?.code || "",
@@ -368,9 +385,37 @@ function CheckoutForm() {
             </>
           ) : null}
 
-          <p className="label-brand mt-6">Contact & bezorgadres</p>
+          {/* Bezorgen of afhalen in winkel (click & collect) */}
+          <p className="label-brand mt-6">Ontvangen</p>
+          <div className="mt-3 inline-flex rounded-card border border-line p-0.5">
+            {([["Bezorgen", false], ["Afhalen in winkel", true]] as const).map(([label, val]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setPickupMode(val)}
+                className={`px-4 py-1.5 font-sans text-sm transition-colors ${pickupMode === val ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {pickupMode ? (
+            <label className="mt-4 block">
+              <span className="font-sans text-sm text-ink">Kies een winkel</span>
+              <select
+                value={pickupStore}
+                onChange={(e) => setPickupStore(e.target.value)}
+                className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+              >
+                {stores.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+              </select>
+              <span className="mt-1 block font-sans text-xs text-muted">Gratis afhalen — je krijgt bericht zodra je bestelling klaarligt.</span>
+            </label>
+          ) : null}
+
+          <p className="label-brand mt-6">{pickupMode ? "Contactgegevens" : "Contact & bezorgadres"}</p>
           <div className="mt-4 grid grid-cols-2 gap-4">
-            {FIELDS.map((f) => (
+            {FIELDS.filter((f) => !pickupMode || !["postalCode", "houseNumber", "street", "city"].includes(f.name)).map((f) => (
               <label key={f.name} className={f.col === 2 ? "col-span-2 block" : "block"}>
                 <span className="font-sans text-sm text-ink">{f.label}</span>
                 <input
@@ -385,10 +430,12 @@ function CheckoutForm() {
                 />
               </label>
             ))}
-            <label className="col-span-2 block">
-              <span className="font-sans text-sm text-ink">Land</span>
-              <input value="Nederland" readOnly className="mt-1.5 w-full border border-line bg-surface px-4 py-2.5 font-sans text-sm text-muted" />
-            </label>
+            {!pickupMode ? (
+              <label className="col-span-2 block">
+                <span className="font-sans text-sm text-ink">Land</span>
+                <input value="Nederland" readOnly className="mt-1.5 w-full border border-line bg-surface px-4 py-2.5 font-sans text-sm text-muted" />
+              </label>
+            ) : null}
           </div>
 
           {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm. */}
@@ -466,14 +513,21 @@ function CheckoutForm() {
               ))}
             </ul>
             <div className="mt-4 border-t border-line pt-4">
-              <DeliveryOptions
-                items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
-                value={delivery}
-                onChange={(m, s) => {
-                  setDelivery(m);
-                  setExpressSurcharge(m === "express" ? s : expressSurcharge || s);
-                }}
-              />
+              {pickupMode ? (
+                <div className="font-sans text-sm">
+                  <p className="font-medium text-ink">Afhalen in winkel</p>
+                  <p className="mt-1 text-ink-soft">Gratis · {pickupStore || "kies een winkel"} — je krijgt bericht zodra het klaarligt.</p>
+                </div>
+              ) : (
+                <DeliveryOptions
+                  items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                  value={delivery}
+                  onChange={(m, s) => {
+                    setDelivery(m);
+                    setExpressSurcharge(m === "express" ? s : expressSurcharge || s);
+                  }}
+                />
+              )}
             </div>
             <div className="mt-4 border-t border-line pt-4">
               {/* Toegepaste codes */}
@@ -516,7 +570,7 @@ function CheckoutForm() {
               <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(cart.subtotalCents)}</dd></div>
               {tieredCents > 0 ? (<div className="flex justify-between text-success"><dt>Staffelkorting ({tiered?.percentOff}% vanaf {tiered?.minItems})</dt><dd>− {formatEuro(tieredCents)}</dd></div>) : null}
               {voucherCents > 0 ? (<div className="flex justify-between text-success"><dt>Korting ({voucher?.code})</dt><dd>− {formatEuro(voucherCents)}</dd></div>) : null}
-              <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{baseShipping === 0 ? "Gratis" : formatEuro(baseShipping)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">{pickupMode ? "Afhalen in winkel" : "Verzending"}</dt><dd>{baseShipping === 0 ? "Gratis" : formatEuro(baseShipping)}</dd></div>
               {surcharge > 0 ? (<div className="flex justify-between"><dt className="text-muted">Snellere levering</dt><dd>+ {formatEuro(surcharge)}</dd></div>) : null}
               {giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>Cadeaubon</dt><dd>− {formatEuro(giftcardCents)}</dd></div>) : null}
               <div className="flex justify-between border-t border-line pt-2 font-medium">

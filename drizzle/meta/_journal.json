@@ -78,6 +78,13 @@
       "when": 1782210012492,
       "tag": "0010_noisy_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782216842964,
+      "tag": "0011_violet_shockwave",
+      "breakpoints": true
     }
   ]
 }

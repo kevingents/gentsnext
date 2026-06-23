@@ -27,18 +27,28 @@ export async function POST(req: Request) {
   const items: CheckoutItem[] = Array.isArray(body?.items) ? body.items : [];
   if (!items.length) return bad("Je winkelwagen is leeg.");
   if (!c.email || !/.+@.+\..+/.test(c.email)) return bad("Vul een geldig e-mailadres in.");
-  for (const f of ["firstName", "lastName", "street", "houseNumber", "postalCode", "city"]) {
-    if (!String(c[f] || "").trim()) return bad("Vul alle adresvelden in.");
+  for (const f of ["firstName", "lastName"]) {
+    if (!String(c[f] || "").trim()) return bad("Vul je naam in.");
   }
 
-  const deliveryMethod: DeliveryMethod = body?.deliveryMethod === "express" ? "express" : "standard";
+  const deliveryMethod: DeliveryMethod =
+    body?.deliveryMethod === "express" ? "express" : body?.deliveryMethod === "pickup" ? "pickup" : "standard";
+  const pickupStore = String(body?.pickupStore || "").trim();
+  // Adres alleen vereist bij bezorgen; bij afhalen in winkel is een winkelkeuze nodig.
+  if (deliveryMethod === "pickup") {
+    if (!pickupStore) return bad("Kies een winkel om af te halen.");
+  } else {
+    for (const f of ["street", "houseNumber", "postalCode", "city"]) {
+      if (!String(c[f] || "").trim()) return bad("Vul alle adresvelden in.");
+    }
+  }
   // Vooraf gekozen betaalmethode (gevalideerd) → Mollie slaat z'n keuzescherm over.
   const payMethod = isKnownMethod(body?.method) ? String(body.method) : undefined;
   const voucherCode = String(body?.voucherCode || "").trim();
   const giftcardCode = String(body?.giftcardCode || "").trim();
   let order;
   try {
-    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode);
+    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore);
   } catch (e) {
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
   }

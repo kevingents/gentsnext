@@ -17,7 +17,7 @@ import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcar
  * gehaald — nooit het client-bedrag vertrouwen. Bedragen in centen.
  */
 
-export type DeliveryMethod = "standard" | "express";
+export type DeliveryMethod = "standard" | "express" | "pickup";
 
 export type CheckoutItem = {
   sku: string;
@@ -132,7 +132,8 @@ export async function createOrder(
   items: CheckoutItem[],
   deliveryMethod: DeliveryMethod = "standard",
   voucherCode = "",
-  giftcardCode = ""
+  giftcardCode = "",
+  pickupStore = ""
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -168,7 +169,9 @@ export async function createOrder(
   }
 
   // Verzendkosten + (optionele) express-toeslag — alles uit de instelbare settings.
-  const baseShipping = subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
+  // Afhalen in winkel ('pickup') is gratis: geen verzendkosten, geen toeslag.
+  const isPickup = method === "pickup";
+  const baseShipping = isPickup ? 0 : subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
   const surcharge = method === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
   const totalBeforeGiftcard = Math.max(0, subtotalCents - discountCents) + shippingCents;
@@ -205,6 +208,7 @@ export async function createOrder(
       companyName: (contact.companyName || "").trim(),
       vatNumber: (contact.vatNumber || "").trim(),
       deliveryMethod: method,
+      pickupStore: isPickup ? pickupStore.trim() : "",
       voucherCode: appliedCode,
       discountCents,
       giftcardCode: appliedGiftcard,
@@ -343,6 +347,37 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
   const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
 
   try {
+    // Afhalen in winkel: geen allocatie/SRS — het plan is één zending op de
+    // gekozen afhaalwinkel. Zo reserveert de core de voorraad dáár (kassa ziet 't)
+    // en verschijnt de order als afhaalorder voor die winkel.
+    if (order.deliveryMethod === "pickup") {
+      const store = (order.pickupStore || "").trim() || "winkel";
+      const pickupPlan = {
+        shipments: [
+          {
+            branchId: "",
+            store,
+            isWarehouse: false,
+            canDispatchToday: true,
+            dispatchLabel: "Klaar om af te halen",
+            dispatchInDays: 0,
+            lines: lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title })),
+            units: lines.reduce((n, l) => n + l.quantity, 0),
+          },
+        ],
+        splitCount: 1,
+        fullyAllocated: true,
+        shortages: [] as { sku: string; qtyShort: number; title?: string }[],
+        strategy: "single-source" as const,
+        computedAt: new Date().toISOString(),
+      };
+      await db
+        .update(orders)
+        .set({ fulfillmentPlan: pickupPlan, fulfillmentStatus: "planned", updatedAt: sql`now()` })
+        .where(eq(orders.id, orderId));
+      return;
+    }
+
     const plan = await allocateOrder(
       lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title, groupId: l.groupId ?? undefined })),
       { country: order.country, postalCode: order.postalCode }

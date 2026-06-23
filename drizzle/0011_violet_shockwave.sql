@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "pickup_store" text DEFAULT '' NOT NULL;

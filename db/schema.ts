@@ -313,8 +313,10 @@ export const orders = pgTable(
     /** Zakelijk bestellen (optioneel): bedrijfsnaam + BTW-nummer. */
     companyName: text("company_name").notNull().default(""),
     vatNumber: text("vat_number").notNull().default(""),
-    /** 'standard' | 'express' (snellere levering tegen toeslag). */
+    /** 'standard' | 'express' (snellere levering tegen toeslag) | 'pickup' (afhalen in winkel). */
     deliveryMethod: text("delivery_method").notNull().default("standard"),
+    /** Bij 'pickup': de winkel waar de klant afhaalt (winkelnaam, bv. "GENTS Groningen"). */
+    pickupStore: text("pickup_store").notNull().default(""),
     voucherCode: text("voucher_code").notNull().default(""),
     discountCents: integer("discount_cents").notNull().default(0),
     /** Cadeaubon als betaalmiddel: ingezette code + afgeboekt bedrag (centen). */
