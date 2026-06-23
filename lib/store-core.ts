@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { storeStockMovements } from "@/db/schema";
-import { stockForSkus } from "@/lib/stock";
+import { stockForSkus, stockSyncedAt } from "@/lib/stock";
 
 /**
  * Omnichannel voorraad-core (Fase A). De zelfgebouwde kassa (storegents) én de
@@ -104,21 +104,67 @@ export async function coreDeltaForKeys(location: string, keys: string[]): Promis
 }
 
 /**
- * Beschikbaar per artikel in één locatie = SRS-baseline (winkelvoorraad uit de
- * SFTP-blob, gematcht op winkelnaam) + core-delta. Geeft een map key → aantal.
+ * Web-reserveringen per stockKey voor één locatie. Afgeleid uit de orders +
+ * hun fulfillment_plan (welke locatie welk artikel levert), zodat de KASSA de
+ * lopende web-orders meeneemt en het laatste stuk niet dubbel verkoopt.
+ *
+ * Telt mee zolang een web-order betaald-maar-niet-verzonden is, óf verzonden ná
+ * de laatste SRS-sync (model A: magazijn/winkel boekt de pick in SRS uit; daarna
+ * laat de sync 'm zakken → reservering valt vrij). Géén permanente boeking →
+ * geen dubbeltelling met de SRS-baseline.
+ */
+export async function webReservedForLocation(location: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const loc = norm(location);
+  if (!loc) return out;
+  const syncedAt = (await stockSyncedAt()) ?? new Date(0);
+  try {
+    const db = getDb();
+    const rows = await db.execute<{ fulfillment_plan: unknown }>(sql`
+      select fulfillment_plan from orders
+      where (status in ('paid','ready_pickup')
+             or (status in ('shipped','delivered') and updated_at > ${syncedAt.toISOString()}))
+        and fulfillment_plan is not null
+    `);
+    for (const r of rows.rows) {
+      const plan = r.fulfillment_plan as { shipments?: { store?: string; lines?: { sku?: string; qty?: number }[] }[] } | null;
+      for (const s of plan?.shipments || []) {
+        if (lower(s.store) !== lower(loc)) continue;
+        for (const l of s.lines || []) {
+          const key = lower(l.sku);
+          const qty = Math.abs(Math.round(Number(l.qty) || 0));
+          if (!key || !qty) continue;
+          out.set(key, (out.get(key) || 0) + qty);
+        }
+      }
+    }
+  } catch {
+    // Bij een fout liever niets reserveren dan de kassa blokkeren.
+  }
+  return out;
+}
+
+/**
+ * Beschikbaar per artikel in één locatie =
+ *   SRS-baseline(locatie) + core-delta(kassa/pos) − web-reservering(locatie).
+ * Dit is de gedeelde waarheid: de kassa én de webshop rekenen hiermee, dus het
+ * laatste stuk kan maar één keer verkocht worden (online of in de winkel).
  */
 export async function availableInStore(location: string, keys: string[]): Promise<Map<string, number>> {
   const loc = norm(location);
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, number>();
   if (!clean.length) return out;
-  const [stock, delta] = await Promise.all([stockForSkus(clean), coreDeltaForKeys(loc, clean)]);
+  const [stock, delta, webRes] = await Promise.all([
+    stockForSkus(clean),
+    coreDeltaForKeys(loc, clean),
+    webReservedForLocation(loc),
+  ]);
   for (const key of clean) {
     const st = stock.get(key);
-    const baseline = st
-      ? st.byBranch.find((b) => lower(b.store) === lower(loc))?.qty ?? 0
-      : 0;
-    out.set(key, Math.max(0, baseline + (delta.get(lower(key)) || 0)));
+    const baseline = st ? st.byBranch.find((b) => lower(b.store) === lower(loc))?.qty ?? 0 : 0;
+    const net = baseline + (delta.get(lower(key)) || 0) - (webRes.get(lower(key)) || 0);
+    out.set(key, Math.max(0, net));
   }
   return out;
 }
