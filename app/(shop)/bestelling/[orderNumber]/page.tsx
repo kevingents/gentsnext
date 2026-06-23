@@ -203,7 +203,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-sm font-medium text-ink">
                     {plan.splitCount > 1 ? `Zending ${i + 1} van ${plan.splitCount} · ` : ""}
-                    {s.isWarehouse ? "Vanuit ons magazijn" : `Onze winkel in ${s.store}`}
+                    {s.isWarehouse ? "Vanuit ons magazijn" : `Onze winkel in ${s.store.replace(/^GENTS\s+/i, "")}`}
                   </p>
                   <p className="mt-0.5 font-sans text-sm text-ink-soft">
                     {s.isWarehouse ? "Ons magazijnteam maakt" : `${pickerName(s.branchId)} maakt`} {s.units === 1 ? "je artikel" : `je ${s.units} artikelen`} met zorg klaar.
