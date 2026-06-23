@@ -46,6 +46,19 @@ function pickerName(branchId: string): string {
   return PICKERS[h % PICKERS.length];
 }
 
+/** Stap 2-tekst: noemt direct wie + welke winkel je bestelling inpakt (of split). */
+function sourceSentence(plan: FulfillmentPlan | null) {
+  const tail = <> Zodra je pakket onderweg is, krijg je een verzendmail met track &amp; trace zodat je het kunt volgen.</>;
+  if (!plan?.shipments?.length) return <>We pakken je bestelling met zorg in.{tail}</>;
+  if (plan.splitCount > 1) {
+    const locs = [...new Set(plan.shipments.map((s) => (s.isWarehouse ? "ons magazijn" : s.store.replace(/^GENTS\s+/i, ""))))].join(" en ");
+    return <>Je bestelling komt uit {locs} en wordt in {plan.splitCount} zendingen verstuurd.{tail}</>;
+  }
+  const s = plan.shipments[0];
+  if (s.isWarehouse) return <>Ons magazijnteam pakt je bestelling met zorg in.{tail}</>;
+  return <><span className="text-ink">{pickerName(s.branchId)}</span> in onze winkel in <span className="text-ink">{s.store.replace(/^GENTS\s+/i, "")}</span> pakt je bestelling met zorg in.{tail}</>;
+}
+
 /** Eén stap in het "wat er nu gebeurt"-stappenplan (Coolblue-stijl). */
 function Step({ done, title, body }: { done?: boolean; title: string; body: React.ReactNode }) {
   return (
@@ -118,7 +131,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
             <p className="label-brand">Wat er nu gebeurt</p>
             <ol className="mt-4 space-y-4">
               <Step done title="Betaling ontvangen" body={<>Je orderbevestiging met factuur is onderweg naar <span className="text-ink">{order.email}</span>.</>} />
-              <Step title="We maken je bestelling klaar" body="Zodra je pakket onderweg is, sturen we je een verzendmail met track &amp; trace zodat je 'm op de voet kunt volgen." />
+              <Step title="We maken je bestelling klaar" body={sourceSentence(plan)} />
               <Step
                 title={isExpress ? "Snel bezorgd" : "Bezorgd"}
                 body={deliveryDate ? <>Verwachte bezorging rond <span className="text-ink">{fmtDate(deliveryDate)}</span>. Niet thuis? De bezorger probeert het opnieuw of levert bij de buren.</> : "We bezorgen je bestelling zo snel mogelijk."}
@@ -183,13 +196,11 @@ export default async function OrderPage({ params, searchParams }: Props) {
         <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>{order.giftcardCents > 0 ? "Betaald" : "Totaal"}</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
       </dl>
 
-      {paid && plan && plan.shipments.length ? (
+      {paid && plan && plan.splitCount > 1 ? (
         <section className="mt-10">
-          <p className="label-brand">{plan.splitCount > 1 ? `Je bestelling — ${plan.splitCount} zendingen` : "Je bestelling wordt klaargemaakt"}</p>
-          <h2 className="mt-2 font-display text-xl">{plan.splitCount > 1 ? "We versturen 'm in meerdere zendingen" : "We maken 'm met zorg voor je klaar"}</h2>
-          {plan.splitCount > 1 ? (
-            <p className="mt-1 font-sans text-sm text-ink-soft">Je artikelen komen uit verschillende locaties en worden los bezorgd — je betaalt niets extra.</p>
-          ) : null}
+          <p className="label-brand">Je bestelling — {plan.splitCount} zendingen</p>
+          <h2 className="mt-2 font-display text-xl">We versturen je bestelling in meerdere zendingen</h2>
+          <p className="mt-1 font-sans text-sm text-ink-soft">Je artikelen komen uit verschillende locaties en worden los bezorgd — je betaalt niets extra.</p>
           <div className="mt-5 space-y-3">
             {plan.shipments.map((s, i) => (
               <div key={i} className="flex items-start gap-4 rounded-card border border-line p-4">
@@ -235,11 +246,20 @@ export default async function OrderPage({ params, searchParams }: Props) {
         </div>
       ) : null}
 
-      {paid && extras?.careItems.length ? (
+      {paid ? (
         <section className="mt-12 border-t border-line pt-8">
           <p className="label-brand">Zo geniet je er lang van</p>
           <h2 className="mt-2 font-display text-xl">Verzorgingstips voor je aankoop</h2>
-          <div className="mt-4"><CareBlock items={extras.careItems} prose={[]} /></div>
+          <ul className="mt-4 space-y-2.5 font-sans text-sm leading-relaxed text-ink-soft">
+            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span>Pak je bestelling uit en <span className="text-ink">hang de kleding meteen uit</span> — vouw- en verzendkreukels hangen er dan vanzelf uit. Een nacht laten hangen helpt; eventueel licht stomen of strijken op lage temperatuur.</span></li>
+            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span><span className="text-ink">Past iets niet helemaal?</span> Met onze <span className="text-ink">vermaakservice</span> in de winkel maken we mouwen, pijpen en taille passend. Liever ruilen of retourneren? Dat kan <span className="text-ink">gratis binnen 14 dagen</span> — ook in de winkel.</span></li>
+          </ul>
+          {extras?.careItems.length ? (
+            <>
+              <p className="mt-6 font-sans text-sm font-medium text-ink">Onderhoud van dit artikel</p>
+              <div className="mt-3"><CareBlock items={extras.careItems} prose={[]} /></div>
+            </>
+          ) : null}
         </section>
       ) : null}
 
