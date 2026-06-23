@@ -80,12 +80,12 @@ export function LookDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, close, step]);
 
-  function addItem(i: number) {
+  function addItem(i: number, sizeOverride?: string) {
     const base = look.products[i];
     if (!base.product) return;
     const handle = activeHandle(i);
     const data = buy[handle];
-    const size = picked[i];
+    const size = sizeOverride ?? picked[i];
     if (!data || !size) return;
     const s = data.sizes.find((x) => x.size === size);
     if (!s || s.qty <= 0) return;
@@ -176,6 +176,7 @@ export function LookDetail({
             const price = formatEuro(selSize?.priceCents ?? h.product!.minPriceCents);
             const img = activeImage(i);
             const shoppable = Boolean(data && data.sizes.length);
+            const single = Boolean(data && data.sizes.length === 1); // one-size → direct toevoegen
             return (
               <li key={i} className="group flex items-start gap-4 border-b border-line py-4 first:border-t last:border-b-0">
                 <button
@@ -223,12 +224,12 @@ export function LookDetail({
                     {shoppable ? (
                       <button
                         type="button"
-                        onClick={() => setSizeDrawer(i)}
+                        onClick={() => (single ? addItem(i, data!.sizes[0].size) : setSizeDrawer(i))}
                         className={`shrink-0 rounded-card border px-3.5 py-1.5 font-sans text-xs font-medium transition-colors ${
                           added[i] ? "border-success bg-success/10 text-success" : sel ? "border-ink bg-ink text-canvas" : "border-ink text-ink hover:bg-ink hover:text-canvas"
                         }`}
                       >
-                        {added[i] ? "Toegevoegd" : sel ? `Maat ${sel}` : "Kies maat"}
+                        {added[i] ? "Toegevoegd" : single ? "In winkelwagen" : sel ? `Maat ${sel}` : "Kies maat"}
                       </button>
                     ) : (
                       <span className="shrink-0 font-sans text-xs text-muted">Tijdelijk niet beschikbaar</span>

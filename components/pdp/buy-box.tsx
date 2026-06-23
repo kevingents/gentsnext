@@ -101,6 +101,18 @@ export function BuyBox({
     if (oneSize && active && !size) setSize(active.sizes[0].size);
   }, [oneSize, active, size]);
 
+  // Sticky mobiele bestelbalk pas tonen als de hoofd-bestelknop uit beeld is gescrolld.
+  const mainCtaRef = useRef<HTMLDivElement>(null);
+  const [stickyOn, setStickyOn] = useState(false);
+  useEffect(() => {
+    const el = mainCtaRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setStickyOn(!e.isIntersecting), { rootMargin: "0px 0px -40px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const selectedSize = useMemo(
     () => active?.sizes.find((s) => s.size === size) ?? null,
     [active, size]
@@ -270,7 +282,7 @@ export function BuyBox({
         </div>
       ) : (
         <>
-          <div className="mt-7 grid grid-cols-[1fr_auto] gap-2">
+          <div ref={mainCtaRef} className="mt-7 grid grid-cols-[1fr_auto] gap-2">
             <button
               type="button"
               onClick={addToCart}
@@ -292,28 +304,30 @@ export function BuyBox({
         <ClickAndCollect branches={selectedSize.branches} />
       ) : null}
 
-      {/* Sticky mobiele bestelbalk */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-page items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-sans text-xs text-muted">{title}</p>
-            <p className="flex items-baseline gap-2 font-display text-base">
-              {priceLabel}
-              {size ? (
-                <span className="rounded-full bg-surface px-2 py-0.5 font-sans text-xs font-medium text-ink">Maat {size}</span>
-              ) : null}
-            </p>
+      {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is. */}
+      {stickyOn && !allSoldOut ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 backdrop-blur lg:hidden">
+          <div className="mx-auto flex max-w-page items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-sans text-xs text-muted">{title}</p>
+              <p className="flex items-baseline gap-2 font-display text-base">
+                {priceLabel}
+                {size && !oneSize ? (
+                  <span className="rounded-full bg-surface px-2 py-0.5 font-sans text-xs font-medium text-ink">Maat {size}</span>
+                ) : null}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addToCart}
+              disabled={!size || soldOut}
+              className="btn-primary !px-5"
+            >
+              {!size ? "Kies maat" : soldOut ? "Uitverkocht" : "In winkelwagen"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={addToCart}
-            disabled={!size || soldOut}
-            className="btn-primary !px-5"
-          >
-            {!size ? "Kies maat" : soldOut ? "Uitverkocht" : "In winkelwagen"}
-          </button>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
