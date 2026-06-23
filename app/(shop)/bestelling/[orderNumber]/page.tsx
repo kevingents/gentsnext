@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrderForViewer, getPostPurchase } from "@/lib/orders";
+import { getSettings } from "@/lib/settings";
 import { getSessionCustomer } from "@/lib/account";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
@@ -20,6 +21,40 @@ type Props = {
   searchParams: Promise<{ t?: string }>;
 };
 
+/** Telt werkdagen op bij een datum (weekend overslaan) — voor de bezorgschatting. */
+function addBusinessDays(from: Date, days: number): Date {
+  const d = new Date(from);
+  let added = 0;
+  while (added < Math.max(0, days)) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d;
+}
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/** Eén stap in het "wat er nu gebeurt"-stappenplan (Coolblue-stijl). */
+function Step({ done, title, body }: { done?: boolean; title: string; body: React.ReactNode }) {
+  return (
+    <li className="flex gap-4">
+      <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${done ? "bg-ink text-canvas" : "border border-line text-ink"}`}>
+        {done ? (
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M5 12l5 5 9-9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden><circle cx="12" cy="12" r="9" /></svg>
+        )}
+      </span>
+      <div className="min-w-0">
+        <p className="font-sans text-sm font-medium text-ink">{title}</p>
+        <p className="mt-0.5 font-sans text-sm leading-relaxed text-ink-soft">{body}</p>
+      </div>
+    </li>
+  );
+}
+
 export default async function OrderPage({ params, searchParams }: Props) {
   const { orderNumber } = await params;
   const { t } = await searchParams;
@@ -36,6 +71,13 @@ export default async function OrderPage({ params, searchParams }: Props) {
   // Post-purchase: verzorgingstips + cross-sell (alleen bij een betaalde order).
   const extras = paid ? await getPostPurchase(lines.map((l) => l.productHandle)) : null;
 
+  // Bezorgschatting voor het stappenplan.
+  const settings = paid ? await getSettings() : null;
+  const isExpress = order.deliveryMethod === "express";
+  const deliveryDate = settings
+    ? addBusinessDays(new Date(order.createdAt), isExpress ? Math.max(1, settings.expressTransitDays) : settings.standardMaxDays)
+    : null;
+
   return (
     <div className="mx-auto max-w-2xl px-gutter py-16">
       {paid ? <ClearCart /> : null}
@@ -48,6 +90,18 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <p className="mt-3 font-sans text-ink-soft">
             We hebben je betaling ontvangen. Een bevestiging is onderweg naar {order.email}.
           </p>
+          {/* Stappenplan — wat er nu gebeurt (Coolblue-stijl). */}
+          <section className="mt-8 rounded-card border border-line bg-surface/50 p-5">
+            <p className="label-brand">Wat er nu gebeurt</p>
+            <ol className="mt-4 space-y-4">
+              <Step done title="Betaling ontvangen" body={<>Je orderbevestiging met factuur is onderweg naar <span className="text-ink">{order.email}</span>.</>} />
+              <Step title="We maken je bestelling klaar" body="Zodra je pakket onderweg is, sturen we je een verzendmail met track &amp; trace zodat je 'm op de voet kunt volgen." />
+              <Step
+                title={isExpress ? "Snel bezorgd" : "Bezorgd"}
+                body={deliveryDate ? <>Verwachte bezorging rond <span className="text-ink">{fmtDate(deliveryDate)}</span>. Niet thuis? De bezorger probeert het opnieuw of levert bij de buren.</> : "We bezorgen je bestelling zo snel mogelijk."}
+              />
+            </ol>
+          </section>
         </>
       ) : pending ? (
         <>
@@ -143,6 +197,25 @@ export default async function OrderPage({ params, searchParams }: Props) {
             {extras.recommendations.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
+          </div>
+        </section>
+      ) : null}
+
+      {paid ? (
+        <section className="mt-12 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-card border border-line p-5">
+            <p className="font-display text-lg">Vragen over je bestelling?</p>
+            <p className="mt-1 font-sans text-sm text-ink-soft">Onze klantenservice en stylisten in 19 winkels helpen je graag verder.</p>
+            <Link href="/winkels" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">Vind een winkel</Link>
+          </div>
+          <div className="rounded-card border border-line p-5">
+            <p className="font-display text-lg">Volg je bestelling</p>
+            <p className="mt-1 font-sans text-sm text-ink-soft">
+              {order.customerId
+                ? "Je vindt deze bestelling en de status altijd terug in je account."
+                : "Bewaar deze pagina — hiermee volg je de status van je bestelling."}
+            </p>
+            {order.customerId ? <Link href="/account" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">Naar mijn account</Link> : null}
           </div>
         </section>
       ) : null}
