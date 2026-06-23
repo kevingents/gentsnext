@@ -64,7 +64,7 @@ const SPEC_LABELS: [key: string, label: string][] = [
 
 const TRUST = [
   "Gratis retour binnen 14 dagen — ook in de winkel",
-  "Gratis vermaken in onze winkels",
+  "Vermaakservice in onze winkels",
   "Persoonlijk advies in 19 winkels",
   "Veilig betalen met iDEAL",
 ];
