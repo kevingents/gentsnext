@@ -7,6 +7,7 @@ import { formatEuro } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { SizeChartButton } from "@/components/pdp/size-chart-modal";
 import { ColorSiblings, type SiblingItem } from "@/components/pdp/color-siblings";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
@@ -213,11 +214,7 @@ export function BuyBox({
             <div className="flex items-center justify-between">
               <p className="font-sans text-sm font-medium">Maat</p>
               <div className="flex items-center gap-3 font-sans text-xs">
-                {sizeChartHandle ? (
-                  <Link href={`/pages/${sizeChartHandle}`} className="text-ink-soft underline underline-offset-4 hover:text-ink">
-                    Maattabel
-                  </Link>
-                ) : null}
+                <SizeChartButton hoofdgroep={hoofdgroep} pageHandle={sizeChartHandle} />
                 <Link href="/maatadvies" className="text-ink underline underline-offset-4">
                   Vind mijn maat
                 </Link>
