@@ -6,6 +6,7 @@ import { formatEuro } from "@/lib/pricing";
 type Order = {
   id: string; orderNumber: string; status: string; email: string; name: string;
   city: string; totalCents: number; deliveryMethod: string; fulfillmentStatus: string; createdAt: string;
+  route?: string;
 };
 
 const STATUS_NL: Record<string, string> = {
@@ -48,6 +49,10 @@ export function OrdersAdmin({ orders }: { orders: Order[] }) {
               <span className="border border-line px-2 py-0.5 text-xs">{STATUS_NL[o.status] || o.status}</span>
             </div>
           </div>
+          <p className="mt-2 flex items-center gap-1.5 font-sans text-xs text-ink-soft">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M3 9l1.5-4.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 14h6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span>Routing: {o.route ? <span className="font-medium text-ink">{o.route}</span> : <span className="text-muted">nog te bepalen</span>}</span>
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Action label="Markeer verzonden" onClick={() => setStatus(o.id, "shipped")} busy={busy === o.id + "shipped"} disabled={o.status === "shipped"} />
             <Action label="Klaar om af te halen" onClick={() => setStatus(o.id, "ready_pickup")} busy={busy === o.id + "ready_pickup"} disabled={o.status === "ready_pickup"} />

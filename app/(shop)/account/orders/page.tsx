@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { listOperationalOrders } from "@/lib/orders";
+import type { FulfillmentPlan } from "@/lib/fulfillment";
 import { listOrders } from "@/lib/reports";
 import { OrdersAdmin } from "@/components/account/orders-admin";
 import { BackofficeShell, Section, euro, StatusBadge, fieldClass, btnSecondary } from "@/components/account/report-ui";
@@ -17,6 +18,14 @@ const STATUS_NL: Record<string, string> = {
 };
 
 type Props = { searchParams: Promise<{ q?: string; status?: string; channel?: string; from?: string; to?: string; page?: string }> };
+
+/** Korte routing-samenvatting per order: welke locatie(s) + aantal zendingen. */
+function routeSummary(plan: FulfillmentPlan | null): string {
+  if (!plan?.shipments?.length) return "";
+  const locs = plan.shipments.map((s) => (s.isWarehouse ? "Magazijn" : s.store.replace(/^GENTS\s+/i, "")));
+  const base = [...new Set(locs)].join(" + ");
+  return plan.splitCount > 1 ? `${base} · ${plan.splitCount} zendingen` : base;
+}
 
 export default async function OrdersPage({ searchParams }: Props) {
   const customer = await getSessionCustomer();
@@ -49,6 +58,7 @@ export default async function OrdersPage({ searchParams }: Props) {
     id: o.id, orderNumber: o.orderNumber, status: o.status, email: o.email,
     name: `${o.firstName} ${o.lastName}`.trim(), city: o.city, totalCents: o.totalCents,
     deliveryMethod: o.deliveryMethod, fulfillmentStatus: o.fulfillmentStatus, createdAt: o.createdAt.toISOString(),
+    route: routeSummary(o.fulfillmentPlan as FulfillmentPlan | null),
   }));
 
   const totalPages = Math.max(1, Math.ceil(list.total / list.pageSize));
