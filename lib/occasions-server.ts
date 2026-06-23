@@ -1,9 +1,9 @@
-import { getSanityOccasions, urlForImage, type SanityOccasion } from "@/lib/sanity";
+import { getContentDoc } from "@/lib/content-store";
 
 /**
- * Gelegenheden voor /gelegenheden — uit Sanity (beheerbaar in de Studio) met de
- * onderstaande standaard als fallback. De links sluiten aan op de bestaande
- * collecties/landingen.
+ * Gelegenheden voor /gelegenheden — uit onze eigen content-store (content:occasions,
+ * beheerbaar in de GENTS-portal) met de onderstaande standaard als seed/fallback.
+ * Vervangt Sanity. De links sluiten aan op de bestaande collecties/landingen.
  */
 
 export type Occasion = {
@@ -71,26 +71,7 @@ const FALLBACK: Occasion[] = [
   },
 ];
 
-function fromSanity(o: SanityOccasion): Occasion | null {
-  if (!o?.title || !o?.slug) return null;
-  return {
-    slug: o.slug,
-    title: o.title,
-    eyebrow: o.eyebrow || "",
-    intro: o.intro || "",
-    image: o.image ? urlForImage(o.image, 900) : "",
-    ctaLabel: o.ctaLabel || "Bekijk",
-    ctaHref: o.ctaHref || "#",
-    links: (o.links || []).filter((l) => l?.label && l?.href),
-  };
-}
-
 export async function getOccasions(): Promise<Occasion[]> {
-  try {
-    const data = await getSanityOccasions();
-    const items = (data || []).map(fromSanity).filter(Boolean) as Occasion[];
-    return items.length ? items : FALLBACK;
-  } catch {
-    return FALLBACK;
-  }
+  const doc = await getContentDoc<{ items: Occasion[] }>("occasions");
+  return Array.isArray(doc?.items) && doc.items.length ? doc.items : FALLBACK;
 }
