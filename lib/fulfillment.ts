@@ -139,9 +139,10 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
         byBranch.set(b.branchId, rec);
       }
       rec.avail.set(sku, net);
-      // Overstock = voorraad boven ideaal (tekort < 0). Optellen over de orderregels:
-      // hoe meer een filiaal boven ideaal zit, hoe "ouder"/trager die voorraad is.
-      rec.surplus += Math.max(0, -b.tekort);
+      // Overstock = voorraad boven het ideaal (alleen als er een ideaal bekend is —
+      // ideaal=0 betekent "niet ingesteld", dan kunnen we geen doorloop afleiden).
+      // Hoe meer boven ideaal, hoe trager/ouder die schapvoorraad: proxy voor doorloop.
+      if (b.ideaal > 0) rec.surplus += Math.max(0, b.qty - b.ideaal);
     }
   }
 
