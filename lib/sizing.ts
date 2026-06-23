@@ -15,7 +15,12 @@
  *    "7"-suffix = extra lengte (langere pasvorm voor lange mannen).
  *  - Pantalon-tailleband 25–29 = aparte lijn (chino/jeans-achtig maatnummer).
  *  - Drop: pantalonmaat ligt doorgaans 6 onder de jasjemaat (drop 6).
+ *
+ * NB: de jasjemaat + boordmaat worden gegrond op de ECHTE GENTS-maattabel
+ * (lib/size-chart, bron Faslet) i.p.v. de vuistregel borst/2 — GENTS valt anders
+ * (maat 50 = 107 cm borst). De tabel is leidend; de formule is enkel fallback.
  */
+import { sizeByChest, boordByChest } from "@/lib/size-chart";
 
 export type SizeSystem =
   | "jacket" // 44–60 even (colbert/pak)
@@ -142,21 +147,30 @@ export function recommendSizes(input: SizeAdviceInput): SizeAdvice {
   const neck = estimateNeck(chest, input);
   const tall = input.heightCm >= 188;
 
-  // Jasjemaat = borst / 2, met pasvorm-correctie.
-  const fitDelta = fit === "slim" ? -1 : fit === "comfort" ? +1.5 : 0;
-  const jacketRaw = chest / 2 + fitDelta;
-  const jacket = clampEven(jacketRaw, 44, 60);
+  // Colbert/pak: grond op de GENTS-maattabel (autoritair), niet op borst/2.
+  const cb = sizeByChest("Colberts (Standaard)", chest);
+  const jacket = cb ? Number(cb.size) : clampEven(chest / 2, 42, 64);
 
-  const jacketConfidence: CategoryAdvice["confidence"] = measuredChest
-    ? "hoog"
-    : input.heightCm && input.weightKg
-      ? "gemiddeld"
-      : "laag";
+  // Confidence: hoog alleen bij een gemeten borst die netjes in een maat valt.
+  const jacketConfidence: CategoryAdvice["confidence"] =
+    measuredChest && cb && cb.distanceCm <= 2
+      ? "hoog"
+      : input.heightCm && input.weightKg
+        ? "gemiddeld"
+        : "laag";
 
-  // Twijfelband: als de schatting dicht bij een grens ligt, geef een range.
-  const remainder = Math.abs((jacketRaw % 2) - 1);
+  // De tabel geeft je lichaamsmaat; comfort → overweeg een maat ruimer, en bij
+  // een schatting tonen we een twijfelband.
   const jacketRange =
-    !measuredChest && remainder < 0.6 ? `${Math.max(44, jacket - 2)}–${jacket}` : undefined;
+    fit === "comfort"
+      ? `${jacket}–${Math.min(64, jacket + 2)}`
+      : !measuredChest
+        ? `${Math.max(42, jacket - 2)}–${jacket}`
+        : undefined;
+
+  // Overhemd-boordmaat uit de tabel (borst → boord), niet uit een formule.
+  const bd = boordByChest(chest);
+  const shirtSize = bd ? bd.boordCm.replace("-", "/") : collarLabel(neck);
 
   const advice: SizeAdvice = {
     estimatedChestCm: chest,
@@ -168,14 +182,14 @@ export function recommendSizes(input: SizeAdviceInput): SizeAdvice {
       confidence: jacketConfidence,
       note:
         fit === "slim"
-          ? "Slim fit valt smaller — bij twijfel een maat groter."
+          ? "Slim fit valt strakker — dit is je lichaamsmaat."
           : fit === "comfort"
-            ? "Comfort fit zit ruimer."
+            ? "Comfort fit zit ruimer — bij twijfel een maat groter."
             : undefined,
     },
     shirt: {
-      size: collarLabel(neck),
-      confidence: input.neckCm ? "hoog" : "gemiddeld",
+      size: shirtSize,
+      confidence: measuredChest || input.neckCm ? "hoog" : "gemiddeld",
       note: tall ? "Lange pasvorm? Kies de 7-variant voor extra lengte." : undefined,
     },
   };
