@@ -4,19 +4,34 @@ import { createContext, useContext } from "react";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 import { t as translate } from "@/lib/messages";
 
-const Ctx = createContext<Locale>(DEFAULT_LOCALE);
+type Messages = Record<string, string>;
+type Ctx = { locale: Locale; messages: Messages | null };
 
-/** Locale vanaf de server doorgeven aan client components (geen hydration-mismatch). */
-export function LocaleProvider({ locale, children }: { locale: Locale; children: React.ReactNode }) {
-  return <Ctx.Provider value={locale}>{children}</Ctx.Provider>;
+const LocaleCtx = createContext<Ctx>({ locale: DEFAULT_LOCALE, messages: null });
+
+/**
+ * Locale + (optioneel) de volledige, op de server samengestelde UI-dictionary
+ * doorgeven aan client components. De dictionary bevat de cron-vertalingen uit
+ * de store; ontbreekt die, dan valt useT terug op de statische dict.
+ */
+export function LocaleProvider({
+  locale,
+  messages,
+  children,
+}: {
+  locale: Locale;
+  messages?: Messages;
+  children: React.ReactNode;
+}) {
+  return <LocaleCtx.Provider value={{ locale, messages: messages ?? null }}>{children}</LocaleCtx.Provider>;
 }
 
 export function useLocale(): Locale {
-  return useContext(Ctx);
+  return useContext(LocaleCtx).locale;
 }
 
 /** Vertaalhelper voor client components. */
 export function useT(): (key: string) => string {
-  const locale = useContext(Ctx);
-  return (key: string) => translate(key, locale);
+  const { locale, messages } = useContext(LocaleCtx);
+  return (key: string) => messages?.[key] ?? translate(key, locale);
 }

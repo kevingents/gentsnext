@@ -97,7 +97,72 @@ const de: Dict = {
   "delivery.free": "Kostenloser Versand ab 75 €",
 };
 
-const DICTS: Record<Locale, Dict> = { nl, en, de, fr: {}, es: {} };
+const fr: Dict = {
+  "usp.specialist": "Spécialiste des occasions formelles",
+  "usp.luxury": "Luxe abordable",
+  "usp.returns": "Retours gratuits sous 14 jours",
+  "usp.advice": "Conseils personnalisés dans 19 magasins",
+  "nav.suitBuilder": "Composez votre costume",
+  "nav.sizeAdvice": "Guide des tailles",
+  "cart.title": "Panier",
+  "cart.empty": "Votre panier est vide",
+  "cart.checkout": "Commander",
+  "cart.subtotal": "Sous-total",
+  "cart.freeShipping": "Vous bénéficiez de la livraison gratuite",
+  "common.addToCart": "Ajouter au panier",
+  "common.chooseSize": "Choisissez une taille",
+  "common.soldOut": "Épuisé",
+  "common.inStock": "En stock",
+  "common.shopNow": "Acheter",
+  "common.viewAll": "Voir tout",
+  "common.search": "Rechercher",
+  "common.account": "Mon compte",
+  "common.wishlist": "Favoris",
+  "footer.shop": "Boutique",
+  "footer.service": "Service",
+  "footer.legal": "Mentions légales",
+  "footer.newsletterTitle": "Nouvelles collections, conseils de style et offres exclusives",
+  "footer.newsletterCta": "S'inscrire",
+  "delivery.beforeCutoff": "Commandé avant 16h, expédié aujourd'hui",
+  "delivery.free": "Livraison gratuite dès 75 €",
+};
+
+const es: Dict = {
+  "usp.specialist": "Especialistas en ropa formal",
+  "usp.luxury": "Lujo asequible",
+  "usp.returns": "Devoluciones gratis en 14 días",
+  "usp.advice": "Asesoramiento personal en 19 tiendas",
+  "nav.suitBuilder": "Crea tu traje",
+  "nav.sizeAdvice": "Guía de tallas",
+  "cart.title": "Cesta",
+  "cart.empty": "Tu cesta está vacía",
+  "cart.checkout": "Tramitar pedido",
+  "cart.subtotal": "Subtotal",
+  "cart.freeShipping": "Tienes derecho a envío gratis",
+  "common.addToCart": "Añadir a la cesta",
+  "common.chooseSize": "Elige una talla",
+  "common.soldOut": "Agotado",
+  "common.inStock": "En stock",
+  "common.shopNow": "Comprar",
+  "common.viewAll": "Ver todo",
+  "common.search": "Buscar",
+  "common.account": "Mi cuenta",
+  "common.wishlist": "Favoritos",
+  "footer.shop": "Tienda",
+  "footer.service": "Servicio",
+  "footer.legal": "Aviso legal",
+  "footer.newsletterTitle": "Nuevas colecciones, consejos de estilo y ofertas exclusivas",
+  "footer.newsletterCta": "Suscribirse",
+  "delivery.beforeCutoff": "Pedido antes de las 16:00, enviado hoy",
+  "delivery.free": "Envío gratis a partir de 75 €",
+};
+
+const DICTS: Record<Locale, Dict> = { nl, en, de, fr, es };
+
+/** Alle bekende NL-bronsleutels (voor de vertaal-cron: dit is de bron-van-waarheid). */
+export function uiSourceKeys(): { key: string; source: string }[] {
+  return Object.entries(nl).map(([key, source]) => ({ key, source }));
+}
 
 export function t(key: string, locale: Locale): string {
   return DICTS[locale]?.[key] ?? nl[key] ?? key;

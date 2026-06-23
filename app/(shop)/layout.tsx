@@ -13,12 +13,14 @@ import { WelcomePopup } from "@/components/welcome-popup";
 import { Tracker } from "@/components/analytics/tracker";
 import { LocaleProvider } from "@/components/i18n/locale-provider";
 import { getLocale } from "@/lib/locale-server";
+import { getUiMessages } from "@/lib/translate";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
+  const messages = await getUiMessages(locale).catch(() => undefined);
   return (
-    <LocaleProvider locale={locale}>
+    <LocaleProvider locale={locale} messages={messages}>
     <CartProvider>
       <WishlistProvider>
         <div className="flex min-h-screen flex-col">
