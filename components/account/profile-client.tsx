@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatEuro } from "@/lib/pricing";
+import { AddressBook } from "@/components/account/address-book";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
 type Line = { title: string; size: string; color: string; quantity: number; unitPriceCents: number };
@@ -23,7 +24,7 @@ type Giftcard = {
 };
 type Loyalty = { id: string; points: number; reason: string; createdAt: string };
 type Address = {
-  id: string; label: string; street: string; houseNumber: string; postalCode: string;
+  id: string; label: string; firstName?: string; lastName?: string; street: string; houseNumber: string; postalCode: string;
   city: string; country: string; isDefault: boolean;
 };
 type Customer = {
@@ -523,26 +524,7 @@ function Gegevens({ customer }: { customer: Customer }) {
 
 /* ── Adresboek ────────────────────────────────────────────────────────────── */
 function Adressen({ data }: { data: Data }) {
-  if (!data.addresses.length) {
-    return <Empty title="Nog geen adressen" body="Je bezorgadres wordt automatisch bewaard zodra je je eerste online bestelling plaatst." />;
-  }
-  return (
-    <ul className="grid gap-4 sm:grid-cols-2">
-      {data.addresses.map((a) => (
-        <li key={a.id} className="border border-line p-5">
-          <div className="flex items-center justify-between">
-            <p className="font-medium">{a.label}</p>
-            {a.isDefault ? <span className="bg-surface px-2 py-0.5 font-sans text-[0.6rem] uppercase tracking-wide">Standaard</span> : null}
-          </div>
-          <p className="mt-2 font-sans text-sm text-ink-soft">
-            {a.street} {a.houseNumber}<br />
-            {a.postalCode} {a.city}<br />
-            {a.country}
-          </p>
-        </li>
-      ))}
-    </ul>
-  );
+  return <AddressBook addresses={data.addresses} />;
 }
 
 /* ── Helper ───────────────────────────────────────────────────────────────── */
