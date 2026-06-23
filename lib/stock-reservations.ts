@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { stockForSkus, stockSyncedAt, type SkuStock } from "@/lib/stock";
+import { stockForSkus, stockSyncedAt, onlineBranchSet, type SkuStock } from "@/lib/stock";
+import { posDeltaByLocationKey, webReservedAllLocations } from "@/lib/store-core";
 
 /**
  * Order-bewuste voorraad. SRS is alleen WMS/voorraadbron en ziet de webverkopen
@@ -44,19 +45,36 @@ export async function reservedBySku(skus: string[]): Promise<Map<string, number>
 }
 
 /**
- * Zoals stockForSkus, maar met de web-reserveringen afgetrokken van total/online
- * (het web-kanaal). byBranch (winkel-afhaal) blijft bruto. Voor klant-weergave
- * (PDP/maat-beschikbaarheid) zodat we niet oververkopen tussen syncs.
+ * Beschikbaar per artikel voor klant-weergave (PDP/maat), uit de gedeelde core:
+ *   per locatie: net = SRS-baseline + kassa/pos-delta − web-reservering
+ * total = som over alle locaties; online = som over de online-filialen.
+ * Zo ziet de webshop óók de winkelverkopen (pos) en z'n eigen web-reserveringen —
+ * één waarheid met de kassa, geen dubbelverkoop. byBranch.qty wordt netto.
  */
 export async function availableForSkus(skus: string[]): Promise<Map<string, SkuStock>> {
-  const [gross, reserved] = await Promise.all([stockForSkus(skus), reservedBySku(skus)]);
+  const clean = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];
   const out = new Map<string, SkuStock>();
+  if (!clean.length) return out;
+  const [gross, posDelta, webRes] = await Promise.all([
+    stockForSkus(clean),
+    posDeltaByLocationKey(clean),
+    webReservedAllLocations(),
+  ]);
+  const online = onlineBranchSet(); // Set<branchId> of null = alle filialen
   for (const [sku, st] of gross) {
-    const r = reserved.get(sku) || 0;
-    out.set(
-      sku,
-      r > 0 ? { ...st, total: Math.max(0, st.total - r), online: Math.max(0, st.online - r) } : st,
-    );
+    const keyL = sku.toLowerCase();
+    let total = 0;
+    let onlineQty = 0;
+    const byBranch = st.byBranch.map((b) => {
+      const locL = (b.store || "").toLowerCase();
+      const pd = posDelta.get(locL)?.get(keyL) || 0; // negatief = kassa-verkoop
+      const wr = webRes.get(locL)?.get(keyL) || 0; // door web gereserveerd
+      const net = Math.max(0, b.qty + pd - wr);
+      total += net;
+      if (!online || online.has(b.branchId)) onlineQty += net;
+      return { ...b, qty: net };
+    });
+    out.set(sku, { total, online: onlineQty, byBranch });
   }
   return out;
 }

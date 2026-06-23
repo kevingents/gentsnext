@@ -113,13 +113,13 @@ export async function coreDeltaForKeys(location: string, keys: string[]): Promis
  * laat de sync 'm zakken → reservering valt vrij). Géén permanente boeking →
  * geen dubbeltelling met de SRS-baseline.
  */
-export async function webReservedForLocation(location: string): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  const loc = norm(location);
-  if (!loc) return out;
+export async function webReservedAllLocations(): Promise<Map<string, Map<string, number>>> {
+  // locatie(lower) → (stockKey(lower) → gereserveerd aantal)
+  const out = new Map<string, Map<string, number>>();
   const syncedAt = (await stockSyncedAt()) ?? new Date(0);
   try {
     const db = getDb();
+    // Alléén web-orders met een fulfillment_plan (geïmporteerde historie heeft er geen → uitgesloten).
     const rows = await db.execute<{ fulfillment_plan: unknown }>(sql`
       select fulfillment_plan from orders
       where (status in ('paid','ready_pickup')
@@ -129,17 +129,48 @@ export async function webReservedForLocation(location: string): Promise<Map<stri
     for (const r of rows.rows) {
       const plan = r.fulfillment_plan as { shipments?: { store?: string; lines?: { sku?: string; qty?: number }[] }[] } | null;
       for (const s of plan?.shipments || []) {
-        if (lower(s.store) !== lower(loc)) continue;
+        const loc = lower(s.store);
+        if (!loc) continue;
+        let m = out.get(loc);
+        if (!m) { m = new Map(); out.set(loc, m); }
         for (const l of s.lines || []) {
           const key = lower(l.sku);
           const qty = Math.abs(Math.round(Number(l.qty) || 0));
           if (!key || !qty) continue;
-          out.set(key, (out.get(key) || 0) + qty);
+          m.set(key, (m.get(key) || 0) + qty);
         }
       }
     }
   } catch {
-    // Bij een fout liever niets reserveren dan de kassa blokkeren.
+    // Bij een fout liever niets reserveren dan blokkeren.
+  }
+  return out;
+}
+
+/** Web-reserveringen per stockKey voor één locatie (gebruikt door de kassa-core). */
+export async function webReservedForLocation(location: string): Promise<Map<string, number>> {
+  const loc = lower(location);
+  if (!loc) return new Map();
+  return (await webReservedAllLocations()).get(loc) || new Map();
+}
+
+/** Kassa/pos-delta (core-grootboek) per locatie+stockKey voor een set artikelen. */
+export async function posDeltaByLocationKey(keys: string[]): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
+  const clean = [...new Set(keys.map(lower).filter(Boolean))];
+  if (!clean.length) return out;
+  const db = getDb();
+  const rows = await db.execute<{ location: string; stock_key: string; net: number }>(sql`
+    select location, stock_key, sum(delta)::int as net
+    from store_stock_movements
+    where stock_key in (${sql.join(clean.map((k) => sql`${k}`), sql`, `)})
+    group by location, stock_key
+  `);
+  for (const r of rows.rows) {
+    const loc = lower(r.location);
+    let m = out.get(loc);
+    if (!m) { m = new Map(); out.set(loc, m); }
+    m.set(String(r.stock_key), Number(r.net) || 0);
   }
   return out;
 }

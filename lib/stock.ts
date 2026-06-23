@@ -28,7 +28,7 @@ let _at = 0;
 let _inflight: Promise<StockIndex> | null = null;
 let _syncedAt: Date | null = null; // tijdstip van de laatste SRS-voorraadsync (blob)
 
-function onlineBranchSet(): Set<string> | null {
+export function onlineBranchSet(): Set<string> | null {
   const raw = (process.env.GENTS_WEBSHOP_STOCK_BRANCHES || "").trim();
   if (!raw) return null; // null = tel alle filialen mee
   return new Set(
