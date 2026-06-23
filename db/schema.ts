@@ -204,6 +204,47 @@ export const storeStockMovements = pgTable(
   ],
 );
 
+/**
+ * Fase D — anti-oversell. Atomaire web-reserveringsteller per (locatie, stockKey).
+ * De gate bij het aanmaken van een order is één SQL-statement (ON CONFLICT DO
+ * UPDATE ... WHERE) → de rij-lock serialiseert gelijktijdige checkouts, zodat het
+ * laatste stuk maar één keer gereserveerd kan worden. 'online' = de web-pool.
+ */
+export const webStockReservationCounter = pgTable(
+  "web_stock_reservation_counter",
+  {
+    location: text("location").notNull(),
+    stockKey: text("stock_key").notNull(),
+    reserved: integer("reserved").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.location, t.stockKey] })],
+);
+
+/**
+ * Individuele web-holds (per order) met TTL. Voeden de teller en maken gerichte
+ * vrijgave (betaald+gepland → afgeleide reservering neemt over; betaling mislukt
+ * → vrij) en expiry (verlaten checkout) mogelijk. Eén statement decrementeert de
+ * teller + ruimt de hold op, zodat teller en holds in sync blijven.
+ */
+export const webStockHolds = pgTable(
+  "web_stock_holds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull(),
+    location: text("location").notNull(),
+    stockKey: text("stock_key").notNull(),
+    qty: integer("qty").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("wsh_order_idx").on(t.orderId),
+    index("wsh_loc_key_idx").on(t.location, t.stockKey),
+    index("wsh_expires_idx").on(t.expiresAt),
+  ],
+);
+
 export const priceHistory = pgTable(
   "price_history",
   {

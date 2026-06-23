@@ -11,6 +11,9 @@ import { getSettings } from "@/lib/settings";
 import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
+import { availableForSkus } from "@/lib/stock-reservations";
+import { availableInStore } from "@/lib/store-core";
+import { reserveOrderStock, releaseOrderHolds, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -18,6 +21,16 @@ import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcar
  */
 
 export type DeliveryMethod = "standard" | "express" | "pickup";
+
+/** Gegooid wanneer de voorraad-gate een order weigert (net uitverkocht). */
+export class OutOfStockError extends Error {
+  titles: string[];
+  constructor(titles: string[]) {
+    super(`Niet meer op voorraad: ${titles.join(", ")}`);
+    this.name = "OutOfStockError";
+    this.titles = titles;
+  }
+}
 
 export type CheckoutItem = {
   sku: string;
@@ -219,6 +232,37 @@ export async function createOrder(
     })
     .returning({ id: orders.id, orderNumber: orders.orderNumber });
 
+  // Fase D — anti-oversell: claim de voorraad atomair vóór we kortingen verzilveren.
+  // Afhalen reserveert in de gekozen winkel; standaard/express in de online-pool.
+  // gross = beschikbaar (SRS + kassa − afgeleide web-reservering); de teller-gate
+  // borgt dat twee gelijktijdige checkouts het laatste stuk niet allebei pakken.
+  const skuList = [...new Set(lines.map((l) => l.sku).filter(Boolean))];
+  const grossBySku = new Map<string, number>();
+  if (isPickup) {
+    const avail = await availableInStore(pickupStore.trim(), skuList);
+    for (const s of skuList) grossBySku.set(s, avail.get(s) ?? 0);
+  } else {
+    const avail = await availableForSkus(skuList);
+    for (const s of skuList) grossBySku.set(s, avail.get(s)?.online ?? 0);
+  }
+  const reserveLoc = isPickup ? pickupStore.trim() : WEB_POOL;
+  const requests: ReserveRequest[] = lines.map((l) => ({
+    location: reserveLoc,
+    stockKey: l.sku,
+    qty: l.quantity,
+    gross: grossBySku.get(l.sku) ?? 0,
+  }));
+  const reservation = await reserveOrderStock(order.id, requests);
+  if (!reservation.ok) {
+    // Niet leverbaar → order weer weg (nog geen voucher/cadeaubon verzilverd).
+    await db.delete(orders).where(eq(orders.id, order.id));
+    const titles = lines
+      .filter((l) => reservation.failed.includes(l.sku.toLowerCase()) || reservation.failed.includes(l.sku))
+      .map((l) => l.title)
+      .filter((v, i, a) => a.indexOf(v) === i);
+    throw new OutOfStockError(titles.length ? titles : ["een of meer artikelen"]);
+  }
+
   if (appliedCode) await redeemVoucher(appliedCode);
   // Cadeaubon afboeken (idempotent per order; geeft het werkelijk afgeboekte terug).
   if (appliedGiftcard) await redeemGiftcard(appliedGiftcard, order.orderNumber, giftcardCents);
@@ -289,7 +333,15 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
   const set: Record<string, unknown> = { paymentStatus, updatedAt: sql`now()` };
   if (orderStatus) set.status = orderStatus;
   if (paymentStatus === "paid" || paymentStatus === "authorized") set.paidAt = sql`now()`;
-  await db.update(orders).set(set).where(eq(orders.molliePaymentId, molliePaymentId));
+  const updated = await db
+    .update(orders)
+    .set(set)
+    .where(eq(orders.molliePaymentId, molliePaymentId))
+    .returning({ id: orders.id });
+  // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven.
+  if (updated.length && (orderStatus === "canceled" || orderStatus === "expired" || orderStatus === "failed")) {
+    await releaseOrderHolds(updated[0].id);
+  }
 }
 
 /**
@@ -375,6 +427,7 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
         .update(orders)
         .set({ fulfillmentPlan: pickupPlan, fulfillmentStatus: "planned", updatedAt: sql`now()` })
         .where(eq(orders.id, orderId));
+      await releaseOrderHolds(orderId); // plan staat → afgeleide reservering neemt over
       return;
     }
 
@@ -407,6 +460,7 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
         updatedAt: sql`now()`,
       })
       .where(eq(orders.id, orderId));
+    await releaseOrderHolds(orderId); // plan staat → afgeleide reservering neemt over
   } catch (e) {
     console.error("[fulfillment] plan/push faalde voor", order.orderNumber, e);
     // Terug naar 'pending' zodat een volgende webhook het opnieuw probeert.
