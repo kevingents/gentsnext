@@ -9,7 +9,7 @@ import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { FooterPayments } from "@/components/footer-payments";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
-import { formatEuro } from "@/lib/pricing";
+import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
 
 type Field = {
   name: string;
@@ -103,6 +103,12 @@ function CheckoutForm() {
   const [expressSurcharge, setExpressSurcharge] = useState(0);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
+  const [tiered, setTiered] = useState<TieredDiscountCfg | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/promo").then((r) => r.json()).then((d) => { if (active) setTiered(d?.tieredDiscount || null); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   // Eén veld voor kortingscode óf cadeaubon — de server bepaalt welke het is.
   const [codeInput, setCodeInput] = useState("");
   const [codeErr, setCodeErr] = useState("");
@@ -167,7 +173,10 @@ function CheckoutForm() {
   const baseShipping = cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
   const surcharge = delivery === "express" ? expressSurcharge : 0;
   const shippingCents = baseShipping + surcharge;
-  const discountCents = voucher?.discountCents ?? 0;
+  const itemCount = cart.lines.reduce((n, l) => n + l.qty, 0);
+  const tieredCents = tieredDiscountCents(itemCount, cart.subtotalCents, tiered);
+  const voucherCents = voucher?.discountCents ?? 0;
+  const discountCents = Math.min(cart.subtotalCents, voucherCents + tieredCents);
   const totalCents = Math.max(0, cart.subtotalCents - discountCents) + shippingCents;
   // Cadeaubon dekt (een deel van) het hele bedrag incl. verzending.
   const giftcardCents = giftcard ? Math.min(giftcard.balanceCents, totalCents) : 0;
@@ -505,7 +514,8 @@ function CheckoutForm() {
             </div>
             <dl className="mt-4 space-y-1.5 border-t border-line pt-4 font-sans text-sm">
               <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(cart.subtotalCents)}</dd></div>
-              {discountCents > 0 ? (<div className="flex justify-between text-success"><dt>Korting ({voucher?.code})</dt><dd>− {formatEuro(discountCents)}</dd></div>) : null}
+              {tieredCents > 0 ? (<div className="flex justify-between text-success"><dt>Staffelkorting ({tiered?.percentOff}% vanaf {tiered?.minItems})</dt><dd>− {formatEuro(tieredCents)}</dd></div>) : null}
+              {voucherCents > 0 ? (<div className="flex justify-between text-success"><dt>Korting ({voucher?.code})</dt><dd>− {formatEuro(voucherCents)}</dd></div>) : null}
               <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{baseShipping === 0 ? "Gratis" : formatEuro(baseShipping)}</dd></div>
               {surcharge > 0 ? (<div className="flex justify-between"><dt className="text-muted">Snellere levering</dt><dd>+ {formatEuro(surcharge)}</dd></div>) : null}
               {giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>Cadeaubon</dt><dd>− {formatEuro(giftcardCents)}</dd></div>) : null}

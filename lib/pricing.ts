@@ -20,6 +20,17 @@ export function formatEuro(cents: number): string {
   );
 }
 
+export type TieredDiscountCfg = { enabled: boolean; minItems: number; percentOff: number };
+
+/** Staffelkorting: vanaf `minItems` artikelen → `percentOff`% op het subtotaal.
+ *  Pure functie — zelfde berekening op client (weergave) en server (autoritatief). */
+export function tieredDiscountCents(itemCount: number, subtotalCents: number, cfg?: TieredDiscountCfg | null): number {
+  if (!cfg?.enabled || subtotalCents <= 0) return 0;
+  if (itemCount < Math.max(1, cfg.minItems || 0)) return 0;
+  const pct = Math.max(0, Math.min(100, cfg.percentOff || 0));
+  return Math.min(subtotalCents, Math.round((subtotalCents * pct) / 100));
+}
+
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 type HistoryRow = { variantId: string; priceCents: number; validFrom: Date };

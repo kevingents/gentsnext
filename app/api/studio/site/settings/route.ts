@@ -37,6 +37,14 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
   }
+  if (b.tieredDiscount && typeof b.tieredDiscount === "object") {
+    const t = b.tieredDiscount as Record<string, unknown>;
+    out.tieredDiscount = {
+      enabled: Boolean(t.enabled),
+      minItems: Math.max(1, Math.round(Number(t.minItems) || 2)),
+      percentOff: Math.max(0, Math.min(100, Math.round(Number(t.percentOff) || 0))),
+    };
+  }
   if (b.giftcardConfig && typeof b.giftcardConfig === "object") {
     const g = b.giftcardConfig as Record<string, unknown>;
     out.giftcardConfig = {

@@ -56,6 +56,12 @@ export type Settings = {
     maxCents: number;
     validityMonths: number;
   };
+  // Staffelkorting: vanaf X artikelen Y% korting op het subtotaal. Default uit.
+  tieredDiscount: {
+    enabled: boolean;
+    minItems: number;
+    percentOff: number;
+  };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -96,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
     maxCents: 50000,
     validityMonths: 24,
   },
+  tieredDiscount: { enabled: false, minItems: 2, percentOff: 10 },
 };
 
 let _cache: Settings | null = null;
@@ -116,6 +123,7 @@ export async function getSettings(): Promise<Settings> {
       storeCutoffByDay: { ...DEFAULT_SETTINGS.storeCutoffByDay, ...(stored.storeCutoffByDay || {}) },
       modelLook: { ...DEFAULT_SETTINGS.modelLook, ...(stored.modelLook || {}) },
       giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
+      tieredDiscount: { ...DEFAULT_SETTINGS.tieredDiscount, ...(stored.tieredDiscount || {}) },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

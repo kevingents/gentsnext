@@ -9,6 +9,7 @@ import { allocateOrder } from "@/lib/fulfillment";
 import { pushOrderToSRS } from "@/lib/srs";
 import { getSettings } from "@/lib/settings";
 import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
+import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 
 /**
@@ -149,6 +150,9 @@ export async function createOrder(
       appliedCode = v.code;
     }
   }
+  // Staffelkorting (instelbaar, default uit): vanaf N artikelen X% op 't subtotaal.
+  const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
+  discountCents = Math.min(subtotalCents, discountCents + tieredDiscountCents(itemCount, subtotalCents, settings.tieredDiscount));
   // Express kan alléén als de héle order rechtstreeks uit het magazijn leverbaar
   // is (snelle levering kan niet vanuit de winkels). Server-side borgen: bij een
   // split, winkel-bron of tekort zetten we stilletjes terug naar standaard —
