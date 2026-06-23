@@ -26,6 +26,7 @@ const TTL_MS = 5 * 60 * 1000;
 let _index: StockIndex | null = null;
 let _at = 0;
 let _inflight: Promise<StockIndex> | null = null;
+let _syncedAt: Date | null = null; // tijdstip van de laatste SRS-voorraadsync (blob)
 
 function onlineBranchSet(): Set<string> | null {
   const raw = (process.env.GENTS_WEBSHOP_STOCK_BRANCHES || "").trim();
@@ -47,6 +48,7 @@ async function loadIndex(): Promise<StockIndex> {
   const result = await list({ prefix: BLOB_PATH, limit: 1, token });
   const blob = result.blobs.find((b) => b.pathname === BLOB_PATH);
   if (!blob) return index;
+  _syncedAt = blob.uploadedAt ? new Date(blob.uploadedAt) : null;
 
   const res = await fetch(`${blob.url}?_=${Date.now()}`, { cache: "no-store" });
   if (!res.ok) return index;
@@ -115,4 +117,10 @@ export async function stockForSkus(skus: string[]): Promise<Map<string, SkuStock
 export async function stockAvailable(): Promise<boolean> {
   const idx = await getIndex();
   return idx.size > 0;
+}
+
+/** Tijdstip van de laatste SRS-voorraadsync (blob-upload). Voor reservering-release. */
+export async function stockSyncedAt(): Promise<Date | null> {
+  await getIndex();
+  return _syncedAt;
 }

@@ -34,7 +34,8 @@ import { localeAlternates } from "@/lib/seo";
 import { parseComposition, parseCare, careProse, stripSymbols } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { sortSizes } from "@/lib/sizing";
-import { stockForSkus, stockAvailable } from "@/lib/stock";
+import { stockAvailable } from "@/lib/stock";
+import { availableForSkus } from "@/lib/stock-reservations";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
 import { getProductViewStats } from "@/lib/social-proof";
@@ -103,7 +104,7 @@ export default async function ProductPage({ params }: Props) {
 
   const [referencePrices, stockMap, hasStock] = await Promise.all([
     getReferencePrices(variants.map((v) => v.id)),
-    stockForSkus(variants.map((v) => v.sku).filter(Boolean)),
+    availableForSkus(variants.map((v) => v.sku).filter(Boolean)),
     stockAvailable(),
   ]);
   const referenceCents = referencePrices.get(cheapest.id);
