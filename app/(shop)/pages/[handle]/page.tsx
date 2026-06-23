@@ -13,6 +13,8 @@ import { HerroepingLanding } from "@/components/landings/herroeping-landing";
 import { PortableContent } from "@/components/sanity/portable";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
+import { getStorePage } from "@/lib/content-pages";
+import { PageBody } from "@/components/page-body";
 import { getLanding, type Landing } from "@/lib/landings";
 import { localeAlternates } from "@/lib/seo";
 import { getSanityLanding, getSanityPage, urlForImage, type SanityLanding } from "@/lib/sanity";
@@ -79,6 +81,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     };
   const store = getStoreByPageHandle(handle);
   if (store) return { title: `GENTS ${store.city} — herenmode & pakken`, alternates: await localeAlternates(`/pages/${handle}`) };
+
+  const storePage = await getStorePage(handle);
+  if (storePage)
+    return { title: storePage.title, description: storePage.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
 
   const sanityLanding = await getSanityLanding(handle);
   const landing = sanityLanding ? toLanding(sanityLanding) : getLanding(handle);
@@ -151,6 +157,16 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
   // 2. Individuele winkelpagina
   const store = getStoreByPageHandle(handle);
   if (store) return <StorePage store={store} />;
+
+  // 2b. Eigen content-pagina (portal-beheerd, content:pages) — wint van Sanity/migrated.
+  const storePage = await getStorePage(handle);
+  if (storePage) {
+    return (
+      <ContentPage title={storePage.title} image={storePage.image || heroForPage(handle, storePage.title)}>
+        <PageBody body={storePage.body} />
+      </ContentPage>
+    );
+  }
 
   // 3. Storytelling-landing — Sanity wint van de statische versie
   const sanityLanding = await getSanityLanding(handle);
