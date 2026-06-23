@@ -95,11 +95,14 @@ export function BuyBox({
   }, [active, mySize, myBucket, size]);
   const isMySize = Boolean(size && myBucket && sizeRowLabel(size) === myBucket);
 
-  // One-size (bv. accessoires met maat "One"): meteen selecteren — geen maatkeuze nodig.
-  const oneSize = Boolean(active && active.sizes.length === 1);
+  // Eén beschikbare maat → meteen voorselecteren (scheelt een klik).
+  const singleSize = Boolean(active && active.sizes.length === 1);
+  // ECHTE one-size (accessoires: "One"/"OS") → maatkiezer verbergen. Eén NORMALE
+  // restmaat (bv. laatste pak in maat 50) blijft de maat tonen (klant moet 'm zien).
+  const oneSize = singleSize && /^(one|one\s?size|os|onesize|é{0,2}n maat)$/i.test(String(active?.sizes[0]?.size ?? "").trim());
   useEffect(() => {
-    if (oneSize && active && !size) setSize(active.sizes[0].size);
-  }, [oneSize, active, size]);
+    if (singleSize && active && !size) setSize(active.sizes[0].size);
+  }, [singleSize, active, size]);
 
   // Sticky mobiele bestelbalk pas tonen als de hoofd-bestelknop uit beeld is gescrolld.
   const mainCtaRef = useRef<HTMLDivElement>(null);

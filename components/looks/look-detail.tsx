@@ -176,7 +176,9 @@ export function LookDetail({
             const price = formatEuro(selSize?.priceCents ?? h.product!.minPriceCents);
             const img = activeImage(i);
             const shoppable = Boolean(data && data.sizes.length);
-            const single = Boolean(data && data.sizes.length === 1); // one-size → direct toevoegen
+            // Alleen ECHTE one-size (One/OS) → direct toevoegen; een enkele normale
+            // maat opent de drawer zodat de klant die maat ziet.
+            const single = Boolean(data && data.sizes.length === 1 && /^(one|one\s?size|os|onesize|é{0,2}n maat)$/i.test(String(data.sizes[0].size).trim()));
             return (
               <li key={i} className="group flex items-start gap-4 border-b border-line py-4 first:border-t last:border-b-0">
                 <button

@@ -36,7 +36,7 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
             <span className="flex flex-col gap-0.5">
               <span className="font-medium text-ink">Ophalen in een winkel</span>
               <span className="text-xs text-success">
-                ● Op voorraad in {available.length} {available.length === 1 ? "winkel" : "winkels"}
+                ● Af te halen in {available.length} {available.length === 1 ? "winkel" : "winkels"}
                 {openNow > 0 ? <span className="text-muted"> · {openNow} nu open</span> : null}
               </span>
             </span>
