@@ -1,11 +1,13 @@
-import { getSanityFooter } from "@/lib/sanity";
+import { getContentDoc } from "@/lib/content-store";
 
 /**
- * De footer-inhoud — uit Sanity (beheerbaar in de Studio) met de onderstaande
- * standaard als veilige fallback wanneer er (nog) geen footer in de CMS staat.
+ * De footer-inhoud — uit onze eigen content-store (content:footer, beheerbaar in
+ * de GENTS-portal) met de onderstaande standaard als seed/fallback wanneer er
+ * (nog) geen footer is bewerkt. Vervangt de oude Sanity-bron.
  */
 
 export type FooterCol = { title: string; links: { label: string; href: string }[] };
+export type FooterDoc = { intro: string; columns: FooterCol[] };
 
 const DEFAULT_INTRO =
   "Dé specialist voor je formele momenten. Betaalbare luxe, persoonlijk advies — online en in onze winkels.";
@@ -56,20 +58,18 @@ const DEFAULT_COLS: FooterCol[] = [
   },
 ];
 
-export async function getFooter(): Promise<{ intro: string; columns: FooterCol[] }> {
-  try {
-    const data = await getSanityFooter();
-    const columns = (data?.columns || [])
-      .map((c) => ({
-        title: (c.title || "").trim(),
-        links: (c.links || []).filter((l) => l?.label && l?.href) as { label: string; href: string }[],
-      }))
-      .filter((c) => c.title && c.links.length);
-    return {
-      intro: (data?.intro || "").trim() || DEFAULT_INTRO,
-      columns: columns.length ? columns : DEFAULT_COLS,
-    };
-  } catch {
-    return { intro: DEFAULT_INTRO, columns: DEFAULT_COLS };
-  }
+export const DEFAULT_FOOTER: FooterDoc = { intro: DEFAULT_INTRO, columns: DEFAULT_COLS };
+
+export async function getFooter(): Promise<FooterDoc> {
+  const doc = await getContentDoc<FooterDoc>("footer");
+  const columns = (doc?.columns || [])
+    .map((c) => ({
+      title: (c.title || "").trim(),
+      links: (c.links || []).filter((l) => l?.label && l?.href) as { label: string; href: string }[],
+    }))
+    .filter((c) => c.title && c.links.length);
+  return {
+    intro: (doc?.intro || "").trim() || DEFAULT_INTRO,
+    columns: columns.length ? columns : DEFAULT_COLS,
+  };
 }
