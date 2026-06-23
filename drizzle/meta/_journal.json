@@ -71,6 +71,13 @@
       "when": 1781552099335,
       "tag": "0009_light_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782210012492,
+      "tag": "0010_noisy_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

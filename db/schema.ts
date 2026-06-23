@@ -173,6 +173,37 @@ export const productTranslations = pgTable(
   (t) => [primaryKey({ columns: [t.productId, t.locale] })]
 );
 
+/**
+ * Omnichannel voorraad-grootboek (de "core"). Append-only kassa/web-mutaties
+ * bovenop de SRS-magazijn-baseline: beschikbaar = SRS-baseline + Σ delta.
+ * De zelfgebouwde kassa (storegents) ÉN de webshop schrijven hier transactioneel
+ * → één bron van waarheid voor winkelvoorraad, geen dubbelverkoop.
+ *  location  = winkelnaam ("GENTS Amsterdam") of "magazijn"
+ *  stockKey  = lower(barcode || sku || artikelnummer) — zelfde sleutel als SRS/kassa
+ *  delta     = − verkoop/reservering · + inboeken/retour/vrijgave
+ *  channel   = 'pos' | 'web' | 'correction'
+ *  ref       = saleId/orderNumber/clientRef → idempotentie (NULL = geen)
+ */
+export const storeStockMovements = pgTable(
+  "store_stock_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    location: text("location").notNull(),
+    stockKey: text("stock_key").notNull(),
+    delta: integer("delta").notNull(),
+    channel: text("channel").notNull().default("web"),
+    reason: text("reason").notNull().default(""),
+    ref: text("ref"),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("ssm_loc_key_idx").on(t.location, t.stockKey),
+    // Idempotentie: dezelfde (ref, kanaal, sku) boekt niet dubbel. NULL-ref mag vrij.
+    uniqueIndex("ssm_ref_unique").on(t.ref, t.channel, t.stockKey),
+  ],
+);
+
 export const priceHistory = pgTable(
   "price_history",
   {
