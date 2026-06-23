@@ -10,10 +10,9 @@ const nextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 dagen op de edge-cache
     remotePatterns: [
       // Productfoto's staan tijdens de migratie nog op de Shopify-CDN;
-      // na re-hosting komen hier de eigen Blob/Sanity-hosts bij.
+      // eigen beelden draaien op Vercel Blob.
       { protocol: 'https', hostname: 'cdn.shopify.com' },
       { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
-      { protocol: 'https', hostname: 'cdn.sanity.io' },
     ],
   },
   eslint: {

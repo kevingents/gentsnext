@@ -10,36 +10,15 @@ import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
 import { StudentsLanding } from "@/components/landings/students-landing";
 import { KlantenserviceLanding } from "@/components/landings/klantenservice-landing";
 import { HerroepingLanding } from "@/components/landings/herroeping-landing";
-import { PortableContent } from "@/components/sanity/portable";
 import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
 import { getMigratedPage } from "@/lib/migrated-pages";
 import { getStorePage } from "@/lib/content-pages";
 import { PageBody } from "@/components/page-body";
-import { getLanding, type Landing } from "@/lib/landings";
+import { getLanding } from "@/lib/landings";
 import { localeAlternates } from "@/lib/seo";
-import { getSanityLanding, getSanityPage, urlForImage, type SanityLanding } from "@/lib/sanity";
 import { getHighlights, getCollectionByHandle, getCollectionProducts } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
-
-/** Sanity-landing → component-vorm (afbeeldingen via Sanity-CDN). */
-function toLanding(s: SanityLanding): Landing {
-  return {
-    handle: s.slug,
-    eyebrow: s.eyebrow || "",
-    title: s.title,
-    intro: s.intro || "",
-    heroImage: urlForImage(s.heroImage, 1600) || "/brand/brand-impression-interview.jpg",
-    sections: (s.sections || []).map((x) => ({
-      title: x.title || "",
-      body: x.body || "",
-      image: x.image ? urlForImage(x.image, 1000) : undefined,
-    })),
-    shop: (s.shop || []).filter((x) => x.label && x.href).map((x) => ({ label: x.label!, href: x.href! })),
-    cta: { label: s.ctaLabel || "Bekijk de collectie", href: s.ctaHref || "/collections" },
-    seoDescription: s.seoDescription || "",
-  };
-}
 
 const KNOWN_TITLES: Record<string, string> = {
   winkels: "Onze winkels",
@@ -86,14 +65,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   if (storePage)
     return { title: storePage.title, description: storePage.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
 
-  const sanityLanding = await getSanityLanding(handle);
-  const landing = sanityLanding ? toLanding(sanityLanding) : getLanding(handle);
+  const landing = getLanding(handle);
   if (landing)
     return { title: landing.title, description: landing.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
 
-  const sanityPage = await getSanityPage(handle);
-  if (sanityPage)
-    return { title: sanityPage.title, description: sanityPage.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
   const mp = getMigratedPage(handle);
   if (mp) return { title: mp.title, alternates: await localeAlternates(`/pages/${handle}`) };
   return { title: fallbackTitle(handle), robots: { index: false } };
@@ -168,24 +143,11 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
     );
   }
 
-  // 3. Storytelling-landing — Sanity wint van de statische versie
-  const sanityLanding = await getSanityLanding(handle);
-  const landing = sanityLanding ? toLanding(sanityLanding) : getLanding(handle);
+  // 3. Statische storytelling-landing.
+  const landing = getLanding(handle);
   if (landing) return <LandingPage landing={landing} />;
 
-  // 4. Content-pagina — Sanity (Portable Text of overgenomen HTML) wint van migrated
-  const sanityPage = await getSanityPage(handle);
-  if (sanityPage) {
-    return (
-      <ContentPage title={sanityPage.title} image={heroForPage(handle, sanityPage.title)}>
-        {sanityPage.body?.length ? (
-          <PortableContent value={sanityPage.body} />
-        ) : sanityPage.legacyHtml ? (
-          <div className="prose-gents" dangerouslySetInnerHTML={{ __html: sanityPage.legacyHtml }} />
-        ) : null}
-      </ContentPage>
-    );
-  }
+  // 4. Overgenomen content-pagina (migrated).
   const mp = getMigratedPage(handle);
   if (mp) {
     // Bespoke structuur-classes (dresscode-/gelegenheidspagina's) → gents-doc-styling

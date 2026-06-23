@@ -1,5 +1,4 @@
 import { getProductsByHandles, type ProductCardData } from "@/lib/catalog";
-import { getSanityLooks, getSanityLook, urlForImage } from "@/lib/sanity";
 import { getContentDoc, setContentDoc } from "@/lib/content-store";
 import type { Settings } from "@/lib/settings";
 import { getDb } from "@/db";
@@ -10,9 +9,8 @@ import { colorSwatch } from "@/lib/colors";
 /**
  * "Shop the look" — gecureerde outfits met klikbare hotspots op een modelfoto
  * (Mr Marvis-stijl, eigen GENTS-twist: gelegenheid-first + dresscode-laag).
- * Bron: Sanity ('look'-documenten, beheerbaar op /studio); valt terug op de
- * statische LOOKS hieronder als Sanity (nog) geen looks heeft. Hotspot-posities
- * zijn percentages op de foto.
+ * Bron: de eigen looks-store (portal-beheerd, content:looks) bovenop de statische
+ * LOOKS hieronder als basis. Hotspot-posities zijn percentages op de foto.
  */
 
 export type Hotspot = { x: number; y: number; handle: string; label?: string };
@@ -271,48 +269,13 @@ function withStory(look: Look): Look {
   return story ? { ...look, story } : look;
 }
 
-/** Sanity-look → component-vorm (afbeelding via Sanity-CDN). */
-function fromSanity(s: {
-  title: string;
-  slug: string;
-  occasion?: string;
-  theme?: string;
-  subtitle?: string;
-  story?: string;
-  image?: unknown;
-  gallery?: unknown[];
-  hotspots?: { label?: string; handle?: string; x?: number; y?: number }[];
-}): Look | null {
-  const image = urlForImage(s.image, 1200);
-  if (!image) return null;
-  const images = (s.gallery || []).map((g) => urlForImage(g, 1000)).filter(Boolean);
-  return {
-    slug: s.slug,
-    title: s.title,
-    subtitle: s.subtitle || "",
-    occasion: s.occasion || "",
-    ...(s.theme ? { theme: s.theme } : {}),
-    ...(s.story ? { story: s.story } : {}),
-    image,
-    ...(images.length ? { images } : {}),
-    hotspots: (s.hotspots || [])
-      .filter((h) => h.handle)
-      .map((h) => ({ x: Number(h.x ?? 50), y: Number(h.y ?? 50), handle: h.handle!, label: h.label })),
-  };
-}
-
 /**
- * Alle looks — de in code gedefinieerde LOOKS als basis (altijd aanwezig),
- * met Sanity-looks die op slug overschrijven of toevoegen (beheerbaar op /studio).
- * Zo verschijnen de vaste occasion-looks gegarandeerd, en blijft de CMS uitbreidbaar.
+ * Alle looks — de in code gedefinieerde LOOKS als basis (altijd aanwezig), met
+ * de eigen looks-store (portal-beheerd) eroverheen: gepubliceerde looks
+ * overschrijven/voegen toe, concepten (draft) verbergen we op de storefront.
  */
 export async function getAllLooks(): Promise<Look[]> {
-  const sanity = await getSanityLooks();
-  const fromCms = (sanity || []).map(fromSanity).filter(Boolean) as Look[];
   const bySlug = new Map<string, Look>(LOOKS.map((l) => [l.slug, l]));
-  for (const l of fromCms) bySlug.set(l.slug, l);
-  // Eigen looks-store (portal-beheerd): gepubliceerde looks overschrijven/voegen toe,
-  // concepten (draft) verbergen we juist op de storefront.
   for (const sl of await getStoredLooks()) {
     if (sl.status === "published") bySlug.set(sl.slug, stripStatus(sl));
     else bySlug.delete(sl.slug);
@@ -320,13 +283,11 @@ export async function getAllLooks(): Promise<Look[]> {
   return [...bySlug.values()].map(withStory);
 }
 
-/** Eén look op slug — eigen store eerst (alleen gepubliceerd), dan Sanity, dan statisch. */
+/** Eén look op slug — eigen store eerst (alleen gepubliceerd), dan statisch. */
 export async function getLookBySlug(slug: string): Promise<Look | null> {
   const stored = (await getStoredLooks()).find((l) => l.slug === slug);
   if (stored) return stored.status === "published" ? withStory(stripStatus(stored)) : null;
-  const s = await getSanityLook(slug);
-  const fromCms = s ? fromSanity(s) : null;
-  const look = fromCms ?? LOOKS.find((l) => l.slug === slug) ?? null;
+  const look = LOOKS.find((l) => l.slug === slug) ?? null;
   return look ? withStory(look) : null;
 }
 
@@ -347,23 +308,13 @@ export async function getStoredLooks(): Promise<StoredLook[]> {
 }
 
 /**
- * Alle looks vóór de portal-beheerpagina: statische + Sanity als basis (status
+ * Alle looks vóór de portal-beheerpagina: de statische LOOKS als basis (status
  * 'published'), met de store-versie eroverheen (incl. concepten). Zo ziet de
  * beheerder álles en kan hij bestaande looks goedkeuren/bewerken.
  */
 export async function getManagedLooks(): Promise<StoredLook[]> {
-  const base = await getAllLooksRaw();
-  const bySlug = new Map<string, StoredLook>(base.map((l) => [l.slug, { ...l, status: "published" as const }]));
+  const bySlug = new Map<string, StoredLook>(LOOKS.map((l) => [l.slug, { ...l, status: "published" as const }]));
   for (const sl of await getStoredLooks()) bySlug.set(sl.slug, sl);
-  return [...bySlug.values()];
-}
-
-/** Statische + Sanity-looks zonder store-overlay (basis voor de beheerlijst). */
-async function getAllLooksRaw(): Promise<Look[]> {
-  const sanity = await getSanityLooks();
-  const fromCms = (sanity || []).map(fromSanity).filter(Boolean) as Look[];
-  const bySlug = new Map<string, Look>(LOOKS.map((l) => [l.slug, l]));
-  for (const l of fromCms) bySlug.set(l.slug, l);
   return [...bySlug.values()];
 }
 

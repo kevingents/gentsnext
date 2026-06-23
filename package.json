@@ -18,24 +18,15 @@
     "backfill:sizelabel": "tsx scripts/backfill-size-label.ts",
     "sync:catalog": "tsx scripts/sync-catalog-flags.ts",
     "translate:catalog": "tsx scripts/translate-catalog.ts",
-    "generate:model-photos": "tsx scripts/generate-model-photos.ts",
-    "sanity:seed": "tsx scripts/sanity-seed.ts",
-    "studio:dev": "sanity dev",
-    "studio:deploy": "sanity deploy"
+    "generate:model-photos": "tsx scripts/generate-model-photos.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
-    "@portabletext/react": "^6.2.0",
-    "@sanity/image-url": "^2.1.1",
-    "@sanity/vision": "^3.99.0",
-    "@sanity/webhook": "^4.0.4",
     "@vercel/blob": "^2.4.0",
     "drizzle-orm": "^0.45.2",
     "next": "^15.5.19",
-    "next-sanity": "^9.12.3",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "sanity": "^3.99.0"
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/node": "^22.19.21",
