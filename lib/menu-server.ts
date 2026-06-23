@@ -1,34 +1,11 @@
-import { getSanityMenu, urlForImage, type SanityMenu } from "@/lib/sanity";
 import { MAIN_MENU, type MenuItem } from "@/lib/main-menu";
+import { getContentDoc } from "@/lib/content-store";
 
 /**
- * Het hoofdmenu — uit Sanity (beheerbaar in de Studio) met de statische
- * MAIN_MENU als veilige fallback wanneer er (nog) geen menu in de CMS staat.
+ * Het hoofdmenu — uit onze eigen content-store (content:menu, beheerbaar in de
+ * GENTS-portal) met de statische MAIN_MENU als seed/fallback. Vervangt Sanity.
  */
 export async function getMenu(): Promise<MenuItem[]> {
-  try {
-    const data = await getSanityMenu();
-    const items = (data?.items || []).map(fromSanity).filter(Boolean) as MenuItem[];
-    return items.length ? items : MAIN_MENU;
-  } catch {
-    return MAIN_MENU;
-  }
-}
-
-function fromSanity(it: NonNullable<SanityMenu["items"]>[number]): MenuItem | null {
-  if (!it?.label) return null;
-  const columns = (it.columns || [])
-    .map((c) => ({ title: c.title, links: (c.links || []).filter((l) => l?.label && l?.href) }))
-    .filter((c) => c.links.length);
-  const featImg = it.feature?.image ? urlForImage(it.feature.image, 600) : "";
-  const features =
-    it.feature && featImg && it.feature.href
-      ? [{ label: it.feature.label || "", caption: it.feature.caption, href: it.feature.href, image: featImg }]
-      : [];
-  return {
-    label: it.label,
-    href: it.href || "#",
-    ...(columns.length ? { columns } : {}),
-    ...(features.length ? { features } : {}),
-  };
+  const doc = await getContentDoc<{ items: MenuItem[] }>("menu");
+  return Array.isArray(doc?.items) && doc.items.length ? doc.items : MAIN_MENU;
 }
