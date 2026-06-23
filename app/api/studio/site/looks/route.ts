@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
-import { getManagedLooks, saveLook, deleteStoredLook, type StoredLook } from "@/lib/looks";
+import { getManagedLooks, saveLook, deleteStoredLook, getLookGallery, type StoredLook } from "@/lib/looks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,7 +19,19 @@ export async function GET(req: Request) {
   }
   try {
     const looks = await getManagedLooks();
-    return NextResponse.json({ ok: true, looks });
+    // Verrijk met siteImages = de daadwerkelijk getoonde galerij (zodat de editor
+    // 1-op-1 matcht met de site; de beheerder kan ze overschrijven via images[]).
+    const withImages = await Promise.all(
+      looks.map(async (l) => {
+        try {
+          const { hero, gallery } = await getLookGallery(l);
+          return { ...l, siteImages: [hero, ...gallery.map((g) => g.url)].filter(Boolean) };
+        } catch {
+          return { ...l, siteImages: [l.image].filter(Boolean) };
+        }
+      }),
+    );
+    return NextResponse.json({ ok: true, looks: withImages });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
@@ -39,14 +51,18 @@ function sanitizeLook(input: unknown): StoredLook | null {
         }))
         .filter((h) => h.handle)
     : [];
+  // Foto's: images[] is de bron-van-waarheid (ordered: [0]=hero). image = hero (compat).
+  const images = Array.isArray(b.images)
+    ? (b.images as unknown[]).map((x) => String(x).trim()).filter(Boolean).slice(0, 12)
+    : [];
   return {
     slug,
     title: String(b.title || "").trim().slice(0, 120) || slug,
     subtitle: String(b.subtitle || "").trim().slice(0, 240),
     occasion: String(b.occasion || "").trim().slice(0, 80),
     theme: b.theme ? String(b.theme).trim().slice(0, 80) : undefined,
-    image: String(b.image || "").trim().slice(0, 600),
-    images: Array.isArray(b.images) ? (b.images as unknown[]).map((x) => String(x)).filter(Boolean).slice(0, 8) : undefined,
+    image: (images[0] || String(b.image || "").trim()).slice(0, 600),
+    images: images.length ? images : undefined,
     story: b.story ? String(b.story).slice(0, 4000) : undefined,
     hotspots,
     status: b.status === "published" ? "published" : "draft",

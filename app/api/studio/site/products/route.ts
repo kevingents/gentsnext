@@ -42,17 +42,18 @@ export async function GET(req: Request) {
     ).rows;
     const rows = await db.execute<{
       handle: string; title: string; vendor: string; product_type: string; status: string;
-      in_stock: boolean; stock_qty: number; has_image: boolean; created_at: string;
+      in_stock: boolean; stock_qty: number; has_image: boolean; created_at: string; image: string;
       variant_count: string; min_price_cents: string | null; max_price_cents: string | null;
     }>(sql`
       select p.handle, p.title, p.vendor, p.product_type, p.status,
              p.in_stock, p.stock_qty, p.has_image,
+             split_part(p.model_image_url,'?',1) image,
              to_char(p.created_at,'YYYY-MM-DD') created_at,
              count(v.id) variant_count, min(v.price_cents) min_price_cents, max(v.price_cents) max_price_cents
       from products p
       left join product_variants v on v.product_id = p.id
       where ${where}
-      group by p.id, p.handle, p.title, p.vendor, p.product_type, p.status, p.in_stock, p.stock_qty, p.has_image, p.created_at
+      group by p.id, p.handle, p.title, p.vendor, p.product_type, p.status, p.in_stock, p.stock_qty, p.has_image, p.model_image_url, p.created_at
       order by p.created_at desc
       limit ${pageSize} offset ${(page - 1) * pageSize}`);
 
@@ -73,6 +74,7 @@ export async function GET(req: Request) {
         minPriceCents: x.min_price_cents == null ? 0 : Number(x.min_price_cents) || 0,
         maxPriceCents: x.max_price_cents == null ? 0 : Number(x.max_price_cents) || 0,
         hasImage: !!x.has_image,
+        image: x.image || "",
         createdAt: x.created_at,
       })),
     });

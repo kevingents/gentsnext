@@ -536,6 +536,14 @@ async function getLookSfeerStore(): Promise<Record<string, string[]>> {
 }
 
 export async function getLookGallery(look: Look): Promise<{ hero: string; gallery: LookGalleryImage[] }> {
+  // Door de portal expliciet ingestelde foto's (images[]) winnen ALTIJD — zo
+  // matcht wat de beheerder instelt 1-op-1 met wat de site toont.
+  if (look.images && look.images.length) {
+    return {
+      hero: look.images[0],
+      gallery: look.images.slice(1).map((u) => ({ url: u, alt: `${look.title} — sfeerbeeld`, kind: "sfeer" as const })),
+    };
+  }
   const handles = [...new Set(look.hotspots.map((h) => h.handle))];
   if (!handles.length) return { hero: look.image, gallery: [] };
   const db = getDb();
