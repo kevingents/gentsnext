@@ -37,6 +37,13 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
   }
+  if (b.routeOverstockFirst && typeof b.routeOverstockFirst === "object") {
+    const r = b.routeOverstockFirst as Record<string, unknown>;
+    out.routeOverstockFirst = {
+      enabled: Boolean(r.enabled),
+      minSurplus: Math.max(1, Math.round(Number(r.minSurplus) || 3)),
+    };
+  }
   if (b.tieredDiscount && typeof b.tieredDiscount === "object") {
     const t = b.tieredDiscount as Record<string, unknown>;
     out.tieredDiscount = {

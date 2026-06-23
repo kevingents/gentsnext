@@ -37,6 +37,10 @@ export type Settings = {
   retailSafetyStock: number;
   warehouseSafetyStock: number;
   protectUnderstockedRetail: boolean;
+  // Doorloop/overstock-routing: verzend bij voorkeur uit een winkel die ruim boven
+  // z'n ideaal zit (trage/oude schapvoorraad eerst weg). minSurplus = drempel in
+  // stuks waarboven een winkel zelfs vóór het magazijn mag gaan. Default uit.
+  routeOverstockFirst: { enabled: boolean; minSurplus: number };
   // Zoeken
   searchSynonyms: string; // één groep per regel, komma-gescheiden
   // Shop-the-look op AI-modelfoto's: de vaste basis-outfit die het canvas-model
@@ -85,6 +89,7 @@ export const DEFAULT_SETTINGS: Settings = {
   retailSafetyStock: num(process.env.GENTS_RETAIL_SAFETY_STOCK, 1),
   warehouseSafetyStock: num(process.env.GENTS_WAREHOUSE_SAFETY_STOCK, 0),
   protectUnderstockedRetail: (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0",
+  routeOverstockFirst: { enabled: false, minSurplus: 3 },
   searchSynonyms: DEFAULT_SYNONYMS,
   modelLook: {
     enabled: true,
@@ -124,6 +129,7 @@ export async function getSettings(): Promise<Settings> {
       modelLook: { ...DEFAULT_SETTINGS.modelLook, ...(stored.modelLook || {}) },
       giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
       tieredDiscount: { ...DEFAULT_SETTINGS.tieredDiscount, ...(stored.tieredDiscount || {}) },
+      routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

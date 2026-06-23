@@ -58,6 +58,7 @@ type Branch = {
   dispatchLabel: string;
   dispatchInDays: number;
   avail: Map<string, number>; // sku → beschikbaar (na veiligheidsvoorraad/tekort)
+  surplus: number; // overstock-eenheden boven ideaal (proxy voor trage/oude schapvoorraad)
 };
 
 /* ── Tijd & openingstijden → verzendmoment ───────────────────────────────── */
@@ -122,7 +123,7 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
 
-  const byBranch = new Map<string, { store: string; avail: Map<string, number> }>();
+  const byBranch = new Map<string, { store: string; avail: Map<string, number>; surplus: number }>();
   for (const sku of skus) {
     const entry = stock.get(sku);
     if (!entry) continue;
@@ -134,10 +135,13 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
       if (net <= 0) continue;
       let rec = byBranch.get(b.branchId);
       if (!rec) {
-        rec = { store: b.store, avail: new Map() };
+        rec = { store: b.store, avail: new Map(), surplus: 0 };
         byBranch.set(b.branchId, rec);
       }
       rec.avail.set(sku, net);
+      // Overstock = voorraad boven ideaal (tekort < 0). Optellen over de orderregels:
+      // hoe meer een filiaal boven ideaal zit, hoe "ouder"/trager die voorraad is.
+      rec.surplus += Math.max(0, -b.tekort);
     }
   }
 
@@ -154,6 +158,7 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
       dispatchLabel: d.dispatchLabel,
       dispatchInDays: d.dispatchInDays,
       avail: rec.avail,
+      surplus: rec.surplus,
     });
   }
   return branches;
@@ -167,15 +172,26 @@ function totalAvail(b: Branch): number {
 
 /**
  * Comparator (kleiner = beter): vandaag-verzendbaar > zelfde land als klant >
- * magazijn/prioriteit > meeste voorraad > stabiel filiaalnummer (reproduceerbaar).
+ * [doorloop: ruim overstockte winkel eerst, instelbaar] > magazijn/prioriteit >
+ * meeste overstock > meeste voorraad > stabiel filiaalnummer (reproduceerbaar).
  */
-function makeComparator(country: string) {
+function makeComparator(country: string, settings: Settings) {
   const cc = (country || "NL").toUpperCase();
+  const clearOverstock = settings.routeOverstockFirst?.enabled ?? false;
+  const minSurplus = Math.max(1, settings.routeOverstockFirst?.minSurplus ?? 3);
   return (a: Branch, b: Branch): number => {
     if (a.canDispatchToday !== b.canDispatchToday) return a.canDispatchToday ? -1 : 1;
     const aSame = a.country === cc, bSame = b.country === cc;
     if (aSame !== bSame) return aSame ? -1 : 1;
+    // Doorloop leegruimen: een winkel die ruim boven ideaal zit (≥ minSurplus) eerst
+    // legen — mag dan zelfs vóór het magazijn (trage/oude schapvoorraad eerst weg).
+    if (clearOverstock) {
+      const aClear = !a.isWarehouse && a.surplus >= minSurplus;
+      const bClear = !b.isWarehouse && b.surplus >= minSurplus;
+      if (aClear !== bClear) return aClear ? -1 : 1;
+    }
     if (a.priority !== b.priority) return b.priority - a.priority;
+    if (clearOverstock && a.surplus !== b.surplus) return b.surplus - a.surplus; // meeste overstock eerst
     const ta = totalAvail(a), tb = totalAvail(b);
     if (ta !== tb) return tb - ta;
     return (Number(a.branchId) || 0) - (Number(b.branchId) || 0);
@@ -206,7 +222,7 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
 
   const settings = await getSettings();
   const branches = await buildBranches(skus, settings);
-  const better = makeComparator(opts.country || "NL");
+  const better = makeComparator(opts.country || "NL", settings);
 
   // 1. Single-source: één filiaal dat de HELE order dekt → bespaart verzendkosten.
   const fullCovers = branches.filter((b) => skus.every((sku) => (b.avail.get(sku) ?? 0) >= (need.get(sku) ?? 0)));
