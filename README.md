@@ -59,20 +59,40 @@ npm run dev
    niet live is — dubbel slot bovenop de noindex.
 5. **Géén domein koppelen.** gents.nl blijft op Shopify tot de geplande
    atomische DNS-cutover; eventueel `next.gents.nl` als preview-domein.
-6. **Cache-cron staat bewust UIT** (`vercel.json` heeft een lege crons-lijst).
-   De dagelijkse publicatie naar de storegents-blob is de "bronwissel" uit de
-   blauwdruk: pas inschakelen wanneer er een doorlopende catalogus-sync naar
-   deze database draait, anders veroudert de portal-cache. Tot die tijd:
-   handmatig publiceren kan met `npm run cache:publish`. De route weigert
-   bovendien te publiceren bij een (bijna) lege catalogus.
+6. **Crons** (`vercel.json`): actief zijn `sync-reviews` (02:00), `blog`/stijlgids
+   (09:00 op de 1e + 15e) en `translate` (03:00 — UI + producttitels/-omschrijvingen
+   naar en/de/fr/es). Allemaal `CRON_SECRET`-gated. De **catalogus-cache-publicatie**
+   (`npm run cache:publish`) blijft bewust handmatig tot er een doorlopende
+   catalogus-sync naar deze database draait (de route weigert bij lege catalogus).
 
 ## Launch-checklist (pas bij cutover — NIET nu)
 
-- [ ] `SITE_INDEXABLE=true` zetten (robots/noindex-schakelaar in
-      `app/robots.ts` en `app/layout.tsx`)
+**Env / kill-switches (Vercel → gentsnext):**
+
+| Variabele | Nu (pre-launch) | Bij go-live | Effect |
+| --- | --- | --- | --- |
+| `MOLLIE_API_KEY` | `test_…` | `live_…` (of `access_…`-token in live-modus) | echte betalingen |
+| `SITE_INDEXABLE` | leeg → **noindex** | `true` | Google mag indexeren (`app/(shop)/robots.ts`, sitemap, layout) |
+| `SRS_PUSH_ENABLED` | uit | **LATEN UIT** | bewust: SRS = alléén WMS/voorraadbron, géén weborder-push (kill-switch `lib/srs.ts`) |
+| `RESEND_API_KEY` + `RESEND_FROM` | gezet? → **bevestigen** | gezet | transactionele mail (bestelbevestiging, magic-link). Let op: er is géén test-adres-guard — bij live Mollie gaan mails naar échte klanten (zo bedoeld) |
+| `ANTHROPIC_API_KEY` | ✅ gezet | — | vertaal-cron + stijlgids + AI |
+| `CRON_SECRET`, `DATABASE_URL`, `PUBLIC_SITE_URL`, `STOREGENTS_BLOB_READ_WRITE_TOKEN` | gezet | gezet | platform |
+
+**Omnichannel-core (kassa ↔ webshop):**
+- [ ] `STORE_CORE_TOKEN` staat in **beide** projecten (gentsnext + storegents) met dezelfde waarde; `GENTSNEXT_CORE_URL` in storegents. **Roteer dit token** (is in een chat geplakt) en zet de nieuwe waarde in beide.
+- [ ] SRS-voorraad-SFTP-sync draait (blob `srs-voorraad/srs-rows-latest.json`, ~3×/dag) — externe afhankelijkheid, géén Vercel-cron. De anti-oversell-laag (Fase D) + de gedeelde core leunen op een actuele baseline.
+
+**Cutover-stappen:**
+- [ ] `SITE_INDEXABLE=true`
 - [ ] Deployment Protection uit voor productie
 - [ ] DNS gents.nl → Vercel (lage TTL vooraf), Shopify naar Pause and Build
 - [ ] Sitemap indienen in Search Console; redirect-map voor legacy-URL's live
+
+**Verificatie ná livegang:**
+- [ ] Eén echte test-bestelling met live Mollie (klein bedrag) → betaald → bevestigingsmail → SRS-allocatie-plan op de order; daarna evt. terugbetalen.
+- [ ] `/en/` `/de/` tonen vertaalde content (na de eerste 03:00-vertaalcron).
+- [ ] `robots.txt` = allow; sitemap bereikbaar.
+- [ ] Kassa: een verkoop verlaagt de webshop-voorraad (gedeelde core) en omgekeerd; dagafsluiting sluit kloppend.
 
 ## Conventies
 
