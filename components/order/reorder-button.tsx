@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Addable = Omit<CartLine, "id">;
 
@@ -11,6 +12,7 @@ type Addable = Omit<CartLine, "id">;
  */
 export function ReorderButton({ orderNumber, token, className }: { orderNumber: string; token?: string; className?: string }) {
   const cart = useCart();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -26,12 +28,12 @@ export function ReorderButton({ orderNumber, token, className }: { orderNumber: 
       });
       const d = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; addable?: Addable[]; unavailable?: string[] } | null;
       if (!res.ok || !d?.ok) {
-        setMsg(d?.error || "Opnieuw bestellen mislukt.");
+        setMsg(d?.error || t("order.reorder.error"));
         return;
       }
       const addable = d.addable ?? [];
       if (!addable.length) {
-        setMsg("Geen van deze artikelen is nog leverbaar.");
+        setMsg(t("order.reorder.unavailable"));
         return;
       }
       for (const line of addable) cart.add(line, { quiet: true });
@@ -47,7 +49,7 @@ export function ReorderButton({ orderNumber, token, className }: { orderNumber: 
   return (
     <div className={className}>
       <button type="button" onClick={run} disabled={busy} className="btn-ghost">
-        {busy ? "Toevoegen…" : "Bestel opnieuw"}
+        {busy ? t("order.reorder.busy") : t("order.reorder.button")}
       </button>
       {msg ? <p className="mt-1 font-sans text-xs text-muted">{msg}</p> : null}
     </div>

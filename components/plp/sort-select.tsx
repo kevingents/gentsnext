@@ -4,8 +4,10 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import type { ProductSort } from "@/lib/catalog";
 import { SORT_LABELS } from "@/lib/plp-params";
+import { useT } from "@/components/i18n/locale-provider";
 
 export function SortSelect({ value }: { value: ProductSort }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -22,7 +24,7 @@ export function SortSelect({ value }: { value: ProductSort }) {
 
   return (
     <label className="flex items-center gap-2 font-sans text-sm">
-      <span className="text-muted">Sorteer</span>
+      <span className="text-muted">{t("plp.sort.label")}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

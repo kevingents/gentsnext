@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 /** Delen via systeem of kopieer-link. Geen tracking, geen externe scripts. */
 export function ShareRow({ title }: { title: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   async function share() {
@@ -34,7 +36,7 @@ export function ShareRow({ title }: { title: string }) {
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
         <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v14" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      {copied ? "Link gekopieerd" : "Deel dit product"}
+      {copied ? t("pdp.share.copied") : t("pdp.share.label")}
     </button>
   );
 }

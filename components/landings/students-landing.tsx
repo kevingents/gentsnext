@@ -4,6 +4,8 @@ import { ProductCard } from "@/components/product-card";
 import { ContactRequestForm } from "@/components/contact-request-form";
 import type { ProductCardData } from "@/lib/catalog";
 import { VISUAL } from "@/lib/visuals";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
 const USPS = [
   { title: "Specialist in rokkostuums & smokings", body: "Voor gala's, corpsactiviteiten en diners waar uitstraling telt." },
@@ -23,7 +25,8 @@ type Props = {
   highlights: ProductCardData[];
 };
 
-export function StudentsLanding({ highlights }: Props) {
+export async function StudentsLanding({ highlights }: Props) {
+  const locale = await getLocale();
   return (
     <article>
       {/* Hero */}
@@ -48,7 +51,7 @@ export function StudentsLanding({ highlights }: Props) {
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link href="#contact-students" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
-              Vraag direct informatie aan
+              {t("landing.students.cta", locale)}
             </Link>
             <a
               href="https://wa.me/31851155042"
@@ -99,8 +102,8 @@ export function StudentsLanding({ highlights }: Props) {
           <h2 className="mt-2 text-display-md">Voor gala, bestuur en vereniging</h2>
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: "Rokkostuums", href: "/collections/rokkostuum" },
-              { label: "Smoking", href: "/collections/smoking" },
+              { label: t("landing.students.shop.gala", locale), href: "/collections/rokkostuum" },
+              { label: t("landing.students.shop.smoking", locale), href: "/collections/smoking" },
               { label: "Jacquets", href: "/collections/jacquets" },
               { label: "Kroegjasjes", href: "/collections/kroegjasjes" },
             ].map((c) => (
@@ -160,7 +163,7 @@ export function StudentsLanding({ highlights }: Props) {
           </div>
           <ContactRequestForm
             channel="students"
-            title="Vraag direct informatie aan"
+            title={t("landing.students.cta", locale)}
             intro="Voor besturen, verenigingen of individuele studenten. We reageren binnen één werkdag."
             showOrg
             showGroupSize

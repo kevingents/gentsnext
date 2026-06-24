@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatEuro } from "@/lib/pricing";
 import { track } from "@/lib/track-client";
+import { useT } from "@/components/i18n/locale-provider";
 import type { ProductCardData } from "@/lib/catalog";
 
 /**
@@ -14,6 +15,7 @@ import type { ProductCardData } from "@/lib/catalog";
  * direct naar PDP; "Toon alle resultaten" → /zoeken?q=…
  */
 export function InstantSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<ProductCardData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,7 +71,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
   // containing block voor fixed-kinderen maakt — anders klemt deze overlay in op
   // de header-hoogte i.p.v. fullscreen (zelfde reden als de mobiele menu-drawer).
   const tree = (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-label="Zoeken" aria-modal="true">
+    <div className="fixed inset-0 z-[70]" role="dialog" aria-label={t("search.label")} aria-modal="true">
       <div className="absolute inset-0 bg-ink/30" onClick={onClose} />
       <div className="absolute inset-x-0 top-0 max-h-[90vh] overflow-y-auto bg-canvas shadow-pop">
         <div className="mx-auto max-w-page px-gutter py-5">
@@ -89,11 +91,11 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Zoek op pak, kleur, merk of categorie…"
-              aria-label="Zoekterm"
+              aria-label={t("search.input.ariaLabel")}
               className="flex-1 bg-transparent py-2 font-sans text-base focus:outline-none"
             />
             <button type="button" onClick={onClose} className="font-sans text-sm text-muted underline">
-              Sluiten
+              {t("common.close")}
             </button>
           </form>
 

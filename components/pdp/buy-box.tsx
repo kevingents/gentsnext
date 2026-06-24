@@ -16,6 +16,7 @@ import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { RatingStars } from "@/components/rating-stars";
 import type { ProductRating } from "@/lib/reviews";
 import { useCart } from "@/components/cart/cart-context";
+import { useT } from "@/components/i18n/locale-provider";
 
 export type BuyColor = { color: string; sizes: BuySize[] };
 export type BuySize = {
@@ -69,6 +70,7 @@ export function BuyBox({
   mySize,
 }: Props) {
   const cart = useCart();
+  const t = useT();
   const { setSizeLabel } = usePdpSize();
   const [colorIdx, setColorIdx] = useState(0);
   const [size, setSize] = useState<string | null>(null);
@@ -159,11 +161,11 @@ export function BuyBox({
           <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
-        <span className="font-sans text-xs text-muted">incl. btw</span>
+        <span className="font-sans text-xs text-muted">{t("common.vat")}</span>
       </div>
       {referenceCents ? (
         <p className="mt-1 font-sans text-xs text-muted">
-          Doorgestreepte prijs: laagste prijs in de 30 dagen vóór de korting.
+          {t("pdp.price.reference")}
         </p>
       ) : null}
 
@@ -212,11 +214,11 @@ export function BuyBox({
         {!oneSize ? (
           <>
             <div className="flex items-center justify-between">
-              <p className="font-sans text-sm font-medium">Maat</p>
+              <p className="font-sans text-sm font-medium">{t("pdp.size.label")}</p>
               <div className="flex items-center gap-3 font-sans text-xs">
                 <SizeChartButton hoofdgroep={hoofdgroep} pageHandle={sizeChartHandle} />
                 <Link href="/maatadvies" className="text-ink underline underline-offset-4">
-                  Vind mijn maat
+                  {t("pdp.size.finder")}
                 </Link>
               </div>
             </div>
@@ -233,7 +235,7 @@ export function BuyBox({
         {isMySize ? (
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-card bg-surface px-2.5 py-1 font-sans text-xs text-ink-soft">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
-            <span><span className="font-medium text-ink">Jouw maat</span> — automatisch geselecteerd</span>
+            <span><span className="font-medium text-ink">{t("pdp.size.my")}</span> — {t("pdp.size.autoSelected")}</span>
           </p>
         ) : null}
         {hasStock && selectedSize ? (
@@ -242,7 +244,7 @@ export function BuyBox({
               selectedSize.qty <= 5 ? (
                 <span className="text-danger">● Nog maar {selectedSize.qty} op voorraad — wees er snel bij</span>
               ) : (
-                <span className="text-success">● Op voorraad</span>
+                <span className="text-success">● {t("pdp.stock.inStock")}</span>
               )
             ) : (
               <span className="text-muted">Maat {selectedSize.size} tijdelijk uitverkocht</span>
@@ -269,7 +271,7 @@ export function BuyBox({
         <div className="mt-7">
           <div className="grid grid-cols-[1fr_auto] gap-2">
             <button type="button" disabled className="btn-primary w-full opacity-60">
-              Uitverkocht
+              {t("pdp.button.sold")}
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
@@ -289,12 +291,12 @@ export function BuyBox({
               disabled={!size || soldOut}
               className="btn-primary w-full"
             >
-              {!size ? "Kies een maat" : soldOut ? "Uitverkocht" : oneSize ? "In winkelwagen" : `In winkelwagen — maat ${size}`}
+              {!size ? t("pdp.cta.chooseSize") : soldOut ? t("pdp.button.sold") : oneSize ? t("pdp.cta.addToCart") : `In winkelwagen — maat ${size}`}
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
           <p className="mt-3 font-sans text-xs text-muted">
-            Gratis retour binnen 14 dagen. Veilig afrekenen met o.a. iDEAL.
+            {t("pdp.fineprint")}
           </p>
         </>
       )}
@@ -323,7 +325,7 @@ export function BuyBox({
               disabled={!size || soldOut}
               className="btn-primary !px-5"
             >
-              {!size ? "Kies maat" : soldOut ? "Uitverkocht" : "In winkelwagen"}
+              {!size ? t("pdp.sticky.choosesize") : soldOut ? t("pdp.button.sold") : t("pdp.cta.addToCart")}
             </button>
           </div>
         </div>

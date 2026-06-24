@@ -1,33 +1,36 @@
 import { RatingStars } from "@/components/rating-stars";
 import { WriteReview } from "@/components/reviews/review-form";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
+import type { Locale } from "@/lib/i18n";
 import type { ReviewSummary, PublicReview } from "@/lib/reviews-db";
 
 const dateFmt = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric" });
 
-function fitLabel(fit: string) {
-  return fit === "klein" ? "Valt klein" : fit === "groot" ? "Valt groot" : fit === "normaal" ? "Valt normaal" : "";
+function fitLabel(fit: string, locale: Locale) {
+  return fit === "klein" ? t("reviews.form.fitSmall", locale) : fit === "groot" ? t("reviews.form.fitLarge", locale) : fit === "normaal" ? t("reviews.form.fitNormal", locale) : "";
 }
 
-function FitBar({ fit }: { fit: ReviewSummary["fit"] }) {
+function FitBar({ fit, locale }: { fit: ReviewSummary["fit"]; locale: Locale }) {
   const seg = (n: number) => (fit.total ? Math.round((n / fit.total) * 100) : 0);
   return (
     <div className="mt-5">
-      <p className="font-sans text-xs font-medium text-ink">Pasvorm volgens klanten</p>
+      <p className="font-sans text-xs font-medium text-ink">{t("reviews.summary.fitLabel", locale)}</p>
       <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-surface">
         <span className="block h-full bg-line" style={{ width: `${seg(fit.klein)}%` }} />
         <span className="block h-full bg-ink" style={{ width: `${seg(fit.normaal)}%` }} />
         <span className="block h-full bg-line" style={{ width: `${seg(fit.groot)}%` }} />
       </div>
       <div className="mt-1.5 flex justify-between font-sans text-[0.65rem] text-muted">
-        <span>Valt klein</span>
-        <span>Normaal</span>
-        <span>Valt groot</span>
+        <span>{t("reviews.fitbar.small", locale)}</span>
+        <span>{t("reviews.fitbar.normal", locale)}</span>
+        <span>{t("reviews.fitbar.large", locale)}</span>
       </div>
     </div>
   );
 }
 
-export function ReviewsSection({
+export async function ReviewsSection({
   handle,
   summary,
   reviews,
@@ -36,6 +39,7 @@ export function ReviewsSection({
   summary: ReviewSummary | null;
   reviews: PublicReview[];
 }) {
+  const locale = await getLocale();
   return (
     <section id="reviews" className="mt-20 scroll-mt-24 border-t border-line pt-12">
       <p className="label-brand">Reviews</p>
@@ -70,7 +74,7 @@ export function ReviewsSection({
                   );
                 })}
               </ul>
-              {summary.fit.total >= 3 ? <FitBar fit={summary.fit} /> : null}
+              {summary.fit.total >= 3 ? <FitBar fit={summary.fit} locale={locale} /> : null}
             </>
           ) : (
             <p className="font-sans text-sm text-ink-soft">
@@ -95,7 +99,7 @@ export function ReviewsSection({
                         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                           <path d="M5 12l5 5 9-9" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                        Geverifieerde aankoop
+                        {t("reviews.badge.verified", locale)}
                       </span>
                     ) : null}
                   </div>
@@ -103,7 +107,7 @@ export function ReviewsSection({
                   {r.body ? <p className="mt-1 whitespace-pre-line font-sans text-sm text-ink-soft">{r.body}</p> : null}
                   <p className="mt-2 font-sans text-xs text-muted">
                     {r.authorName} · {dateFmt.format(new Date(r.createdAt))}
-                    {fitLabel(r.fit) ? ` · ${fitLabel(r.fit)}` : ""}
+                    {fitLabel(r.fit, locale) ? ` · ${fitLabel(r.fit, locale)}` : ""}
                   </p>
                 </li>
               ))}

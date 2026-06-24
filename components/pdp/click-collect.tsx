@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: string };
 
@@ -11,6 +12,7 @@ type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: strin
  * gekozen maat; klik = volledige modal met ALLE winkels (voorraad/geen voorraad).
  */
 export function ClickAndCollect({ branches }: { branches: Branch[] }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const available = branches.filter((b) => b.qty > 0);
   if (!available.length) return null;
@@ -34,10 +36,10 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
               <path d="M3 9l1.5-4.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 14h6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span className="flex flex-col gap-0.5">
-              <span className="font-medium text-ink">Ophalen in een winkel</span>
+              <span className="font-medium text-ink">{t("clickCollect.title")}</span>
               <span className="text-xs text-success">
-                ● Af te halen in {available.length} {available.length === 1 ? "winkel" : "winkels"}
-                {openNow > 0 ? <span className="text-muted"> · {openNow} nu open</span> : null}
+                ● {t("clickCollect.available")} {available.length} {available.length === 1 ? t("clickCollect.storeSingular") : t("clickCollect.storePlural")}
+                {openNow > 0 ? <span className="text-muted"> · {openNow} {t("clickCollect.openNow")}</span> : null}
               </span>
             </span>
           </span>
@@ -46,13 +48,13 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
       </div>
 
       {open && typeof document !== "undefined" ? createPortal(
-        <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Voorraad per winkel" aria-modal="true">
+        <div className="fixed inset-0 z-[60]" role="dialog" aria-label={t("clickCollect.modal.title")} aria-modal="true">
           <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
-              <p className="font-display text-lg">Voorraad per winkel</p>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Sluiten" className="font-sans text-sm underline">
-                Sluiten
+              <p className="font-display text-lg">{t("clickCollect.modal.title")}</p>
+              <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">
+                {t("common.close")}
               </button>
             </div>
             <p className="border-b border-line bg-surface px-5 py-3 font-sans text-xs text-ink-soft">
@@ -72,10 +74,10 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
                     </span>
                     {inStock ? (
                       <span className="shrink-0 text-xs text-success">
-                        ● {b.qty > 5 ? "Op voorraad" : `Nog ${b.qty}`}
+                        ● {b.qty > 5 ? t("clickCollect.modal.inStock") : `Nog ${b.qty}`}
                       </span>
                     ) : (
-                      <span className="shrink-0 text-xs text-muted">Niet op voorraad</span>
+                      <span className="shrink-0 text-xs text-muted">{t("clickCollect.modal.outOfStock")}</span>
                     )}
                   </li>
                 );

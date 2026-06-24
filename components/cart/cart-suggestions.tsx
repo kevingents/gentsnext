@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 import { formatEuro } from "@/lib/pricing";
 
 /**
@@ -16,7 +17,7 @@ export function CartSuggestions({
   hoofdgroepen,
   excludeHandles,
   onNavigate,
-  title = "Vaak samen gekocht",
+  title,
   className = "border-t border-line px-5 py-4",
 }: {
   hoofdgroepen: string[];
@@ -25,6 +26,8 @@ export function CartSuggestions({
   title?: string;
   className?: string;
 }) {
+  const t = useT();
+  const heading = title ?? t("cart.suggestions.title");
   const [items, setItems] = useState<Suggestion[]>([]);
   const key = hoofdgroepen.join(",");
   const exclude = excludeHandles.join(",");
@@ -47,7 +50,7 @@ export function CartSuggestions({
   if (!items.length) return null;
   return (
     <div className={className}>
-      <p className="label-brand mb-3">{title}</p>
+      <p className="label-brand mb-3">{heading}</p>
       <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((s) => (
           <Link key={s.id} href={`/products/${s.handle}`} onClick={onNavigate} className="group block w-28 shrink-0">

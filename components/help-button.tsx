@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * Hulp-widget rechtsonder met een AI-assistent: geeft direct antwoord op basis
@@ -9,6 +10,7 @@ import { useState } from "react";
  * Daaronder snelle links naar service/maatadvies/winkels.
  */
 export function HelpButton() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
@@ -41,7 +43,7 @@ export function HelpButton() {
     <div className="fixed bottom-20 right-4 z-30 flex flex-col items-end lg:bottom-6 lg:right-6">
       {open ? (
         <div className="mb-3 w-80 border border-line bg-canvas p-4 shadow-pop">
-          <p className="label-brand mb-2">Hulp nodig?</p>
+          <p className="label-brand mb-2">{t("help.title")}</p>
           <form onSubmit={ask}>
             <textarea
               value={q}
@@ -58,7 +60,7 @@ export function HelpButton() {
               className="mt-2 w-full border border-line bg-canvas px-3 py-2 font-sans text-xs focus:border-ink focus:outline-none"
             />
             <button type="submit" disabled={busy} className="btn-primary mt-2 w-full !py-2 text-sm">
-              {busy ? "Even denken…" : "Vraag stellen"}
+              {busy ? "Even denken…" : t("help.ask")}
             </button>
           </form>
 
@@ -70,9 +72,9 @@ export function HelpButton() {
           ) : null}
 
           <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 font-sans text-xs">
-            <li><Link href="/pages/service" onClick={() => setOpen(false)} className="text-ink hover:underline">Klantenservice</Link></li>
-            <li><Link href="/maatadvies" onClick={() => setOpen(false)} className="text-ink hover:underline">Maatadvies</Link></li>
-            <li><Link href="/pages/winkels" onClick={() => setOpen(false)} className="text-ink hover:underline">Winkels</Link></li>
+            <li><Link href="/pages/service" onClick={() => setOpen(false)} className="text-ink hover:underline">{t("help.link.service")}</Link></li>
+            <li><Link href="/maatadvies" onClick={() => setOpen(false)} className="text-ink hover:underline">{t("help.link.sizeAdvice")}</Link></li>
+            <li><Link href="/pages/winkels" onClick={() => setOpen(false)} className="text-ink hover:underline">{t("help.link.stores")}</Link></li>
           </ul>
         </div>
       ) : null}
@@ -87,7 +89,7 @@ export function HelpButton() {
           <circle cx="12" cy="12" r="9" />
           <path d="M9.5 9a2.5 2.5 0 014.9.5c0 1.5-2.4 2-2.4 3.5M12 16h.01" strokeLinecap="round" />
         </svg>
-        <span className="hidden sm:inline">Hulp nodig?</span>
+        <span className="hidden sm:inline">{t("help.title")}</span>
       </button>
     </div>
   );

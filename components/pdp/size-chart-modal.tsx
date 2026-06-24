@@ -9,6 +9,7 @@ import {
   BOORD_CHART,
   type ChartCategory,
 } from "@/lib/size-chart";
+import { useT } from "@/components/i18n/locale-provider";
 
 /** Catalogus-hoofdgroep → tabel: een chest/waist-categorie of de boord-tabel. */
 function chartFor(hg: string): { category?: ChartCategory; boord?: boolean } {
@@ -28,6 +29,7 @@ function chartFor(hg: string): { category?: ChartCategory; boord?: boolean } {
  * kan opzoeken. Geen knop voor categorieën zonder maattabel (schoenen/accessoires).
  */
 export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string; pageHandle?: string | null }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const target = chartFor(hoofdgroep);
   if (!target.category && !target.boord) return null;
@@ -35,16 +37,16 @@ export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="text-ink-soft underline underline-offset-4 hover:text-ink">
-        Maattabel
+        {t("pdp.size.chart")}
       </button>
       {open && typeof document !== "undefined"
         ? createPortal(
-            <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Maattabel" aria-modal="true">
+            <div className="fixed inset-0 z-[60]" role="dialog" aria-label={t("pdp.size.chart")} aria-modal="true">
               <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
               <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer">
                 <div className="flex items-center justify-between border-b border-line px-5 py-4">
                   <p className="font-display text-lg">Onze maattabel</p>
-                  <button type="button" onClick={() => setOpen(false)} aria-label="Sluiten" className="font-sans text-sm underline">Sluiten</button>
+                  <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">{t("common.close")}</button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-5 py-4">
                   <p className="mb-3 font-sans text-xs text-ink-soft">Lichaamsmaten in centimeters. Twijfel je tussen twee maten? Onze stylisten in de winkel helpen je graag.</p>

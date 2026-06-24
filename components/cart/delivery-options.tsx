@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Item = { sku: string; qty: number };
 type Option = { dateLabel: string; rangeLabel: string; surchargeCents: number };
@@ -27,6 +28,7 @@ export function DeliveryOptions({
   value: "standard" | "express";
   onChange: (method: "standard" | "express", surchargeCents: number) => void;
 }) {
+  const t = useT();
   const [est, setEst] = useState<Estimate | null>(null);
   const key = items.map((i) => `${i.sku}:${i.qty}`).join(",");
 
@@ -58,13 +60,13 @@ export function DeliveryOptions({
   if (!est) return null;
 
   const opts: { method: "standard" | "express"; title: string; option: Option }[] = [
-    { method: "standard", title: "Standaard", option: est.standard },
-    ...(est.express ? [{ method: "express" as const, title: "Sneller", option: est.express }] : []),
+    { method: "standard", title: t("delivery.standard"), option: est.standard },
+    ...(est.express ? [{ method: "express" as const, title: t("delivery.express"), option: est.express }] : []),
   ];
 
   return (
     <fieldset className="space-y-2">
-      <legend className="mb-2 font-sans text-sm font-medium">Bezorging</legend>
+      <legend className="mb-2 font-sans text-sm font-medium">{t("delivery.label")}</legend>
       {opts.map(({ method, title, option }) => {
         const active = value === method;
         return (
@@ -85,7 +87,7 @@ export function DeliveryOptions({
                   {title} <span className="font-normal text-muted">· {option.rangeLabel}</span>
                 </span>
                 <span className="font-sans text-sm">
-                  {option.surchargeCents > 0 ? `+ ${formatEuro(option.surchargeCents)}` : "Gratis"}
+                  {option.surchargeCents > 0 ? `+ ${formatEuro(option.surchargeCents)}` : t("checkout.free")}
                 </span>
               </span>
               <span className="mt-0.5 block font-sans text-xs text-ink-soft">

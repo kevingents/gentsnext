@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import type { Facets } from "@/lib/catalog";
 import { colorSwatch } from "@/lib/colors";
 import { buildPlpQuery, type PlpSelection } from "@/lib/plp-params";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
   facets: Facets;
@@ -26,6 +27,7 @@ function priceBrackets(maxEuro: number): { label: string; min?: number; max?: nu
 }
 
 export function PlpFilters({ facets, selection, total, mySize }: Props) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
@@ -74,20 +76,20 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
             <path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" />
           </svg>
           <span className="min-w-0 flex-1 font-sans text-sm leading-tight">
-            <span className="block font-medium">{myActive ? "Je ziet alleen jouw maat" : "Shop in jouw maat"}</span>
+            <span className="block font-medium">{myActive ? t("plp.filters.viewingMySize") : t("plp.filters.shopMySize")}</span>
             <span className={`block text-xs ${myActive ? "text-canvas/70" : "text-muted"}`}>
-              Maat {mySize.raw} · {myFacet.count} {myFacet.count === 1 ? "artikel" : "artikelen"}
+              {t("plp.filters.mySizePrefix")} {mySize.raw} · {myFacet.count} {myFacet.count === 1 ? t("plp.filters.itemSingular") : t("plp.filters.itemPlural")}
             </span>
           </span>
           <span className={`shrink-0 font-sans text-xs underline underline-offset-2 ${myActive ? "text-canvas/80" : "text-ink"}`}>
-            {myActive ? "Wis" : "Toon"}
+            {myActive ? t("plp.filters.clear") : t("plp.filters.show")}
           </span>
         </button>
       ) : null}
 
       {/* Type (subgroep) — bv. Chino/Pantalon/Lange mouw/2-delig */}
       {facets.types.length > 1 ? (
-        <FilterGroup title="Type" defaultOpen>
+        <FilterGroup title={t("plp.filters.type")} defaultOpen>
           <CheckList
             items={facets.types.map((tp) => ({ value: tp.value, label: tp.label, count: tp.count }))}
             selected={selection.types}
@@ -98,7 +100,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
 
       {/* Kleur */}
       {facets.colors.length > 0 ? (
-        <FilterGroup title="Kleur" defaultOpen>
+        <FilterGroup title={t("plp.filters.color")} defaultOpen>
           <div className="flex flex-wrap gap-2">
             {facets.colors.map((c) => {
               const sw = colorSwatch(c.label);
@@ -130,7 +132,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
 
       {/* Maat (lettermaat-buckets) */}
       {facets.sizes.length > 0 ? (
-        <FilterGroup title="Maat">
+        <FilterGroup title={t("plp.filters.size")}>
           <div className="flex flex-wrap gap-2">
             {facets.sizes.map((s) => {
               const active = selection.sizes.includes(s.value);
@@ -155,7 +157,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
 
       {/* Pasvorm */}
       {facets.fits.length > 0 ? (
-        <FilterGroup title="Pasvorm">
+        <FilterGroup title={t("plp.filters.fit")}>
           <CheckList
             items={facets.fits.map((fit) => ({ value: fit.value, label: fit.value, count: fit.count }))}
             selected={selection.fits}
@@ -166,7 +168,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
 
       {/* Materiaal */}
       {facets.materials.length > 1 ? (
-        <FilterGroup title="Materiaal">
+        <FilterGroup title={t("plp.filters.material")}>
           <CheckList
             items={facets.materials.map((m) => ({ value: m.value, label: m.value, count: m.count }))}
             selected={selection.materials}
@@ -177,7 +179,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
 
       {/* Dessin (print_design) */}
       {facets.patterns.length > 1 ? (
-        <FilterGroup title="Dessin">
+        <FilterGroup title={t("plp.filters.pattern")}>
           <CheckList
             items={facets.patterns.map((pt) => ({ value: pt.value, label: pt.value, count: pt.count }))}
             selected={selection.patterns}
@@ -188,7 +190,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
 
       {/* Seizoen */}
       {facets.seasons.length > 1 ? (
-        <FilterGroup title="Seizoen">
+        <FilterGroup title={t("plp.filters.season")}>
           <CheckList
             items={facets.seasons.map((s) => ({ value: s.value, label: s.value, count: s.count }))}
             selected={selection.seasons}
@@ -207,14 +209,14 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
               onChange={() => apply({ ironFree: !selection.ironFree })}
               className="h-4 w-4 accent-ink"
             />
-            <span className="label-brand !text-ink">Strijkvrij</span>
+            <span className="label-brand !text-ink">{t("plp.filters.ironFree")}</span>
             <span className="text-muted">{facets.ironFreeCount}</span>
           </label>
         </div>
       ) : null}
 
       {/* Prijs */}
-      <FilterGroup title="Prijs">
+      <FilterGroup title={t("plp.filters.price")}>
         <div className="flex flex-wrap gap-2">
           {priceBrackets(maxEuro).map((b) => {
             const active = (selection.priceMin ?? 0) === (b.min ?? 0) && (selection.priceMax ?? 0) === (b.max ?? 0);
@@ -243,7 +245,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
           onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
-          Wis alle filters ({activeCount})
+          {t("plp.filters.clearAllPrefix")} ({activeCount})
         </button>
       ) : null}
     </div>
@@ -258,16 +260,16 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
           onClick={() => setOpenMobile(true)}
           className="btn-ghost !px-4 !py-2"
         >
-          Filters {activeCount > 0 ? `(${activeCount})` : ""}
+          {t("plp.filters.mobileButton")} {activeCount > 0 ? `(${activeCount})` : ""}
         </button>
-        <span className="font-sans text-sm text-muted">{total} artikelen</span>
+        <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
       </div>
       <button
         type="button"
         onClick={() => setOpenMobile(true)}
         className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop lg:hidden"
       >
-        Filter & sorteer {activeCount > 0 ? `· ${activeCount}` : ""}
+        {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `· ${activeCount}` : ""}
       </button>
 
       {openMobile ? (
@@ -275,14 +277,14 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
           <div className="absolute inset-0 bg-ink/40" onClick={() => setOpenMobile(false)} />
           <div className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer">
             <div className="mb-4 flex items-center justify-between">
-              <p className="label-brand">Filters</p>
+              <p className="label-brand">{t("plp.filters.mobileDrawerTitle")}</p>
               <button type="button" onClick={() => setOpenMobile(false)} className="font-sans text-sm underline">
-                Sluiten
+                {t("common.close")}
               </button>
             </div>
             {body}
             <button type="button" onClick={() => setOpenMobile(false)} className="btn-primary mt-6 w-full">
-              Toon {total} artikelen
+              {t("plp.filters.showCountBtn")} {total} {t("plp.filters.itemPlural")}
             </button>
           </div>
         </div>
@@ -338,6 +340,7 @@ function CheckList({
   onToggle: (value: string) => void;
   maxVisible?: number;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? items : items.slice(0, maxVisible);
   return (
@@ -360,7 +363,7 @@ function CheckList({
           onClick={() => setExpanded((v) => !v)}
           className="pt-1 font-sans text-xs text-ink underline underline-offset-2"
         >
-          {expanded ? "Toon minder" : `Toon alle ${items.length}`}
+          {expanded ? t("plp.filters.showLess") : `${t("plp.filters.showAllPrefix")} ${items.length}`}
         </button>
       ) : null}
     </div>

@@ -4,9 +4,12 @@ import { NewsletterSignup } from "@/components/newsletter-signup";
 import { FooterPayments } from "@/components/footer-payments";
 import { CookieSettingsLink } from "@/components/cookie-settings-link";
 import { getFooter } from "@/lib/footer-server";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
 export async function SiteFooter() {
   const { intro, columns } = await getFooter();
+  const locale = await getLocale();
   return (
     <footer className="mt-24 bg-ink text-canvas">
       {/* Nieuwsbrief-blok */}
@@ -15,10 +18,10 @@ export async function SiteFooter() {
           <div>
             <p className="label-brand !text-canvas/60">GENTS Insider</p>
             <h2 className="mt-2 font-display text-2xl font-light text-canvas">
-              Nieuwe collecties, styling-tips en exclusieve aanbiedingen
+              {t("footer.newsletterTitle", locale)}
             </h2>
             <p className="mt-1 font-sans text-sm text-canvas/70">
-              Schrijf je in en mis nooit meer een lancering of sale.
+              {t("footer.newsletterHint", locale)}
             </p>
           </div>
           <NewsletterSignup />

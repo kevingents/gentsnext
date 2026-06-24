@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
   /** Type aanvraag — toegevoegd aan de mail-onderwerpregel en payload. */
@@ -26,6 +27,7 @@ export function ContactRequestForm({
   showGroupSize = false,
   showDate = false,
 }: Props) {
+  const t = useT();
   const [form, setForm] = useState<Record<string, string>>({});
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
@@ -37,7 +39,7 @@ export function ContactRequestForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name || !form.email || !form.message) {
-      setMsg("Vul je naam, e-mailadres en bericht in.");
+      setMsg(t("forms.contact.required"));
       setState("fail");
       return;
     }
@@ -84,7 +86,7 @@ export function ContactRequestForm({
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="font-sans text-sm">Naam</span>
+          <span className="font-sans text-sm">{t("forms.contact.name")}</span>
           <input
             type="text"
             required
@@ -94,7 +96,7 @@ export function ContactRequestForm({
           />
         </label>
         <label className="block">
-          <span className="font-sans text-sm">E-mailadres</span>
+          <span className="font-sans text-sm">{t("forms.contact.email")}</span>
           <input
             type="email"
             required
@@ -104,7 +106,7 @@ export function ContactRequestForm({
           />
         </label>
         <label className="block">
-          <span className="font-sans text-sm">Telefoon (optioneel)</span>
+          <span className="font-sans text-sm">{t("checkout.phone_optional")}</span>
           <input
             type="tel"
             value={form.phone || ""}
@@ -114,7 +116,7 @@ export function ContactRequestForm({
         </label>
         {showOrg ? (
           <label className="block">
-            <span className="font-sans text-sm">Bedrijf of vereniging</span>
+            <span className="font-sans text-sm">{t("forms.contact.organisation")}</span>
             <input
               type="text"
               value={form.organisation || ""}
@@ -125,7 +127,7 @@ export function ContactRequestForm({
         ) : null}
         {showGroupSize ? (
           <label className="block">
-            <span className="font-sans text-sm">Aantal personen</span>
+            <span className="font-sans text-sm">{t("forms.contact.groupSize")}</span>
             <input
               type="number"
               inputMode="numeric"
@@ -138,7 +140,7 @@ export function ContactRequestForm({
         ) : null}
         {showDate ? (
           <label className="block">
-            <span className="font-sans text-sm">Gewenste datum</span>
+            <span className="font-sans text-sm">{t("forms.contact.eventDate")}</span>
             <input
               type="date"
               value={form.eventDate || ""}
@@ -148,7 +150,7 @@ export function ContactRequestForm({
           </label>
         ) : null}
         <label className="block sm:col-span-2">
-          <span className="font-sans text-sm">Vertel ons wat je nodig hebt</span>
+          <span className="font-sans text-sm">{t("forms.contact.message")}</span>
           <textarea
             required
             rows={4}
@@ -166,7 +168,7 @@ export function ContactRequestForm({
       ) : null}
 
       <button type="submit" disabled={state === "busy"} className="btn-primary mt-5 w-full sm:w-auto">
-        {state === "busy" ? "Bezig…" : "Verstuur aanvraag"}
+        {state === "busy" ? t("common.processing") : t("forms.contact.submit")}
       </button>
       <p className="mt-3 font-sans text-xs text-muted">
         We reageren binnen één werkdag. Je gegevens worden uitsluitend gebruikt

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useCart } from "@/components/cart/cart-context";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * Subtiele "toegevoegd aan winkelwagen"-toast — gebruikt bij toevoegen vanuit een
@@ -10,6 +11,7 @@ import { useCart } from "@/components/cart/cart-context";
  */
 export function CartToast() {
   const cart = useCart();
+  const t = useT();
   const toast = cart.toast;
 
   useEffect(() => {
@@ -32,8 +34,8 @@ export function CartToast() {
           <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span className="font-medium">{toast.title}</span>
-        <span className="text-canvas/70">toegevoegd</span>
-        <span className="ml-1 text-canvas underline underline-offset-2">Bekijk winkelwagen</span>
+        <span className="text-canvas/70">{t("cart.toast.added")}</span>
+        <span className="ml-1 text-canvas underline underline-offset-2">{t("cart.toast.view")}</span>
       </button>
     </div>
   );

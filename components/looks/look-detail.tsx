@@ -8,6 +8,7 @@ import type { ResolvedLook, LookBuyData, LookGalleryImage, LookColorOption } fro
 import { useCart } from "@/components/cart/cart-context";
 import { track } from "@/lib/track-client";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { useT } from "@/components/i18n/locale-provider";
 
 type LightboxState = { images: { url: string; alt: string }[]; index: number } | null;
 
@@ -42,6 +43,7 @@ export function LookDetail({
   buy: Record<string, LookBuyData>;
 }) {
   const cart = useCart();
+  const t = useT();
   const [picked, setPicked] = useState<Record<number, string>>({});
   const [added, setAdded] = useState<Record<number, boolean>>({});
   const [colorSel, setColorSel] = useState<Record<number, string>>({});
@@ -125,7 +127,7 @@ export function LookDetail({
           type="button"
           onClick={() => setLightbox({ images: heroImages, index: 0 })}
           className="group relative block aspect-[4/5] w-full overflow-hidden rounded-card bg-surface"
-          aria-label="Bekijk op volledige grootte"
+          aria-label={t("looks.detail.viewFullScreen")}
         >
           <Image src={hero} alt={look.title} fill priority sizes="(max-width:1024px) 100vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
           <ZoomBadge />
@@ -163,7 +165,7 @@ export function LookDetail({
           </div>
         ) : null}
 
-        <p className="label-brand mt-8">In deze look</p>
+        <p className="label-brand mt-8">{t("looks.detail.inThisLook")}</p>
         <ul className="mt-3">
           {items.map((h) => {
             const i = look.products.indexOf(h);
@@ -231,10 +233,10 @@ export function LookDetail({
                           added[i] ? "border-success bg-success/10 text-success" : sel ? "border-ink bg-ink text-canvas" : "border-ink text-ink hover:bg-ink hover:text-canvas"
                         }`}
                       >
-                        {added[i] ? "Toegevoegd" : single ? "In winkelwagen" : sel ? `Maat ${sel}` : "Kies maat"}
+                        {added[i] ? t("looks.detail.added") : single ? t("looks.detail.addToCart") : sel ? `Maat ${sel}` : t("looks.detail.chooseSizeBtn")}
                       </button>
                     ) : (
-                      <span className="shrink-0 font-sans text-xs text-muted">Tijdelijk niet beschikbaar</span>
+                      <span className="shrink-0 font-sans text-xs text-muted">{t("common.temporarilyUnavailable")}</span>
                     )}
                   </div>
                 </div>
@@ -243,17 +245,17 @@ export function LookDetail({
           })}
         </ul>
 
-        <p className="mt-4 font-sans text-xs text-muted">Gratis retour binnen 14 dagen · Styling-advies in al onze winkels.</p>
+        <p className="mt-4 font-sans text-xs text-muted">{t("delivery.returnAndStyling")}</p>
       </div>
 
       {/* ── Maat-drawer ───────────────────────────────────────────── */}
       {sizeDrawer !== null && dh?.product && dData ? (
-        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Kies je maat">
+        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={t("looks.detail.sizeDrawerTitle")}>
           <div className="absolute inset-0 bg-ink/40" onClick={() => setSizeDrawer(null)} />
           <div className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer">
             <div className="mb-4 flex items-center justify-between">
-              <p className="label-brand">Kies je maat</p>
-              <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">Sluiten</button>
+              <p className="label-brand">{t("looks.detail.sizeDrawerTitle")}</p>
+              <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">{t("look.drawer.close")}</button>
             </div>
 
             <div className="flex items-start gap-3">
@@ -269,8 +271,8 @@ export function LookDetail({
             </div>
 
             <div className="mt-4 flex items-center justify-between">
-              <span className="font-sans text-xs text-muted">Maat</span>
-              <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">Vind mijn maat</Link>
+              <span className="font-sans text-xs text-muted">{t("looks.detail.sizeLabel")}</span>
+              <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">{t("look.drawer.sizeAdvice")}</Link>
             </div>
             <SizeMatrix
               sizes={dData.sizes.map((s) => ({ ...s, known: true }))}
@@ -285,25 +287,25 @@ export function LookDetail({
               disabled={!dSelSize || (dSelSize?.qty ?? 0) <= 0}
               className="btn-primary mt-5 w-full"
             >
-              {!dSel ? "Kies een maat" : dSelSize && dSelSize.qty <= 0 ? "Uitverkocht" : `In winkelwagen — maat ${dSel}`}
+              {!dSel ? t("looks.detail.chooseOneCtaDrawer") : dSelSize && dSelSize.qty <= 0 ? t("common.soldOut") : `In winkelwagen — maat ${dSel}`}
             </button>
-            <p className="mt-2 text-center font-sans text-xs text-muted">Gratis retour binnen 14 dagen.</p>
+            <p className="mt-2 text-center font-sans text-xs text-muted">{t("look.drawer.returnNote")}</p>
           </div>
         </div>
       ) : null}
 
       {/* ── Lightbox (volledige grootte) ──────────────────────────── */}
       {lightbox ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4" role="dialog" aria-modal="true" aria-label="Afbeelding vergroot">
-          <button type="button" onClick={close} aria-label="Sluiten" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4" role="dialog" aria-modal="true" aria-label={t("looks.detail.lightboxTitle")}>
+          <button type="button" onClick={close} aria-label={t("look.drawer.close")} className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" /></svg>
           </button>
           {lightbox.images.length > 1 ? (
             <>
-              <button type="button" onClick={() => step(-1)} aria-label="Vorige" className="absolute left-3 flex h-11 w-11 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20 sm:left-6">
+              <button type="button" onClick={() => step(-1)} aria-label={t("common.previous")} className="absolute left-3 flex h-11 w-11 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20 sm:left-6">
                 <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
-              <button type="button" onClick={() => step(1)} aria-label="Volgende" className="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20 sm:right-6">
+              <button type="button" onClick={() => step(1)} aria-label={t("common.next")} className="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20 sm:right-6">
                 <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
             </>

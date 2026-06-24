@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Item = { sku: string; qty: number };
 
@@ -9,6 +10,7 @@ type Item = { sku: string; qty: number };
  * eerst, openingstijden, cutoff). Voor cart-drawer en afrekenpagina.
  */
 export function DeliveryEstimate({ items, className }: { items: Item[]; className?: string }) {
+  const t = useT();
   const [promise, setPromise] = useState<string | null>(null);
   const key = items.map((i) => `${i.sku}:${i.qty}`).join(",");
 
@@ -33,7 +35,7 @@ export function DeliveryEstimate({ items, className }: { items: Item[]; classNam
   return (
     <p className={className ?? "font-sans text-xs text-ink-soft"}>
       {promise ? <span className="text-success">●</span> : null}{" "}
-      {promise || "Voor 16:00 besteld = vandaag verzonden."}
+      {promise || t("delivery.sameday")}
     </p>
   );
 }

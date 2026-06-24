@@ -7,6 +7,7 @@ import type { SuitDetail, SuitRole } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { useCart } from "@/components/cart/cart-context";
+import { useT } from "@/components/i18n/locale-provider";
 import { parseComposition, parseCare, careProse } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { Accordion } from "@/components/pdp/accordion";
@@ -35,6 +36,7 @@ type Props = {
 
 export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }: Props) {
   const cart = useCart();
+  const t = useT();
   const colbert = suit.pieces.find((p) => p.role === "colbert")!;
   const broek = suit.pieces.find((p) => p.role === "broek")!;
   const gilet = suit.pieces.find((p) => p.role === "gilet") ?? null;
@@ -171,22 +173,22 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
 
       {/* Configurator */}
       <div className="lg:sticky lg:top-24 lg:self-start">
-        <p className="label-brand">Stel je pak samen</p>
+        <p className="label-brand">{t("pak.builder.title")}</p>
         <h1 className="mt-2 text-display-md">{pakTitle}</h1>
         <p className="mt-2 font-display text-xl">{allChosen ? formatEuro(totalCents) : `vanaf ${formatEuro(baseFrom)}`}</p>
 
         {/* 2- vs 3-delig */}
         {gilet ? (
           <div className="mt-6">
-            <p className="font-sans text-sm font-medium">Uitvoering</p>
+            <p className="font-sans text-sm font-medium">{t("pak.builder.config")}</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setWithGilet(false)} aria-pressed={!withGilet} className={`border px-4 py-3 text-left transition-colors ${!withGilet ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"}`}>
-                <span className="block font-sans text-sm font-medium">2-delig</span>
-                <span className={`font-sans text-xs ${!withGilet ? "text-canvas/70" : "text-muted"}`}>Colbert + pantalon</span>
+                <span className="block font-sans text-sm font-medium">{t("pak.builder.twopiece")}</span>
+                <span className={`font-sans text-xs ${!withGilet ? "text-canvas/70" : "text-muted"}`}>{t("pak.builder.twopieceDesc")}</span>
               </button>
               <button type="button" onClick={() => setWithGilet(true)} aria-pressed={withGilet} className={`border px-4 py-3 text-left transition-colors ${withGilet ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"}`}>
-                <span className="block font-sans text-sm font-medium">3-delig</span>
-                <span className={`font-sans text-xs ${withGilet ? "text-canvas/70" : "text-muted"}`}>+ gilet</span>
+                <span className="block font-sans text-sm font-medium">{t("pak.builder.threepiece")}</span>
+                <span className={`font-sans text-xs ${withGilet ? "text-canvas/70" : "text-muted"}`}>{t("pak.builder.plusWaistcoat")}</span>
               </button>
             </div>
           </div>
@@ -195,10 +197,10 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
         {/* Maat PER ONDERDEEL — Suitsupply-stijl matrix (Regular/Long/Short). */}
         <div className="mt-6">
           <div className="flex items-center justify-between">
-            <p className="font-sans text-sm font-medium">Maat per onderdeel</p>
-            <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">Vind mijn maat</Link>
+            <p className="font-sans text-sm font-medium">{t("pak.builder.sizePerPart")}</p>
+            <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">{t("pdp.size.finder")}</Link>
           </div>
-          <p className="mt-1 font-sans text-xs text-muted">Kies per onderdeel je maat — handig bij langere armen of kortere benen.</p>
+          <p className="mt-1 font-sans text-xs text-muted">{t("pak.builder.sizePerPartHint")}</p>
 
           {/* Tabs per onderdeel — één matrix tegelijk = minder scrollen; vinkje als de maat gekozen is. */}
           <div className="mt-4 flex gap-1 border-b border-line">
@@ -236,7 +238,7 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
                     onSelect={(size) => pickSize(piece.role, size)}
                   />
                 ) : (
-                  <p className="mt-1 font-sans text-sm text-muted">Geen maten beschikbaar.</p>
+                  <p className="mt-1 font-sans text-sm text-muted">{t("pak.builder.noSizesAvailable")}</p>
                 )}
                 {variant ? (
                   <p className="mt-3 font-sans text-xs">
@@ -270,7 +272,7 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
                   </div>
                   <div className="text-right">
                     <p className="font-sans text-sm">{s.variant ? formatEuro(s.variant.priceCents) : "—"}</p>
-                    {out ? <p className="font-sans text-[0.65rem] text-danger">uitverkocht</p> : null}
+                    {out ? <p className="font-sans text-[0.65rem] text-danger">{t("pak.builder.outOfStock")}</p> : null}
                   </div>
                 </li>
               );
@@ -280,11 +282,11 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
 
         {/* Totaal + CTA */}
         <div className="mt-6 flex items-center justify-between">
-          <span className="font-sans text-sm text-muted">Totaalprijs</span>
+          <span className="font-sans text-sm text-muted">{t("pak.builder.totalPrice")}</span>
           <span className="font-display text-2xl">{allChosen ? formatEuro(totalCents) : "—"}</span>
         </div>
         <button type="button" onClick={addPak} disabled={!canAdd} className="btn-primary mt-4 w-full">
-          {allChosen ? "Pak in winkelwagen" : "Kies de maten"}
+          {allChosen ? t("pak.builder.addToCart") : t("pak.builder.chooseSizes")}
         </button>
         <p className="mt-3 font-sans text-xs text-muted">
           Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.

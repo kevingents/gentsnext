@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { DAYS, openStatus, mapsEmbedUrl, mapsLinkUrl, type Store } from "@/lib/stores";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
-export function StorePage({ store }: { store: Store }) {
+export async function StorePage({ store }: { store: Store }) {
   const { open, today, todayRange } = openStatus(store);
   const todayName = today;
+  const locale = await getLocale();
 
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
-      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+      <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb", locale)}>
+        <Link href="/" className="hover:text-ink">{t("common.home", locale)}</Link>
         {" / "}
-        <Link href="/pages/winkels" className="hover:text-ink">Winkels</Link>
+        <Link href="/pages/winkels" className="hover:text-ink">{t("nav.stores", locale)}</Link>
         {" / "}
         <span className="text-ink">{store.city}</span>
       </nav>

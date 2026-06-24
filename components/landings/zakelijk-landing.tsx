@@ -4,6 +4,8 @@ import { ProductCard } from "@/components/product-card";
 import { ContactRequestForm } from "@/components/contact-request-form";
 import type { ProductCardData } from "@/lib/catalog";
 import { VISUAL } from "@/lib/visuals";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
 const USPS = [
   { title: "Direct uit voorraad leverbaar", body: "Voor veel aanvragen kunnen we direct schakelen dankzij sterke basis- en NOS-collecties." },
@@ -24,7 +26,8 @@ type Props = {
   businessShirts: ProductCardData[];
 };
 
-export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
+export async function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
+  const locale = await getLocale();
   return (
     <article>
       {/* Hero */}
@@ -41,7 +44,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
         <div className="absolute inset-0 mx-auto flex max-w-page flex-col items-start justify-end px-gutter pb-14">
           <p className="label-brand !text-canvas/80">GENTS Zakelijk</p>
           <h1 className="mt-3 max-w-3xl text-display-xl font-light text-canvas">
-            Zakelijke kleding die snel leverbaar, representatief en praktisch geregeld is
+            {t("landing.zakelijk.hero.title", locale)}
           </h1>
           <p className="mt-4 max-w-xl font-sans text-base text-canvas/85">
             Voor bedrijven in horeca, hospitality, retail, events en kantooromgevingen.
@@ -49,7 +52,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link href="#contact-zakelijk" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
-              Vraag informatie aan
+              {t("landing.zakelijk.cta", locale)}
             </Link>
             <a
               href="tel:0851155042"
@@ -98,7 +101,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
           <header className="mb-8 flex items-end justify-between">
             <div>
               <p className="label-brand">Snel schakelen</p>
-              <h2 className="mt-2 text-display-md">Business pakken & overhemden</h2>
+              <h2 className="mt-2 text-display-md">{t("landing.zakelijk.suits.title", locale)}</h2>
             </div>
             <Link href="/collections/mix-match-pakken" className="hidden font-sans text-sm text-ink underline underline-offset-4 sm:inline">
               Alle business pakken
@@ -118,7 +121,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
             <header className="mb-8 flex items-end justify-between">
               <div>
                 <p className="label-brand">De basis</p>
-                <h2 className="mt-2 text-display-md">Business overhemden</h2>
+                <h2 className="mt-2 text-display-md">{t("landing.zakelijk.shirts.title", locale)}</h2>
               </div>
               <Link href="/collections/business-overhemden" className="hidden font-sans text-sm text-ink underline underline-offset-4 sm:inline">
                 Alle business overhemden
@@ -157,7 +160,7 @@ export function ZakelijkLanding({ businessSuits, businessShirts }: Props) {
           </div>
           <ContactRequestForm
             channel="zakelijk"
-            title="Vraag informatie aan"
+            title={t("landing.zakelijk.cta", locale)}
             intro="We nemen binnen één werkdag contact met je op."
             showOrg
             showGroupSize

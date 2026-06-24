@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
   productHandle: string;
@@ -16,6 +17,7 @@ type Channel = "email" | "whatsapp";
 
 /** "Mail me / WhatsApp me als het er weer is" — terug-op-voorraad-notificatie. */
 export function StockNotify({ productHandle, productTitle, sku, size, color, variant = "compact" }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(variant === "block");
   const [channel, setChannel] = useState<Channel>("email");
   const [value, setValue] = useState("");
@@ -26,7 +28,7 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
     e.preventDefault();
     const valid = channel === "email" ? /.+@.+\..+/.test(value) : value.replace(/[\s().+-]/g, "").length >= 8;
     if (!valid) {
-      setErr(channel === "email" ? "Vul een geldig e-mailadres in." : "Vul een geldig telefoonnummer in.");
+      setErr(channel === "email" ? t("pdp.stocknotify.invalidemail") : t("pdp.stocknotify.invalidphone"));
       setState("fail");
       return;
     }
@@ -51,7 +53,7 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
       if (r.ok) setState("done");
       else {
         setState("fail");
-        setErr(d.error || "Er ging iets mis.");
+        setErr(d.error || t("common.error"));
       }
     } catch {
       setState("fail");
@@ -88,8 +90,8 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
     <form onSubmit={submit} className={variant === "block" ? "mt-4 border border-line p-4" : "mt-3"}>
       {variant === "block" ? (
         <p className="mb-3 font-sans text-sm">
-          <span className="font-medium">Tijdelijk uitverkocht.</span>{" "}
-          <span className="text-muted">We tippen je via e-mail of WhatsApp zodra het er weer is.</span>
+          <span className="font-medium">{t("pdp.stocknotify.soldout")}</span>{" "}
+          <span className="text-muted">{t("pdp.stocknotify.description")}</span>
         </p>
       ) : null}
 
@@ -100,7 +102,7 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
           onClick={() => { setChannel("email"); setValue(""); setState("idle"); }}
           className={`px-3 py-1.5 font-sans transition-colors ${channel === "email" ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
         >
-          E-mail
+          {t("pdp.stocknotify.email")}
         </button>
         <button
           type="button"
@@ -110,7 +112,7 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
             <path d="M17.5 14.4l-2.5-1.3-.6.7c-.6.7-1.4.8-2.3.3-1.5-.8-3-2.2-3.8-3.7-.5-.9-.3-1.7.3-2.3l.7-.7-1.2-2.5c-.2-.4-.6-.6-1-.4-.8.3-1.6 1-2 1.7-.7 1.2-.4 3 1 5.6 1.4 2.6 4.3 5.5 6.9 6.9 2.6 1.4 4.4 1.7 5.6 1 .7-.4 1.3-1.2 1.7-2 .1-.4-.1-.8-.5-1zM12 2C6.5 2 2 6.5 2 12c0 1.9.5 3.7 1.4 5.2L2 22l4.9-1.3C8.4 21.5 10.1 22 12 22c5.5 0 10-4.5 10-10S17.5 2 12 2z" />
           </svg>
-          WhatsApp
+          {t("pdp.stocknotify.whatsapp")}
         </button>
       </div>
 
@@ -119,12 +121,12 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
           type={channel === "email" ? "email" : "tel"}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder={channel === "email" ? "Je e-mailadres" : "Je 06-nummer"}
+          placeholder={channel === "email" ? t("pdp.stocknotify.emailplaceholder") : t("pdp.stocknotify.phoneplaceholder")}
           aria-label={channel === "email" ? "E-mailadres" : "Telefoonnummer"}
           className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"
         />
         <button type="submit" disabled={state === "busy"} className="btn-primary !px-4 !py-2 whitespace-nowrap">
-          {state === "busy" ? "…" : "Tip me"}
+          {state === "busy" ? "…" : t("pdp.stocknotify.submit")}
         </button>
       </div>
       {state === "fail" ? <p className="mt-2 font-sans text-xs text-danger">{err}</p> : null}

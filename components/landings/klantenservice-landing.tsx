@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Accordion } from "@/components/pdp/accordion";
 import { ServiceAsk } from "@/components/service/service-ask";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
 const EMAIL = process.env.CONTACT_EMAIL || "klantenservice@gents.nl";
 const WHATSAPP = process.env.WHATSAPP_PHONE_NUMBER || process.env.WHATSAPP_PHONE || "";
@@ -46,7 +48,8 @@ const FAQ = [
   },
 ];
 
-export function KlantenserviceLanding() {
+export async function KlantenserviceLanding() {
+  const locale = await getLocale();
   const contacts = [
     { label: "Vraag de assistent", sub: "Direct antwoord, 24/7", icon: "M8 10h8M8 14h5M21 12a9 9 0 1 1-3.5-7.1L21 3v6h-6", href: "#assistent" },
     { label: "Mail ons", sub: `Reactie binnen 1 werkdag`, icon: "M4 6h16v12H4zM4 7l8 6 8-6", href: `mailto:${EMAIL}` },
@@ -58,8 +61,8 @@ export function KlantenserviceLanding() {
     <div className="mx-auto max-w-page px-gutter py-12">
       {/* Hero */}
       <div className="max-w-2xl">
-        <p className="label-brand">Klantenservice</p>
-        <h1 className="mt-2 text-display-lg">We staan voor je klaar</h1>
+        <p className="label-brand">{t("landing.klantenservice.label", locale)}</p>
+        <h1 className="mt-2 text-display-lg">{t("landing.klantenservice.title", locale)}</h1>
         <p className="mt-3 font-sans text-ink-soft">
           Een vraag over je bestelling, maat of retour? Onze mensen — en onze assistent — helpen je graag.
           Persoonlijk, snel en zonder gedoe.
@@ -91,7 +94,7 @@ export function KlantenserviceLanding() {
           <ServiceAsk />
         </div>
         <div>
-          <p className="label-brand">Veelgestelde vragen</p>
+          <p className="label-brand">{t("landing.klantenservice.faqLabel", locale)}</p>
           <h2 className="mt-2 text-display-md">Misschien staat je antwoord hier</h2>
           <div className="mt-5">
             <Accordion items={FAQ} />
@@ -102,10 +105,10 @@ export function KlantenserviceLanding() {
       {/* Persoonlijk in de winkel */}
       <div className="mt-14 flex flex-col items-start justify-between gap-4 rounded-card bg-surface p-8 sm:flex-row sm:items-center">
         <div>
-          <p className="font-display text-xl">Liever persoonlijk advies?</p>
+          <p className="font-display text-xl">{t("landing.klantenservice.personalAdvice", locale)}</p>
           <p className="mt-1 font-sans text-sm text-ink-soft">In onze 19 winkels meten en stylen we je van top tot teen.</p>
         </div>
-        <Link href="/pages/winkels" className="btn-primary shrink-0">Vind een winkel</Link>
+        <Link href="/pages/winkels" className="btn-primary shrink-0">{t("landing.klantenservice.findStore", locale)}</Link>
       </div>
     </div>
   );

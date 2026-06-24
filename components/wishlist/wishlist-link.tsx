@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useWishlist } from "@/components/wishlist/wishlist-context";
+import { useT } from "@/components/i18n/locale-provider";
 
 export function WishlistLink() {
+  const t = useT();
   const wl = useWishlist();
   return (
     <Link
       href="/favorieten"
-      aria-label={`Favorieten, ${wl.count} bewaard`}
+      aria-label={`${t("wishlist.link.label")} ${wl.count} ${t("wishlist.link.saved")}`}
       className="relative text-ink-soft transition-colors hover:text-ink"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>

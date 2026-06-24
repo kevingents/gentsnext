@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 import { useCart } from "@/components/cart/cart-context";
 import { CartSuggestions } from "@/components/cart/cart-suggestions";
 import { formatEuro } from "@/lib/pricing";
@@ -14,6 +15,7 @@ import { formatEuro } from "@/lib/pricing";
  * direct afrekenen. Sluit automatisch na een paar seconden.
  */
 export function AddedToCartToast() {
+  const t = useT();
   const cart = useCart();
   const added = cart.added;
 
@@ -31,7 +33,7 @@ export function AddedToCartToast() {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-4" role="status" aria-live="polite">
-      <button type="button" aria-label="Sluiten" onClick={cart.dismissAdded} className="absolute inset-0 cursor-default animate-[fadeIn_.2s_ease] bg-ink/30" />
+      <button type="button" aria-label={t("common.close")} onClick={cart.dismissAdded} className="absolute inset-0 cursor-default animate-[fadeIn_.2s_ease] bg-ink/30" />
       <div className="relative w-full max-w-md animate-[fadeIn_.2s_ease] rounded-card border border-line bg-canvas p-5 shadow-drawer">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -39,9 +41,9 @@ export function AddedToCartToast() {
               <circle cx="12" cy="12" r="9" />
               <path d="M8 12.5l2.5 2.5L16 9.5" />
             </svg>
-            <p className="font-sans text-sm font-medium text-ink">Toegevoegd aan winkelwagen</p>
+            <p className="font-sans text-sm font-medium text-ink">{t("cart.added.title")}</p>
           </div>
-          <button type="button" onClick={cart.dismissAdded} aria-label="Sluiten" className="text-muted hover:text-ink">
+          <button type="button" onClick={cart.dismissAdded} aria-label={t("common.close")} className="text-muted hover:text-ink">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
@@ -62,7 +64,7 @@ export function AddedToCartToast() {
           hoofdgroepen={[l.hoofdgroep].filter(Boolean) as string[]}
           excludeHandles={[l.productHandle]}
           onNavigate={cart.dismissAdded}
-          title="Maak je look compleet"
+          title={t("cart.added.suggestions")}
           className="mt-4 border-t border-line pt-4"
         />
 
@@ -75,7 +77,7 @@ export function AddedToCartToast() {
             Bekijk winkelwagen ({cart.count})
           </button>
           <Link href="/afrekenen" onClick={cart.dismissAdded} className="btn-primary w-full text-center">
-            Ga naar de kassa
+            {t("cart.added.checkout")}
           </Link>
         </div>
       </div>

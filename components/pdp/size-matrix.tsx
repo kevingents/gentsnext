@@ -9,6 +9,7 @@ import {
   rowSortIndex,
   type SizeGroup,
 } from "@/lib/size-taxonomy";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Column = { key: SizeGroup; label: string; sub?: string };
 
@@ -63,10 +64,11 @@ export function SizeMatrix({
   selected: string | null;
   onSelect: (size: string) => void;
 }) {
+  const t = useT();
   // Uitverkochte maten niet tonen (i.p.v. doorstrepen).
   const live = sizes.filter((s) => !(s.known && s.qty <= 0));
   if (!live.length) {
-    return <p className="mt-2 font-sans text-sm text-muted">Tijdelijk uitverkocht.</p>;
+    return <p className="mt-2 font-sans text-sm text-muted">{t("pdp.size.soldout")}</p>;
   }
 
   const layout = sizeLayoutFor(hoofdgroep, live.map((s) => s.size));

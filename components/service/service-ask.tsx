@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * Directe AI-vraag op de servicepagina: geeft meteen antwoord uit de kennisbank,
  * of escaleert naar een medewerker (via /api/support) met e-mailterugkoppeling.
  */
 export function ServiceAsk() {
+  const t = useT();
   const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export function ServiceAsk() {
           className="flex-1 border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
         />
         <button type="submit" disabled={busy || !q.trim()} className="btn-primary sm:w-auto">
-          {busy ? "Bezig…" : "Stel je vraag"}
+          {busy ? t("common.processing") : "Stel je vraag"}
         </button>
       </div>
       {answer ? (

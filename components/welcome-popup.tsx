@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 const KEY = "gents-welcome-v1";
 
@@ -10,6 +11,7 @@ const KEY = "gents-welcome-v1";
  * Maakt een echte, verzilverbare kortingscode aan (/api/welcome-discount).
  */
 export function WelcomePopup() {
+  const t = useT();
   const [show, setShow] = useState(false);
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
@@ -28,13 +30,13 @@ export function WelcomePopup() {
       done = true;
       setShow(true);
     };
-    const t = setTimeout(open, 18000); // na 18s
+    const timer = setTimeout(open, 18000); // na 18s
     const onLeave = (e: MouseEvent) => {
       if (e.clientY <= 0) open(); // exit-intent (muis naar boven uit beeld)
     };
     document.addEventListener("mouseleave", onLeave);
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       document.removeEventListener("mouseleave", onLeave);
     };
   }, []);
@@ -51,7 +53,7 @@ export function WelcomePopup() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!/.+@.+\..+/.test(email)) {
-      setErr("Vul een geldig e-mailadres in.");
+      setErr(t("common.error.emailInvalid"));
       setState("fail");
       return;
     }
@@ -72,7 +74,7 @@ export function WelcomePopup() {
           /* leeg */
         }
       } else {
-        setErr(d.error || "Er ging iets mis.");
+        setErr(d.error || t("common.error_generic"));
         setState("fail");
       }
     } catch {
@@ -87,23 +89,23 @@ export function WelcomePopup() {
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Welkomstkorting">
       <div className="absolute inset-0 bg-ink/50" onClick={close} />
       <div className="relative w-full max-w-md overflow-hidden border border-line bg-canvas shadow-pop">
-        <button type="button" onClick={close} aria-label="Sluiten" className="absolute right-3 top-3 z-10 text-muted hover:text-ink">
+        <button type="button" onClick={close} aria-label={t("common.close")} className="absolute right-3 top-3 z-10 text-muted hover:text-ink">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
           </svg>
         </button>
         <div className="bg-ink px-8 py-8 text-center text-canvas">
-          <p className="label-brand !text-canvas/70">Welkom bij GENTS</p>
-          <p className="mt-2 font-display text-4xl font-light">10% korting</p>
-          <p className="mt-1 font-sans text-sm text-canvas/80">op je eerste bestelling</p>
+          <p className="label-brand !text-canvas/70">{t("welcome.brand")}</p>
+          <p className="mt-2 font-display text-4xl font-light">{t("welcome.discount")}</p>
+          <p className="mt-1 font-sans text-sm text-canvas/80">{t("welcome.discountSubtitle")}</p>
         </div>
         <div className="px-8 py-6">
           {state === "done" ? (
             <div className="text-center">
-              <p className="font-sans text-sm text-ink-soft">Je code:</p>
+              <p className="font-sans text-sm text-ink-soft">{t("welcome.codeLabel")}</p>
               <p className="my-2 inline-block bg-surface px-4 py-2 font-display text-xl tracking-widest">{code}</p>
-              <p className="font-sans text-xs text-muted">Plak de code in je winkelwagen bij het afrekenen. 30 dagen geldig.</p>
-              <button type="button" onClick={close} className="btn-primary mt-5 w-full">Verder shoppen</button>
+              <p className="font-sans text-xs text-muted">{t("welcome.codeNote")}</p>
+              <button type="button" onClick={close} className="btn-primary mt-5 w-full">{t("welcome.continue")}</button>
             </div>
           ) : (
             <form onSubmit={submit}>
@@ -114,15 +116,15 @@ export function WelcomePopup() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Je e-mailadres"
+                placeholder={t("newsletter.emailPlaceholder")}
                 className="mt-4 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
               />
               {err ? <p className="mt-1 font-sans text-xs text-danger">{err}</p> : null}
               <button type="submit" disabled={state === "busy"} className="btn-primary mt-3 w-full">
-                {state === "busy" ? "Bezig…" : "Geef mij 10% korting"}
+                {state === "busy" ? t("common.processing") : t("welcome.submit")}
               </button>
               <button type="button" onClick={close} className="mt-2 w-full font-sans text-xs text-muted underline">
-                Nee bedankt
+                {t("welcome.decline")}
               </button>
             </form>
           )}

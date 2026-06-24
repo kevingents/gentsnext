@@ -1,6 +1,7 @@
 "use client";
 
 import { useWishlist } from "@/components/wishlist/wishlist-context";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
   handle: string;
@@ -9,9 +10,11 @@ type Props = {
 };
 
 /** Hartje voor producten — geluidloos op de kaart, met label op de PDP. */
-export function WishlistButton({ handle, variant = "card", label = "Bewaren" }: Props) {
+export function WishlistButton({ handle, variant = "card", label }: Props) {
+  const t = useT();
   const wl = useWishlist();
   const on = wl.hydrated && wl.has(handle);
+  const saveLabel = label ?? t("wishlist.saveLabel");
 
   if (variant === "pdp") {
     return (
@@ -24,7 +27,7 @@ export function WishlistButton({ handle, variant = "card", label = "Bewaren" }: 
         }`}
       >
         <Heart filled={on} />
-        {on ? "Bewaard" : label}
+        {on ? t("wishlist.savedLabel") : saveLabel}
       </button>
     );
   }
@@ -37,7 +40,7 @@ export function WishlistButton({ handle, variant = "card", label = "Bewaren" }: 
         e.stopPropagation();
         wl.toggle(handle);
       }}
-      aria-label={on ? "Verwijder uit favorieten" : "Voeg toe aan favorieten"}
+      aria-label={on ? t("wishlist.removeAriaLabel") : t("wishlist.addAriaLabel")}
       aria-pressed={on}
       className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-canvas/90 text-ink shadow-card transition-colors hover:bg-canvas"
     >

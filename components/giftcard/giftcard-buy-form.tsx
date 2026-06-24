@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatEuro } from "@/lib/pricing";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
   presetCents: number[];
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonths, defaultBuyerEmail = "" }: Props) {
+  const t = useT();
   const presets = presetCents.length ? presetCents : [2500, 5000, 10000];
   const [amountCents, setAmountCents] = useState(presets[1] ?? presets[0]);
   const [custom, setCustom] = useState("");
@@ -45,7 +47,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
       return;
     }
     if (!/.+@.+\..+/.test(recipientEmail)) {
-      setError("Vul een geldig e-mailadres van de ontvanger in.");
+      setError(t("giftcard.error.email"));
       return;
     }
     setBusy(true);
@@ -57,7 +59,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
       });
       const d = await r.json();
       if (!d.ok) {
-        setError(d.error || "Er ging iets mis.");
+        setError(d.error || t("common.error"));
         return;
       }
       if (d.configured && d.checkoutUrl) {
@@ -83,7 +85,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
 
   return (
     <form onSubmit={submit} noValidate className="rounded-card border border-line p-6">
-      <p className="label-brand">Bedrag</p>
+      <p className="label-brand">{t("giftcard.form.amountLabel")}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {presets.map((c) => (
           <button
@@ -99,7 +101,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
         ))}
       </div>
       <label className="mt-3 block">
-        <span className="font-sans text-sm text-ink">Ander bedrag</span>
+        <span className="font-sans text-sm text-ink">{t("giftcard.form.customAmount")}</span>
         <div className="mt-1.5 flex items-center border border-line bg-canvas focus-within:border-ink">
           <span className="pl-3 font-sans text-sm text-muted">€</span>
           <input
@@ -112,34 +114,34 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
         </div>
       </label>
 
-      <p className="label-brand mt-7">Voor wie?</p>
+      <p className="label-brand mt-7">{t("giftcard.form.recipientLabel")}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="font-sans text-sm text-ink">Naam ontvanger <span className="text-muted">(optioneel)</span></span>
+          <span className="font-sans text-sm text-ink">{t("giftcard.form.recipientName")} <span className="text-muted">{t("common.optional")}</span></span>
           <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} maxLength={80} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm text-ink">E-mail ontvanger</span>
+          <span className="font-sans text-sm text-ink">{t("giftcard.form.recipientEmail")}</span>
           <input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} maxLength={160} required className="mt-1.5 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm text-ink">Van <span className="text-muted">(optioneel)</span></span>
+          <span className="font-sans text-sm text-ink">Van <span className="text-muted">{t("common.optional")}</span></span>
           <input value={senderName} onChange={(e) => setSenderName(e.target.value)} maxLength={80} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm text-ink">Jouw e-mail <span className="text-muted">(optioneel)</span></span>
+          <span className="font-sans text-sm text-ink">{t("giftcard.form.buyerEmail")} <span className="text-muted">{t("common.optional")}</span></span>
           <input type="email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} maxLength={160} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
       </div>
       <label className="mt-3 block">
-        <span className="font-sans text-sm text-ink">Persoonlijk bericht <span className="text-muted">(optioneel)</span></span>
+        <span className="font-sans text-sm text-ink">{t("giftcard.form.message")} <span className="text-muted">{t("common.optional")}</span></span>
         <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} maxLength={500} placeholder="Een paar woorden voor de ontvanger…" className="mt-1.5 w-full resize-none border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
       </label>
 
       {error ? <p role="alert" className="mt-4 font-sans text-sm text-danger">{error}</p> : null}
 
       <button type="submit" disabled={busy || !amountValid} className="btn-primary mt-6 w-full">
-        {busy ? "Bezig…" : `Cadeaubon kopen — ${formatEuro(amountCents)}`}
+        {busy ? t("common.processing") : `Cadeaubon kopen — ${formatEuro(amountCents)}`}
       </button>
       <p className="mt-3 font-sans text-xs text-muted">
         De ontvanger krijgt de cadeaubon direct per e-mail na betaling. Geldig {validityMonths} maanden, in meerdere keren te besteden.

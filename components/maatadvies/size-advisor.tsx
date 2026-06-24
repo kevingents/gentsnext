@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 import {
   recommendSizes,
   type FitPreference,
@@ -34,6 +35,7 @@ function num(v: string): number | undefined {
 }
 
 function AdviceCard({ title, advice, shopHref }: { title: string; advice: CategoryAdvice; shopHref?: string }) {
+  const t = useT();
   return (
     <div className="border border-line bg-canvas p-5">
       <p className="label-brand">{title}</p>
@@ -49,7 +51,7 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
           href={shopHref}
           className="mt-4 inline-block font-sans text-sm text-ink underline underline-offset-4"
         >
-          Shop in deze maat
+          {t("sizeAdvisor.shopInThisSize")}
         </Link>
       ) : null}
     </div>
@@ -57,6 +59,7 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
 }
 
 export function SizeAdvisor() {
+  const t = useT();
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [fit, setFit] = useState<FitPreference>("regular");
@@ -109,11 +112,11 @@ export function SizeAdvisor() {
 
   function calculate() {
     if (!heightCm || !weightKg) {
-      setError("Vul je lengte en gewicht in om een advies te krijgen.");
+      setError(t("sizeAdvisor.errorMissingData"));
       return;
     }
     if (heightCm < 140 || heightCm > 215 || weightKg < 45 || weightKg > 180) {
-      setError("Controleer je lengte en gewicht — die lijken buiten het verwachte bereik.");
+      setError(t("sizeAdvisor.errorOutOfRange"));
       return;
     }
     setError("");
@@ -149,12 +152,12 @@ export function SizeAdvisor() {
             aria-expanded={showRef}
             className="font-sans text-sm font-medium text-ink underline underline-offset-4"
           >
-            {showRef ? "Verberg snelstart" : "Ken je je maat al bij een ander merk? (snelstart)"}
+            {showRef ? t("sizeAdvisor.hideQuickStart") : t("sizeAdvisor.showQuickStart")}
           </button>
           {showRef ? (
             <div className="mt-4 space-y-4">
               <div>
-                <span className="font-sans text-xs text-muted">Merk</span>
+                <span className="font-sans text-xs text-muted">{t("sizeAdvisor.brand")}</span>
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {REFERENCE_BRANDS.map((b) => (
                     <button
@@ -170,7 +173,7 @@ export function SizeAdvisor() {
                 </div>
               </div>
               <div>
-                <span className="font-sans text-xs text-muted">Jouw maat daar</span>
+                <span className="font-sans text-xs text-muted">{t("sizeAdvisor.yourSizeThere")}</span>
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {REFERENCE_LETTERS.map((l) => (
                     <button
@@ -187,18 +190,18 @@ export function SizeAdvisor() {
               </div>
               {refResult ? (
                 <div className="border border-line bg-canvas p-4">
-                  <p className="label-brand">Indicatie GENTS-maat</p>
+                  <p className="label-brand">{t("sizeAdvisor.gentsEstimate")}</p>
                   <dl className="mt-2 space-y-1 font-sans text-sm">
-                    <div className="flex justify-between gap-4"><dt className="text-muted">Colbert / pak</dt><dd className="font-medium text-ink">{refResult.colbert.range ?? refResult.colbert.size}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className="text-muted">Overhemd (boord)</dt><dd className="font-medium text-ink">{refResult.overhemd.size}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className="text-muted">Pantalon</dt><dd className="font-medium text-ink">{refResult.broek.size}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-muted">{t("sizeAdvisor.jacket")}</dt><dd className="font-medium text-ink">{refResult.colbert.range ?? refResult.colbert.size}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-muted">{t("sizeAdvisor.shirt")}</dt><dd className="font-medium text-ink">{refResult.overhemd.size}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-muted">{t("sizeAdvisor.trousers")}</dt><dd className="font-medium text-ink">{refResult.broek.size}</dd></div>
                   </dl>
                   <p className="mt-3 font-sans text-xs leading-relaxed text-muted">
                     Indicatie — merkmaten verschillen onderling. Vul hieronder je lengte &amp; gewicht in voor een zekerder advies, of pas je pasvorm aan.
                   </p>
                 </div>
               ) : (
-                <p className="font-sans text-xs text-muted">Kies een merk én je maat daar voor een indicatie.</p>
+                <p className="font-sans text-xs text-muted">{t("sizeAdvisor.selectBrandAndSize")}</p>
               )}
             </div>
           ) : null}
@@ -206,31 +209,31 @@ export function SizeAdvisor() {
 
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
-            <span className="font-sans text-sm font-medium text-ink">Lengte (cm)</span>
+            <span className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.height")}</span>
             <input
               inputMode="numeric"
               value={height}
               onChange={(e) => setHeight(e.target.value)}
-              placeholder="bijv. 182"
+              placeholder={t("sizeAdvisor.heightPlaceholder")}
               className="mt-2 w-full border border-line bg-canvas px-4 py-3 font-sans text-sm focus:border-ink focus:outline-none"
-              aria-label="Lengte in centimeters"
+              aria-label={t("sizeAdvisor.heightAriaLabel")}
             />
           </label>
           <label className="block">
-            <span className="font-sans text-sm font-medium text-ink">Gewicht (kg)</span>
+            <span className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.weight")}</span>
             <input
               inputMode="numeric"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
-              placeholder="bijv. 80"
+              placeholder={t("sizeAdvisor.weightPlaceholder")}
               className="mt-2 w-full border border-line bg-canvas px-4 py-3 font-sans text-sm focus:border-ink focus:outline-none"
-              aria-label="Gewicht in kilogram"
+              aria-label={t("sizeAdvisor.weightAriaLabel")}
             />
           </label>
         </div>
 
         <fieldset>
-          <legend className="font-sans text-sm font-medium text-ink">Pasvorm-voorkeur</legend>
+          <legend className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.fitPreference")}</legend>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {FITS.map((f) => (
               <button
@@ -260,14 +263,14 @@ export function SizeAdvisor() {
             className="font-sans text-sm text-ink underline underline-offset-4"
             aria-expanded={showMeasured}
           >
-            {showMeasured ? "Verberg lichaamsmaten" : "Ik weet mijn lichaamsmaten (nauwkeuriger)"}
+            {showMeasured ? t("sizeAdvisor.hideMeasurements") : t("sizeAdvisor.showMeasurements")}
           </button>
           {showMeasured ? (
             <div className="mt-4 grid grid-cols-3 gap-4">
               {[
-                { label: "Borst (cm)", value: chest, set: setChest },
-                { label: "Taille (cm)", value: waist, set: setWaist },
-                { label: "Hals (cm)", value: neck, set: setNeck },
+                { label: t("sizeAdvisor.chest"), value: chest, set: setChest },
+                { label: t("sizeAdvisor.waist"), value: waist, set: setWaist },
+                { label: t("sizeAdvisor.neck"), value: neck, set: setNeck },
               ].map((m) => (
                 <label key={m.label} className="block">
                   <span className="font-sans text-xs text-muted">{m.label}</span>
@@ -291,7 +294,7 @@ export function SizeAdvisor() {
         ) : null}
 
         <button type="submit" disabled={!ready} className="btn-primary w-full">
-          Toon mijn maat
+          {t("sizeAdvisor.calculate")}
         </button>
         <p className="font-sans text-xs leading-relaxed text-muted">
           Dit advies is een inschatting op basis van je gegevens. Twijfel je tussen
@@ -304,17 +307,17 @@ export function SizeAdvisor() {
         {advice ? (
           <div className="space-y-4">
             <div>
-              <p className="label-brand">Jouw maatadvies</p>
+              <p className="label-brand">{t("sizeAdvisor.yourAdvice")}</p>
               <p className="mt-1 font-sans text-sm text-ink-soft">
-                Geschatte borstomvang ± {advice.estimatedChestCm} cm
+                {t("sizeAdvisor.estimatedChest")} {advice.estimatedChestCm} cm
                 {advice.tall ? " · lange lengte" : ""}
               </p>
             </div>
-            <AdviceCard title="Colbert / pak" advice={advice.jacket} shopHref="/collections/colberts" />
+            <AdviceCard title={t("sizeAdvisor.jacket")} advice={advice.jacket} shopHref="/collections/colberts" />
             {advice.trouserLength ? (
-              <AdviceCard title="Lengtemaat (lang)" advice={advice.trouserLength} shopHref="/collections/broeken" />
+              <AdviceCard title={t("sizeAdvisor.adviceTrouserLength")} advice={advice.trouserLength} shopHref="/collections/broeken" />
             ) : null}
-            <AdviceCard title="Overhemd (boordmaat)" advice={advice.shirt} shopHref="/collections/overhemden" />
+            <AdviceCard title={t("sizeAdvisor.adviceShirt")} advice={advice.shirt} shopHref="/collections/overhemden" />
 
             {/* Bewaar in profiel → daarna "Shop in jouw maat" overal op de site. */}
             <div className="border border-line bg-surface p-5">
@@ -322,26 +325,26 @@ export function SizeAdvisor() {
                 <div className="flex items-start gap-3">
                   <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
                   <div>
-                    <p className="font-sans text-sm font-medium text-ink">Opgeslagen in je profiel</p>
+                    <p className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.savedToProfile")}</p>
                     <p className="mt-1 font-sans text-xs text-ink-soft">
                       We selecteren je maat nu automatisch op productpagina&apos;s en je kunt overal filteren op &ldquo;jouw maat&rdquo;.
                     </p>
-                    <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">Bekijk mijn maten</Link>
+                    <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.viewMySizes")}</Link>
                   </div>
                 </div>
               ) : saveState === "login" ? (
                 <div className="flex items-start gap-3">
                   <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 11V7a4 4 0 10-8 0M5 11h14v10H5zM12 15v2" /></svg>
                   <div>
-                    <p className="font-sans text-sm font-medium text-ink">Log in om je maat te bewaren</p>
-                    <p className="mt-1 font-sans text-xs text-ink-soft">Dan vullen we je maat automatisch in bij elk product.</p>
-                    <Link href="/account/login?next=/maatadvies" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">Inloggen of account aanmaken</Link>
+                    <p className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.loginToSave")}</p>
+                    <p className="mt-1 font-sans text-xs text-ink-soft">{t("sizeAdvisor.loginMessage")}</p>
+                    <Link href="/account/login?next=/maatadvies" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.loginOrRegister")}</Link>
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-sans text-sm text-ink-soft">
-                    <span className="font-medium text-ink">Bewaar je maat</span> — dan selecteren we &lsquo;m voortaan automatisch.
+                    <span className="font-medium text-ink">{t("sizeAdvisor.saveSizeLabel")}</span> — dan selecteren we &lsquo;m voortaan automatisch.
                   </p>
                   <button
                     type="button"
@@ -349,20 +352,20 @@ export function SizeAdvisor() {
                     disabled={saveState === "saving"}
                     className="btn-ghost shrink-0 !py-2"
                   >
-                    {saveState === "saving" ? "Opslaan…" : "Bewaar in mijn profiel"}
+                    {saveState === "saving" ? t("sizeAdvisor.saving") : t("sizeAdvisor.saveButton")}
                   </button>
                 </div>
               )}
               {saveState === "error" ? (
-                <p className="mt-2 font-sans text-xs text-danger">Opslaan lukte niet — probeer het zo nog eens.</p>
+                <p className="mt-2 font-sans text-xs text-danger">{t("sizeAdvisor.saveError")}</p>
               ) : null}
             </div>
           </div>
         ) : (
           <div className="flex h-full flex-col justify-center border border-dashed border-line p-8 text-center">
-            <p className="font-display text-xl font-light text-ink">Jouw advies verschijnt hier</p>
+            <p className="font-display text-xl font-light text-ink">{t("sizeAdvisor.emptyState")}</p>
             <p className="mt-2 font-sans text-sm text-muted">
-              Vul je gegevens in en we berekenen je colbert-, lengte- en boordmaat.
+              {t("sizeAdvisor.emptyStateDesc")}
             </p>
           </div>
         )}

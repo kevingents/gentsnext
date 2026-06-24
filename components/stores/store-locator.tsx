@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 export type LocatorStore = {
   pageHandle: string;
@@ -14,6 +15,7 @@ export type LocatorStore = {
 };
 
 export function StoreLocator({ stores }: { stores: LocatorStore[] }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const [openOnly, setOpenOnly] = useState(false);
 
@@ -40,7 +42,7 @@ export function StoreLocator({ stores }: { stores: LocatorStore[] }) {
           <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} className="h-4 w-4 accent-ink" />
           Alleen nu geopend
         </label>
-        <span className="font-sans text-sm text-muted sm:ml-auto">{filtered.length} winkels</span>
+        <span className="font-sans text-sm text-muted sm:ml-auto">{filtered.length} {t("clickCollect.storePlural")}</span>
       </div>
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

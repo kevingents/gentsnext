@@ -8,6 +8,7 @@ import type { ResolvedLook, LookBuyData } from "@/lib/looks";
 import { useCart } from "@/components/cart/cart-context";
 import { track } from "@/lib/track-client";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * Interactieve modelfoto met GENUMMERDE hotspots → elk cijfer wijst het artikel
@@ -26,6 +27,7 @@ export function ShopTheLook({
   buy?: Record<string, LookBuyData>;
 }) {
   const cart = useCart();
+  const t = useT();
   const [active, setActive] = useState<number | null>(null);
   const [picked, setPicked] = useState<Record<number, string>>({});
   const [added, setAdded] = useState<Record<number, boolean>>({});
@@ -104,7 +106,7 @@ export function ShopTheLook({
           );
         })}
         <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-canvas/85 px-3 py-1 font-sans text-[0.7rem] text-ink-soft shadow-pop">
-          Tik op een cijfer om het artikel te shoppen
+          {t("looks.shopTheLook.instruction")}
         </span>
       </div>
 
@@ -165,7 +167,7 @@ export function ShopTheLook({
                               : "border-ink text-ink hover:bg-ink hover:text-canvas"
                         }`}
                       >
-                        {added[i] ? "Toegevoegd" : sel ? `Maat ${sel}` : "Kies maat"}
+                        {added[i] ? t("looks.shopTheLook.added") : sel ? `Maat ${sel}` : t("looks.shopTheLook.chooseSizeBtn")}
                       </button>
                     </div>
                   ) : (
@@ -183,12 +185,12 @@ export function ShopTheLook({
 
       {/* Maat-drawer: matrix in een overlay i.p.v. lang op de pagina */}
       {sizeDrawer !== null && dh?.product && dData ? (
-        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Kies je maat">
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t("looks.shopTheLook.sizeDrawerTitle")}>
           <div className="absolute inset-0 bg-ink/40" onClick={() => setSizeDrawer(null)} />
           <div className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer">
             <div className="mb-4 flex items-center justify-between">
-              <p className="label-brand">Kies je maat</p>
-              <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">Sluiten</button>
+              <p className="label-brand">{t("looks.shopTheLook.sizeDrawerTitle")}</p>
+              <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">{t("look.drawer.close")}</button>
             </div>
 
             <div className="flex items-start gap-3">
@@ -204,8 +206,8 @@ export function ShopTheLook({
             </div>
 
             <div className="mt-4 flex items-center justify-between">
-              <span className="font-sans text-xs text-muted">Maat</span>
-              <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">Vind mijn maat</Link>
+              <span className="font-sans text-xs text-muted">{t("looks.shopTheLook.sizeLabel")}</span>
+              <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">{t("look.drawer.sizeAdvice")}</Link>
             </div>
             <SizeMatrix
               sizes={dData.sizes.map((s) => ({ ...s, known: true }))}
@@ -220,9 +222,9 @@ export function ShopTheLook({
               disabled={!dSelSize || (dSelSize?.qty ?? 0) <= 0}
               className="btn-primary mt-5 w-full"
             >
-              {!dSel ? "Kies een maat" : dSelSize && dSelSize.qty <= 0 ? "Uitverkocht" : `In winkelwagen — maat ${dSel}`}
+              {!dSel ? t("looks.shopTheLook.chooseOneCta") : dSelSize && dSelSize.qty <= 0 ? t("common.soldOut") : `In winkelwagen — maat ${dSel}`}
             </button>
-            <p className="mt-2 text-center font-sans text-xs text-muted">Gratis retour binnen 14 dagen.</p>
+            <p className="mt-2 text-center font-sans text-xs text-muted">{t("look.drawer.returnNote")}</p>
           </div>
         </div>
       ) : null}

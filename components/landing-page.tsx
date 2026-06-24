@@ -1,8 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Landing } from "@/lib/landings";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
-export function LandingPage({ landing }: { landing: Landing }) {
+export async function LandingPage({ landing }: { landing: Landing }) {
+  const locale = await getLocale();
   return (
     <article>
       {/* Hero */}
@@ -69,17 +72,17 @@ export function LandingPage({ landing }: { landing: Landing }) {
       {/* Advies-CTA */}
       <section className="bg-ink text-canvas">
         <div className="mx-auto max-w-page px-gutter py-14 text-center">
-          <h2 className="text-display-md !text-canvas">Liever persoonlijk advies?</h2>
+          <h2 className="text-display-md !text-canvas">{t("landing.klantenservice.personalAdvice", locale)}</h2>
           <p className="mx-auto mt-3 max-w-xl font-sans text-canvas/80">
             Onze stylisten helpen je graag in één van onze 19 winkels — van de juiste
             maat tot het complete tenue voor jouw gelegenheid.
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/pages/winkels" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
-              Vind een winkel
+              {t("home.trustBlock.storesLink", locale)}
             </Link>
             <Link href="/maatadvies" className="btn-ghost !border-canvas !text-canvas hover:!bg-canvas hover:!text-ink">
-              Maatadvies
+              {t("nav.sizeAdvice", locale)}
             </Link>
           </div>
         </div>

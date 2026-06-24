@@ -2,8 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ETIQUETTE } from "@/lib/etiquette-hub";
 import { VISUAL } from "@/lib/visuals";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
-export function EtiquetteHub() {
+export async function EtiquetteHub() {
+  const locale = await getLocale();
   return (
     <>
       {/* Hero */}
@@ -67,14 +70,14 @@ export function EtiquetteHub() {
       {/* CTA */}
       <section className="bg-ink text-canvas">
         <div className="mx-auto max-w-page px-gutter py-14 text-center">
-          <h2 className="text-display-md !text-canvas">Hulp nodig?</h2>
+          <h2 className="text-display-md !text-canvas">{t("help.title", locale)}</h2>
           <p className="mx-auto mt-3 max-w-xl font-sans text-canvas/80">
             Onze stylisten in de winkel helpen je bij elke gelegenheid aan het
             juiste tenue.
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/pages/winkels" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
-              Vind een winkel
+              {t("landing.klantenservice.findStore", locale)}
             </Link>
             <Link href="/collections/gala" className="btn-ghost !border-canvas !text-canvas hover:!bg-canvas hover:!text-ink">
               Shop gala & smoking

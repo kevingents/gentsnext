@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 export type LookCard = { slug: string; title: string; occasion: string; theme?: string; image: string };
 
@@ -11,6 +12,7 @@ export type LookCard = { slug: string; title: string; occasion: string; theme?: 
  * "Alles" toont alle looks; een chip filtert op occasion OF theme.
  */
 export function LooksGrid({ looks }: { looks: LookCard[] }) {
+  const t = useT();
   const [filter, setFilter] = useState("");
 
   const { occasions, themes } = useMemo(() => {
@@ -30,7 +32,7 @@ export function LooksGrid({ looks }: { looks: LookCard[] }) {
     <>
       {hasTags ? (
         <div className="mt-6 flex flex-wrap items-center gap-2">
-          <Chip active={!filter} onClick={() => setFilter("")}>Alles</Chip>
+          <Chip active={!filter} onClick={() => setFilter("")}>{t("looks.filter.all")}</Chip>
           {occasions.map((t) => (
             <Chip key={`o-${t}`} active={filter === t} onClick={() => setFilter(t)}>{t}</Chip>
           ))}
@@ -56,7 +58,7 @@ export function LooksGrid({ looks }: { looks: LookCard[] }) {
         ))}
       </div>
 
-      {!filtered.length ? <p className="mt-8 font-sans text-sm text-muted">Geen looks in deze categorie.</p> : null}
+      {!filtered.length ? <p className="mt-8 font-sans text-sm text-muted">{t("looks.filter.noResults")}</p> : null}
     </>
   );
 }

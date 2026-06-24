@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * Nieuwsbrief-aanmelding met kanaalkeuze: per e-mail óf per WhatsApp.
@@ -10,6 +11,7 @@ const INPUT_CLASS =
   "w-full border border-canvas/30 bg-transparent px-3 py-2.5 font-sans text-sm text-canvas placeholder:text-canvas/50 focus:border-canvas focus:outline-none";
 
 export function NewsletterSignup() {
+  const t = useT();
   const [channel, setChannel] = useState<"email" | "whatsapp">("email");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -19,12 +21,12 @@ export function NewsletterSignup() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (channel === "email" && !/.+@.+\..+/.test(email)) {
-      setMsg("Vul een geldig e-mailadres in.");
+      setMsg(t("stockNotify.error.email"));
       setState("fail");
       return;
     }
     if (channel === "whatsapp" && phone.replace(/\D/g, "").length < 9) {
-      setMsg("Vul een geldig telefoonnummer in.");
+      setMsg(t("stockNotify.error.phone"));
       setState("fail");
       return;
     }
@@ -73,7 +75,7 @@ export function NewsletterSignup() {
               channel === c ? "bg-canvas text-ink" : "text-canvas/70 hover:text-canvas"
             }`}
           >
-            {c === "email" ? "E-mail" : "WhatsApp"}
+            {c === "email" ? t("newsletter.emailTab") : t("newsletter.whatsappTab")}
           </button>
         ))}
       </div>
@@ -83,8 +85,8 @@ export function NewsletterSignup() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Je e-mailadres"
-            aria-label="E-mailadres"
+            placeholder={t("newsletter.emailPlaceholder")}
+            aria-label={t("checkout.email")}
             className={INPUT_CLASS}
           />
         ) : (
@@ -93,7 +95,7 @@ export function NewsletterSignup() {
             inputMode="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="Je 06-nummer"
+            placeholder={t("newsletter.phonePlaceholder")}
             aria-label="Telefoonnummer"
             className={INPUT_CLASS}
           />
@@ -103,7 +105,7 @@ export function NewsletterSignup() {
           disabled={state === "busy"}
           className="inline-flex items-center justify-center border border-canvas bg-canvas px-5 py-2.5 font-sans text-sm font-medium text-ink transition-colors hover:bg-surface disabled:opacity-50"
         >
-          {state === "busy" ? "Bezig…" : "Inschrijven"}
+          {state === "busy" ? t("common.processing") : t("newsletter.submit")}
         </button>
       </form>
       {msg && state !== "busy" ? (

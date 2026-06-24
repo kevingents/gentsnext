@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MenuItem } from "@/lib/main-menu";
+import { useT } from "@/components/i18n/locale-provider";
 
 /** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
 export function MegaMenuBar({ items }: { items: MenuItem[] }) {
+  const t = useT();
   return (
-    <nav aria-label="Hoofdmenu" className="relative">
+    <nav aria-label={t("nav.mainMenu")} className="relative">
       <ul className="flex items-center justify-center gap-x-8">
         {items.map((item) => (
           <DesktopItem key={item.label} item={item} />
@@ -97,10 +99,11 @@ function DesktopItem({ item }: { item: MenuItem }) {
 
 /** Mobiel: hamburger + uitklap-drawer met kolommen. */
 export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
+  const t = useT();
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setMobileOpen(true)} aria-label="Menu openen" className="p-1">
+      <button type="button" onClick={() => setMobileOpen(true)} aria-label={t("nav.openMenuAriaLabel")} className="p-1">
         <span className="block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
@@ -111,6 +114,7 @@ export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
 }
 
 function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -169,12 +173,12 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Hoofdmenu"
+        aria-label={t("nav.mainMenu")}
         className="absolute inset-y-0 left-0 w-[88%] max-w-sm animate-[slideInLeft_.25s_ease-out] overflow-y-auto bg-canvas shadow-drawer"
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <span className="label-brand">Menu</span>
-          <button type="button" onClick={onClose} aria-label="Menu sluiten" className="font-sans text-sm underline">Sluiten</button>
+          <button type="button" onClick={onClose} aria-label={t("nav.closeMenuAriaLabel")} className="font-sans text-sm underline">{t("common.close")}</button>
         </div>
         <ul className="px-2 py-2">
           {items.map((item) => {
@@ -218,8 +222,8 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
           })}
         </ul>
         <div className="border-t border-line px-5 py-4">
-          <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">Winkels</Link>
-          <Link href="/maatadvies" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">Maatadvies</Link>
+          <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.stores")}</Link>
+          <Link href="/maatadvies" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.sizeAdvice")}</Link>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
   handle: string;
@@ -27,6 +28,7 @@ function Star({ active, size = 26 }: { active: boolean; size?: number }) {
 }
 
 export function WriteReview({ handle, orderNumber, token, productTitle, defaultOpen = false }: Props) {
+  const t = useT();
   const verified = Boolean(orderNumber && token);
   const [open, setOpen] = useState(defaultOpen);
   const [rating, setRating] = useState(0);
@@ -44,7 +46,7 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
     e.preventDefault();
     setError("");
     if (rating < 1) {
-      setError("Geef een score van 1 tot 5 sterren.");
+      setError(t("reviews.error.rating"));
       return;
     }
     setBusy(true);
@@ -56,7 +58,7 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
       });
       const d = await r.json();
       if (!d.ok) {
-        setError(d.error || "Er ging iets mis.");
+        setError(d.error || t("common.error"));
         return;
       }
       setDone(d.status);
@@ -72,7 +74,7 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
       <div className="rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft">
         {done === "published"
           ? "Bedankt voor je review — hij staat nu online."
-          : "Bedankt voor je review. We plaatsen hem zodra hij is gecontroleerd."}
+          : t("reviews.success.pending")}
       </div>
     );
   }
@@ -80,7 +82,7 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="btn-ghost">
-        Schrijf een review
+        {t("reviews.form.button")}
       </button>
     );
   }
@@ -109,19 +111,19 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
 
       <label className="mt-4 block">
         <span className="font-sans text-sm text-ink">
-          Titel <span className="text-muted">(optioneel)</span>
+          {t("reviews.form.title")} <span className="text-muted">{t("common.optional")}</span>
         </span>
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
       </label>
 
       <label className="mt-3 block">
-        <span className="font-sans text-sm text-ink">Je review</span>
+        <span className="font-sans text-sm text-ink">{t("reviews.form.body")}</span>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} maxLength={4000} placeholder="Hoe bevalt het? Denk aan pasvorm, stof en kwaliteit…" className="mt-1.5 w-full resize-none border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
       </label>
 
       <fieldset className="mt-3">
         <legend className="font-sans text-sm text-ink">
-          Pasvorm <span className="text-muted">(optioneel)</span>
+          {t("reviews.form.fit")} <span className="text-muted">{t("common.optional")}</span>
         </legend>
         <div className="mt-2 flex flex-wrap gap-2">
           {FIT_OPTIONS.map((o) => (
@@ -140,12 +142,12 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
       {!verified ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="font-sans text-sm text-ink">Naam</span>
+            <span className="font-sans text-sm text-ink">{t("forms.contact.name")}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
           </label>
           <label className="block">
             <span className="font-sans text-sm text-ink">
-              E-mail <span className="text-muted">(niet zichtbaar)</span>
+              {t("pdp.stocknotify.email")} <span className="text-muted">(niet zichtbaar)</span>
             </span>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={160} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
           </label>
@@ -156,7 +158,7 @@ export function WriteReview({ handle, orderNumber, token, productTitle, defaultO
 
       <div className="mt-4 flex items-center gap-3">
         <button type="submit" disabled={busy} className="btn-primary">
-          {busy ? "Versturen…" : "Plaats review"}
+          {busy ? "Versturen…" : t("reviews.form.submit")}
         </button>
         {!defaultOpen ? (
           <button type="button" onClick={() => setOpen(false)} className="font-sans text-sm text-muted underline">
