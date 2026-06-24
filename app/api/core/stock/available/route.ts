@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { availableInStore } from "@/lib/store-core";
+import { availableBreakdown } from "@/lib/store-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,8 +28,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "location + keys vereist." }, { status: 400 });
   }
   try {
-    const map = await availableInStore(location, keys);
-    return NextResponse.json({ ok: true, available: Object.fromEntries(map) });
+    // Breakdown (kassa-weergave) + platte 'available' (gate/back-compat) uit één bron.
+    const bd = await availableBreakdown(location, keys);
+    const available: Record<string, number> = {};
+    const breakdown: Record<string, { baseline: number; posDelta: number; webReserved: number; available: number }> = {};
+    for (const [k, v] of bd) {
+      available[k] = v.available;
+      breakdown[k] = v;
+    }
+    return NextResponse.json({ ok: true, available, breakdown });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
   }

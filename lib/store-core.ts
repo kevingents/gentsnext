@@ -200,6 +200,34 @@ export async function availableInStore(location: string, keys: string[]): Promis
   return out;
 }
 
+/**
+ * Beschikbaar mét uitsplitsing per artikel in één locatie — voor de kassa-weergave
+ * (read-side cut-over): { baseline (SRS), posDelta (kassa), webReserved, available }.
+ * Eén bron: de kassa toont deze getallen i.p.v. z'n eigen Blob-core.
+ */
+export async function availableBreakdown(
+  location: string,
+  keys: string[],
+): Promise<Map<string, { baseline: number; posDelta: number; webReserved: number; available: number }>> {
+  const loc = norm(location);
+  const clean = [...new Set(keys.map(norm).filter(Boolean))];
+  const out = new Map<string, { baseline: number; posDelta: number; webReserved: number; available: number }>();
+  if (!clean.length) return out;
+  const [stock, delta, webRes] = await Promise.all([
+    stockForSkus(clean),
+    coreDeltaForKeys(loc, clean),
+    webReservedForLocation(loc),
+  ]);
+  for (const key of clean) {
+    const st = stock.get(key);
+    const baseline = st ? st.byBranch.find((b) => lower(b.store) === lower(loc))?.qty ?? 0 : 0;
+    const posDelta = delta.get(lower(key)) || 0;
+    const webReserved = webRes.get(lower(key)) || 0;
+    out.set(key, { baseline, posDelta, webReserved, available: Math.max(0, baseline + posDelta - webReserved) });
+  }
+  return out;
+}
+
 /** Recente core-mutaties (nieuwste eerst), optioneel op locatie. */
 export async function listMovements(location?: string, limit = 100) {
   const db = getDb();
