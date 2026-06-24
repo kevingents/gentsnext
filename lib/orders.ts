@@ -13,7 +13,7 @@ import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
 import { availableInStore } from "@/lib/store-core";
-import { reserveOrderStock, releaseOrderHolds, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
+import { reserveOrderStock, releaseOrderHolds, renewOrderHolds, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -263,24 +263,34 @@ export async function createOrder(
     throw new OutOfStockError(titles.length ? titles : ["een of meer artikelen"]);
   }
 
+  // Order-regels EERST — zo heeft een order altijd z'n regels vóór we single-use
+  // codes (voucher/cadeaubon) verzilveren. Faalt dit → holds vrij + order weg, zodat
+  // er nooit een betaalbare order zonder regels (of een verzilverde-code-zonder-order)
+  // achterblijft. (neon-http kent geen transactie, dus handmatige rollback.)
+  try {
+    await db.insert(orderLines).values(
+      lines.map((l) => ({
+        orderId: order.id,
+        sku: l.sku,
+        productHandle: l.productHandle,
+        title: l.title,
+        size: l.size,
+        color: l.color,
+        unitPriceCents: l.unitPriceCents,
+        quantity: l.quantity,
+        groupId: l.groupId ?? null,
+        roleLabel: l.roleLabel ?? null,
+      }))
+    );
+  } catch (e) {
+    await releaseOrderHolds(order.id);
+    await db.delete(orders).where(eq(orders.id, order.id));
+    throw e;
+  }
+
   if (appliedCode) await redeemVoucher(appliedCode);
   // Cadeaubon afboeken (idempotent per order; geeft het werkelijk afgeboekte terug).
   if (appliedGiftcard) await redeemGiftcard(appliedGiftcard, order.orderNumber, giftcardCents);
-
-  await db.insert(orderLines).values(
-    lines.map((l) => ({
-      orderId: order.id,
-      sku: l.sku,
-      productHandle: l.productHandle,
-      title: l.title,
-      size: l.size,
-      color: l.color,
-      unitPriceCents: l.unitPriceCents,
-      quantity: l.quantity,
-      groupId: l.groupId ?? null,
-      roleLabel: l.roleLabel ?? null,
-    }))
-  );
 
   return { id: order.id, orderNumber: order.orderNumber, accessToken, totalCents, subtotalCents, shippingCents, giftcardCents };
 }
@@ -317,6 +327,10 @@ export async function attachMolliePayment(orderId: string, molliePaymentId: stri
     .update(orders)
     .set({ molliePaymentId, paymentStatus: "open", updatedAt: sql`now()` })
     .where(eq(orders.id, orderId));
+  // Betaling gestart → verleng de voorraad-hold tot een ruime backstop (24u), zodat
+  // trage betaalmethoden (banktransfer) het laatste stuk niet tussentijds verliezen.
+  // Definitieve vrijgave loopt via de webhook (betaald/ mislukt/ verlopen).
+  await renewOrderHolds(orderId, 1440);
 }
 
 /** Mollie-status → order-status. Idempotent (webhook kan dubbel binnenkomen). */

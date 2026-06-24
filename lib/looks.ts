@@ -283,11 +283,13 @@ export async function getAllLooks(): Promise<Look[]> {
   return [...bySlug.values()].map(withStory);
 }
 
-/** Eén look op slug — eigen store eerst (alleen gepubliceerd), dan statisch. */
+/** Eén look op slug — eigen store eerst (alleen gepubliceerd), dan statisch.
+ *  Slug genormaliseerd (opgeslagen slugs zijn lowercase) zodat /looks/Foo ook werkt. */
 export async function getLookBySlug(slug: string): Promise<Look | null> {
-  const stored = (await getStoredLooks()).find((l) => l.slug === slug);
+  const s = String(slug || "").trim().toLowerCase();
+  const stored = (await getStoredLooks()).find((l) => l.slug === s);
   if (stored) return stored.status === "published" ? withStory(stripStatus(stored)) : null;
-  const look = LOOKS.find((l) => l.slug === slug) ?? null;
+  const look = LOOKS.find((l) => l.slug === s) ?? null;
   return look ? withStory(look) : null;
 }
 

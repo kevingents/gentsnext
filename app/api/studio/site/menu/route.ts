@@ -14,6 +14,8 @@ export const runtime = "nodejs";
  * Auth: admin OF STUDIO_API_TOKEN.
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
+/** Alleen veilige link-schemes toestaan (stored-XSS-preventie op de publieke site). */
+const safeHref = (v: unknown, n: number) => { const h = s(v, n); return /^(\/|https:\/\/|mailto:|tel:|#)/i.test(h) ? h : "#"; };
 
 function sanitize(input: unknown): MenuItem[] {
   const items = Array.isArray(input) ? input : [];
@@ -26,7 +28,7 @@ function sanitize(input: unknown): MenuItem[] {
           const links = (Array.isArray(col.links) ? col.links : [])
             .map((l) => {
               const lk = (l || {}) as Record<string, unknown>;
-              return { label: s(lk.label, 60), href: s(lk.href, 200) };
+              return { label: s(lk.label, 60), href: safeHref(lk.href, 200) };
             })
             .filter((l) => l.label && l.href);
           return { title: col.title ? s(col.title, 60) : undefined, links };
@@ -35,12 +37,12 @@ function sanitize(input: unknown): MenuItem[] {
       const features = (Array.isArray(i.features) ? i.features : [])
         .map((f) => {
           const ft = (f || {}) as Record<string, unknown>;
-          return { label: s(ft.label, 60), caption: ft.caption ? s(ft.caption, 120) : undefined, href: s(ft.href, 200), image: s(ft.image, 600) };
+          return { label: s(ft.label, 60), caption: ft.caption ? s(ft.caption, 120) : undefined, href: safeHref(ft.href, 200), image: s(ft.image, 600) };
         })
         .filter((f) => f.href && f.image);
       return {
         label: s(i.label, 60),
-        href: s(i.href, 200) || "#",
+        href: safeHref(i.href, 200) || "#",
         ...(columns.length ? { columns } : {}),
         ...(features.length ? { features } : {}),
       };

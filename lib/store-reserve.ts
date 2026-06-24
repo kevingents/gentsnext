@@ -126,3 +126,23 @@ export async function releaseOrderHolds(orderId: string): Promise<void> {
     // Vrijgave is best-effort; verlopen holds vangt de sweep alsnog op.
   }
 }
+
+/**
+ * Verleng de holds van een order (nieuwe expires_at = now()+ttlMin). Aangeroepen
+ * zodra een betaling wordt gestart: de standaard-TTL (30 min) kan korter zijn dan
+ * het betaalvenster van trage methoden (bv. banktransfer), waardoor de sweep de
+ * hold te vroeg zou vrijgeven en het laatste stuk weer verkoopbaar zou worden vóór
+ * de betaling binnen is. Definitieve vrijgave loopt via de webhook (betaald →
+ * afgeleide reservering neemt over; mislukt/verlopen → releaseOrderHolds).
+ */
+export async function renewOrderHolds(orderId: string, ttlMin = DEFAULT_TTL_MIN): Promise<void> {
+  const db = getDb();
+  try {
+    await db.execute(sql`
+      update web_stock_holds set expires_at = now() + make_interval(mins => ${Math.max(1, Math.round(ttlMin))})
+      where order_id = ${orderId}
+    `);
+  } catch {
+    // Best-effort.
+  }
+}

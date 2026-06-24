@@ -57,7 +57,14 @@ export async function POST(req: Request) {
 
   // Volledig met cadeaubon (of 100%-voucher) betaald → geen Mollie nodig.
   if (order.totalCents === 0) {
-    await finalizeGiftcardCoveredOrder(order.id);
+    // Afronden (markeer betaald + mail + plan) is best-effort: faalt een stap, dan
+    // krijgt de klant tóch de bevestigingspagina (order bestaat + cadeaubon is al
+    // verzilverd); een retry/cron kan plannen/mailen alsnog afmaken.
+    try {
+      await finalizeGiftcardCoveredOrder(order.id);
+    } catch (e) {
+      console.error("[checkout] afronden cadeaubon-order faalde:", e);
+    }
     return NextResponse.json({
       ok: true,
       configured: true,

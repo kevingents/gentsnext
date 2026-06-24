@@ -13,6 +13,9 @@ export const runtime = "nodejs";
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const slugify = (v: unknown) => s(v, 80).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+/** Slugs met een vaste, in code afgehandelde pagina — een eigen pagina hierop zou
+ *  stilletjes overschaduwd worden (de route checkt deze vóór getStorePage). Weiger ze. */
+const RESERVED = new Set(["etiquette", "klantenservice", "service", "herroepingsformulier", "zakelijk", "students", "winkels", "uitvaartkleding", "trouw-afspraak"]);
 
 function sanitize(input: unknown): StorePage[] {
   const items = Array.isArray(input) ? input : [];
@@ -57,6 +60,13 @@ export async function POST(req: Request) {
   }
   if (!Array.isArray(body?.items)) return NextResponse.json({ ok: false, error: "Ongeldige lijst." }, { status: 400 });
   const items = sanitize(body.items);
+  const reserved = items.filter((p) => RESERVED.has(p.slug)).map((p) => p.slug);
+  if (reserved.length) {
+    return NextResponse.json(
+      { ok: false, error: `Deze slug(s) zijn gereserveerd voor een vaste pagina en kunnen niet als content-pagina: ${reserved.join(", ")}. Kies een andere slug.` },
+      { status: 400 },
+    );
+  }
   try {
     await saveStorePages(items);
     return NextResponse.json({ ok: true, items });

@@ -14,6 +14,8 @@ export const runtime = "nodejs";
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const slugify = (v: unknown) => s(v, 80).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+/** Alleen veilige link-schemes toestaan (stored-XSS-preventie op de publieke pagina). */
+const safeHref = (v: unknown, n: number) => { const h = s(v, n); return /^(\/|https:\/\/|mailto:|tel:|#)/i.test(h) ? h : "#"; };
 
 function sanitize(input: unknown): Occasion[] {
   const items = Array.isArray(input) ? input : [];
@@ -27,11 +29,11 @@ function sanitize(input: unknown): Occasion[] {
         intro: s(o.intro, 600),
         image: s(o.image, 600),
         ctaLabel: s(o.ctaLabel, 60) || "Bekijk",
-        ctaHref: s(o.ctaHref, 200) || "#",
+        ctaHref: safeHref(o.ctaHref, 200) || "#",
         links: (Array.isArray(o.links) ? o.links : [])
           .map((l) => {
             const lk = (l || {}) as Record<string, unknown>;
-            return { label: s(lk.label, 60), href: s(lk.href, 200) };
+            return { label: s(lk.label, 60), href: safeHref(lk.href, 200) };
           })
           .filter((l) => l.label && l.href),
       };
