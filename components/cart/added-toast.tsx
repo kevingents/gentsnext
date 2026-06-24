@@ -29,7 +29,7 @@ export function AddedToCartToast() {
 
   if (!added) return null;
   const l = added.line;
-  const meta = [l.color, l.size ? `maat ${l.size}` : ""].filter(Boolean).join(" · ");
+  const meta = [l.color, l.size ? t("cart.added.sizeMeta", { size: l.size }) : ""].filter(Boolean).join(" · ");
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-4" role="status" aria-live="polite">
@@ -55,7 +55,7 @@ export function AddedToCartToast() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-sans text-sm font-medium text-ink">{l.title}</p>
             {meta ? <p className="mt-0.5 font-sans text-xs text-muted">{meta}</p> : null}
-            {added.extraCount > 0 ? <p className="mt-0.5 font-sans text-xs text-muted">+ {added.extraCount} onderdeel{added.extraCount === 1 ? "" : "en"}</p> : null}
+            {added.extraCount > 0 ? <p className="mt-0.5 font-sans text-xs text-muted">{t(added.extraCount === 1 ? "cart.added.extraPartSingular" : "cart.added.extraPartPlural", { count: added.extraCount })}</p> : null}
           </div>
           <p className="shrink-0 font-sans text-sm text-ink">{formatEuro(l.priceCents)}</p>
         </div>
@@ -74,7 +74,7 @@ export function AddedToCartToast() {
             onClick={() => { cart.dismissAdded(); cart.open(); }}
             className="btn-ghost w-full"
           >
-            Bekijk winkelwagen ({cart.count})
+            {t("cart.added.viewCart", { count: cart.count })}
           </button>
           <Link href="/afrekenen" onClick={cart.dismissAdded} className="btn-primary w-full text-center">
             {t("cart.added.checkout")}

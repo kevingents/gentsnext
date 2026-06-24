@@ -15,46 +15,39 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-const FAQ = [
-  {
-    title: "Bezorging & verzendkosten",
-    content:
-      "We bezorgen in 1–3 werkdagen, en gratis vanaf € 75. Staat een artikel op voorraad en bestel je vóór 16:00? Dan ligt het vaak de volgende werkdag al bij je op de mat. Je ontvangt een track & trace zodra je pakket onderweg is.",
-  },
-  {
-    title: "Retourneren & ruilen",
-    content:
-      "Niet helemaal goed? Je retourneert gratis binnen 14 dagen. Stuur het artikel ongedragen en met kaartje terug met het bijgevoegde retourlabel — of ruil 'm direct in één van onze 19 winkels. Zodra we je retour ontvangen, storten we het bedrag binnen enkele werkdagen terug.",
-  },
-  {
-    title: "De juiste maat kiezen",
-    content:
-      "Twijfel je over je maat? Gebruik ons maatadvies (30 sec.) voor een persoonlijk advies, of kom langs in de winkel — onze stylisten meten je graag op. Zo bestel je in één keer raak en voorkom je retour.",
-  },
-  {
-    title: "Betalen — veilig & vertrouwd",
-    content:
-      "Je betaalt veilig met o.a. iDEAL. Al je gegevens gaan versleuteld over een beveiligde verbinding. Je betaalt pas bij het afrekenen; achteraf betalen volgt binnenkort.",
-  },
-  {
-    title: "Bestelling wijzigen of annuleren",
-    content:
-      "Is er iets misgegaan of wil je je bestelling aanpassen? Neem zo snel mogelijk contact op via de assistent hierboven of per e-mail — zolang je pakket nog niet verzonden is, passen we het graag voor je aan.",
-  },
-  {
-    title: "Kwaliteit & garantie",
-    content:
-      "GENTS staat voor betaalbare kwaliteit. Is er onverhoopt iets mis met je artikel? Laat het ons weten met een foto, dan lossen we het samen op — netjes en zonder gedoe.",
-  },
-];
-
 export async function KlantenserviceLanding() {
   const locale = await getLocale();
+  const FAQ = [
+    {
+      title: t("landing.klantenservice.faq.delivery", locale),
+      content: t("landing.klantenservice.faq.deliveryBody", locale),
+    },
+    {
+      title: t("landing.klantenservice.faq.returns", locale),
+      content: t("landing.klantenservice.faq.returnsBody", locale),
+    },
+    {
+      title: t("landing.klantenservice.faq.sizing", locale),
+      content: t("landing.klantenservice.faq.sizingBody", locale),
+    },
+    {
+      title: t("landing.klantenservice.faq.payment", locale),
+      content: t("landing.klantenservice.faq.paymentBody", locale),
+    },
+    {
+      title: t("landing.klantenservice.faq.change", locale),
+      content: t("landing.klantenservice.faq.changeBody", locale),
+    },
+    {
+      title: t("landing.klantenservice.faq.quality", locale),
+      content: t("landing.klantenservice.faq.qualityBody", locale),
+    },
+  ];
   const contacts = [
-    { label: "Vraag de assistent", sub: "Direct antwoord, 24/7", icon: "M8 10h8M8 14h5M21 12a9 9 0 1 1-3.5-7.1L21 3v6h-6", href: "#assistent" },
-    { label: "Mail ons", sub: `Reactie binnen 1 werkdag`, icon: "M4 6h16v12H4zM4 7l8 6 8-6", href: `mailto:${EMAIL}` },
-    ...(WHATSAPP ? [{ label: "WhatsApp", sub: "Snel een appje", icon: "M21 12a9 9 0 0 1-13.5 7.8L3 21l1.3-4.4A9 9 0 1 1 21 12Z", href: `https://wa.me/${WHATSAPP.replace(/\D/g, "")}` }] : []),
-    { label: "Kom langs", sub: "Persoonlijk advies in 19 winkels", icon: "M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11ZM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z", href: "/pages/winkels" },
+    { label: t("landing.klantenservice.contact.assistant", locale), sub: t("landing.klantenservice.contact.assistantSub", locale), icon: "M8 10h8M8 14h5M21 12a9 9 0 1 1-3.5-7.1L21 3v6h-6", href: "#assistent" },
+    { label: t("landing.klantenservice.contact.mail", locale), sub: t("landing.klantenservice.contact.mailSub", locale), icon: "M4 6h16v12H4zM4 7l8 6 8-6", href: `mailto:${EMAIL}` },
+    ...(WHATSAPP ? [{ label: t("landing.klantenservice.contact.whatsapp", locale), sub: t("landing.klantenservice.contact.whatsappSub", locale), icon: "M21 12a9 9 0 0 1-13.5 7.8L3 21l1.3-4.4A9 9 0 1 1 21 12Z", href: `https://wa.me/${WHATSAPP.replace(/\D/g, "")}` }] : []),
+    { label: t("landing.klantenservice.contact.visit", locale), sub: t("landing.klantenservice.contact.visitSub", locale), icon: "M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11ZM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z", href: "/pages/winkels" },
   ];
 
   return (
@@ -63,10 +56,7 @@ export async function KlantenserviceLanding() {
       <div className="max-w-2xl">
         <p className="label-brand">{t("landing.klantenservice.label", locale)}</p>
         <h1 className="mt-2 text-display-lg">{t("landing.klantenservice.title", locale)}</h1>
-        <p className="mt-3 font-sans text-ink-soft">
-          Een vraag over je bestelling, maat of retour? Onze mensen — en onze assistent — helpen je graag.
-          Persoonlijk, snel en zonder gedoe.
-        </p>
+        <p className="mt-3 font-sans text-ink-soft">{t("landing.klantenservice.intro", locale)}</p>
       </div>
 
       {/* Contactopties */}
@@ -95,7 +85,7 @@ export async function KlantenserviceLanding() {
         </div>
         <div>
           <p className="label-brand">{t("landing.klantenservice.faqLabel", locale)}</p>
-          <h2 className="mt-2 text-display-md">Misschien staat je antwoord hier</h2>
+          <h2 className="mt-2 text-display-md">{t("landing.klantenservice.faqHeading", locale)}</h2>
           <div className="mt-5">
             <Accordion items={FAQ} />
           </div>
@@ -106,7 +96,7 @@ export async function KlantenserviceLanding() {
       <div className="mt-14 flex flex-col items-start justify-between gap-4 rounded-card bg-surface p-8 sm:flex-row sm:items-center">
         <div>
           <p className="font-display text-xl">{t("landing.klantenservice.personalAdvice", locale)}</p>
-          <p className="mt-1 font-sans text-sm text-ink-soft">In onze 19 winkels meten en stylen we je van top tot teen.</p>
+          <p className="mt-1 font-sans text-sm text-ink-soft">{t("landing.klantenservice.personalAdviceSub", locale)}</p>
         </div>
         <Link href="/pages/winkels" className="btn-primary shrink-0">{t("landing.klantenservice.findStore", locale)}</Link>
       </div>

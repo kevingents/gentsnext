@@ -41,16 +41,16 @@ export function NewsletterSignup() {
         setState("done");
         setMsg(
           channel === "email"
-            ? "Bedankt — kijk in je inbox voor een bevestiging."
-            : "Bedankt — je hoort binnenkort van ons via WhatsApp."
+            ? t("newsletter.successEmail")
+            : t("newsletter.successWhatsapp")
         );
       } else {
         setState("fail");
-        setMsg("Er ging iets mis. Probeer het later opnieuw.");
+        setMsg(t("forms.error.tryLater"));
       }
     } catch {
       setState("fail");
-      setMsg("Er ging iets mis. Probeer het later opnieuw.");
+      setMsg(t("forms.error.tryLater"));
     }
   }
 
@@ -96,7 +96,7 @@ export function NewsletterSignup() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder={t("newsletter.phonePlaceholder")}
-            aria-label="Telefoonnummer"
+            aria-label={t("forms.phone.ariaLabel")}
             className={INPUT_CLASS}
           />
         )}

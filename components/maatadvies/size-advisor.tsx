@@ -17,16 +17,16 @@ import {
   type ReferenceLetter,
 } from "@/lib/size-reference";
 
-const FITS: { key: FitPreference; label: string; hint: string }[] = [
-  { key: "slim", label: "Slim", hint: "Strak, modern silhouet" },
-  { key: "regular", label: "Modern", hint: "Comfortabel, niet te wijd" },
-  { key: "comfort", label: "Comfort", hint: "Ruimer, meer bewegingsvrijheid" },
+const FITS: { key: FitPreference; labelKey: string; hintKey: string }[] = [
+  { key: "slim", labelKey: "sizeAdvisor.fit.slim", hintKey: "sizeAdvisor.fit.slimHint" },
+  { key: "regular", labelKey: "sizeAdvisor.fit.modern", hintKey: "sizeAdvisor.fit.modernHint" },
+  { key: "comfort", labelKey: "sizeAdvisor.fit.comfort", hintKey: "sizeAdvisor.fit.comfortHint" },
 ];
 
-const CONFIDENCE_LABEL: Record<CategoryAdvice["confidence"], string> = {
-  hoog: "Betrouwbaar advies",
-  gemiddeld: "Goede inschatting",
-  laag: "Globale inschatting",
+const CONFIDENCE_LABEL_KEY: Record<CategoryAdvice["confidence"], string> = {
+  hoog: "sizeAdvisor.confidence.high",
+  gemiddeld: "sizeAdvisor.confidence.medium",
+  laag: "sizeAdvisor.confidence.low",
 };
 
 function num(v: string): number | undefined {
@@ -42,7 +42,7 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
       <p className="mt-2 font-display text-4xl font-light text-ink">
         {advice.range ?? advice.size}
       </p>
-      <p className="mt-1 font-sans text-xs text-muted">{CONFIDENCE_LABEL[advice.confidence]}</p>
+      <p className="mt-1 font-sans text-xs text-muted">{t(CONFIDENCE_LABEL_KEY[advice.confidence])}</p>
       {advice.note ? (
         <p className="mt-3 font-sans text-sm leading-relaxed text-ink-soft">{advice.note}</p>
       ) : null}
@@ -197,7 +197,7 @@ export function SizeAdvisor() {
                     <div className="flex justify-between gap-4"><dt className="text-muted">{t("sizeAdvisor.trousers")}</dt><dd className="font-medium text-ink">{refResult.broek.size}</dd></div>
                   </dl>
                   <p className="mt-3 font-sans text-xs leading-relaxed text-muted">
-                    Indicatie — merkmaten verschillen onderling. Vul hieronder je lengte &amp; gewicht in voor een zekerder advies, of pas je pasvorm aan.
+                    {t("sizeAdvisor.quickStartDisclaimer")}
                   </p>
                 </div>
               ) : (
@@ -245,11 +245,11 @@ export function SizeAdvisor() {
                   fit === f.key ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"
                 }`}
               >
-                <span className="block font-sans text-sm font-medium">{f.label}</span>
+                <span className="block font-sans text-sm font-medium">{t(f.labelKey)}</span>
                 <span
                   className={`mt-0.5 block font-sans text-xs ${fit === f.key ? "text-canvas/70" : "text-muted"}`}
                 >
-                  {f.hint}
+                  {t(f.hintKey)}
                 </span>
               </button>
             ))}
@@ -297,8 +297,7 @@ export function SizeAdvisor() {
           {t("sizeAdvisor.calculate")}
         </button>
         <p className="font-sans text-xs leading-relaxed text-muted">
-          Dit advies is een inschatting op basis van je gegevens. Twijfel je tussen
-          twee maten? Onze stylisten in de winkel helpen je graag verder.
+          {t("sizeAdvisor.disclaimer")}
         </p>
       </form>
 
@@ -309,8 +308,8 @@ export function SizeAdvisor() {
             <div>
               <p className="label-brand">{t("sizeAdvisor.yourAdvice")}</p>
               <p className="mt-1 font-sans text-sm text-ink-soft">
-                {t("sizeAdvisor.estimatedChest")} {advice.estimatedChestCm} cm
-                {advice.tall ? " · lange lengte" : ""}
+                {t("sizeAdvisor.estimatedChest")} {advice.estimatedChestCm} {t("sizeAdvisor.cmUnit")}
+                {advice.tall ? ` · ${t("sizeAdvisor.tallNote")}` : ""}
               </p>
             </div>
             <AdviceCard title={t("sizeAdvisor.jacket")} advice={advice.jacket} shopHref="/collections/colberts" />
@@ -327,7 +326,7 @@ export function SizeAdvisor() {
                   <div>
                     <p className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.savedToProfile")}</p>
                     <p className="mt-1 font-sans text-xs text-ink-soft">
-                      We selecteren je maat nu automatisch op productpagina&apos;s en je kunt overal filteren op &ldquo;jouw maat&rdquo;.
+                      {t("sizeAdvisor.savedMessage")}
                     </p>
                     <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.viewMySizes")}</Link>
                   </div>
@@ -344,7 +343,7 @@ export function SizeAdvisor() {
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-sans text-sm text-ink-soft">
-                    <span className="font-medium text-ink">{t("sizeAdvisor.saveSizeLabel")}</span> — dan selecteren we &lsquo;m voortaan automatisch.
+                    <span className="font-medium text-ink">{t("sizeAdvisor.saveSizeLabel")}</span> — {t("sizeAdvisor.saveSizeHint")}
                   </p>
                   <button
                     type="button"

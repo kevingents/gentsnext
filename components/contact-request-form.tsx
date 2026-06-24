@@ -21,7 +21,7 @@ type Props = {
  */
 export function ContactRequestForm({
   channel,
-  title = "Vraag direct informatie aan",
+  title,
   intro,
   showOrg = false,
   showGroupSize = false,
@@ -53,22 +53,22 @@ export function ContactRequestForm({
       });
       if (r.ok) {
         setState("done");
-        setMsg("Bedankt — we nemen binnen één werkdag contact met je op.");
+        setMsg(t("forms.contact.successWorkday"));
       } else {
         const d = await r.json().catch(() => ({}));
         setState("fail");
-        setMsg(d.error || "Er ging iets mis. Probeer het later opnieuw.");
+        setMsg(d.error || t("forms.error.tryLater"));
       }
     } catch {
       setState("fail");
-      setMsg("Er ging iets mis. Probeer het later opnieuw.");
+      setMsg(t("forms.error.tryLater"));
     }
   }
 
   if (state === "done") {
     return (
       <div className="border border-line bg-surface p-6">
-        <p className="label-brand">Verzonden</p>
+        <p className="label-brand">{t("forms.contact.sent")}</p>
         <p className="mt-2 font-display text-xl font-light">{msg}</p>
       </div>
     );
@@ -81,7 +81,7 @@ export function ContactRequestForm({
       noValidate
       className="border border-line bg-canvas p-6"
     >
-      <p className="label-brand">{title}</p>
+      <p className="label-brand">{title ?? t("forms.contact.requestInfoTitle")}</p>
       {intro ? <p className="mt-2 font-sans text-sm text-ink-soft">{intro}</p> : null}
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -171,8 +171,7 @@ export function ContactRequestForm({
         {state === "busy" ? t("common.processing") : t("forms.contact.submit")}
       </button>
       <p className="mt-3 font-sans text-xs text-muted">
-        We reageren binnen één werkdag. Je gegevens worden uitsluitend gebruikt
-        om je aanvraag te beantwoorden.
+        {t("forms.contact.privacyNote")}
       </p>
     </form>
   );

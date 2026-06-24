@@ -78,7 +78,7 @@ export function WelcomePopup() {
         setState("fail");
       }
     } catch {
-      setErr("Er ging iets mis.");
+      setErr(t("common.error_generic"));
       setState("fail");
     }
   }
@@ -86,7 +86,7 @@ export function WelcomePopup() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Welkomstkorting">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={t("welcome.dialogAriaLabel")}>
       <div className="absolute inset-0 bg-ink/50" onClick={close} />
       <div className="relative w-full max-w-md overflow-hidden border border-line bg-canvas shadow-pop">
         <button type="button" onClick={close} aria-label={t("common.close")} className="absolute right-3 top-3 z-10 text-muted hover:text-ink">
@@ -110,7 +110,7 @@ export function WelcomePopup() {
           ) : (
             <form onSubmit={submit}>
               <p className="text-center font-sans text-sm text-ink-soft">
-                Schrijf je in voor onze nieuwsbrief en ontvang direct je kortingscode.
+                {t("welcome.signupIntro")}
               </p>
               <input
                 type="email"

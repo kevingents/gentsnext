@@ -1,14 +1,17 @@
 import type { ViewStats } from "@/lib/social-proof";
+import { getLocale } from "@/lib/locale-server";
+import { t } from "@/lib/messages";
 
 /**
  * Subtiele, EERLIJKE social-proof bij de buy-box. Toont alleen iets bij een
  * betekenisvol echt signaal (geen verzonnen "x kijken nu"). Het pulserende
  * stipje is enkel een sfeer-cue, geen claim over real-time aanwezigheid.
  */
-export function SocialProof({ stats }: { stats: ViewStats }) {
+export async function SocialProof({ stats }: { stats: ViewStats }) {
+  const locale = await getLocale();
   let text = "";
-  if (stats.viewers24h >= 5) text = `${stats.viewers24h} mensen bekeken dit de afgelopen 24 uur`;
-  else if (stats.views7d >= 15) text = `Populair · ${stats.views7d}× bekeken deze week`;
+  if (stats.viewers24h >= 5) text = t("pdp.socialProof.viewers24h", locale, { count: stats.viewers24h });
+  else if (stats.views7d >= 15) text = t("pdp.socialProof.views7d", locale, { count: stats.views7d });
   if (!text) return null;
 
   return (

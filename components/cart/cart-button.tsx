@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "@/components/cart/cart-context";
+import { useT } from "@/components/i18n/locale-provider";
 
 /** "Tas" — een GENTS-tas-icoon dat kort opveert wanneer er iets bij komt. */
 export function CartButton() {
   const cart = useCart();
+  const t = useT();
   const [bump, setBump] = useState(false);
   const prev = useRef(cart.count);
 
@@ -23,7 +25,7 @@ export function CartButton() {
     <button
       type="button"
       onClick={cart.open}
-      aria-label={`Tas, ${cart.count} artikelen`}
+      aria-label={t("cart.button.arialabelDynamic", { count: cart.count })}
       className="relative text-ink-soft transition-colors hover:text-ink"
     >
       <svg

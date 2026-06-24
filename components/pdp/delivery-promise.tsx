@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n/locale-provider";
+
+type TFn = (key: string, params?: Record<string, string | number>) => string;
 
 /**
  * Levertijd-indicatie op de PDP. De headline komt bij voorkeur server-side uit
@@ -9,7 +12,7 @@ import { useEffect, useState } from "react";
  * server-belofte valt 'ie terug op een client-schatting. De aftelteller is
  * altijd client-side, zodat hij klopt met de tijd van de bezoeker.
  */
-function nextDeliveryLabel(now: Date): string {
+function nextDeliveryLabel(now: Date, t: TFn): string {
   const beforeCutoff = now.getHours() < 16;
   const shipDayOffset = beforeCutoff ? 0 : 1;
   const ship = new Date(now);
@@ -26,20 +29,20 @@ function nextDeliveryLabel(now: Date): string {
   const days = Math.round((dCmp.getTime() - today.getTime()) / 86400000);
 
   const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" }).format(deliver);
-  if (days === 1) return `Morgen in huis (${fmt})`;
-  if (days === 2) return `Overmorgen in huis (${fmt})`;
-  return `In huis op ${fmt}`;
+  if (days === 1) return t("delivery.tomorrowDated", { date: fmt });
+  if (days === 2) return t("delivery.dayAfterDated", { date: fmt });
+  return t("delivery.onDateDated", { date: fmt });
 }
 
-function cutoffSuffix(now: Date, cutoffHour: number): string {
-  if (now.getDay() === 0 || now.getDay() === 6) return "Bestellingen op zaterdag en zondag verzenden we maandag.";
+function cutoffSuffix(now: Date, cutoffHour: number, t: TFn): string {
+  if (now.getDay() === 0 || now.getDay() === 6) return t("delivery.weekendNote");
   return now.getHours() < cutoffHour
-    ? `Voor ${cutoffHour}:00 besteld, vandaag nog verzonden.`
-    : `Voor ${cutoffHour}:00 besteld, morgen verzonden.`;
+    ? t("delivery.cutoffToday", { hour: cutoffHour })
+    : t("delivery.cutoffTomorrow", { hour: cutoffHour });
 }
 
 /** Live aftel-tekst tot de cutoff, voor urgentie ("bestel binnen 2u 14m"). */
-function countdownLabel(now: Date, cutoffHour: number): string | null {
+function countdownLabel(now: Date, cutoffHour: number, t: TFn): string | null {
   const day = now.getDay();
   if (day === 0 || day === 6) return null; // weekend → geen vandaag-verzending
   const cutoff = new Date(now);
@@ -49,8 +52,8 @@ function countdownLabel(now: Date, cutoffHour: number): string | null {
   const mins = Math.floor(ms / 60000);
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  const t = h > 0 ? `${h} uur en ${m} min` : `${m} min`;
-  return `Bestel binnen ${t} en wij versturen het vandaag nog`;
+  const remaining = h > 0 ? t("delivery.countdown.hoursMinutes", { hours: h, minutes: m }) : t("delivery.countdown.minutes", { minutes: m });
+  return t("delivery.countdownLabel", { remaining });
 }
 
 export function DeliveryPromise({
@@ -62,6 +65,7 @@ export function DeliveryPromise({
   note?: string | null;
   cutoffHour?: number;
 }) {
+  const t = useT();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -70,10 +74,10 @@ export function DeliveryPromise({
   }, []);
 
   // Eerste render (SSR/hydration): toon in elk geval de server-belofte.
-  const headline = promise || (now ? nextDeliveryLabel(now) : null);
+  const headline = promise || (now ? nextDeliveryLabel(now, t) : null);
   if (!headline) return null;
 
-  const countdown = now ? countdownLabel(now, cutoffHour) : null;
+  const countdown = now ? countdownLabel(now, cutoffHour, t) : null;
 
   return (
     <div className="mt-6 border-y border-line py-3">
@@ -90,7 +94,7 @@ export function DeliveryPromise({
           {countdown}
         </p>
       ) : !promise && now ? (
-        <p className="mt-1 font-sans text-xs text-muted">{cutoffSuffix(now, cutoffHour)}</p>
+        <p className="mt-1 font-sans text-xs text-muted">{cutoffSuffix(now, cutoffHour, t)}</p>
       ) : null}
     </div>
   );

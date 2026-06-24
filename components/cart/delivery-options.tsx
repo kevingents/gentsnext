@@ -91,7 +91,7 @@ export function DeliveryOptions({
                 </span>
               </span>
               <span className="mt-0.5 block font-sans text-xs text-ink-soft">
-                Bezorgd <strong>{option.dateLabel}</strong>
+                {t("delivery.deliveredOn")} <strong>{option.dateLabel}</strong>
               </span>
             </span>
           </label>

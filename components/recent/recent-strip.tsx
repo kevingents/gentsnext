@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ProductCard } from "@/components/product-card";
+import { useT } from "@/components/i18n/locale-provider";
 import type { ProductCardData } from "@/lib/catalog";
 
 const KEY = "gents-recent-v1";
@@ -11,6 +12,7 @@ const KEY = "gents-recent-v1";
  * op via /api/products-by-handles. Verbergt zichzelf als er niets is.
  */
 export function RecentStrip({ exclude }: { exclude?: string }) {
+  const t = useT();
   const [items, setItems] = useState<ProductCardData[]>([]);
 
   useEffect(() => {
@@ -42,8 +44,8 @@ export function RecentStrip({ exclude }: { exclude?: string }) {
   return (
     <section className="mx-auto max-w-page px-gutter py-16">
       <header className="mb-8">
-        <p className="label-brand">Voor jou</p>
-        <h2 className="mt-2 text-display-md">Recent bekeken</h2>
+        <p className="label-brand">{t("recent.eyebrow")}</p>
+        <h2 className="mt-2 text-display-md">{t("recent.title")}</h2>
       </header>
       <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
         {items.slice(0, 4).map((p) => (

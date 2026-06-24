@@ -33,7 +33,7 @@ export function HelpButton() {
       setAnswer(d.answer || "");
       setEscalated(Boolean(d.escalated));
     } catch {
-      setAnswer("Er ging iets mis. Bel ons gerust op 085 115 50 42.");
+      setAnswer(t("help.errorCall"));
     } finally {
       setBusy(false);
     }
@@ -49,25 +49,25 @@ export function HelpButton() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               rows={2}
-              placeholder="Stel je vraag — bv. 'wat zijn de verzendkosten?'"
+              placeholder={t("help.placeholder")}
               className="w-full resize-none border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"
             />
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Je e-mail (voor een persoonlijk antwoord)"
+              placeholder={t("help.emailPlaceholder")}
               className="mt-2 w-full border border-line bg-canvas px-3 py-2 font-sans text-xs focus:border-ink focus:outline-none"
             />
             <button type="submit" disabled={busy} className="btn-primary mt-2 w-full !py-2 text-sm">
-              {busy ? "Even denken…" : t("help.ask")}
+              {busy ? t("help.thinking") : t("help.ask")}
             </button>
           </form>
 
           {answer ? (
             <div className="mt-3 border-t border-line pt-3">
               <p className="font-sans text-sm text-ink-soft">{answer}</p>
-              {escalated ? <p className="mt-1 font-sans text-xs text-muted">We mailen je binnen één werkdag.</p> : null}
+              {escalated ? <p className="mt-1 font-sans text-xs text-muted">{t("help.escalated")}</p> : null}
             </div>
           ) : null}
 
@@ -82,7 +82,7 @@ export function HelpButton() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Hulp nodig"
+        aria-label={t("help.title")}
         className="flex h-12 w-12 items-center justify-center gap-2 rounded-full border border-line bg-canvas font-sans text-sm shadow-card hover:border-ink sm:w-auto sm:px-5"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden className="shrink-0">

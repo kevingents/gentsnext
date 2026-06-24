@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
-import { t as translate } from "@/lib/messages";
+import { t as translate, interpolate } from "@/lib/messages";
 
 type Messages = Record<string, string>;
 type Ctx = { locale: Locale; messages: Messages | null };
@@ -30,8 +30,11 @@ export function useLocale(): Locale {
   return useContext(LocaleCtx).locale;
 }
 
-/** Vertaalhelper voor client components. */
-export function useT(): (key: string) => string {
+/** Vertaalhelper voor client components. Tweede arg = params voor {placeholders}. */
+export function useT(): (key: string, params?: Record<string, string | number>) => string {
   const { locale, messages } = useContext(LocaleCtx);
-  return (key: string) => messages?.[key] ?? translate(key, locale);
+  return (key: string, params?: Record<string, string | number>) => {
+    const raw = messages?.[key];
+    return raw != null ? interpolate(raw, params) : translate(key, locale, params);
+  };
 }

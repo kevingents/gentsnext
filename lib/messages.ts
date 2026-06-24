@@ -169,8 +169,14 @@ export function uiSourceKeys(): { key: string; source: string }[] {
   return Object.entries(NL_ALL).map(([key, source]) => ({ key, source }));
 }
 
-export function t(key: string, locale: Locale): string {
-  return DICTS[locale]?.[key] ?? NL_ALL[key] ?? key;
+/** Vul {placeholders} in een vertaalde string met params. Onbekende {x} blijft staan. */
+export function interpolate(text: string, params?: Record<string, string | number>): string {
+  if (!params) return text;
+  return text.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
+}
+
+export function t(key: string, locale: Locale, params?: Record<string, string | number>): string {
+  return interpolate(DICTS[locale]?.[key] ?? NL_ALL[key] ?? key, params);
 }
 
 /** Hele woordenboek voor een locale (voor de client-provider). */

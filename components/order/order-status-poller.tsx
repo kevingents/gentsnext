@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * Polt de order-status terwijl de betaling 'open' is en ververst de pagina
@@ -11,6 +12,7 @@ import { useRouter } from "next/navigation";
  */
 export function OrderStatusPoller({ orderNumber, token }: { orderNumber: string; token?: string }) {
   const router = useRouter();
+  const t = useT();
 
   useEffect(() => {
     let active = true;
@@ -45,7 +47,7 @@ export function OrderStatusPoller({ orderNumber, token }: { orderNumber: string;
       <svg viewBox="0 0 24 24" className="h-4 w-4 animate-spin text-ink" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path d="M21 12a9 9 0 1 1-6.2-8.5" strokeLinecap="round" />
       </svg>
-      We controleren je betaling — dit gaat vanzelf.
+      {t("order.status.checkingDash")}
     </p>
   );
 }

@@ -34,13 +34,13 @@ export function StoreLocator({ stores }: { stores: LocatorStore[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Zoek op stad of adres…"
-          aria-label="Zoek een winkel"
+          placeholder={t("stores.locator.searchPlaceholder")}
+          aria-label={t("stores.locator.searchAriaLabel")}
           className="w-full max-w-sm border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
         />
         <label className="flex items-center gap-2 font-sans text-sm text-ink-soft">
           <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} className="h-4 w-4 accent-ink" />
-          Alleen nu geopend
+          {t("stores.locator.openOnly")}
         </label>
         <span className="font-sans text-sm text-muted sm:ml-auto">{filtered.length} {t("clickCollect.storePlural")}</span>
       </div>
@@ -55,17 +55,17 @@ export function StoreLocator({ stores }: { stores: LocatorStore[] }) {
               <div className="flex items-start justify-between gap-2">
                 <h2 className="font-display text-lg">{s.city}</h2>
                 {s.open ? (
-                  <span className="shrink-0 font-sans text-xs text-success">● Nu open</span>
+                  <span className="shrink-0 font-sans text-xs text-success">● {t("stores.openNow")}</span>
                 ) : (
-                  <span className="shrink-0 font-sans text-xs text-muted">Gesloten</span>
+                  <span className="shrink-0 font-sans text-xs text-muted">{t("stores.closed")}</span>
                 )}
               </div>
               <p className="mt-1 font-sans text-sm text-ink-soft">{s.address}</p>
               {s.todayRange ? (
-                <p className="mt-2 font-sans text-xs text-muted">Vandaag: {s.todayRange}</p>
+                <p className="mt-2 font-sans text-xs text-muted">{t("stores.today")}: {s.todayRange}</p>
               ) : null}
               <span className="mt-auto pt-4 font-sans text-sm text-ink underline underline-offset-4">
-                Bekijk winkel →
+                {t("stores.locator.viewStore")} →
               </span>
             </Link>
           </li>

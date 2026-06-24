@@ -39,19 +39,18 @@ export function CookieNotice() {
 
   if (!visible) return null;
   return (
-    <div role="dialog" aria-label="Cookievoorkeuren" className="fixed inset-x-3 bottom-3 z-[55] mx-auto max-w-2xl rounded-card border border-line bg-canvas p-4 shadow-pop sm:p-5">
+    <div role="dialog" aria-label={t("cookies.dialogAriaLabel")} className="fixed inset-x-3 bottom-3 z-[55] mx-auto max-w-2xl rounded-card border border-line bg-canvas p-4 shadow-pop sm:p-5">
       <p className="font-display text-base">{t("cookies.title")}</p>
       <p className="mt-1 font-sans text-sm text-ink-soft">
-        Functionele cookies hebben we nodig om de site te laten werken. Voor anonieme statistieken en
-        gepersonaliseerde aanbiedingen vragen we eerst je toestemming. Meer in onze{" "}
-        <Link href="/pages/cookies" className="text-ink underline underline-offset-4">cookieverklaring</Link>.
+        {t("cookies.body")}{" "}
+        <Link href="/pages/cookies" className="text-ink underline underline-offset-4">{t("cookies.policyLink")}</Link>.
       </p>
 
       {details ? (
         <div className="mt-4 space-y-3 border-t border-line pt-4">
           <Row label={t("cookies.necessary")} desc={t("cookies.necessary.desc")} checked disabled />
-          <Row label={t("cookies.analytics")} desc="Anonieme statistieken om de winkel te verbeteren." checked={analytics} onChange={setAnalytics} />
-          <Row label={t("cookies.marketing")} desc="Relevante aanbiedingen en gepersonaliseerde content." checked={marketing} onChange={setMarketing} />
+          <Row label={t("cookies.analytics")} desc={t("cookies.analytics.desc")} checked={analytics} onChange={setAnalytics} />
+          <Row label={t("cookies.marketing")} desc={t("cookies.marketing.desc")} checked={marketing} onChange={setMarketing} />
         </div>
       ) : null}
 

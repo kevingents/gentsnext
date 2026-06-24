@@ -43,7 +43,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
     setError("");
     setNotice("");
     if (!amountValid) {
-      setError(`Kies een bedrag tussen ${formatEuro(minCents)} en ${formatEuro(maxCents)}.`);
+      setError(t("giftcard.error.amountRangeFull", { min: formatEuro(minCents), max: formatEuro(maxCents) }));
       return;
     }
     if (!/.+@.+\..+/.test(recipientEmail)) {
@@ -65,10 +65,10 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
       if (d.configured && d.checkoutUrl) {
         window.location.href = d.checkoutUrl;
       } else {
-        setNotice(d.message || "Je cadeaubon is genoteerd.");
+        setNotice(d.message || t("giftcard.notedFallback"));
       }
     } catch {
-      setError("Kon de cadeaubon niet versturen. Probeer het opnieuw.");
+      setError(t("giftcard.error.send"));
     } finally {
       setBusy(false);
     }
@@ -77,7 +77,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
   if (notice) {
     return (
       <div className="rounded-card border border-line bg-surface p-6">
-        <p className="label-brand">Bedankt</p>
+        <p className="label-brand">{t("giftcard.thanksShort")}</p>
         <p className="mt-2 font-sans text-sm text-ink-soft">{notice}</p>
       </div>
     );
@@ -125,7 +125,7 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
           <input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} maxLength={160} required className="mt-1.5 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm text-ink">Van <span className="text-muted">{t("common.optional")}</span></span>
+          <span className="font-sans text-sm text-ink">{t("giftcard.form.senderName")} <span className="text-muted">{t("common.optional")}</span></span>
           <input value={senderName} onChange={(e) => setSenderName(e.target.value)} maxLength={80} className="mt-1.5 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
@@ -135,16 +135,16 @@ export function GiftcardBuyForm({ presetCents, minCents, maxCents, validityMonth
       </div>
       <label className="mt-3 block">
         <span className="font-sans text-sm text-ink">{t("giftcard.form.message")} <span className="text-muted">{t("common.optional")}</span></span>
-        <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} maxLength={500} placeholder="Een paar woorden voor de ontvanger…" className="mt-1.5 w-full resize-none border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
+        <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} maxLength={500} placeholder={t("giftcard.form.messagePlaceholder")} className="mt-1.5 w-full resize-none border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
       </label>
 
       {error ? <p role="alert" className="mt-4 font-sans text-sm text-danger">{error}</p> : null}
 
       <button type="submit" disabled={busy || !amountValid} className="btn-primary mt-6 w-full">
-        {busy ? t("common.processing") : `Cadeaubon kopen — ${formatEuro(amountCents)}`}
+        {busy ? t("common.processing") : t("giftcard.form.submitWithAmount", { amount: formatEuro(amountCents) })}
       </button>
       <p className="mt-3 font-sans text-xs text-muted">
-        De ontvanger krijgt de cadeaubon direct per e-mail na betaling. Geldig {validityMonths} maanden, in meerdere keren te besteden.
+        {t("giftcard.form.validityNote", { months: validityMonths })}
       </p>
     </form>
   );

@@ -10,7 +10,7 @@ export async function AnnouncementBar() {
       <div className="mx-auto flex max-w-page items-center justify-center gap-2 px-gutter py-2 font-sans text-xs">
         <span className="hidden sm:inline">{t("delivery.free", locale)}</span>
         <span aria-hidden className="hidden text-canvas/40 sm:inline">·</span>
-        <span>Persoonlijk advies in onze 19 winkels —</span>
+        <span>{t("announcement.personalAdvice", locale)} —</span>
         <Link href="/pages/winkels" className="underline underline-offset-4">{t("common.findStore", locale)}</Link>
       </div>
     </div>

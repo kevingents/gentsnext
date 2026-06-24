@@ -47,7 +47,7 @@ export async function ContentPage({
         <div className="mx-auto max-w-page px-gutter py-12 text-center">
           <h2 className="text-display-md">{t("landing.klantenservice.personalAdvice", locale)}</h2>
           <p className="mx-auto mt-3 max-w-xl font-sans text-ink-soft">
-            Onze stylisten helpen je graag in één van onze 19 winkels — van de juiste maat tot het complete tenue voor jouw gelegenheid.
+            {t("contentPage.adviceBody", locale)}
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/pages/winkels" className="btn-primary">{t("order.find_store", locale)}</Link>

@@ -177,7 +177,7 @@ export function BuyBox({
       ) : colors.length > 1 ? (
         <div className="mt-7">
           <p className="font-sans text-sm">
-            <span className="text-muted">Kleur: </span>
+            <span className="text-muted">{t("pdp.color.prefix")} </span>
             <span className="font-medium">{active?.color}</span>
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -204,7 +204,7 @@ export function BuyBox({
       ) : active && active.color !== "Standaard" && !title.toLowerCase().includes(active.color.toLowerCase()) ? (
         // Alleen tonen als de kleur NIET al in de titel staat (geen dubbeling).
         <p className="mt-7 font-sans text-sm">
-          <span className="text-muted">Kleur: </span>
+          <span className="text-muted">{t("pdp.color.prefix")} </span>
           <span className="font-medium">{active.color}</span>
         </p>
       ) : null}
@@ -242,12 +242,12 @@ export function BuyBox({
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
               selectedSize.qty <= 5 ? (
-                <span className="text-danger">● Nog maar {selectedSize.qty} op voorraad — wees er snel bij</span>
+                <span className="text-danger">● {t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
               ) : (
                 <span className="text-success">● {t("pdp.stock.inStock")}</span>
               )
             ) : (
-              <span className="text-muted">Maat {selectedSize.size} tijdelijk uitverkocht</span>
+              <span className="text-muted">{t("pdp.stock.sizeSoldOut", { size: selectedSize.size })}</span>
             )}
           </p>
         ) : null}
@@ -291,7 +291,7 @@ export function BuyBox({
               disabled={!size || soldOut}
               className="btn-primary w-full"
             >
-              {!size ? t("pdp.cta.chooseSize") : soldOut ? t("pdp.button.sold") : oneSize ? t("pdp.cta.addToCart") : `In winkelwagen — maat ${size}`}
+              {!size ? t("pdp.cta.chooseSize") : soldOut ? t("pdp.button.sold") : oneSize ? t("pdp.cta.addToCart") : t("pdp.cta.addToCartWithSize", { size })}
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
@@ -315,7 +315,7 @@ export function BuyBox({
               <p className="flex items-baseline gap-2 font-display text-base">
                 {priceLabel}
                 {size && !oneSize ? (
-                  <span className="rounded-full bg-surface px-2 py-0.5 font-sans text-xs font-medium text-ink">Maat {size}</span>
+                  <span className="rounded-full bg-surface px-2 py-0.5 font-sans text-xs font-medium text-ink">{t("pdp.size.label")} {size}</span>
                 ) : null}
               </p>
             </div>

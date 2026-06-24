@@ -54,7 +54,7 @@ export async function LandingPage({ landing }: { landing: Landing }) {
 
       {/* Shop-strip */}
       <section className="mx-auto max-w-page px-gutter py-14">
-        <p className="label-brand">Shop deze gelegenheid</p>
+        <p className="label-brand">{t("landing.shopOccasion", locale)}</p>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {landing.shop.map((c) => (
             <Link
@@ -74,8 +74,7 @@ export async function LandingPage({ landing }: { landing: Landing }) {
         <div className="mx-auto max-w-page px-gutter py-14 text-center">
           <h2 className="text-display-md !text-canvas">{t("landing.klantenservice.personalAdvice", locale)}</h2>
           <p className="mx-auto mt-3 max-w-xl font-sans text-canvas/80">
-            Onze stylisten helpen je graag in één van onze 19 winkels — van de juiste
-            maat tot het complete tenue voor jouw gelegenheid.
+            {t("landing.adviceCtaBody", locale)}
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/pages/winkels" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
