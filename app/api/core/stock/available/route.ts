@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     // Breakdown (kassa-weergave) + platte 'available' (gate/back-compat) uit één bron.
     const bd = await availableBreakdown(location, keys);
     const available: Record<string, number> = {};
-    const breakdown: Record<string, { baseline: number; posDelta: number; webReserved: number; available: number }> = {};
+    const breakdown: Record<string, { baseline: number; posDelta: number; webReserved: number; safety: number; available: number }> = {};
     for (const [k, v] of bd) {
       available[k] = v.available;
       breakdown[k] = v;

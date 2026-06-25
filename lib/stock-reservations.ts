@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockForSkus, stockSyncedAt, onlineBranchSet, type SkuStock } from "@/lib/stock";
 import { posDeltaByLocationKey, webReservedAllLocations } from "@/lib/store-core";
+import { getSettings } from "@/lib/settings";
+import { safetyStockFor } from "@/lib/fulfillment-config";
 
 /**
  * Order-bewuste voorraad. SRS is alleen WMS/voorraadbron en ziet de webverkopen
@@ -55,10 +57,11 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
   const clean = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];
   const out = new Map<string, SkuStock>();
   if (!clean.length) return out;
-  const [gross, posDelta, webRes] = await Promise.all([
+  const [gross, posDelta, webRes, settings] = await Promise.all([
     stockForSkus(clean),
     posDeltaByLocationKey(clean),
     webReservedAllLocations(),
+    getSettings(),
   ]);
   const online = onlineBranchSet(); // Set<branchId> of null = alle filialen
   for (const [sku, st] of gross) {
@@ -69,7 +72,9 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
       const locL = (b.store || "").toLowerCase();
       const pd = posDelta.get(locL)?.get(keyL) || 0; // negatief = kassa-verkoop
       const wr = webRes.get(locL)?.get(keyL) || 0; // door web gereserveerd
-      const net = Math.max(0, b.qty + pd - wr);
+      // Voorraad-veiligheid (safety stock) per filiaal: de laatste N stuks blijven
+      // buiten verkoop/reservering (buffer tegen miteltelling/displaystuk).
+      const net = Math.max(0, b.qty + pd - wr - safetyStockFor(b.branchId, settings));
       total += net;
       if (!online || online.has(b.branchId)) onlineQty += net;
       return { ...b, qty: net };

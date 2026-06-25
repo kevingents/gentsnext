@@ -86,7 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   warehouseTransitDays: 1,
   storeExtraDays: 1,
   expressTransitDays: 1,
-  retailSafetyStock: num(process.env.GENTS_RETAIL_SAFETY_STOCK, 1),
+  retailSafetyStock: num(process.env.GENTS_RETAIL_SAFETY_STOCK, 2),
   warehouseSafetyStock: num(process.env.GENTS_WAREHOUSE_SAFETY_STOCK, 0),
   protectUnderstockedRetail: (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0",
   routeOverstockFirst: { enabled: false, minSurplus: 3 },

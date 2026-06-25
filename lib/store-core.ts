@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { storeStockMovements } from "@/db/schema";
 import { stockForSkus, stockSyncedAt } from "@/lib/stock";
+import { getSettings } from "@/lib/settings";
+import { safetyStockFor } from "@/lib/fulfillment-config";
 
 /**
  * Omnichannel voorraad-core (Fase A). De zelfgebouwde kassa (storegents) én de
@@ -186,15 +188,18 @@ export async function availableInStore(location: string, keys: string[]): Promis
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, number>();
   if (!clean.length) return out;
-  const [stock, delta, webRes] = await Promise.all([
+  const [stock, delta, webRes, settings] = await Promise.all([
     stockForSkus(clean),
     coreDeltaForKeys(loc, clean),
     webReservedForLocation(loc),
+    getSettings(),
   ]);
   for (const key of clean) {
     const st = stock.get(key);
-    const baseline = st ? st.byBranch.find((b) => lower(b.store) === lower(loc))?.qty ?? 0 : 0;
-    const net = baseline + (delta.get(lower(key)) || 0) - (webRes.get(lower(key)) || 0);
+    const branch = st ? st.byBranch.find((b) => lower(b.store) === lower(loc)) : undefined;
+    const baseline = branch?.qty ?? 0;
+    const safety = branch ? safetyStockFor(branch.branchId, settings) : 0;
+    const net = baseline + (delta.get(lower(key)) || 0) - (webRes.get(lower(key)) || 0) - safety;
     out.set(key, Math.max(0, net));
   }
   return out;
@@ -208,22 +213,25 @@ export async function availableInStore(location: string, keys: string[]): Promis
 export async function availableBreakdown(
   location: string,
   keys: string[],
-): Promise<Map<string, { baseline: number; posDelta: number; webReserved: number; available: number }>> {
+): Promise<Map<string, { baseline: number; posDelta: number; webReserved: number; safety: number; available: number }>> {
   const loc = norm(location);
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
-  const out = new Map<string, { baseline: number; posDelta: number; webReserved: number; available: number }>();
+  const out = new Map<string, { baseline: number; posDelta: number; webReserved: number; safety: number; available: number }>();
   if (!clean.length) return out;
-  const [stock, delta, webRes] = await Promise.all([
+  const [stock, delta, webRes, settings] = await Promise.all([
     stockForSkus(clean),
     coreDeltaForKeys(loc, clean),
     webReservedForLocation(loc),
+    getSettings(),
   ]);
   for (const key of clean) {
     const st = stock.get(key);
-    const baseline = st ? st.byBranch.find((b) => lower(b.store) === lower(loc))?.qty ?? 0 : 0;
+    const branch = st ? st.byBranch.find((b) => lower(b.store) === lower(loc)) : undefined;
+    const baseline = branch?.qty ?? 0;
+    const safety = branch ? safetyStockFor(branch.branchId, settings) : 0;
     const posDelta = delta.get(lower(key)) || 0;
     const webReserved = webRes.get(lower(key)) || 0;
-    out.set(key, { baseline, posDelta, webReserved, available: Math.max(0, baseline + posDelta - webReserved) });
+    out.set(key, { baseline, posDelta, webReserved, safety, available: Math.max(0, baseline + posDelta - webReserved - safety) });
   }
   return out;
 }
