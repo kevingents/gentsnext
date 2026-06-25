@@ -38,6 +38,33 @@ export function centsToValue(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+/** Volledige of gedeeltelijke terugbetaling van een Mollie-betaling (retour → geld terug). */
+export async function refundMolliePayment(
+  paymentId: string,
+  amountCents: number,
+  description = "Retour",
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!mollieConfigured()) return { ok: false, error: "Mollie niet geconfigureerd." };
+  if (!paymentId || amountCents <= 0) return { ok: false, error: "Ongeldig refund-bedrag." };
+  const body: Record<string, unknown> = {
+    amount: { currency: "EUR", value: centsToValue(amountCents) },
+    description: description.slice(0, 140),
+  };
+  if (usesAccessToken() && testmode()) body.testmode = true;
+  try {
+    const r = await fetch(`https://api.mollie.com/v2/payments/${encodeURIComponent(paymentId)}/refunds`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey()}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = (await r.json().catch(() => null)) as { id?: string; detail?: string } | null;
+    if (!r.ok || !d?.id) return { ok: false, error: d?.detail || `Mollie ${r.status}` };
+    return { ok: true, id: d.id };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 export type MolliePayment = {
   id: string;
   status: string; // open|pending|authorized|paid|canceled|expired|failed

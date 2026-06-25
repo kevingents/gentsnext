@@ -66,6 +66,13 @@ export type Settings = {
     minItems: number;
     percentOff: number;
   };
+  // Retouren: bedenktijd, retourkosten bij geld-terug (DHL-label), en of store
+  // credit / omruilen altijd een gratis retour geeft.
+  returnConfig: {
+    windowDays: number;
+    dhlReturnCostCents: number;
+    freeOnCredit: boolean;
+  };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -108,6 +115,11 @@ export const DEFAULT_SETTINGS: Settings = {
     validityMonths: 24,
   },
   tieredDiscount: { enabled: false, minItems: 2, percentOff: 10 },
+  returnConfig: {
+    windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
+    dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 495),
+    freeOnCredit: (process.env.GENTS_RETURN_FREE_ON_CREDIT ?? "1") !== "0",
+  },
 };
 
 let _cache: Settings | null = null;
@@ -129,6 +141,7 @@ export async function getSettings(): Promise<Settings> {
       modelLook: { ...DEFAULT_SETTINGS.modelLook, ...(stored.modelLook || {}) },
       giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
       tieredDiscount: { ...DEFAULT_SETTINGS.tieredDiscount, ...(stored.tieredDiscount || {}) },
+      returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
     };
   } catch {

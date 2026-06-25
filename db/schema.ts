@@ -780,3 +780,55 @@ export const newsletterSubscribers = pgTable(
     index("newsletter_channel_idx").on(t.channel),
   ]
 );
+
+/**
+ * Retouren — klant start een retour vanuit z'n bestelling. Methode: DHL-retourlabel
+ * of in de winkel inleveren. Vergoeding: geld terug (Mollie-refund) of store credit
+ * (cadeaubon). Store credit / omruilen = gratis retour; geld terug kan retourkosten
+ * hebben (instelbaar). Statussen: requested → label_created → received → completed.
+ */
+export const returns = pgTable(
+  "returns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull(),
+    orderNumber: text("order_number").notNull(),
+    email: text("email").notNull(),
+    status: text("status").notNull().default("requested"),
+    method: text("method").notNull(), // 'dhl' | 'store'
+    refundType: text("refund_type").notNull(), // 'money' | 'credit'
+    pickupStore: text("pickup_store").notNull().default(""), // bij method='store'
+    reason: text("reason").notNull().default(""),
+    itemsCents: integer("items_cents").notNull().default(0), // waarde geretourneerde items
+    shippingCostCents: integer("shipping_cost_cents").notNull().default(0), // retourkosten (0 = gratis)
+    refundedCents: integer("refunded_cents").notNull().default(0),
+    creditCode: text("credit_code").notNull().default(""), // store-credit cadeaubon-code
+    dhlLabelUrl: text("dhl_label_url").notNull().default(""),
+    dhlTracking: text("dhl_tracking").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("returns_order_idx").on(t.orderId),
+    index("returns_ordernr_idx").on(t.orderNumber),
+    index("returns_email_idx").on(t.email),
+    index("returns_status_idx").on(t.status),
+  ],
+);
+
+export const returnLines = pgTable(
+  "return_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    returnId: uuid("return_id").notNull(),
+    orderLineId: uuid("order_line_id"),
+    sku: text("sku").notNull().default(""),
+    title: text("title").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    qty: integer("qty").notNull().default(1),
+    unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    reason: text("reason").notNull().default(""),
+  },
+  (t) => [index("return_lines_return_idx").on(t.returnId)],
+);
