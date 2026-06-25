@@ -5,6 +5,7 @@ import { orders, orderLines, returns, returnLines, giftcards } from "@/db/schema
 import { getSettings } from "@/lib/settings";
 import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
 import { refundMolliePayment } from "@/lib/mollie";
+import { sendReturnRegistered, sendReturnRefunded } from "@/lib/email";
 
 /**
  * Retouren — klant start vanuit z'n bestelling. Methode: DHL-retourlabel of in de
@@ -184,6 +185,24 @@ export async function createReturn(input: CreateReturnInput): Promise<
     }
   }
 
+  // Bevestigingsmail naar de klant (env-gated; faalt stil zodat de retour blijft staan).
+  try {
+    await sendReturnRegistered({
+      email: input.email.trim().toLowerCase(),
+      firstName: order?.firstName || "",
+      orderNumber: base.orderNumber,
+      method,
+      refundType,
+      items: picked.map((p) => ({ title: p.line.title, size: p.line.size, color: p.line.color, qty: p.qty })),
+      labelUrl: label?.url || "",
+      tracking: label?.tracking || "",
+      itemsCents,
+      shippingCostCents,
+    });
+  } catch (e) {
+    console.error("[returns] bevestigingsmail mislukt:", (e as Error).message);
+  }
+
   return { ok: true, id: ret.id, status: labelPending ? "requested" : method === "dhl" ? "label_created" : "requested", itemsCents, shippingCostCents, refundType, method, label, labelPending };
 }
 
@@ -227,23 +246,87 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
 
   await db.update(returns).set({ status: "received", updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
 
+  const [order] = await db
+    .select({ customerId: orders.customerId, molliePaymentId: orders.molliePaymentId, firstName: orders.firstName })
+    .from(orders)
+    .where(eq(orders.id, ret.orderId))
+    .limit(1);
+
+  async function mailRefunded(refundType: RefundType, amountCents: number, code: string) {
+    try {
+      await sendReturnRefunded({ email: ret.email, firstName: order?.firstName || "", orderNumber: ret.orderNumber, refundType, amountCents, creditCode: code });
+    } catch (e) {
+      console.error("[returns] verwerk-mail mislukt:", (e as Error).message);
+    }
+  }
+
   if (ret.refundType === "credit") {
-    const [order] = await db.select({ customerId: orders.customerId }).from(orders).where(eq(orders.id, ret.orderId)).limit(1);
     const code = await issueStoreCredit(ret.itemsCents, ret.email, order?.customerId ?? null, `Retour ${ret.orderNumber}`);
     await db.update(returns).set({ status: "completed", creditCode: code, refundedCents: ret.itemsCents, updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+    await mailRefunded("credit", ret.itemsCents, code);
     return { ok: true, status: "completed", refundedCents: ret.itemsCents, creditCode: code };
   }
 
   // Geld terug: items minus retourkosten (bij DHL-label), via Mollie.
   const refundCents = Math.max(0, ret.itemsCents - ret.shippingCostCents);
-  const [order] = await db.select({ molliePaymentId: orders.molliePaymentId }).from(orders).where(eq(orders.id, ret.orderId)).limit(1);
   if (!order?.molliePaymentId) {
     return { ok: false, status: "received", error: "Geen Mollie-betaling gevonden — handmatig terugbetalen." };
   }
   const r = await refundMolliePayment(order.molliePaymentId, refundCents, `Retour ${ret.orderNumber}`);
   if (!r.ok) return { ok: false, status: "received", error: r.error || "Terugbetaling mislukt." };
   await db.update(returns).set({ status: "completed", refundedCents: refundCents, updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+  await mailRefunded("money", refundCents, "");
   return { ok: true, status: "completed", refundedCents: refundCents };
+}
+
+/**
+ * Worklist voor supply chain: retouren die fysiek ontvangen zijn maar nog terug
+ * in SRS geboekt moeten worden (stockCorrectedAt = null). Pas verschijnt zodra de
+ * retour de status 'received' of 'completed' heeft (= goederen daadwerkelijk binnen).
+ */
+export async function listAwaitingStockCorrection(limit = 100) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(returns)
+    .where(and(inArray(returns.status, ["received", "completed"]), sql`${returns.stockCorrectedAt} is null`))
+    .orderBy(desc(returns.updatedAt))
+    .limit(Math.max(1, Math.min(300, limit)));
+  const ids = rows.map((r) => r.id);
+  const lines = ids.length ? await db.select().from(returnLines).where(inArray(returnLines.returnId, ids)) : [];
+  const byRet = new Map<string, typeof lines>();
+  for (const l of lines) {
+    const arr = byRet.get(l.returnId) || [];
+    arr.push(l);
+    byRet.set(l.returnId, arr);
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    orderNumber: r.orderNumber,
+    method: r.method,
+    pickupStore: r.pickupStore,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    lines: (byRet.get(r.id) || []).map((l) => ({ sku: l.sku, title: l.title, size: l.size, color: l.color, qty: l.qty })),
+  }));
+}
+
+/** Supply chain markeert de geretourneerde stuks als fysiek terug in SRS geboekt. */
+export async function markStockCorrected(returnId: string, by = ""): Promise<{ ok: boolean; error?: string }> {
+  const db = getDb();
+  const [ret] = await db.select({ id: returns.id, stockCorrectedAt: returns.stockCorrectedAt }).from(returns).where(eq(returns.id, returnId)).limit(1);
+  if (!ret) return { ok: false, error: "Retour niet gevonden." };
+  if (ret.stockCorrectedAt) return { ok: true }; // idempotent
+  await db.update(returns).set({ stockCorrectedAt: sql`now()`, stockCorrectedBy: by.slice(0, 120), updatedAt: sql`now()` }).where(eq(returns.id, returnId));
+  return { ok: true };
+}
+
+/** Aantal openstaande voorraadcorrecties (voor badge/notificatie). */
+export async function countAwaitingStockCorrection(): Promise<number> {
+  const db = getDb();
+  const r = (await db.execute<{ n: number }>(sql`select count(*)::int n from returns where status in ('received','completed') and stock_corrected_at is null`)).rows[0];
+  return Number(r?.n) || 0;
 }
 
 /** Admin: recente retouren. */

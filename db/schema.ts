@@ -805,6 +805,10 @@ export const returns = pgTable(
     creditCode: text("credit_code").notNull().default(""), // store-credit cadeaubon-code
     dhlLabelUrl: text("dhl_label_url").notNull().default(""),
     dhlTracking: text("dhl_tracking").notNull().default(""),
+    // Voorraadcorrectie: gezet zodra supply chain de geretourneerde stuks fysiek
+    // terug in SRS heeft geboekt. Null = staat nog op de "terug te scannen"-worklist.
+    stockCorrectedAt: timestamp("stock_corrected_at", { withTimezone: true }),
+    stockCorrectedBy: text("stock_corrected_by").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -813,6 +817,7 @@ export const returns = pgTable(
     index("returns_ordernr_idx").on(t.orderNumber),
     index("returns_email_idx").on(t.email),
     index("returns_status_idx").on(t.status),
+    index("returns_stockcorr_idx").on(t.stockCorrectedAt),
   ],
 );
 

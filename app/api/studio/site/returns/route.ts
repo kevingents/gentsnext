@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { returns, returnLines } from "@/db/schema";
 import { adminOrToken } from "@/lib/studio-token";
-import { listReturns, processReturnReceived, getReturnStats, getReturnSignals } from "@/lib/returns";
+import { listReturns, processReturnReceived, getReturnStats, getReturnSignals, listAwaitingStockCorrection, markStockCorrected } from "@/lib/returns";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,8 +29,8 @@ export async function GET(req: Request) {
       byRet.set(l.returnId, arr);
     }
     const items = rows.map((r) => ({ ...r, lines: byRet.get(r.id) || [] }));
-    const [stats, signals] = await Promise.all([getReturnStats(90), getReturnSignals(90)]);
-    return NextResponse.json({ ok: true, items, stats, signals });
+    const [stats, signals, awaitingCorrection] = await Promise.all([getReturnStats(90), getReturnSignals(90), listAwaitingStockCorrection(150)]);
+    return NextResponse.json({ ok: true, items, stats, signals, awaitingCorrection });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
@@ -55,6 +55,10 @@ export async function POST(req: Request) {
     const db = getDb();
     await db.update(returns).set({ status: "cancelled", updatedAt: sql`now()` }).where(eq(returns.id, id));
     return NextResponse.json({ ok: true, status: "cancelled" });
+  }
+  if (body.action === "stock_corrected") {
+    const res = await markStockCorrected(id, (body as { by?: string }).by || "");
+    return NextResponse.json(res, { status: res.ok ? 200 : 400 });
   }
   return NextResponse.json({ ok: false, error: "Onbekende actie." }, { status: 400 });
 }

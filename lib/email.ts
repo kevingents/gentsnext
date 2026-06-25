@@ -270,3 +270,97 @@ export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]
   }
   return true;
 }
+
+/* ── Retouren ── */
+
+type ReturnRegisteredEmail = {
+  email: string;
+  firstName: string;
+  orderNumber: string;
+  method: "dhl" | "store";
+  refundType: "money" | "credit";
+  items: { title: string; size: string; color: string; qty: number }[];
+  labelUrl: string;
+  tracking: string;
+  itemsCents: number;
+  shippingCostCents: number;
+};
+
+/** Bevestiging dat de retour is aangemeld — met DHL-label of winkel-instructie. */
+export async function sendReturnRegistered(r: ReturnRegisteredEmail): Promise<boolean> {
+  const site = getSiteUrl();
+  const hi = r.firstName ? `Hoi ${r.firstName},` : "Hoi,";
+  const itemRows = r.items
+    .map(
+      (l) => `<tr><td style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">
+        ${l.title}<div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && `maat ${l.size}`, `${l.qty}×`].filter(Boolean).join(" · ")}</div></td></tr>`,
+    )
+    .join("");
+  const deliveryBlock =
+    r.method === "dhl"
+      ? r.labelUrl
+        ? `<tr><td style="padding:8px 28px 0">
+             <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">Print je <strong>DHL-retourlabel</strong>, plak het op het pakket en lever het in bij een DHL-punt.</p>
+             <a href="${r.labelUrl}" style="display:inline-block;margin-top:12px;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 22px;text-decoration:none">Download retourlabel</a>
+             ${r.tracking ? `<p style="font:12px Arial,sans-serif;color:#8B8B8B;margin:10px 0 0">Track &amp; trace: ${r.tracking}</p>` : ""}
+           </td></tr>`
+        : `<tr><td style="padding:8px 28px 0"><p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">We sturen je het <strong>DHL-retourlabel</strong> zo snel mogelijk per e-mail toe.</p></td></tr>`
+      : `<tr><td style="padding:8px 28px 0"><p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">Lever de artikelen samen met je bestelnummer in bij een van onze <strong>GENTS-winkels</strong>. Inleveren is gratis.</p></td></tr>`;
+  const refundLine =
+    r.refundType === "credit"
+      ? `Je ontvangt <strong>GENTS-tegoed</strong> van ${euro(r.itemsCents)} zodra we de artikelen hebben ontvangen en gecontroleerd.`
+      : `Je krijgt ${euro(Math.max(0, r.itemsCents - r.shippingCostCents))} terug op je betaalmethode zodra we de artikelen hebben ontvangen${r.shippingCostCents ? ` (na aftrek van ${euro(r.shippingCostCents)} retourkosten)` : ""}.`;
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Je retour is aangemeld</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} we hebben je retour voor bestelling <strong>${r.orderNumber}</strong> ontvangen.</p>
+    </td></tr>
+    <tr><td style="padding:8px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${itemRows}</table></td></tr>
+    ${deliveryBlock}
+    <tr><td style="padding:16px 28px 8px"><p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">${refundLine}</p></td></tr>
+    <tr><td style="padding:8px 28px 28px"><p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin:0">Volg de status van je retour in <a href="${site}/account" style="color:#0A0A0A">Mijn GENTS</a>.</p></td></tr>`;
+  return sendEmail(r.email, `Je GENTS-retour voor ${r.orderNumber} is aangemeld`, shell(inner));
+}
+
+type ReturnRefundedEmail = {
+  email: string;
+  firstName: string;
+  orderNumber: string;
+  refundType: "money" | "credit";
+  amountCents: number;
+  creditCode: string;
+};
+
+/** Retour verwerkt: geld teruggestort, of tegoed-code uitgegeven. */
+export async function sendReturnRefunded(r: ReturnRefundedEmail): Promise<boolean> {
+  const site = getSiteUrl();
+  const hi = r.firstName ? `Hoi ${r.firstName},` : "Hoi,";
+  if (r.refundType === "credit") {
+    const inner = `
+      <tr><td style="padding:24px 28px 8px">
+        <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Je GENTS-tegoed staat klaar</h1>
+        <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} we hebben je retour voor bestelling <strong>${r.orderNumber}</strong> verwerkt. Hieronder je tegoed.</p>
+      </td></tr>
+      <tr><td style="padding:8px 28px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #0A0A0A">
+          <tr><td align="center" style="padding:22px 16px;background:#0A0A0A">
+            <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#C9A14A">GENTS-TEGOED</div>
+            <div style="font:600 34px Arial,sans-serif;color:#fff;margin:6px 0">${euro(r.amountCents)}</div>
+            <div style="display:inline-block;background:#fff;color:#0A0A0A;font:700 20px 'Courier New',monospace;letter-spacing:2px;padding:10px 18px">${r.creditCode}</div>
+          </td></tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:12px 28px 28px">
+        <p style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:0">Vul de code bij het afrekenen in onder “Cadeaubon”. Je kunt 'm in meerdere keren gebruiken tot het saldo op is.</p>
+        <a href="${site}" style="display:inline-block;margin-top:14px;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 22px;text-decoration:none">Kies iets nieuws</a>
+      </td></tr>`;
+    return sendEmail(r.email, "Je GENTS-tegoed staat klaar", shell(inner));
+  }
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Je retour is terugbetaald</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} we hebben <strong>${euro(r.amountCents)}</strong> teruggestort op je betaalmethode voor je retour van bestelling <strong>${r.orderNumber}</strong>. Afhankelijk van je bank zie je het binnen enkele werkdagen terug.</p>
+    </td></tr>
+    <tr><td style="padding:8px 28px 28px"><p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin:0">Bekijk je retouren in <a href="${site}/account" style="color:#0A0A0A">Mijn GENTS</a>.</p></td></tr>`;
+  return sendEmail(r.email, `Je GENTS-retour voor ${r.orderNumber} is terugbetaald`, shell(inner));
+}

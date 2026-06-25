@@ -90,6 +90,18 @@ export async function POST(req: Request) {
     };
   }
 
+  if (body.returnConfig && typeof body.returnConfig === "object") {
+    const rc = body.returnConfig as Record<string, unknown>;
+    patch.returnConfig = {
+      windowDays: Math.max(1, Math.round(Number(rc.windowDays) || 14)),
+      dhlReturnCostCents: Math.max(0, Math.round(Number(rc.dhlReturnCostCents) || 499)),
+      freeOnCredit: rc.freeOnCredit !== false,
+      signalMinReturns: Math.max(1, Math.round(Number(rc.signalMinReturns) || 3)),
+      signalMinRatePct: Math.max(1, Math.min(100, Math.round(Number(rc.signalMinRatePct) || 30))),
+      signalFastDays: Math.max(1, Math.round(Number(rc.signalFastDays) || 7)),
+    };
+  }
+
   const next = await updateSettings(patch);
   return NextResponse.json({ ok: true, settings: next });
 }

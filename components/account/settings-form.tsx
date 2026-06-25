@@ -32,6 +32,14 @@ type Settings = {
     maxCents: number;
     validityMonths: number;
   };
+  returnConfig: {
+    windowDays: number;
+    dhlReturnCostCents: number;
+    freeOnCredit: boolean;
+    signalMinReturns: number;
+    signalMinRatePct: number;
+    signalFastDays: number;
+  };
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan). */
@@ -81,6 +89,9 @@ export function SettingsForm({ initial }: { initial: Settings }) {
 
   function setGc(patch: Partial<Settings["giftcardConfig"]>) {
     setS((p) => ({ ...p, giftcardConfig: { ...p.giftcardConfig, ...patch } }));
+  }
+  function setRc(patch: Partial<Settings["returnConfig"]>) {
+    setS((p) => ({ ...p, returnConfig: { ...p.returnConfig, ...patch } }));
   }
   function setPresets(v: string) {
     setPresetText(v);
@@ -319,6 +330,48 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           <span className="font-sans text-sm">Voorgestelde bedragen (euro, komma-gescheiden)</span>
           <input value={presetText} onChange={(e) => setPresets(e.target.value)} placeholder="25, 50, 100, 150" className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
+      </section>
+
+      <section>
+        <p className="label-brand mb-2">Retouren</p>
+        <p className="mb-3 font-sans text-xs text-muted">
+          Bedenktijd, retourkosten bij geld-terug, en wanneer een retour gratis is. De signaal-drempels bepalen wanneer een artikel een aandachtspunt wordt (snel én vaak retour).
+        </p>
+        <label className="mb-3 flex items-center gap-2">
+          <input type="checkbox" checked={s.returnConfig.freeOnCredit} onChange={(e) => setRc({ freeOnCredit: e.target.checked })} className="accent-ink" />
+          <span className="font-sans text-sm">Gratis retour bij tegoed/omruilen (in-winkel is altijd gratis)</span>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="font-sans text-sm">Bedenktijd (dagen)</span>
+            <input type="number" step="1" min="1" defaultValue={s.returnConfig.windowDays} onChange={(e) => setRc({ windowDays: Math.max(1, Math.round(Number(e.target.value) || 14)) })} className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">Retourkosten bij geld terug (DHL)</span>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="font-sans text-sm text-muted">€</span>
+              <input type="number" step="0.01" min="0" defaultValue={s.returnConfig.dhlReturnCostCents / 100} onChange={(e) => setRc({ dhlReturnCostCents: Math.max(0, Math.round(Number(e.target.value) * 100)) })} className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+            </div>
+          </label>
+        </div>
+        <p className="mb-2 mt-4 font-sans text-sm font-medium">Signaal-drempels (aandachtspunt-artikelen)</p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="block">
+            <span className="font-sans text-sm">Min. aantal retouren</span>
+            <input type="number" step="1" min="1" defaultValue={s.returnConfig.signalMinReturns} onChange={(e) => setRc({ signalMinReturns: Math.max(1, Math.round(Number(e.target.value) || 3)) })} className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">Min. retourpercentage</span>
+            <div className="mt-1 flex items-center gap-2">
+              <input type="number" step="1" min="1" max="100" defaultValue={s.returnConfig.signalMinRatePct} onChange={(e) => setRc({ signalMinRatePct: Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 30))) })} className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+              <span className="font-sans text-sm text-muted">%</span>
+            </div>
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">"Snel retour" binnen (dagen)</span>
+            <input type="number" step="1" min="1" defaultValue={s.returnConfig.signalFastDays} onChange={(e) => setRc({ signalFastDays: Math.max(1, Math.round(Number(e.target.value) || 7)) })} className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
+          </label>
+        </div>
       </section>
 
       {msg ? <p className={`font-sans text-sm ${state === "fail" ? "text-danger" : "text-success"}`}>{msg}</p> : null}
