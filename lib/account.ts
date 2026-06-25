@@ -16,6 +16,7 @@ import {
   returnLines,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
+import { getSettings } from "@/lib/settings";
 import { sendWelcomeEmail } from "@/lib/email";
 
 /**
@@ -226,6 +227,7 @@ export async function getProfileData(customerId: string, email = "") {
     loyalty,
     pointsBalance,
     addresses,
+    returnWindowDays: (await getSettings()).returnConfig.windowDays,
     returns: retRows.map((r) => ({
       id: r.id, orderNumber: r.orderNumber, status: r.status, method: r.method, refundType: r.refundType,
       itemsCents: r.itemsCents, shippingCostCents: r.shippingCostCents, refundedCents: r.refundedCents,

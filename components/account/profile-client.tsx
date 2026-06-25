@@ -42,7 +42,7 @@ type ReturnRow = {
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
   giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
-  returns: ReturnRow[];
+  returns: ReturnRow[]; returnWindowDays: number;
 };
 
 const TABS = [
@@ -261,7 +261,7 @@ function Bestellingen({ data }: { data: Data }) {
                     ))}
                   </ul>
                 ) : null}
-                <OrderReturnFooter order={o} returns={data.returns} />
+                <OrderReturnFooter order={o} returns={data.returns} windowDays={data.returnWindowDays} />
               </li>
             ))}
           </ul>
@@ -298,10 +298,11 @@ function Bestellingen({ data }: { data: Data }) {
   );
 }
 
-function OrderReturnFooter({ order, returns }: { order: Order; returns: ReturnRow[] }) {
+function OrderReturnFooter({ order, returns, windowDays }: { order: Order; returns: ReturnRow[]; windowDays: number }) {
   const ret = returns.find((r) => r.orderNumber === order.orderNumber);
-  const returnable = ["paid", "shipped", "delivered", "ready_pickup"].includes(order.status);
-  if (!ret && !returnable) return null;
+  const eligible = ["paid", "shipped", "delivered", "ready_pickup"].includes(order.status);
+  const withinWindow = Date.now() - new Date(order.createdAt).getTime() <= windowDays * 86400000;
+  if (!ret && (!eligible || !withinWindow)) return null;
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs">
       {ret ? (

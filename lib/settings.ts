@@ -122,7 +122,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tieredDiscount: { enabled: false, minItems: 2, percentOff: 10 },
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
-    dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 495),
+    dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 499), // S-pakket heenzending, ex toeslagen (eigen DHL-contract)
     freeOnCredit: (process.env.GENTS_RETURN_FREE_ON_CREDIT ?? "1") !== "0",
     signalMinReturns: num(process.env.GENTS_RETURN_SIGNAL_MIN, 3),
     signalMinRatePct: num(process.env.GENTS_RETURN_SIGNAL_RATE, 30),

@@ -13,17 +13,21 @@ type Created = {
 const euro = (c: number) => "€ " + (c / 100).toFixed(2).replace(".", ",");
 const inputCls = "w-full rounded-lg border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
 
-export function RetourFlow({ initialOrder = "" }: { initialOrder?: string }) {
-  const [step, setStep] = useState<"lookup" | "select" | "done">("lookup");
-  const [orderNumber, setOrderNumber] = useState(initialOrder);
-  const [email, setEmail] = useState("");
+type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };
+
+export function RetourFlow({ initialOrder = "", prefill }: { initialOrder?: string; prefill?: Prefill | null }) {
+  // Ingelogd vanaf de bestelpagina (prefill) → direct naar de artikelkeuze, géén e-mail nodig.
+  const authed = Boolean(prefill);
+  const [step, setStep] = useState<"lookup" | "select" | "done">(prefill ? "select" : "lookup");
+  const [orderNumber, setOrderNumber] = useState(prefill?.orderNumber ?? initialOrder);
+  const [email, setEmail] = useState(prefill?.email ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const [lines, setLines] = useState<Line[]>([]);
-  const [policy, setPolicy] = useState<Policy | null>(null);
-  const [withinWindow, setWithinWindow] = useState(true);
-  const [qty, setQty] = useState<Record<string, number>>({});
+  const [lines, setLines] = useState<Line[]>(prefill?.lines ?? []);
+  const [policy, setPolicy] = useState<Policy | null>(prefill?.policy ?? null);
+  const [withinWindow, setWithinWindow] = useState(prefill?.withinWindow ?? true);
+  const [qty, setQty] = useState<Record<string, number>>(prefill ? Object.fromEntries(prefill.lines.map((l) => [l.orderLineId, 0])) : {});
   const [method, setMethod] = useState<"dhl" | "store">("dhl");
   const [refundType, setRefundType] = useState<"money" | "credit">("credit");
   const [reason, setReason] = useState("");
@@ -135,7 +139,11 @@ export function RetourFlow({ initialOrder = "" }: { initialOrder?: string }) {
 
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-2">
-          <button onClick={() => setStep("lookup")} className="btn-ghost">Terug</button>
+          {authed ? (
+            <a href="/account" className="btn-ghost">Terug</a>
+          ) : (
+            <button onClick={() => setStep("lookup")} className="btn-ghost">Terug</button>
+          )}
           <button onClick={submit} disabled={busy || !selected.length} className="btn-primary disabled:opacity-50">{busy ? "Bezig…" : "Retour bevestigen"}</button>
         </div>
       </div>
