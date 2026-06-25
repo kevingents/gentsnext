@@ -269,10 +269,25 @@ export type ReturnStats = {
   creditSharePct: number; // % dat voor tegoed/omruilen koos
   storeSharePct: number; // % dat in de winkel inlevert
   returnRatePct: number; // geretourneerde stuks ÷ verkochte stuks
+  avgDaysToReturn: number; // gem. dagen bestelling → retour-aanmelding
+  pendingCount: number; // nog te verwerken (niet completed/cancelled)
+  pendingValueCents: number;
   byStatus: { status: string; n: number }[];
+  byLand: { land: string; n: number }[];
   topReasons: { reason: string; n: number }[];
   topProducts: { title: string; qty: number }[];
   topSizes: { size: string; qty: number }[];
+};
+
+/** Een product dat snel én vaak terugkomt — een aandachtspunt (pasvorm/kwaliteit?). */
+export type ReturnSignal = {
+  sku: string;
+  title: string;
+  soldQty: number;
+  returnedQty: number;
+  returnRatePct: number;
+  avgDaysToReturn: number;
+  severity: "hoog" | "midden";
 };
 
 /** Retour-statistieken over de laatste N dagen (voor het admin-dashboard). */
@@ -306,6 +321,16 @@ export async function getReturnStats(days = 90): Promise<ReturnStats> {
     select coalesce(sum(ol.quantity),0)::int q from order_lines ol join orders o on o.id = ol.order_id
     where o.created_at >= ${since} and o.status in ('paid','shipped','delivered','ready_pickup')`)).rows[0]?.q || 0;
 
+  const avgDays = (await db.execute<{ d: number }>(sql`
+    select coalesce(avg(extract(epoch from (r.created_at - coalesce(o.paid_at, o.created_at)))/86400.0),0)::float d
+    from returns r join orders o on o.id = r.order_id where r.created_at >= ${since} and r.status <> 'cancelled'`)).rows[0]?.d || 0;
+  const pending = (await db.execute<{ n: number; v: number }>(sql`
+    select count(*)::int n, coalesce(sum(items_cents),0)::int v from returns
+    where created_at >= ${since} and status in ('requested','label_created','received')`)).rows[0] || { n: 0, v: 0 };
+  const byLand = (await db.execute<{ land: string; n: number }>(sql`
+    select coalesce(nullif(o.country,''),'NL') land, count(*)::int n from returns r join orders o on o.id = r.order_id
+    where r.created_at >= ${since} and r.status <> 'cancelled' group by land order by n desc`)).rows;
+
   const round1 = (x: number) => Math.round(x * 10) / 10;
   return {
     days,
@@ -316,9 +341,68 @@ export async function getReturnStats(days = 90): Promise<ReturnStats> {
     creditSharePct: t.n ? round1((t.credit_n / t.n) * 100) : 0,
     storeSharePct: t.n ? round1((t.store_n / t.n) * 100) : 0,
     returnRatePct: soldQ ? round1((returnedQ / soldQ) * 100) : 0,
+    avgDaysToReturn: round1(avgDays),
+    pendingCount: pending.n,
+    pendingValueCents: pending.v,
     byStatus,
+    byLand,
     topReasons,
     topProducts,
     topSizes,
   };
+}
+
+/**
+ * Signalen: producten die SNEL én VAAK retour komen — een aandachtspunt voor
+ * pasvorm/kwaliteit. Per SKU: geretourneerd ÷ verkocht (retourpercentage) +
+ * gemiddelde dagen tot retour. Drempels uit settings.returnConfig.
+ */
+export async function getReturnSignals(days = 90): Promise<ReturnSignal[]> {
+  const db = getDb();
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { returnConfig: c } = await getSettings();
+
+  const rows = (await db.execute<{ sku: string; title: string; returned_qty: number; sold_qty: number; avg_days: number }>(sql`
+    with ret as (
+      select rl.sku,
+             max(rl.title) title,
+             sum(rl.qty)::int returned_qty,
+             avg(extract(epoch from (r.created_at - coalesce(o.paid_at, o.created_at)))/86400.0)::float avg_days
+      from return_lines rl
+      join returns r on r.id = rl.return_id
+      join orders o on o.id = r.order_id
+      where r.created_at >= ${since} and r.status <> 'cancelled' and rl.sku <> ''
+      group by rl.sku
+    ), sold as (
+      select ol.sku, sum(ol.quantity)::int sold_qty
+      from order_lines ol join orders o on o.id = ol.order_id
+      where o.created_at >= ${since} and o.status in ('paid','shipped','delivered','ready_pickup') and ol.sku <> ''
+      group by ol.sku
+    )
+    select ret.sku, ret.title, ret.returned_qty, coalesce(sold.sold_qty,0) sold_qty, ret.avg_days
+    from ret left join sold on sold.sku = ret.sku
+    where ret.returned_qty >= ${c.signalMinReturns}
+  `)).rows;
+
+  const round1 = (x: number) => Math.round(x * 10) / 10;
+  const signals: ReturnSignal[] = [];
+  for (const r of rows) {
+    const sold = Number(r.sold_qty) || 0;
+    const ret = Number(r.returned_qty) || 0;
+    const rate = sold ? (ret / sold) * 100 : 100; // geen verkoop-match → 100% (alleen retour bekend)
+    const avgDays = round1(Number(r.avg_days) || 0);
+    if (rate < c.signalMinRatePct) continue;
+    const fast = avgDays <= c.signalFastDays;
+    if (!fast && rate < c.signalMinRatePct * 1.5) continue; // niet-snel telt alleen bij erg hoog %
+    signals.push({
+      sku: r.sku,
+      title: r.title || r.sku,
+      soldQty: sold,
+      returnedQty: ret,
+      returnRatePct: round1(rate),
+      avgDaysToReturn: avgDays,
+      severity: rate >= c.signalMinRatePct * 1.5 && fast ? "hoog" : "midden",
+    });
+  }
+  return signals.sort((a, b) => b.returnRatePct - a.returnRatePct).slice(0, 12);
 }

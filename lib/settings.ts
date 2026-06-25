@@ -72,6 +72,11 @@ export type Settings = {
     windowDays: number;
     dhlReturnCostCents: number;
     freeOnCredit: boolean;
+    // Signaal-drempels: een artikel is een "aandachtspunt" als het ≥ minReturns keer
+    // terugkomt, ≥ minRatePct van het verkochte aantal, en gemiddeld ≤ fastDays na bestelling.
+    signalMinReturns: number;
+    signalMinRatePct: number;
+    signalFastDays: number;
   };
 };
 
@@ -119,6 +124,9 @@ export const DEFAULT_SETTINGS: Settings = {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
     dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 495),
     freeOnCredit: (process.env.GENTS_RETURN_FREE_ON_CREDIT ?? "1") !== "0",
+    signalMinReturns: num(process.env.GENTS_RETURN_SIGNAL_MIN, 3),
+    signalMinRatePct: num(process.env.GENTS_RETURN_SIGNAL_RATE, 30),
+    signalFastDays: num(process.env.GENTS_RETURN_SIGNAL_FAST_DAYS, 7),
   },
 };
 

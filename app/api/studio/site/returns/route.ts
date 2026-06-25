@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { returns, returnLines } from "@/db/schema";
 import { adminOrToken } from "@/lib/studio-token";
-import { listReturns, processReturnReceived, getReturnStats } from "@/lib/returns";
+import { listReturns, processReturnReceived, getReturnStats, getReturnSignals } from "@/lib/returns";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,8 +29,8 @@ export async function GET(req: Request) {
       byRet.set(l.returnId, arr);
     }
     const items = rows.map((r) => ({ ...r, lines: byRet.get(r.id) || [] }));
-    const stats = await getReturnStats(90);
-    return NextResponse.json({ ok: true, items, stats });
+    const [stats, signals] = await Promise.all([getReturnStats(90), getReturnSignals(90)]);
+    return NextResponse.json({ ok: true, items, stats, signals });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
