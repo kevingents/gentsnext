@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import { AddressBook } from "@/components/account/address-book";
+import { SupportTickets } from "@/components/account/support-tickets";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
 type Line = { title: string; size: string; color: string; quantity: number; unitPriceCents: number };
@@ -45,6 +46,7 @@ const TABS = [
   { key: "maten", label: "Mijn maten" },
   { key: "gegevens", label: "Gegevens" },
   { key: "adressen", label: "Adresboek" },
+  { key: "vragen", label: "Mijn vragen" },
   { key: "privacy", label: "Privacy" },
 ] as const;
 
@@ -118,6 +120,7 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
         {tab === "maten" && <Maten customer={customer} />}
         {tab === "gegevens" && <Gegevens customer={customer} />}
         {tab === "adressen" && <Adressen data={data} />}
+        {tab === "vragen" && <SupportTickets />}
         {tab === "privacy" && <Privacy />}
       </div>
     </div>
