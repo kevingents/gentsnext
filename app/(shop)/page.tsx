@@ -3,6 +3,7 @@ import Link from "next/link";
 import { UspBar } from "@/components/usp-bar";
 import { ProductCard } from "@/components/product-card";
 import { RecentStrip } from "@/components/recent/recent-strip";
+import { ForYouStrip } from "@/components/home/for-you-strip";
 import { TrustBlock } from "@/components/home/trust-block";
 import { VideoHero } from "@/components/home/video-hero";
 import { JsonLd } from "@/components/json-ld";
@@ -105,6 +106,9 @@ export default async function Home() {
       />
 
       <UspBar />
+
+      {/* ── Persoonlijk: Voor jou (ingelogd, client-side geladen) ───────── */}
+      <ForYouStrip />
 
       {/* ── Gelegenheden ──────────────────────────────────────────────── */}
       <section className="mx-auto max-w-page px-gutter py-16">

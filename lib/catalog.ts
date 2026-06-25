@@ -437,6 +437,19 @@ export async function getRecommendedFromHistory(customerId: string, profile: unk
   const colors = taste.rows.map((r) => r.color_family).filter(Boolean);
   if (!colors.length) return [];
 
+  // Smaak-categorieën (hoofdgroep) uit de historie — voor relevantie-boost.
+  const tasteCat = await db.execute<{ hg: string }>(sql`
+    select p.attributes ->> 'hoofdgroep_omschrijving' hg
+    from ${orderLines} ol
+    join ${orders} o on o.id = ol.order_id
+    join ${productVariants} v on v.sku = ol.sku
+    join ${products} p on p.id = v.product_id
+    where o.customer_id = ${customerId} and o.status in ('paid','shipped','delivered','ready_pickup')
+      and coalesce(p.attributes ->> 'hoofdgroep_omschrijving','') <> ''
+    group by 1 order by count(*) desc limit 4
+  `);
+  const cats = tasteCat.rows.map((r) => r.hg).filter(Boolean);
+
   // Alles wat al gekocht is — niet nogmaals aanbevelen.
   const boughtRows = await db.execute<{ product_id: string }>(sql`
     select distinct v.product_id
@@ -450,6 +463,10 @@ export async function getRecommendedFromHistory(customerId: string, profile: unk
   const sizes = mySizeBuckets(profile);
   const sizeCond = sizes.length ? sql` and v.size_label in (${sql.join(sizes.map((s) => sql`${s}`), sql`, `)})` : sql``;
   const excludeCond = bought.length ? sql` and p.id not in (${sql.join(bought.map((b) => sql`${b}`), sql`, `)})` : sql``;
+  // Producten in een vertrouwde categorie eerst, daarna nieuwste.
+  const catBoost = cats.length
+    ? sql`(case when p.attributes ->> 'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)}) then 0 else 1 end), `
+    : sql``;
 
   const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
     select p.id, p.handle, p.title, p.vendor
@@ -460,7 +477,7 @@ export async function getRecommendedFromHistory(customerId: string, profile: unk
         where v.product_id = p.id and v.stock_qty > 0
           and v.color_family in (${sql.join(colors.map((c) => sql`${c}`), sql`, `)})${sizeCond}
       )${excludeCond}
-    order by p.source_created_at desc nulls last
+    order by ${catBoost}p.source_created_at desc nulls last
     limit ${limit}
   `);
   return buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
