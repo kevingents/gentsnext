@@ -12,7 +12,8 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RetournerenPage() {
+export default async function RetournerenPage({ searchParams }: { searchParams: Promise<{ order?: string }> }) {
+  const { order } = await searchParams;
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
       <div className="mx-auto max-w-2xl">
@@ -23,7 +24,7 @@ export default function RetournerenPage() {
           <strong> gratis</strong> — of kies geld terug. Inleveren kan met een DHL-retourlabel of in een GENTS-winkel.
         </p>
         <div className="mt-8">
-          <RetourFlow />
+          <RetourFlow initialOrder={String(order || "")} />
         </div>
       </div>
     </div>

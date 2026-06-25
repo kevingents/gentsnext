@@ -12,6 +12,8 @@ import {
   orders,
   orderLines,
   newsletterSubscribers,
+  returns,
+  returnLines,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -201,6 +203,20 @@ export async function getProfileData(customerId: string, email = "") {
     (v) => v.status === "active" && (!v.expiresAt || v.expiresAt.getTime() > Date.now())
   );
 
+  // Retouren van deze klant (gekoppeld aan z'n online orders) + hun regels.
+  const retRows = orderIds.length
+    ? await db.select().from(returns).where(sql`${returns.orderId} in (${sql.join(orderIds.map((i) => sql`${i}`), sql`, `)})`).orderBy(desc(returns.createdAt))
+    : [];
+  const retIds = retRows.map((r) => r.id);
+  const retLines = retIds.length
+    ? await db.select().from(returnLines).where(sql`${returnLines.returnId} in (${sql.join(retIds.map((i) => sql`${i}`), sql`, `)})`)
+    : [];
+  const retLinesBy = new Map<string, typeof retLines>();
+  for (const l of retLines) {
+    if (!retLinesBy.has(l.returnId)) retLinesBy.set(l.returnId, []);
+    retLinesBy.get(l.returnId)!.push(l);
+  }
+
   return {
     onlineOrders: onlineOrders.map((o) => ({ ...o, lines: linesByOrder.get(o.id) ?? [] })),
     storeBuys,
@@ -210,6 +226,12 @@ export async function getProfileData(customerId: string, email = "") {
     loyalty,
     pointsBalance,
     addresses,
+    returns: retRows.map((r) => ({
+      id: r.id, orderNumber: r.orderNumber, status: r.status, method: r.method, refundType: r.refundType,
+      itemsCents: r.itemsCents, shippingCostCents: r.shippingCostCents, refundedCents: r.refundedCents,
+      creditCode: r.creditCode, dhlTracking: r.dhlTracking, dhlLabelUrl: r.dhlLabelUrl, createdAt: r.createdAt,
+      lines: (retLinesBy.get(r.id) || []).map((l) => ({ title: l.title, size: l.size, color: l.color, qty: l.qty })),
+    })),
   };
 }
 

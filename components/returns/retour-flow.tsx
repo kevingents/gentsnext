@@ -13,9 +13,9 @@ type Created = {
 const euro = (c: number) => "€ " + (c / 100).toFixed(2).replace(".", ",");
 const inputCls = "w-full rounded-lg border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
 
-export function RetourFlow() {
+export function RetourFlow({ initialOrder = "" }: { initialOrder?: string }) {
   const [step, setStep] = useState<"lookup" | "select" | "done">("lookup");
-  const [orderNumber, setOrderNumber] = useState("");
+  const [orderNumber, setOrderNumber] = useState(initialOrder);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

@@ -33,14 +33,22 @@ type Customer = {
   loyaltyPoints: number; sizeProfile: Record<string, string>; marketingOptIn: boolean;
   isAdmin?: boolean;
 };
+type ReturnRow = {
+  id: string; orderNumber: string; status: string; method: "dhl" | "store"; refundType: "money" | "credit";
+  itemsCents: number; shippingCostCents: number; refundedCents: number; creditCode: string;
+  dhlTracking: string; dhlLabelUrl: string; createdAt: string;
+  lines: { title: string; size: string; color: string; qty: number }[];
+};
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
   giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
+  returns: ReturnRow[];
 };
 
 const TABS = [
   { key: "overzicht", label: "Overzicht" },
   { key: "bestellingen", label: "Bestellingen" },
+  { key: "retouren", label: "Retouren" },
   { key: "punten", label: "Spaarpunten" },
   { key: "vouchers", label: "Tegoed" },
   { key: "maten", label: "Mijn maten" },
@@ -63,6 +71,11 @@ function nlDate(iso: string): string {
 const STATUS_NL: Record<string, string> = {
   open: "In afwachting van betaling", paid: "Betaald", shipped: "Verzonden",
   failed: "Mislukt", expired: "Verlopen", canceled: "Geannuleerd", refunded: "Terugbetaald",
+};
+
+const RET_STATUS_NL: Record<string, string> = {
+  requested: "aangemeld", label_created: "label klaar", received: "ontvangen",
+  completed: "afgehandeld", cancelled: "geannuleerd",
 };
 
 const NEXT_TIER = 500; // punten voor de volgende beloning
@@ -115,6 +128,7 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
       <div className="mt-8">
         {tab === "overzicht" && <Overzicht customer={customer} data={data} onTab={setTab} />}
         {tab === "bestellingen" && <Bestellingen data={data} />}
+        {tab === "retouren" && <Retouren data={data} />}
         {tab === "punten" && <Punten data={data} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
@@ -138,6 +152,18 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
         <Stat label="Spaarpunten" value={String(data.pointsBalance)} sub={toNext > 0 ? `Nog ${toNext} tot je volgende beloning` : "Beloning beschikbaar!"} onClick={() => onTab("punten")} />
         <Stat label="Actieve vouchers" value={String(data.activeVouchers.length)} sub="Bekijk je tegoeden" onClick={() => onTab("vouchers")} />
         <Stat label="Aankopen" value={String(totalOrders)} sub="Online + in de winkel" onClick={() => onTab("bestellingen")} />
+      </div>
+
+      <div>
+        <p className="label-brand mb-3">Ga snel naar</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <QuickTile title="Mijn bestellingen" sub="Bekijk je orders + status" onClick={() => onTab("bestellingen")} />
+          <QuickTile title="Retourneren" sub={data.returns.length ? `${data.returns.length} retour(en) · bekijk status` : "Iets terugsturen of ruilen"} onClick={() => onTab("retouren")} />
+          <QuickTile title="Mijn tegoed" sub="Vouchers & cadeaubonnen" onClick={() => onTab("vouchers")} />
+          <QuickTile title="Mijn maten" sub="Sneller shoppen + beter advies" onClick={() => onTab("maten")} />
+          <QuickTile title="Adresboek" sub="Bezorgadressen beheren" onClick={() => onTab("adressen")} />
+          <QuickTile title="Mijn vragen" sub="Contact & klantenservice" onClick={() => onTab("vragen")} />
+        </div>
       </div>
 
       <div className="border border-line p-5">
@@ -168,6 +194,18 @@ function Stat({ label, value, sub, onClick }: { label: string; value: string; su
       <p className="label-brand">{label}</p>
       <p className="mt-2 font-display text-3xl font-light">{value}</p>
       <p className="mt-1 font-sans text-xs text-muted">{sub}</p>
+    </button>
+  );
+}
+
+function QuickTile({ title, sub, onClick }: { title: string; sub: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="group flex items-center justify-between gap-2 border border-line bg-surface/40 p-4 text-left transition-colors hover:border-ink hover:bg-surface">
+      <span>
+        <span className="block font-display text-base font-light text-ink">{title}</span>
+        <span className="mt-0.5 block font-sans text-xs text-ink-soft">{sub}</span>
+      </span>
+      <span aria-hidden className="text-ink-soft transition-transform group-hover:translate-x-0.5">→</span>
     </button>
   );
 }
@@ -223,6 +261,7 @@ function Bestellingen({ data }: { data: Data }) {
                     ))}
                   </ul>
                 ) : null}
+                <OrderReturnFooter order={o} returns={data.returns} />
               </li>
             ))}
           </ul>
@@ -255,6 +294,69 @@ function Bestellingen({ data }: { data: Data }) {
           </ul>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function OrderReturnFooter({ order, returns }: { order: Order; returns: ReturnRow[] }) {
+  const ret = returns.find((r) => r.orderNumber === order.orderNumber);
+  const returnable = ["paid", "shipped", "delivered", "ready_pickup"].includes(order.status);
+  if (!ret && !returnable) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs">
+      {ret ? (
+        <span className="text-ink-soft">
+          Retour {RET_STATUS_NL[ret.status] || ret.status}
+          {ret.refundType === "credit" && ret.creditCode ? ` · tegoed ${ret.creditCode}` : ""}
+          {ret.refundType === "money" && ret.refundedCents ? ` · ${formatEuro(ret.refundedCents)} terugbetaald` : ""}
+        </span>
+      ) : (
+        <a href={`/retourneren?order=${encodeURIComponent(order.orderNumber)}`} className="underline underline-offset-2 hover:opacity-70">Retourneren</a>
+      )}
+    </div>
+  );
+}
+
+/* ── Retouren ─────────────────────────────────────────────────────────────── */
+function Retouren({ data }: { data: Data }) {
+  if (!data.returns.length) {
+    return (
+      <div className="space-y-5">
+        <Empty title="Nog geen retouren" body="Iets terugsturen of ruilen? Kies tegoed/omruilen en je retour is gratis. Start hieronder of vanaf je bestelling." />
+        <a href="/retourneren" className="btn-primary inline-block">Retour starten</a>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="label-brand">Mijn retouren</p>
+        <a href="/retourneren" className="font-sans text-sm underline underline-offset-2 hover:opacity-70">Nieuwe retour</a>
+      </div>
+      <ul className="space-y-3">
+        {data.returns.map((r) => (
+          <li key={r.id} className="border border-line p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">Retour · bestelling {r.orderNumber}</span>
+              <span className="inline-block border border-line px-2 py-0.5 text-[0.6rem] uppercase tracking-wide">{RET_STATUS_NL[r.status] || r.status}</span>
+            </div>
+            <p className="mt-1 font-sans text-xs text-ink-soft">{r.method === "dhl" ? "Per DHL" : "In de winkel"} · {r.refundType === "credit" ? "tegoed" : "geld terug"} · {nlDate(r.createdAt)}</p>
+            {r.lines.length ? (
+              <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
+                {r.lines.map((l, i) => <li key={i}>{l.qty}× {l.title}{l.size ? ` — maat ${l.size}` : ""}</li>)}
+              </ul>
+            ) : null}
+            {(r.dhlLabelUrl || r.dhlTracking || r.creditCode || (r.status === "completed" && r.refundType === "money")) && (
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs text-ink-soft">
+                {r.dhlLabelUrl ? <a href={r.dhlLabelUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:opacity-70">Retourlabel</a> : null}
+                {r.dhlTracking ? <span>Track &amp; trace: {r.dhlTracking}</span> : null}
+                {r.creditCode ? <span className="text-ink">Tegoed: {r.creditCode}</span> : null}
+                {r.status === "completed" && r.refundType === "money" ? <span>{formatEuro(r.refundedCents)} terugbetaald</span> : null}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
