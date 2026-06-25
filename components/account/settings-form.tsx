@@ -35,7 +35,7 @@ type Settings = {
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan). */
-const SECTIONS: { title: string; fields: { key: keyof Settings; label: string; kind: "euro" | "uur" | "dagen" | "stuks" }[] }[] = [
+const SECTIONS: { title: string; desc?: string; fields: { key: keyof Settings; label: string; kind: "euro" | "uur" | "dagen" | "stuks" }[] }[] = [
   {
     title: "Verzendkosten",
     fields: [
@@ -63,6 +63,7 @@ const SECTIONS: { title: string; fields: { key: keyof Settings; label: string; k
   },
   {
     title: "Voorraad-bescherming",
+    desc: "De laatste N stuks per filiaal blijven buiten online-verkoop én reservering (anti-oversell-gate, afhaal-/weborders) en de allocatie. Een directe baliesale kan het laatste stuk nog wél verkopen.",
     fields: [
       { key: "retailSafetyStock", label: "Veiligheidsvoorraad winkel", kind: "stuks" },
       { key: "warehouseSafetyStock", label: "Veiligheidsvoorraad magazijn", kind: "stuks" },
@@ -151,7 +152,8 @@ export function SettingsForm({ initial }: { initial: Settings }) {
     <form onSubmit={save} className="mt-8 space-y-8">
       {SECTIONS.map((sec) => (
         <section key={sec.title}>
-          <p className="label-brand mb-3">{sec.title}</p>
+          <p className={`label-brand ${sec.desc ? "mb-1" : "mb-3"}`}>{sec.title}</p>
+          {sec.desc ? <p className="mb-3 max-w-2xl text-xs text-muted">{sec.desc}</p> : null}
           <div className="grid gap-4 sm:grid-cols-2">
             {sec.fields.map((f) => {
               const cur = s[f.key] as number;
