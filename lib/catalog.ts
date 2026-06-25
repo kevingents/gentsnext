@@ -8,6 +8,8 @@ import {
   collections,
   productTranslations,
   productSizeMedia,
+  orders,
+  orderLines,
 } from "@/db/schema";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
@@ -408,6 +410,60 @@ export async function getNewArrivalsInSize(profile: unknown, limit = 4): Promise
   if (!col) return [];
   const { items } = await getFilteredProducts({ collectionId: col.id, sizes }, "nieuw", 1, limit);
   return items;
+}
+
+/**
+ * "Past bij je eerdere bestellingen" — leidt de smaak van de klant af uit z'n
+ * aankoophistorie (kleurfamilies via order_lines.sku → variant) en beveelt
+ * producten aan in diezelfde kleur(en) én — als bekend — in de bewaarde maat, op
+ * voorraad, met uitsluiting van wat al gekocht is. Leeg zonder bruikbare historie.
+ */
+export async function getRecommendedFromHistory(customerId: string, profile: unknown, limit = 4): Promise<ProductCardData[]> {
+  if (!customerId) return [];
+  const db = getDb();
+
+  // Smaak: de meest gekochte kleurfamilies (join order-regel → variant).
+  const taste = await db.execute<{ color_family: string }>(sql`
+    select v.color_family
+    from ${orderLines} ol
+    join ${orders} o on o.id = ol.order_id
+    join ${productVariants} v on v.sku = ol.sku
+    where o.customer_id = ${customerId} and o.status in ('paid','shipped','delivered','ready_pickup')
+      and coalesce(v.color_family,'') <> ''
+    group by v.color_family
+    order by count(*) desc
+    limit 4
+  `);
+  const colors = taste.rows.map((r) => r.color_family).filter(Boolean);
+  if (!colors.length) return [];
+
+  // Alles wat al gekocht is — niet nogmaals aanbevelen.
+  const boughtRows = await db.execute<{ product_id: string }>(sql`
+    select distinct v.product_id
+    from ${orderLines} ol
+    join ${orders} o on o.id = ol.order_id
+    join ${productVariants} v on v.sku = ol.sku
+    where o.customer_id = ${customerId}
+  `);
+  const bought = boughtRows.rows.map((r) => r.product_id).filter(Boolean);
+
+  const sizes = mySizeBuckets(profile);
+  const sizeCond = sizes.length ? sql` and v.size_label in (${sql.join(sizes.map((s) => sql`${s}`), sql`, `)})` : sql``;
+  const excludeCond = bought.length ? sql` and p.id not in (${sql.join(bought.map((b) => sql`${b}`), sql`, `)})` : sql``;
+
+  const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
+    select p.id, p.handle, p.title, p.vendor
+    from ${products} p
+    where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
+      and exists (
+        select 1 from ${productVariants} v
+        where v.product_id = p.id and v.stock_qty > 0
+          and v.color_family in (${sql.join(colors.map((c) => sql`${c}`), sql`, `)})${sizeCond}
+      )${excludeCond}
+    order by p.source_created_at desc nulls last
+    limit ${limit}
+  `);
+  return buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
 }
 
 /** Bouwt `col in ('a','b')` met correcte placeholders (drizzle expandeert arrays niet in ruwe sql). */

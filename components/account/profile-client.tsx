@@ -44,7 +44,7 @@ type ReturnRow = {
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
   giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
-  returns: ReturnRow[]; returnWindowDays: number; newInSize: ProductCardData[];
+  returns: ReturnRow[]; returnWindowDays: number; newInSize: ProductCardData[]; recommended: ProductCardData[];
 };
 
 const TABS = [
@@ -176,6 +176,16 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
             {data.newInSize.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        </div>
+      ) : null}
+
+      {data.recommended.length ? (
+        <div>
+          <p className="label-brand mb-1">Past bij je eerdere bestellingen</p>
+          <p className="mb-3 font-sans text-xs text-ink-soft">Geselecteerd op de kleuren en stijl die je eerder koos — in jouw maat, op voorraad.</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
+            {data.recommended.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         </div>
       ) : null}

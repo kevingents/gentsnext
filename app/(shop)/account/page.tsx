@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
-import { getNewArrivalsInSize } from "@/lib/catalog";
+import { getNewArrivalsInSize, getRecommendedFromHistory } from "@/lib/catalog";
 import { ProfileClient } from "@/components/account/profile-client";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +15,14 @@ export default async function AccountPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
 
-  const [data, newInSize] = await Promise.all([
+  const [data, newInSize, recommended] = await Promise.all([
     getProfileData(customer.id, customer.email),
     getNewArrivalsInSize(customer.sizeProfile, 4),
+    getRecommendedFromHistory(customer.id, customer.sizeProfile, 4),
   ]);
 
   // Serialiseer naar plain JSON (datums → ISO) voor de client component.
-  const safe = JSON.parse(JSON.stringify({ ...data, newInSize }));
+  const safe = JSON.parse(JSON.stringify({ ...data, newInSize, recommended }));
   const safeCustomer = {
     id: customer.id,
     email: customer.email,
