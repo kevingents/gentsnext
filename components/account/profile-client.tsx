@@ -4,6 +4,8 @@ import { useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
+import { ProductCard } from "@/components/product-card";
+import type { ProductCardData } from "@/lib/catalog";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
 type Line = { title: string; size: string; color: string; quantity: number; unitPriceCents: number };
@@ -42,7 +44,7 @@ type ReturnRow = {
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
   giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
-  returns: ReturnRow[]; returnWindowDays: number;
+  returns: ReturnRow[]; returnWindowDays: number; newInSize: ProductCardData[];
 };
 
 const TABS = [
@@ -165,6 +167,18 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
           <QuickTile title="Mijn vragen" sub="Contact & klantenservice" onClick={() => onTab("vragen")} />
         </div>
       </div>
+
+      {data.newInSize.length ? (
+        <div>
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <p className="label-brand">Nieuw in jouw maat</p>
+            <a href="/collections/nieuwe-collectie-gents" className="font-sans text-xs text-ink-soft underline underline-offset-2 hover:text-ink">Alle nieuwe arrivals</a>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
+            {data.newInSize.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        </div>
+      ) : null}
 
       <div className="border border-line p-5">
         <div className="flex items-center justify-between">

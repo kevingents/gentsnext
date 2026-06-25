@@ -12,6 +12,8 @@ import {
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
+import { NEW_COLLECTION_HANDLE } from "@/lib/new-collection";
+import { mySizeBuckets } from "@/lib/size-match";
 import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
 import { isSizeToken, expandSynonyms, parseSynonyms } from "@/lib/search-helpers";
 import { getSettings } from "@/lib/settings";
@@ -392,6 +394,20 @@ export async function getProductsByBrand(brand: string, limit = 48): Promise<Pro
     limit ${limit}
   `);
   return buildProductCards(rows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
+}
+
+/**
+ * "Nieuw in jouw maat" — new arrivals (de New arrivals-collectie) met minstens
+ * één variant op voorraad in een van de bewaarde maten van de klant. Leeg als er
+ * geen maatprofiel is. Voor de persoonlijke strip op de accountpagina.
+ */
+export async function getNewArrivalsInSize(profile: unknown, limit = 4): Promise<ProductCardData[]> {
+  const sizes = mySizeBuckets(profile);
+  if (!sizes.length) return [];
+  const col = await getCollectionByHandle(NEW_COLLECTION_HANDLE);
+  if (!col) return [];
+  const { items } = await getFilteredProducts({ collectionId: col.id, sizes }, "nieuw", 1, limit);
+  return items;
 }
 
 /** Bouwt `col in ('a','b')` met correcte placeholders (drizzle expandeert arrays niet in ruwe sql). */

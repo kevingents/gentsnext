@@ -29,6 +29,25 @@ export function sizeCategoryFor(hoofdgroep: string): SizeCategory | null {
 }
 
 /**
+ * Alle filter-buckets (size_label) die bij het maatprofiel van de klant horen —
+ * voor "Nieuw in jouw maat": new arrivals met een variant op voorraad in een van
+ * deze maten. Vertaalt de bewaarde maten (colbert/broek/overhemd/schoen) naar de
+ * PLP-facet-buckets via sizeRowLabel.
+ */
+export function mySizeBuckets(profile: unknown): string[] {
+  if (!profile || typeof profile !== "object") return [];
+  const p = profile as Record<string, unknown>;
+  const out = new Set<string>();
+  for (const field of ["colbert", "broek", "overhemd", "schoen"] as const) {
+    const raw = String(p[field] ?? "").trim();
+    if (!raw) continue;
+    const bucket = sizeRowLabel(raw);
+    if (bucket) out.add(bucket);
+  }
+  return [...out];
+}
+
+/**
  * De voor deze hoofdgroep relevante opgeslagen maat van de klant.
  * `raw` = exacte bewaarde maat (bv. "50"), `row` = filter-bucket (bv. "M/L").
  */
