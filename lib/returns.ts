@@ -259,3 +259,66 @@ export async function getReturnWithLines(id: string) {
   const lines = await db.select().from(returnLines).where(eq(returnLines.returnId, id));
   return { ret, lines };
 }
+
+export type ReturnStats = {
+  days: number;
+  count: number;
+  itemsCents: number;
+  refundedMoneyCents: number;
+  creditIssuedCents: number;
+  creditSharePct: number; // % dat voor tegoed/omruilen koos
+  storeSharePct: number; // % dat in de winkel inlevert
+  returnRatePct: number; // geretourneerde stuks ÷ verkochte stuks
+  byStatus: { status: string; n: number }[];
+  topReasons: { reason: string; n: number }[];
+  topProducts: { title: string; qty: number }[];
+  topSizes: { size: string; qty: number }[];
+};
+
+/** Retour-statistieken over de laatste N dagen (voor het admin-dashboard). */
+export async function getReturnStats(days = 90): Promise<ReturnStats> {
+  const db = getDb();
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const t = (await db.execute<{ n: number; items: number; money: number; credit: number; credit_n: number; store_n: number }>(sql`
+    select count(*)::int n,
+      coalesce(sum(items_cents),0)::int items,
+      coalesce(sum(case when refund_type='money' and status='completed' then refunded_cents else 0 end),0)::int money,
+      coalesce(sum(case when refund_type='credit' and status='completed' then refunded_cents else 0 end),0)::int credit,
+      coalesce(sum(case when refund_type='credit' then 1 else 0 end),0)::int credit_n,
+      coalesce(sum(case when method='store' then 1 else 0 end),0)::int store_n
+    from returns where created_at >= ${since} and status <> 'cancelled'`)).rows[0] || { n: 0, items: 0, money: 0, credit: 0, credit_n: 0, store_n: 0 };
+
+  const byStatus = (await db.execute<{ status: string; n: number }>(sql`
+    select status, count(*)::int n from returns where created_at >= ${since} group by status order by n desc`)).rows;
+  const topReasons = (await db.execute<{ reason: string; n: number }>(sql`
+    select reason, count(*)::int n from returns where created_at >= ${since} and status<>'cancelled' and reason <> '' group by reason order by n desc limit 6`)).rows;
+  const topProducts = (await db.execute<{ title: string; qty: number }>(sql`
+    select rl.title, sum(rl.qty)::int qty from return_lines rl join returns r on r.id = rl.return_id
+    where r.created_at >= ${since} and r.status <> 'cancelled' group by rl.title order by qty desc limit 6`)).rows;
+  const topSizes = (await db.execute<{ size: string; qty: number }>(sql`
+    select rl.size, sum(rl.qty)::int qty from return_lines rl join returns r on r.id = rl.return_id
+    where r.created_at >= ${since} and r.status <> 'cancelled' and rl.size <> '' group by rl.size order by qty desc limit 6`)).rows;
+
+  const returnedQ = (await db.execute<{ q: number }>(sql`
+    select coalesce(sum(rl.qty),0)::int q from return_lines rl join returns r on r.id = rl.return_id
+    where r.created_at >= ${since} and r.status <> 'cancelled'`)).rows[0]?.q || 0;
+  const soldQ = (await db.execute<{ q: number }>(sql`
+    select coalesce(sum(ol.quantity),0)::int q from order_lines ol join orders o on o.id = ol.order_id
+    where o.created_at >= ${since} and o.status in ('paid','shipped','delivered','ready_pickup')`)).rows[0]?.q || 0;
+
+  const round1 = (x: number) => Math.round(x * 10) / 10;
+  return {
+    days,
+    count: t.n,
+    itemsCents: t.items,
+    refundedMoneyCents: t.money,
+    creditIssuedCents: t.credit,
+    creditSharePct: t.n ? round1((t.credit_n / t.n) * 100) : 0,
+    storeSharePct: t.n ? round1((t.store_n / t.n) * 100) : 0,
+    returnRatePct: soldQ ? round1((returnedQ / soldQ) * 100) : 0,
+    byStatus,
+    topReasons,
+    topProducts,
+    topSizes,
+  };
+}
