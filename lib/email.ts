@@ -37,7 +37,9 @@ type OrderInfo = {
   giftcardCents?: number;
 };
 
-function orderHtml(order: OrderInfo, lines: OrderLine[]): string {
+type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
+
+function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = []): string {
   const site = getSiteUrl();
   const rows = lines
     .map(
@@ -74,6 +76,26 @@ function orderHtml(order: OrderInfo, lines: OrderLine[]): string {
             <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${order.giftcardCents ? "Nog te betalen" : "Totaal"}</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>
           </table>
         </td></tr>
+        ${
+          recs.length
+            ? `<tr><td style="padding:20px 28px 4px">
+          <p style="font:600 14px Arial,sans-serif;color:#0A0A0A;margin:0 0 12px">Maak je look compleet</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            ${recs
+              .map(
+                (r) => `<td width="33%" valign="top" style="padding:0 5px">
+              <a href="${site}/products/${r.handle}" style="text-decoration:none;color:#0A0A0A">
+                ${r.imageUrl ? `<img src="${r.imageUrl}" width="100%" alt="" style="display:block;border:1px solid #E6E4DF;background:#F6F5F2"/>` : ""}
+                <div style="font:12px Arial,sans-serif;color:#0A0A0A;margin-top:6px;line-height:1.3">${r.title}</div>
+                <div style="font:12px Arial,sans-serif;color:#8B8B8B">${r.hasPriceRange ? "vanaf " : ""}${euro(r.minPriceCents)}</div>
+              </a>
+            </td>`
+              )
+              .join("")}
+          </tr></table>
+        </td></tr>`
+            : ""
+        }
         <tr><td style="padding:16px 28px 28px">
           <p style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">
             <strong>Bezorgadres</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}
@@ -249,7 +271,7 @@ export async function sendNewsletterConfirmation(email: string, confirmUrl: stri
   return sendEmail(email, "Bevestig je GENTS-nieuwsbrief", shell(inner));
 }
 
-export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]): Promise<boolean> {
+export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = []): Promise<boolean> {
   if (!emailConfigured()) return false;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -261,7 +283,7 @@ export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]
       from: process.env.RESEND_FROM,
       to: [order.email],
       subject: `Je GENTS-bestelling ${order.orderNumber} is bevestigd`,
-      html: orderHtml(order, lines),
+      html: orderHtml(order, lines, recs),
     }),
   });
   if (!res.ok) {

@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
 import { parseCare, type CareItem } from "@/lib/care";
-import { getRecommendations, type ProductCardData } from "@/lib/catalog";
+import { getRecommendations, getOrderCrossSell, type ProductCardData } from "@/lib/catalog";
 import { sendOrderConfirmation } from "@/lib/email";
 import { allocateOrder } from "@/lib/fulfillment";
 import { pushOrderToSRS } from "@/lib/srs";
@@ -381,7 +381,8 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   const orderId = claimed[0].id;
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
-  const ok = await sendOrderConfirmation(order, lines);
+  const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
+  const ok = await sendOrderConfirmation(order, lines, recs);
   if (!ok) {
     // Niet verstuurd → claim terugdraaien zodat een volgende webhook het opnieuw probeert.
     await db.update(orders).set({ confirmationSentAt: null }).where(eq(orders.id, orderId));

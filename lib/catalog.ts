@@ -777,6 +777,59 @@ export async function getRecommendations(
   );
 }
 
+/**
+ * Cross-sell voor de orderbevestigingsmail ("hier kochten anderen bij"):
+ * complementaire categorieën bij wat er besteld is, op voorraad, exclusief de
+ * bestelde producten zelf. Leeg als er niets passends is.
+ */
+export async function getOrderCrossSell(orderId: string, limit = 3): Promise<ProductCardData[]> {
+  const db = getDb();
+  const ordered = await db.execute<{ product_id: string; hg: string }>(sql`
+    select distinct v.product_id, p.attributes ->> 'hoofdgroep_omschrijving' as hg
+    from ${orderLines} ol
+    join ${productVariants} v on v.sku = ol.sku
+    join ${products} p on p.id = v.product_id
+    where ol.order_id = ${orderId}
+  `);
+  if (!ordered.rows.length) return [];
+  const orderedIds = ordered.rows.map((r) => r.product_id).filter(Boolean);
+  const orderedCats = new Set(ordered.rows.map((r) => r.hg).filter(Boolean));
+  const targets = new Set<string>();
+  for (const r of ordered.rows) for (const t of CROSS_SELL[r.hg] || DEFAULT_CROSS) if (!orderedCats.has(t)) targets.add(t);
+  const targetList = [...targets];
+  if (!targetList.length || !orderedIds.length) return [];
+
+  const pool = await db.execute<{ id: string; handle: string; title: string; vendor: string; hg: string }>(sql`
+    select p.id, p.handle, p.title, p.vendor, p.attributes ->> 'hoofdgroep_omschrijving' as hg
+    from ${products} p
+    where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
+      and p.attributes ->> 'hoofdgroep_omschrijving' in (${sql.join(targetList.map((t) => sql`${t}`), sql`, `)})
+      and p.id not in (${sql.join(orderedIds.map((i) => sql`${i}`), sql`, `)})
+    order by p.source_created_at desc nulls last
+    limit 40
+  `);
+  // Round-robin over de doelcategorieën → variatie (niet 3× dezelfde categorie/stijl).
+  const byCat = new Map<string, typeof pool.rows>();
+  for (const r of pool.rows) {
+    if (!byCat.has(r.hg)) byCat.set(r.hg, []);
+    byCat.get(r.hg)!.push(r);
+  }
+  const picked: typeof pool.rows = [];
+  let added = true;
+  while (picked.length < limit && added) {
+    added = false;
+    for (const t of targetList) {
+      const list = byCat.get(t);
+      if (list && list.length) {
+        picked.push(list.shift()!);
+        added = true;
+        if (picked.length >= limit) break;
+      }
+    }
+  }
+  return buildProductCards(picked.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor })));
+}
+
 export type SearchFacets = {
   category?: string;
   colorFamilies?: string[];
