@@ -3,7 +3,7 @@ import { adminOrToken } from "@/lib/studio-token";
 import { getOrderByNumber, updateOrderStatus } from "@/lib/orders";
 import { pushOrderToSRS, type OrderForSrs, type SrsLine } from "@/lib/srs";
 import type { FulfillmentPlan } from "@/lib/fulfillment";
-import { reportUnfulfillable } from "@/lib/unfulfillable";
+import { reportUnfulfillable, resolveUnfulfillable } from "@/lib/unfulfillable";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,6 +62,12 @@ export async function POST(req: Request) {
         ? (body.items as { sku?: unknown; qty?: unknown }[]).map((i) => ({ sku: String(i?.sku || ""), qty: Number(i?.qty) || 1 }))
         : [];
       const res = await reportUnfulfillable(orderNumber, store, items, String(body?.reason || ""));
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    if (action === "resolve-unavailable") {
+      const mode = String(body?.status || "").trim() === "return" ? "return" : "cancel";
+      const res = await resolveUnfulfillable(orderNumber, mode);
       return NextResponse.json(res, { status: res.ok ? 200 : 400 });
     }
 

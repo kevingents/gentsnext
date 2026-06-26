@@ -1,9 +1,11 @@
-import { desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { orders, fulfillmentMisses } from "@/db/schema";
+import { orders, fulfillmentMisses, returns as returnsTable, returnLines as returnLinesTable } from "@/db/schema";
 import { getOrderByNumber } from "@/lib/orders";
 import { allocateOrder, type FulfillmentPlan } from "@/lib/fulfillment";
 import { recordMovements } from "@/lib/store-core";
+import { refundMolliePayment } from "@/lib/mollie";
+import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
 
 /**
  * "Niet leverbaar" — een winkel kan een toegewezen weborder-regel niet leveren.
@@ -107,6 +109,118 @@ async function logMisses(order: { id: string; orderNumber: string }, store: stri
       reroutedTo: to.slice(0, 200),
     })),
   );
+}
+
+/** Open (onopgeloste) niet-leverbaar-meldingen — voor de portal-afhandelingslijst. */
+export async function listUnresolvedUnfulfillable(limit = 100) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(fulfillmentMisses)
+    .where(eq(fulfillmentMisses.outcome, "unresolved"))
+    .orderBy(desc(fulfillmentMisses.createdAt))
+    .limit(Math.max(1, Math.min(300, limit)));
+  // groepeer per order (een set kan meerdere regels hebben)
+  const byOrder = new Map<string, { orderNumber: string; store: string; createdAt: Date; skus: { sku: string; qty: number }[] }>();
+  for (const r of rows) {
+    const cur = byOrder.get(r.orderNumber) || { orderNumber: r.orderNumber, store: r.store, createdAt: r.createdAt, skus: [] };
+    cur.skus.push({ sku: r.sku, qty: r.qty });
+    byOrder.set(r.orderNumber, cur);
+  }
+  // verrijk met de regels van de order (titels + of 't een set is)
+  const out = [];
+  for (const o of byOrder.values()) {
+    const data = await getOrderByNumber(o.orderNumber).catch(() => null);
+    if (!data) { out.push({ ...o, customer: "", isSet: false, affected: o.skus.map((s) => ({ sku: s.sku, title: s.sku })), setLines: [] }); continue; }
+    const missSet = new Set(o.skus.map((s) => s.sku.toLowerCase()));
+    const affectedLines = data.lines.filter((l) => missSet.has(l.sku.toLowerCase()));
+    const groupIds = new Set(affectedLines.map((l) => l.groupId).filter(Boolean) as string[]);
+    const setLines = groupIds.size ? data.lines.filter((l) => l.groupId && groupIds.has(l.groupId)) : affectedLines;
+    out.push({
+      orderNumber: o.orderNumber,
+      store: o.store,
+      customer: `${data.order.firstName} ${data.order.lastName}`.trim(),
+      createdAt: o.createdAt,
+      isSet: setLines.length > affectedLines.length,
+      affected: affectedLines.map((l) => ({ sku: l.sku, title: l.title })),
+      setLines: setLines.map((l) => ({ sku: l.sku, title: l.title, shipped: !missSet.has(l.sku.toLowerCase()) })),
+    });
+  }
+  return out;
+}
+
+/**
+ * Make-whole voor een set die niet compleet leverbaar is. mode:
+ *  - "cancel": niets verstuurd → de hele set terugbetalen (Mollie).
+ *  - "return": een deel is al verstuurd → de set terugbetalen ÉN een systeem-retour
+ *    (gratis DHL-label) starten voor het wél-verstuurde deel zodat de klant het
+ *    terug kan sturen. Geen dubbele terugbetaling: de retour-`itemsCents` = 0.
+ */
+export async function resolveUnfulfillable(orderNumber: string, mode: "cancel" | "return", by = ""): Promise<
+  | { ok: false; error: string }
+  | { ok: true; mode: "cancel" | "return"; refundedCents: number; returnId?: string; labelPending?: boolean }
+> {
+  const nr = String(orderNumber || "").trim();
+  if (!nr) return { ok: false, error: "Geen ordernummer." };
+  const data = await getOrderByNumber(nr);
+  if (!data) return { ok: false, error: "Order niet gevonden." };
+  const { order, lines } = data;
+  const db = getDb();
+
+  const missRows = await db.select({ sku: fulfillmentMisses.sku }).from(fulfillmentMisses)
+    .where(and(eq(fulfillmentMisses.orderNumber, order.orderNumber), eq(fulfillmentMisses.outcome, "unresolved")));
+  const missSet = new Set(missRows.map((r) => r.sku.toLowerCase()));
+  if (!missSet.size) return { ok: false, error: "Geen open niet-leverbaar-melding voor deze order." };
+
+  const affectedLines = lines.filter((l) => missSet.has(l.sku.toLowerCase()));
+  const groupIds = new Set(affectedLines.map((l) => l.groupId).filter(Boolean) as string[]);
+  const setLines = groupIds.size ? lines.filter((l) => l.groupId && groupIds.has(l.groupId)) : affectedLines;
+  const refundCents = setLines.reduce((s, l) => s + l.unitPriceCents * l.quantity, 0);
+
+  // 1. Terugbetalen (de set is onbruikbaar zonder alle delen).
+  if (order.molliePaymentId && refundCents > 0) {
+    const r = await refundMolliePayment(order.molliePaymentId, refundCents, `Pak niet compleet leverbaar — ${order.orderNumber}`);
+    if (!r.ok) return { ok: false, error: r.error || "Terugbetaling mislukt." };
+  }
+
+  // 2. Bij 'return': systeem-retour voor het al-verstuurde deel (set minus niet-leverbaar).
+  let returnId: string | undefined;
+  let labelPending = false;
+  if (mode === "return") {
+    const shipped = setLines.filter((l) => !missSet.has(l.sku.toLowerCase()));
+    if (shipped.length) {
+      const [ret] = await db.insert(returnsTable).values({
+        orderId: order.id, orderNumber: order.orderNumber, email: order.email,
+        status: "requested", method: "dhl", refundType: "money",
+        itemsCents: 0, shippingCostCents: 0, // reeds terugbetaald → geen dubbele refund bij ontvangst
+        reason: "Pak niet compleet leverbaar — systeemretour",
+      }).returning({ id: returnsTable.id });
+      returnId = ret.id;
+      await db.insert(returnLinesTable).values(shipped.map((l) => ({
+        returnId: ret.id, orderLineId: l.id, sku: l.sku, title: l.title, size: l.size || "", color: l.color || "",
+        qty: l.quantity, unitPriceCents: l.unitPriceCents, reason: "pak niet compleet",
+      })));
+      labelPending = true;
+      if (dhlConfigured()) {
+        const addr: ReturnAddress = {
+          name: `${order.firstName} ${order.lastName}`.trim(), street: order.street, number: order.houseNumber,
+          postalCode: order.postalCode, city: order.city, country: order.country || "NL", email: order.email,
+        };
+        const res = await createReturnLabel(order.orderNumber, addr).catch(() => null);
+        if (res?.ok) {
+          labelPending = false;
+          await db.update(returnsTable).set({ status: "label_created", dhlLabelUrl: res.labelUrl || "", dhlTracking: res.tracking || "", updatedAt: sql`now()` }).where(eq(returnsTable.id, ret.id));
+        }
+      }
+    }
+  }
+
+  // 3. Meldingen afsluiten.
+  await db.update(fulfillmentMisses)
+    .set({ outcome: mode === "return" ? "resolved-return" : "resolved-cancel", reroutedTo: by.slice(0, 200) })
+    .where(and(eq(fulfillmentMisses.orderNumber, order.orderNumber), inArray(fulfillmentMisses.outcome, ["unresolved"])));
+
+  return { ok: true, mode, refundedCents: refundCents, returnId, labelPending };
 }
 
 export type StoreReliability = { store: string; misses: number; rerouted: number; unresolved: number };
