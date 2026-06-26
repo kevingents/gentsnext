@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { returns, returnLines } from "@/db/schema";
 import { adminOrToken } from "@/lib/studio-token";
-import { listReturns, processReturnReceived, getReturnStats, getReturnSignals, listAwaitingStockCorrection, markStockCorrected, listExpectedReturnsForStore } from "@/lib/returns";
+import { listReturns, processReturnReceived, getReturnStats, getReturnSignals, listAwaitingStockCorrection, markStockCorrected, listExpectedReturnsForStore, getReturnWithLines } from "@/lib/returns";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -65,6 +65,16 @@ export async function POST(req: Request) {
   if (!id) return NextResponse.json({ ok: false, error: "Geen retour-id." }, { status: 400 });
 
   if (body.action === "received") {
+    // Winkel-scope: als een filiaal de retour verwerkt, mag dat alleen z'n eigen
+    // in-winkel-retour zijn. Admin (zonder store) mag elke retour verwerken.
+    const store = String((body as { store?: string }).store || "").trim();
+    if (store) {
+      const rec = await getReturnWithLines(id);
+      if (!rec) return NextResponse.json({ ok: false, error: "Retour niet gevonden." }, { status: 404 });
+      if (rec.ret.method !== "store" || (rec.ret.pickupStore || "") !== store) {
+        return NextResponse.json({ ok: false, error: "Deze retour hoort niet bij deze winkel." }, { status: 403 });
+      }
+    }
     const res = await processReturnReceived(id);
     return NextResponse.json(res, { status: res.ok ? 200 : 400 });
   }
