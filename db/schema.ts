@@ -868,3 +868,49 @@ export const fulfillmentMisses = pgTable(
     index("fmiss_created_idx").on(t.createdAt),
   ],
 );
+
+/**
+ * Inventarisatie (telsessie) op de handscanner: scan artikelen, tel ze, en zet de
+ * telling af tegen de systeemvoorraad → variantie → optioneel als voorraad-
+ * correctie (core-movement) geboekt. type 'partial' + section = deelinventarisatie.
+ */
+export const inventorySessions = pgTable(
+  "inventory_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    location: text("location").notNull(), // "GENTS Amersfoort"
+    status: text("status").notNull().default("open"), // open | completed | applied | abandoned
+    type: text("type").notNull().default("full"), // full | partial
+    section: text("section").notNull().default(""), // bij partial: bv "Pakken", "Schoenen"
+    note: text("note").notNull().default(""),
+    startedBy: text("started_by").notNull().default(""),
+    completedBy: text("completed_by").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+  },
+  (t) => [index("inv_sessions_loc_idx").on(t.location, t.status), index("inv_sessions_created_idx").on(t.createdAt)],
+);
+
+export const inventoryCounts = pgTable(
+  "inventory_counts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id").notNull().references(() => inventorySessions.id, { onDelete: "cascade" }),
+    stockKey: text("stock_key").notNull(), // lower(barcode) of lower(sku) — tel-sleutel
+    sku: text("sku").notNull().default(""),
+    barcode: text("barcode").notNull().default(""),
+    title: text("title").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    imageUrl: text("image_url").notNull().default(""),
+    scannedQty: integer("scanned_qty").notNull().default(0),
+    expectedQty: integer("expected_qty").notNull().default(0), // systeemvoorraad bij eerste scan
+    firstScannedAt: timestamp("first_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+    lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("inv_counts_session_key_unique").on(t.sessionId, t.stockKey),
+    index("inv_counts_session_idx").on(t.sessionId),
+  ],
+);
