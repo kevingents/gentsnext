@@ -4,6 +4,7 @@ import { localeAlternates } from "@/lib/seo";
 import { getSessionCustomer } from "@/lib/account";
 import { getReturnableOrder } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
+import { getStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
           Inleveren kan met een DHL-retourlabel of in een GENTS-winkel.
         </p>
         <div className="mt-8">
-          <RetourFlow initialOrder={orderNr} prefill={prefill} />
+          <RetourFlow initialOrder={orderNr} prefill={prefill} stores={getStores().map((s) => s.title)} />
         </div>
       </div>
     </div>

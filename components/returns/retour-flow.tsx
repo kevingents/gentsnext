@@ -15,7 +15,7 @@ const inputCls = "w-full rounded-lg border border-line px-3 py-2.5 text-base tex
 
 type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };
 
-export function RetourFlow({ initialOrder = "", prefill }: { initialOrder?: string; prefill?: Prefill | null }) {
+export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initialOrder?: string; prefill?: Prefill | null; stores?: string[] }) {
   // Ingelogd vanaf de bestelpagina (prefill) → direct naar de artikelkeuze, géén e-mail nodig.
   const authed = Boolean(prefill);
   const [step, setStep] = useState<"lookup" | "select" | "done">(prefill ? "select" : "lookup");
@@ -29,6 +29,7 @@ export function RetourFlow({ initialOrder = "", prefill }: { initialOrder?: stri
   const [withinWindow, setWithinWindow] = useState(prefill?.withinWindow ?? true);
   const [qty, setQty] = useState<Record<string, number>>(prefill ? Object.fromEntries(prefill.lines.map((l) => [l.orderLineId, 0])) : {});
   const [method, setMethod] = useState<"dhl" | "store">("dhl");
+  const [pickupStore, setPickupStore] = useState("");
   const [refundType, setRefundType] = useState<"money" | "credit">("credit");
   const [reason, setReason] = useState("");
   const [result, setResult] = useState<Created | null>(null);
@@ -53,10 +54,12 @@ export function RetourFlow({ initialOrder = "", prefill }: { initialOrder?: stri
   const shipCost = free ? 0 : policy?.dhlReturnCostCents ?? 0;
 
   async function submit() {
-    setErr(""); setBusy(true);
+    setErr("");
+    if (method === "store" && stores.length && !pickupStore) { setErr("Kies in welke winkel je het inlevert."); return; }
+    setBusy(true);
     try {
       const items = selected.map((l) => ({ orderLineId: l.orderLineId, qty: qty[l.orderLineId] }));
-      const r = await fetch("/api/returns", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", orderNumber, email, items, method, refundType, reason }) });
+      const r = await fetch("/api/returns", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", orderNumber, email, items, method, refundType, reason, pickupStore: method === "store" ? pickupStore : "" }) });
       const d = (await r.json()) as Created;
       if (!r.ok || !d.ok) throw new Error(d.error || "Aanmaken mislukt.");
       setResult(d); setStep("done");
@@ -113,6 +116,15 @@ export function RetourFlow({ initialOrder = "", prefill }: { initialOrder?: stri
               <span className="block text-xs text-ink-soft">Inleveren in een GENTS-winkel — altijd gratis</span>
             </button>
           </div>
+          {method === "store" && stores.length ? (
+            <label className="mt-2 block">
+              <span className="font-sans text-xs text-ink-soft">In welke winkel lever je het in?</span>
+              <select value={pickupStore} onChange={(e) => setPickupStore(e.target.value)} className={`${inputCls} mt-1`}>
+                <option value="">Kies je winkel…</option>
+                {stores.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+          ) : null}
         </section>
 
         <section>
@@ -172,7 +184,7 @@ export function RetourFlow({ initialOrder = "", prefill }: { initialOrder?: stri
       )}
 
       {result?.method === "store" && (
-        <p className="text-sm text-ink-soft">Lever de artikelen samen met je bestelnummer in bij een van onze GENTS-winkels. Inleveren is gratis.</p>
+        <p className="text-sm text-ink-soft">Lever de artikelen samen met je bestelnummer in bij <strong className="text-ink">{pickupStore || "een van onze GENTS-winkels"}</strong>. Inleveren is gratis.</p>
       )}
 
       <button onClick={() => { setStep("lookup"); setResult(null); setOrderNumber(""); setEmail(""); }} className="btn-ghost">Nieuwe retour</button>

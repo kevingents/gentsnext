@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { returns, returnLines } from "@/db/schema";
 import { adminOrToken } from "@/lib/studio-token";
-import { listReturns, processReturnReceived, getReturnStats, getReturnSignals, listAwaitingStockCorrection, markStockCorrected } from "@/lib/returns";
+import { listReturns, processReturnReceived, getReturnStats, getReturnSignals, listAwaitingStockCorrection, markStockCorrected, listExpectedReturnsForStore } from "@/lib/returns";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +17,23 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request) {
   if (!(await adminOrToken(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  const url = new URL(req.url);
+  // Lichte variant voor het supply-chain dashboard: alleen de "terug te scannen"-worklist.
+  if (url.searchParams.get("view") === "stock-queue") {
+    try {
+      return NextResponse.json({ ok: true, awaitingCorrection: await listAwaitingStockCorrection(200) });
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+    }
+  }
+  // Verwachte in-winkel-retouren voor één filiaal (kassa).
+  if (url.searchParams.get("view") === "expected") {
+    try {
+      return NextResponse.json({ ok: true, expected: await listExpectedReturnsForStore(url.searchParams.get("store") || "", 200) });
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+    }
+  }
   try {
     const rows = await listReturns(150);
     const db = getDb();

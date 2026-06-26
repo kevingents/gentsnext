@@ -198,6 +198,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
       tracking: label?.tracking || "",
       itemsCents,
       shippingCostCents,
+      pickupStore: method === "store" ? (input.pickupStore || "").trim() : "",
     });
   } catch (e) {
     console.error("[returns] bevestigingsmail mislukt:", (e as Error).message);
@@ -327,6 +328,39 @@ export async function countAwaitingStockCorrection(): Promise<number> {
   const db = getDb();
   const r = (await db.execute<{ n: number }>(sql`select count(*)::int n from returns where status in ('received','completed') and stock_corrected_at is null`)).rows[0];
   return Number(r?.n) || 0;
+}
+
+/**
+ * Verwachte retouren voor één winkel: in-winkel-retouren die de klant naar dat
+ * filiaal brengt en nog niet ontvangen zijn. Zo ziet de winkel wat er aankomt.
+ */
+export async function listExpectedReturnsForStore(store: string, limit = 100) {
+  const s = String(store || "").trim();
+  if (!s) return [];
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(returns)
+    .where(and(eq(returns.method, "store"), eq(returns.pickupStore, s), inArray(returns.status, ["requested", "label_created"])))
+    .orderBy(desc(returns.createdAt))
+    .limit(Math.max(1, Math.min(300, limit)));
+  const ids = rows.map((r) => r.id);
+  const lines = ids.length ? await db.select().from(returnLines).where(inArray(returnLines.returnId, ids)) : [];
+  const byRet = new Map<string, typeof lines>();
+  for (const l of lines) {
+    const arr = byRet.get(l.returnId) || [];
+    arr.push(l);
+    byRet.set(l.returnId, arr);
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    orderNumber: r.orderNumber,
+    refundType: r.refundType,
+    itemsCents: r.itemsCents,
+    reason: r.reason,
+    createdAt: r.createdAt,
+    lines: (byRet.get(r.id) || []).map((l) => ({ sku: l.sku, title: l.title, size: l.size, color: l.color, qty: l.qty })),
+  }));
 }
 
 /** Admin: recente retouren. */

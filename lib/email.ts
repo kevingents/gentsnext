@@ -306,6 +306,7 @@ type ReturnRegisteredEmail = {
   tracking: string;
   itemsCents: number;
   shippingCostCents: number;
+  pickupStore: string;
 };
 
 /** Bevestiging dat de retour is aangemeld — met DHL-label of winkel-instructie. */
@@ -327,7 +328,7 @@ export async function sendReturnRegistered(r: ReturnRegisteredEmail): Promise<bo
              ${r.tracking ? `<p style="font:12px Arial,sans-serif;color:#8B8B8B;margin:10px 0 0">Track &amp; trace: ${r.tracking}</p>` : ""}
            </td></tr>`
         : `<tr><td style="padding:8px 28px 0"><p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">We sturen je het <strong>DHL-retourlabel</strong> zo snel mogelijk per e-mail toe.</p></td></tr>`
-      : `<tr><td style="padding:8px 28px 0"><p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">Lever de artikelen samen met je bestelnummer in bij een van onze <strong>GENTS-winkels</strong>. Inleveren is gratis.</p></td></tr>`;
+      : `<tr><td style="padding:8px 28px 0"><p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">Lever de artikelen samen met je bestelnummer in bij <strong>${r.pickupStore || "een van onze GENTS-winkels"}</strong>. Inleveren is gratis.</p></td></tr>`;
   const refundLine =
     r.refundType === "credit"
       ? `Je ontvangt <strong>GENTS-tegoed</strong> van ${euro(r.itemsCents)} zodra we de artikelen hebben ontvangen en gecontroleerd.`
