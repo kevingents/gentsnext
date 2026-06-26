@@ -88,6 +88,23 @@ export async function recordMovements(input: RecordInput): Promise<{ applied: { 
   return { applied: rows.map((r) => ({ stockKey: r.stockKey, delta: r.delta })) };
 }
 
+/**
+ * Markeer de kassa-mutaties van een verkoop (ref = sale-id) als 'in SRS geboekt'.
+ * De delta blijft nog meetellen tot een SRS-sync ná dit moment de baseline
+ * bijwerkt; daarna valt 'ie uit de posDelta-som (geen dubbeltelling). Aangeroepen
+ * door storegents zodra een POS-verkoop succesvol naar SRS is gepost.
+ */
+export async function markMovementsSrsPosted(ref: string): Promise<void> {
+  const r = String(ref || "").trim();
+  if (!r) return;
+  const db = getDb();
+  await db.execute(sql`
+    update store_stock_movements
+    set srs_posted_at = now()
+    where ref = ${r} and channel = 'pos' and srs_posted_at is null
+  `);
+}
+
 /** Netto core-delta per stockKey voor één locatie. */
 export async function coreDeltaForKeys(location: string, keys: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
@@ -95,10 +112,12 @@ export async function coreDeltaForKeys(location: string, keys: string[]): Promis
   const clean = [...new Set(keys.map(lower).filter(Boolean))];
   if (!loc || !clean.length) return out;
   const db = getDb();
+  const syncedAt = (await stockSyncedAt()) ?? new Date(0);
   const rows = await db.execute<{ stock_key: string; net: number }>(sql`
     select stock_key, sum(delta)::int as net
     from store_stock_movements
     where location = ${loc} and stock_key in (${sql.join(clean.map((k) => sql`${k}`), sql`, `)})
+      and (srs_posted_at is null or srs_posted_at >= ${syncedAt.toISOString()})
     group by stock_key
   `);
   for (const r of rows.rows) out.set(r.stock_key, Number(r.net) || 0);
@@ -162,10 +181,12 @@ export async function posDeltaByLocationKey(keys: string[]): Promise<Map<string,
   const clean = [...new Set(keys.map(lower).filter(Boolean))];
   if (!clean.length) return out;
   const db = getDb();
+  const syncedAt = (await stockSyncedAt()) ?? new Date(0);
   const rows = await db.execute<{ location: string; stock_key: string; net: number }>(sql`
     select location, stock_key, sum(delta)::int as net
     from store_stock_movements
     where stock_key in (${sql.join(clean.map((k) => sql`${k}`), sql`, `)})
+      and (srs_posted_at is null or srs_posted_at >= ${syncedAt.toISOString()})
     group by location, stock_key
   `);
   for (const r of rows.rows) {

@@ -195,12 +195,17 @@ export const storeStockMovements = pgTable(
     reason: text("reason").notNull().default(""),
     ref: text("ref"),
     meta: jsonb("meta"),
+    // Gezet zodra de bijbehorende kassa-verkoop in SRS is geboekt. De delta telt
+    // dan nog mee tot een SRS-sync ná dit moment draait (= de baseline neemt 'm
+    // over); daarna valt 'ie uit de posDelta-som → geen dubbeltelling.
+    srsPostedAt: timestamp("srs_posted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("ssm_loc_key_idx").on(t.location, t.stockKey),
     // Idempotentie: dezelfde (ref, kanaal, sku) boekt niet dubbel. NULL-ref mag vrij.
     uniqueIndex("ssm_ref_unique").on(t.ref, t.channel, t.stockKey),
+    index("ssm_ref_idx").on(t.ref),
   ],
 );
 
