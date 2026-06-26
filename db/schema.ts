@@ -842,3 +842,29 @@ export const returnLines = pgTable(
   },
   (t) => [index("return_lines_return_idx").on(t.returnId)],
 );
+
+/**
+ * "Niet leverbaar"-meldingen per winkel — een weborder-regel die een winkel niet
+ * fysiek kon leveren. Bron voor de her-allocatie-afhandeling én het
+ * betrouwbaarheidssignaal (miss-rate per winkel).
+ */
+export const fulfillmentMisses = pgTable(
+  "fulfillment_misses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull(),
+    orderNumber: text("order_number").notNull(),
+    store: text("store").notNull(),
+    sku: text("sku").notNull().default(""),
+    qty: integer("qty").notNull().default(1),
+    reason: text("reason").notNull().default(""),
+    outcome: text("outcome").notNull().default(""), // rerouted | unresolved
+    reroutedTo: text("rerouted_to").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("fmiss_store_idx").on(t.store),
+    index("fmiss_order_idx").on(t.orderNumber),
+    index("fmiss_created_idx").on(t.createdAt),
+  ],
+);

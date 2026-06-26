@@ -3,6 +3,7 @@ import { adminOrToken } from "@/lib/studio-token";
 import { getOrderByNumber, updateOrderStatus } from "@/lib/orders";
 import { pushOrderToSRS, type OrderForSrs, type SrsLine } from "@/lib/srs";
 import type { FulfillmentPlan } from "@/lib/fulfillment";
+import { reportUnfulfillable } from "@/lib/unfulfillable";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
 
-  let body: { orderNumber?: unknown; action?: unknown; status?: unknown };
+  let body: { orderNumber?: unknown; action?: unknown; status?: unknown; store?: unknown; items?: unknown; reason?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -53,6 +54,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: `Status "${status}" niet toegestaan.` }, { status: 400 });
       }
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === "unavailable") {
+      const store = String(body?.store || "").trim();
+      const items = Array.isArray(body?.items)
+        ? (body.items as { sku?: unknown; qty?: unknown }[]).map((i) => ({ sku: String(i?.sku || ""), qty: Number(i?.qty) || 1 }))
+        : [];
+      const res = await reportUnfulfillable(orderNumber, store, items, String(body?.reason || ""));
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
     }
 
     if (action === "srs-push") {

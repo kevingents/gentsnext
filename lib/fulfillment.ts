@@ -26,7 +26,7 @@ import { getSettings, type Settings } from "@/lib/settings";
  */
 
 export type OrderLineInput = { sku: string; qty: number; title?: string; groupId?: string };
-export type AllocateOptions = { country?: string; postalCode?: string };
+export type AllocateOptions = { country?: string; postalCode?: string; excludeBranchIds?: string[] };
 
 export type ShipmentLine = { sku: string; qty: number; title?: string };
 export type Shipment = {
@@ -222,7 +222,13 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
   }
 
   const settings = await getSettings();
-  const branches = await buildBranches(skus, settings);
+  let branches = await buildBranches(skus, settings);
+  // Her-allocatie na 'niet leverbaar': de meldende winkel(s) overslaan zodat de
+  // order niet terugkaatst naar dezelfde locatie.
+  if (opts.excludeBranchIds?.length) {
+    const ex = new Set(opts.excludeBranchIds.map((b) => String(b)));
+    branches = branches.filter((b) => !ex.has(String(b.branchId)));
+  }
   const better = makeComparator(opts.country || "NL", settings);
 
   // 1. Single-source: één filiaal dat de HELE order dekt → bespaart verzendkosten.
