@@ -45,6 +45,58 @@ export async function startInventorySession(input: { location: string; type?: st
   return s;
 }
 
+type ScopeSku = { sku?: string; barcode?: string; expected?: number; title?: string; size?: string; color?: string; imageUrl?: string };
+
+/** Verrijk een {sku, expected}-lijst met variant-meta (barcode/title/size/color/image)
+ *  → zodat de zeroing dezelfde stockKey (barcode||sku) krijgt als een scan. */
+async function buildScopeSkus(skuExpected: { sku: string; expected: number }[]): Promise<ScopeSku[]> {
+  const list = (skuExpected || []).filter((s) => s && s.sku);
+  if (!list.length) return [];
+  const db = getDb();
+  const skus = [...new Set(list.map((s) => String(s.sku)))];
+  const rows = await db.execute<{ sku: string; barcode: string; title: string; size: string; color: string; img: string | null }>(sql`
+    select v.sku, v.barcode, p.title, v.size, v.color,
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
+    from product_variants v join products p on p.id = v.product_id
+    where v.sku in (${sql.join(skus.map((s) => sql`${s}`), sql`, `)})`);
+  const meta = new Map(rows.rows.map((r) => [r.sku, r]));
+  return list.map(({ sku, expected }) => {
+    const m = meta.get(String(sku));
+    return { sku: String(sku), barcode: m?.barcode || "", expected: Number(expected) || 0, title: m?.title || "", size: m?.size || "", color: m?.color || "", imageUrl: m?.img || "" };
+  });
+}
+
+/** Supply-chain zet een telling klaar (status 'prepared') met scope + de verwachte
+ *  SKU's op klaarzet-moment (voor de zeroing van niet-getelde artikelen). Levert
+ *  óf een kant-en-klare scopeSkus, óf een skuExpected-lijst die we hier verrijken. */
+export async function prepareInventorySession(input: { location: string; scope?: string; scopeValues?: unknown[]; scopeSkus?: ScopeSku[]; skuExpected?: { sku: string; expected: number }[]; type?: string; section?: string; note?: string; assignedBy?: string }) {
+  const db = getDb();
+  const scopeSkus = Array.isArray(input.scopeSkus) && input.scopeSkus.length
+    ? input.scopeSkus
+    : await buildScopeSkus(input.skuExpected || []);
+  const [s] = await db.insert(inventorySessions).values({
+    location: input.location,
+    status: "prepared",
+    type: input.type === "partial" || input.scope === "section" ? "partial" : "full",
+    section: input.section || "",
+    scope: input.scope || "",
+    scopeValues: Array.isArray(input.scopeValues) ? input.scopeValues : [],
+    scopeSkus,
+    note: input.note || "",
+    assignedBy: input.assignedBy || "",
+  }).returning();
+  return s;
+}
+
+/** Winkel start een klaargezette telling: prepared → open. */
+export async function startPreparedSession(sessionId: string, startedBy?: string) {
+  const db = getDb();
+  const [s] = await db.update(inventorySessions)
+    .set({ status: "open", startedBy: startedBy || "" })
+    .where(and(eq(inventorySessions.id, sessionId), eq(inventorySessions.status, "prepared"))).returning();
+  return s || null;
+}
+
 export async function scanInventory(input: { sessionId: string; code: string; qty?: number; mode?: string }): Promise<{ ok: boolean; error?: string; count?: ReturnType<typeof withVariance> }> {
   const db = getDb();
   const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, input.sessionId)).limit(1);
@@ -95,13 +147,60 @@ export async function getInventorySession(sessionId: string) {
   return { session, counts: counts.map(withVariance) };
 }
 
-export async function listInventorySessions(location: string, limit = 20) {
+export async function listInventorySessions(location: string, status?: string, limit = 30) {
   const db = getDb();
-  return db.select().from(inventorySessions).where(eq(inventorySessions.location, location)).orderBy(desc(inventorySessions.createdAt)).limit(limit);
+  const cond = status
+    ? and(eq(inventorySessions.location, location), eq(inventorySessions.status, status))
+    : eq(inventorySessions.location, location);
+  return db.select().from(inventorySessions).where(cond).orderBy(desc(inventorySessions.createdAt)).limit(limit);
+}
+
+/** Voor supply-chain: afgeronde tellingen (alle winkels) die wachten op goedkeuring,
+ *  met een korte variantie-samenvatting per sessie. */
+export async function listSessionsForReview(limit = 50) {
+  const db = getDb();
+  const sessions = await db.select().from(inventorySessions).where(eq(inventorySessions.status, "completed")).orderBy(desc(inventorySessions.completedAt)).limit(limit);
+  const out = [];
+  for (const s of sessions) {
+    const counts = (await db.select().from(inventoryCounts).where(eq(inventoryCounts.sessionId, s.id))).map(withVariance);
+    out.push({
+      session: s,
+      items: counts.length,
+      surplus: counts.filter((c) => c.variance > 0).length,
+      shortage: counts.filter((c) => c.variance < 0).length,
+      totalVariance: counts.reduce((n, c) => n + c.variance, 0),
+    });
+  }
+  return out;
 }
 
 export async function completeInventorySession(sessionId: string, completedBy?: string) {
   const db = getDb();
+  const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, sessionId)).limit(1);
+  if (!session) {
+    return { session: null, summary: { items: 0, totalScanned: 0, totalVariance: 0, surplus: 0, shortage: 0 }, counts: [] };
+  }
+
+  // ZEROING: alleen voor een klaargezette scope (all/group/articles). Elke scope-SKU
+  // die NIET gescand is → als geteld 0 toevoegen (variantie −verwacht = ontbreekt),
+  // zodat supply-chain het verschil ziet. (Sectie/vrije telling = geen scopeSkus.)
+  const scopeSkus = (Array.isArray(session.scopeSkus) ? session.scopeSkus : []) as ScopeSku[];
+  if (session.status === "open" && scopeSkus.length) {
+    const existing = await db.select({ stockKey: inventoryCounts.stockKey }).from(inventoryCounts).where(eq(inventoryCounts.sessionId, sessionId));
+    const have = new Set(existing.map((c) => c.stockKey));
+    const toInsert = [];
+    for (const sk of scopeSkus) {
+      const key = String(sk.barcode || sk.sku || "").toLowerCase();
+      if (!key || have.has(key)) continue;
+      toInsert.push({
+        sessionId, stockKey: key, sku: sk.sku || "", barcode: sk.barcode || "",
+        title: sk.title || "", size: sk.size || "", color: sk.color || "", imageUrl: sk.imageUrl || "",
+        scannedQty: 0, expectedQty: Number(sk.expected) || 0,
+      });
+    }
+    if (toInsert.length) await db.insert(inventoryCounts).values(toInsert);
+  }
+
   const [s] = await db.update(inventorySessions)
     .set({ status: "completed", completedAt: new Date(), completedBy: completedBy || "" })
     .where(and(eq(inventorySessions.id, sessionId), eq(inventorySessions.status, "open"))).returning();
@@ -113,12 +212,12 @@ export async function completeInventorySession(sessionId: string, completedBy?: 
     surplus: counts.filter((c) => c.variance > 0).length,
     shortage: counts.filter((c) => c.variance < 0).length,
   };
-  return { session: s || null, summary, counts };
+  return { session: s || session, summary, counts };
 }
 
 /** Varianties als voorraadcorrectie boeken (core-movement, channel 'correction').
  *  Idempotent: ref 'INV-<sessie>' + de unieke (ref,channel,stockKey)-index. */
-export async function applyInventoryVariances(sessionId: string) {
+export async function applyInventoryVariances(sessionId: string, approvedBy?: string) {
   const db = getDb();
   const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, sessionId)).limit(1);
   if (!session) return { ok: false, error: "Sessie niet gevonden." };
@@ -139,6 +238,6 @@ export async function applyInventoryVariances(sessionId: string) {
       lines: shortage.map((c) => ({ sku: c.sku || c.stockKey, barcode: c.barcode, qty: c.expectedQty - c.scannedQty })) });
   }
 
-  const [s] = await db.update(inventorySessions).set({ status: "applied", appliedAt: new Date() }).where(eq(inventorySessions.id, sessionId)).returning();
+  const [s] = await db.update(inventorySessions).set({ status: "applied", appliedAt: new Date(), approvedBy: approvedBy || "" }).where(eq(inventorySessions.id, sessionId)).returning();
   return { ok: true, applied: surplus.length + shortage.length, session: s };
 }

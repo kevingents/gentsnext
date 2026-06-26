@@ -883,12 +883,21 @@ export const inventorySessions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     location: text("location").notNull(), // "GENTS Amersfoort"
-    status: text("status").notNull().default("open"), // open | completed | applied | abandoned
+    status: text("status").notNull().default("open"), // prepared | open | completed | applied | abandoned
     type: text("type").notNull().default("full"), // full | partial
     section: text("section").notNull().default(""), // bij partial: bv "Pakken", "Schoenen"
+    /** Supply-chain klaargezet: scope = all | group | articles | section. */
+    scope: text("scope").notNull().default(""),
+    /** Bij group/articles/section: de gekozen groepen / artikelcodes / sectie-label. */
+    scopeValues: jsonb("scope_values").notNull().default([]),
+    /** Verwachte SKU's in scope (op klaarzet-moment) → voor de zeroing van
+     *  niet-getelde artikelen: [{ sku, expected, title?, size?, color?, imageUrl? }]. */
+    scopeSkus: jsonb("scope_skus").notNull().default([]),
+    assignedBy: text("assigned_by").notNull().default(""), // supply-chain die 'm klaarzette
     note: text("note").notNull().default(""),
     startedBy: text("started_by").notNull().default(""),
     completedBy: text("completed_by").notNull().default(""),
+    approvedBy: text("approved_by").notNull().default(""), // supply-chain die de varianties goedkeurde
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     appliedAt: timestamp("applied_at", { withTimezone: true }),

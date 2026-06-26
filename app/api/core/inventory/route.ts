@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import {
-  startInventorySession, scanInventory, deleteInventoryCount, getInventorySession,
-  listInventorySessions, completeInventorySession, applyInventoryVariances,
+  startInventorySession, prepareInventorySession, startPreparedSession,
+  scanInventory, deleteInventoryCount, getInventorySession,
+  listInventorySessions, listSessionsForReview, completeInventorySession, applyInventoryVariances,
 } from "@/lib/inventory";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; location?: string; type?: string; section?: string; note?: string; startedBy?: string; sessionId?: string; code?: string; qty?: number; mode?: string; stockKey?: string; completedBy?: string; limit?: number };
+  let b: { action?: string; location?: string; type?: string; section?: string; note?: string; startedBy?: string; sessionId?: string; code?: string; qty?: number; mode?: string; stockKey?: string; completedBy?: string; approvedBy?: string; status?: string; limit?: number; scope?: string; scopeValues?: unknown[]; scopeSkus?: { sku?: string; barcode?: string; expected?: number; title?: string; size?: string; color?: string; imageUrl?: string }[]; skuExpected?: { sku: string; expected: number }[]; assignedBy?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -47,15 +48,29 @@ export async function POST(req: Request) {
       }
       case "list": {
         if (!b.location) return NextResponse.json({ ok: false, error: "location vereist." }, { status: 400 });
-        return NextResponse.json({ ok: true, sessions: await listInventorySessions(b.location, b.limit) });
+        return NextResponse.json({ ok: true, sessions: await listInventorySessions(b.location, b.status, b.limit) });
+      }
+      case "prepare": {
+        if (!b.location) return NextResponse.json({ ok: false, error: "location vereist." }, { status: 400 });
+        const session = await prepareInventorySession({ location: b.location, scope: b.scope, scopeValues: b.scopeValues, scopeSkus: b.scopeSkus, skuExpected: b.skuExpected, type: b.type, section: b.section, note: b.note, assignedBy: b.assignedBy });
+        return NextResponse.json({ ok: true, session });
+      }
+      case "start-prepared": {
+        if (!b.sessionId) return NextResponse.json({ ok: false, error: "sessionId vereist." }, { status: 400 });
+        const session = await startPreparedSession(b.sessionId, b.startedBy);
+        return session ? NextResponse.json({ ok: true, session }) : NextResponse.json({ ok: false, error: "Telling niet (meer) klaargezet." }, { status: 400 });
+      }
+      case "review-list": {
+        return NextResponse.json({ ok: true, reviews: await listSessionsForReview(b.limit) });
       }
       case "complete": {
         if (!b.sessionId) return NextResponse.json({ ok: false, error: "sessionId vereist." }, { status: 400 });
         return NextResponse.json({ ok: true, ...(await completeInventorySession(b.sessionId, b.completedBy)) });
       }
-      case "apply": {
+      case "apply":
+      case "approve": {
         if (!b.sessionId) return NextResponse.json({ ok: false, error: "sessionId vereist." }, { status: 400 });
-        return NextResponse.json(await applyInventoryVariances(b.sessionId));
+        return NextResponse.json(await applyInventoryVariances(b.sessionId, b.approvedBy));
       }
       default:
         return NextResponse.json({ ok: false, error: `Onbekende actie "${action}".` }, { status: 400 });
