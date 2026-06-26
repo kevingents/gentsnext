@@ -86,6 +86,9 @@ export async function POST(req: Request) {
           statusLabel: r.status === "ready_pickup" ? "Klaar voor afhalen" : "Betaald",
           totalCents: r.total_cents,
           items,
+          // Aantal deelzendingen: >1 = gesplitste order (bv. een pak uit 2 filialen)
+          // → niet los versturen vóór de andere delen klaar zijn.
+          parts: (plan?.shipments || []).length,
         });
       }
     }
