@@ -100,7 +100,10 @@ function isShipDay(branchId: string, y: number, mo: number, da: number): boolean
  * anders de eerstvolgende verzenddag. Geeft een leesbaar label + of 'ie al te
  * laat is (alles in Amsterdam-tijd; weekend/feestdagen overgeslagen).
  */
-export function computePickDeadline(createdAt: Date, branchId: string, s: Settings, now: Date): { pickByLabel: string; overdue: boolean; sameDay: boolean } {
+/** Binnen hoeveel minuten vóór de cutoff een order "bijna te laat" (oranje) is. */
+const SOON_WINDOW_MIN = 120;
+
+export function computePickDeadline(createdAt: Date, branchId: string, s: Settings, now: Date): { pickByLabel: string; overdue: boolean; soon: boolean; sameDay: boolean } {
   const c = amsterdamParts(createdAt);
   const cutoff = cutoffHourFor(branchId, s, c.dayName);
   let y = c.y, mo = c.mo, da = c.da;
@@ -119,8 +122,11 @@ export function computePickDeadline(createdAt: Date, branchId: string, s: Settin
   const nowNum = n.y * 1e8 + n.mo * 1e6 + n.da * 1e4 + n.h * 100 + n.mi;
   const overdue = nowNum > deadlineNum;
   const sameDay = y === n.y && mo === n.mo && da === n.da;
+  // "Bijna te laat" (oranje): deadline is vandaag en nog ≤ SOON_WINDOW_MIN minuten te gaan.
+  const minutesLeft = sameDay ? cutoff * 60 - (n.h * 60 + n.mi) : 9999;
+  const soon = !overdue && minutesLeft >= 0 && minutesLeft <= SOON_WINDOW_MIN;
   const dayLabel = sameDay ? "vandaag" : `${String(da).padStart(2, "0")}-${String(mo).padStart(2, "0")}`;
-  return { pickByLabel: `${dayLabel} ${String(cutoff).padStart(2, "0")}:00`, overdue, sameDay };
+  return { pickByLabel: `${dayLabel} ${String(cutoff).padStart(2, "0")}:00`, overdue, soon, sameDay };
 }
 
 /** Winkelnaam ("GENTS Amersfoort") → branchId, voor de cutoff-bepaling. */

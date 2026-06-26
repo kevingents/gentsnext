@@ -125,14 +125,14 @@ export async function POST(req: Request) {
           totalPrice: ((Number(r.total_cents) || 0) / 100).toFixed(2), currency: "EUR",
           pickupStatusLabel: r.status === "ready_pickup" ? "Klaar om af te halen" : "Betaald",
           financialStatus: "paid",
-          isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue,
+          isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue, soon: dl.soon,
         });
       } else {
         weborders.push({
           orderNumber: r.order_number, customer, status: r.status,
           statusLabel: r.status === "ready_pickup" ? "Klaar voor afhalen" : "Betaald",
           totalCents: r.total_cents, items, parts,
-          isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue,
+          isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue, soon: dl.soon,
         });
       }
     }
