@@ -78,6 +78,57 @@ export function cutoffHourFor(branchId: string, s: Settings, dayName?: string): 
   return wh ? s.warehouseCutoffHour : s.storeCutoffHour;
 }
 
+/** Datum-onderdelen in Amsterdam-tijd (zodat cutoff-uren lokaal kloppen, los van server-UTC). */
+function amsterdamParts(d: Date): { y: number; mo: number; da: number; h: number; mi: number; dayName: string } {
+  const f = new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false, weekday: "long",
+  });
+  const p = Object.fromEntries(f.formatToParts(d).map((x) => [x.type, x.value])) as Record<string, string>;
+  return { y: +p.year, mo: +p.month, da: +p.day, h: +p.hour === 24 ? 0 : +p.hour, mi: +p.minute, dayName: String(p.weekday || "").toLowerCase() };
+}
+
+function isShipDay(branchId: string, y: number, mo: number, da: number): boolean {
+  const dow = new Date(Date.UTC(y, mo - 1, da, 12)).getUTCDay(); // 0=zo, 6=za
+  if (dow === 0 || dow === 6) return false;
+  const iso = `${y}-${String(mo).padStart(2, "0")}-${String(da).padStart(2, "0")}`;
+  return !isHoliday(branchId, iso);
+}
+
+/**
+ * Pick-deadline voor een order: vóór de cutoff besteld → vandaag de deur uit,
+ * anders de eerstvolgende verzenddag. Geeft een leesbaar label + of 'ie al te
+ * laat is (alles in Amsterdam-tijd; weekend/feestdagen overgeslagen).
+ */
+export function computePickDeadline(createdAt: Date, branchId: string, s: Settings, now: Date): { pickByLabel: string; overdue: boolean; sameDay: boolean } {
+  const c = amsterdamParts(createdAt);
+  const cutoff = cutoffHourFor(branchId, s, c.dayName);
+  let y = c.y, mo = c.mo, da = c.da;
+  // Ná de cutoff besteld → schuif naar de volgende dag.
+  if (c.h >= cutoff) {
+    const nx = new Date(Date.UTC(y, mo - 1, da, 12)); nx.setUTCDate(nx.getUTCDate() + 1);
+    y = nx.getUTCFullYear(); mo = nx.getUTCMonth() + 1; da = nx.getUTCDate();
+  }
+  // Sla weekend/feestdagen over tot de eerstvolgende verzenddag.
+  for (let i = 0; i < 9 && !isShipDay(branchId, y, mo, da); i++) {
+    const nx = new Date(Date.UTC(y, mo - 1, da, 12)); nx.setUTCDate(nx.getUTCDate() + 1);
+    y = nx.getUTCFullYear(); mo = nx.getUTCMonth() + 1; da = nx.getUTCDate();
+  }
+  const deadlineNum = y * 1e8 + mo * 1e6 + da * 1e4 + cutoff * 100;
+  const n = amsterdamParts(now);
+  const nowNum = n.y * 1e8 + n.mo * 1e6 + n.da * 1e4 + n.h * 100 + n.mi;
+  const overdue = nowNum > deadlineNum;
+  const sameDay = y === n.y && mo === n.mo && da === n.da;
+  const dayLabel = sameDay ? "vandaag" : `${String(da).padStart(2, "0")}-${String(mo).padStart(2, "0")}`;
+  return { pickByLabel: `${dayLabel} ${String(cutoff).padStart(2, "0")}:00`, overdue, sameDay };
+}
+
+/** Winkelnaam ("GENTS Amersfoort") → branchId, voor de cutoff-bepaling. */
+export function branchIdForStoreName(name: string): string {
+  const city = String(name || "").replace(/^gents\s+/i, "").trim().toLowerCase();
+  return Object.keys(BRANCH_CITY).find((id) => BRANCH_CITY[id].toLowerCase() === city) || "store";
+}
+
 function parseList(raw: string | undefined, fallback: string[]): string[] {
   const v = (raw || "").trim();
   if (!v) return fallback;

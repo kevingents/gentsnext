@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { getDb } from "@/db";
-import { sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
+import { orderLines } from "@/db/schema";
+import { getSettings } from "@/lib/settings";
+import { computePickDeadline, branchIdForStoreName } from "@/lib/fulfillment-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,11 +42,11 @@ export async function POST(req: Request) {
   try {
     const db = getDb();
     const rows = await db.execute<{
-      order_number: string; first_name: string; last_name: string; email: string;
+      id: string; order_number: string; first_name: string; last_name: string; email: string;
       status: string; total_cents: number; delivery_method: string;
       fulfillment_plan: unknown; created_at: string;
     }>(sql`
-      select order_number, first_name, last_name, email, status, total_cents,
+      select id, order_number, first_name, last_name, email, status, total_cents,
              delivery_method, fulfillment_plan, created_at
       from orders
       where status in ('paid','ready_pickup')
@@ -53,42 +56,83 @@ export async function POST(req: Request) {
       limit 200
     `);
 
-    const afhaalorders: unknown[] = [];
-    const weborders: unknown[] = [];
+    // Pass 1: filter op de orders die DEZE winkel raakt (afhalen of ship-from-store).
     const locLower = location.toLowerCase();
+    type Matched = { r: (typeof rows.rows)[number]; ship: PlanShip; parts: number };
+    const matched: Matched[] = [];
     for (const r of rows.rows) {
       const plan = r.fulfillment_plan as { shipments?: PlanShip[] } | null;
       const ship = (plan?.shipments || []).find((s) => String(s.store || "").toLowerCase() === locLower);
       if (!ship) continue;
+      if (r.delivery_method !== "pickup" && ship.isWarehouse) continue; // magazijn-deel niet voor de winkel
+      matched.push({ r, ship, parts: (plan?.shipments || []).length });
+    }
+
+    // Verrijking: maat/kleur per regel (order_lines), productfoto (per sku),
+    // "vaste klant" (≥2 betaalde orders), en de pick-deadline (cutoff).
+    const orderIds = [...new Set(matched.map((m) => m.r.id))];
+    const skus = [...new Set(matched.flatMap((m) => (m.ship.lines || []).map((l) => l.sku || "").filter(Boolean)))];
+    const emails = [...new Set(matched.map((m) => (m.r.email || "").toLowerCase()).filter(Boolean))];
+
+    const lineMeta = new Map<string, { size: string; color: string }>(); // key: orderId|sku
+    if (orderIds.length) {
+      const ol = await db.select({ orderId: orderLines.orderId, sku: orderLines.sku, size: orderLines.size, color: orderLines.color })
+        .from(orderLines).where(inArray(orderLines.orderId, orderIds));
+      for (const l of ol) lineMeta.set(`${l.orderId}|${l.sku}`, { size: l.size || "", color: l.color || "" });
+    }
+
+    const imgBySku = new Map<string, string>();
+    if (skus.length) {
+      const imgs = await db.execute<{ sku: string; img: string | null }>(sql`
+        select v.sku,
+               coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
+        from product_variants v
+        where v.sku in (${sql.join(skus.map((s) => sql`${s}`), sql`, `)})`);
+      for (const row of imgs.rows) if (row.img) imgBySku.set(row.sku, row.img);
+    }
+
+    const repeatEmails = new Set<string>();
+    if (emails.length) {
+      const rep = await db.execute<{ email: string; c: number }>(sql`
+        select lower(email) email, count(*)::int c from orders
+        where lower(email) in (${sql.join(emails.map((e) => sql`${e}`), sql`, `)})
+          and status in ('paid','shipped','ready_pickup','delivered','fulfilled')
+        group by lower(email)`);
+      for (const row of rep.rows) if (Number(row.c) >= 2) repeatEmails.add(row.email);
+    }
+
+    const settings = await getSettings();
+    const branchId = branchIdForStoreName(location);
+    const now = new Date();
+
+    // Pass 2: payload bouwen met verrijking.
+    const afhaalorders: unknown[] = [];
+    const weborders: unknown[] = [];
+    for (const { r, ship, parts } of matched) {
       const customer = `${r.first_name} ${r.last_name}`.trim() || r.email;
-      const items = (ship.lines || []).map((l) => ({ title: l.title || l.sku || "", sku: l.sku || "", qty: Number(l.qty) || 1 }));
+      const isRepeat = repeatEmails.has((r.email || "").toLowerCase());
+      const dl = computePickDeadline(new Date(r.created_at), branchId, settings, now);
+      const items = (ship.lines || []).map((l) => {
+        const sku = l.sku || "";
+        const meta = lineMeta.get(`${r.id}|${sku}`);
+        return { title: l.title || sku, sku, qty: Number(l.qty) || 1, size: meta?.size || "", color: meta?.color || "", imageUrl: imgBySku.get(sku) || "" };
+      });
 
       if (r.delivery_method === "pickup") {
-        // Afhaalorder: klant haalt op in déze winkel (click&collect, al betaald).
         afhaalorders.push({
-          id: r.order_number,
-          name: r.order_number,
-          customer,
-          email: r.email,
-          phone: "",
-          items: items.map((it) => ({ title: it.title, sku: it.sku, quantity: it.qty })),
-          totalPrice: ((Number(r.total_cents) || 0) / 100).toFixed(2),
-          currency: "EUR",
+          id: r.order_number, name: r.order_number, customer, email: r.email, phone: "",
+          items: items.map((it) => ({ title: it.title, sku: it.sku, quantity: it.qty, size: it.size, color: it.color, imageUrl: it.imageUrl })),
+          totalPrice: ((Number(r.total_cents) || 0) / 100).toFixed(2), currency: "EUR",
           pickupStatusLabel: r.status === "ready_pickup" ? "Klaar om af te halen" : "Betaald",
           financialStatus: "paid",
+          isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue,
         });
-      } else if (!ship.isWarehouse) {
-        // Weborder die deze winkel moet versturen (ship-from-store).
+      } else {
         weborders.push({
-          orderNumber: r.order_number,
-          customer,
-          status: r.status,
+          orderNumber: r.order_number, customer, status: r.status,
           statusLabel: r.status === "ready_pickup" ? "Klaar voor afhalen" : "Betaald",
-          totalCents: r.total_cents,
-          items,
-          // Aantal deelzendingen: >1 = gesplitste order (bv. een pak uit 2 filialen)
-          // → niet los versturen vóór de andere delen klaar zijn.
-          parts: (plan?.shipments || []).length,
+          totalCents: r.total_cents, items, parts,
+          isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue,
         });
       }
     }
