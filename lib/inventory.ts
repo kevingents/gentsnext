@@ -45,20 +45,22 @@ export async function startInventorySession(input: { location: string; type?: st
   return s;
 }
 
-export async function scanInventory(input: { sessionId: string; code: string; qty?: number }): Promise<{ ok: boolean; error?: string; count?: ReturnType<typeof withVariance> }> {
+export async function scanInventory(input: { sessionId: string; code: string; qty?: number; mode?: string }): Promise<{ ok: boolean; error?: string; count?: ReturnType<typeof withVariance> }> {
   const db = getDb();
   const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, input.sessionId)).limit(1);
   if (!session) return { ok: false, error: "Sessie niet gevonden." };
   if (session.status !== "open") return { ok: false, error: "Telsessie is al afgesloten." };
   const meta = await resolveCode(input.code);
   if (!meta || !meta.stockKey) return { ok: false, error: `Onbekend artikel: "${input.code}".` };
-  const qty = Math.max(1, Number(input.qty) || 1);
+  // mode 'set' = exact aantal invullen; anders +1 (rap scannen).
+  const setMode = input.mode === "set";
+  const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
 
   const [existing] = await db.select().from(inventoryCounts)
     .where(and(eq(inventoryCounts.sessionId, session.id), eq(inventoryCounts.stockKey, meta.stockKey))).limit(1);
   if (existing) {
     const [upd] = await db.update(inventoryCounts)
-      .set({ scannedQty: existing.scannedQty + qty, lastScannedAt: new Date() })
+      .set({ scannedQty: setMode ? qty : existing.scannedQty + qty, lastScannedAt: new Date() })
       .where(eq(inventoryCounts.id, existing.id)).returning();
     return { ok: true, count: withVariance(upd) };
   }
@@ -73,6 +75,16 @@ export async function scanInventory(input: { sessionId: string; code: string; qt
     scannedQty: qty, expectedQty: expected,
   }).returning();
   return { ok: true, count: withVariance(ins) };
+}
+
+/** Een geteld artikel uit de sessie verwijderen (per ongeluk gescand / corrigeren). */
+export async function deleteInventoryCount(input: { sessionId: string; stockKey: string }): Promise<{ ok: boolean; error?: string }> {
+  const db = getDb();
+  const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, input.sessionId)).limit(1);
+  if (!session) return { ok: false, error: "Sessie niet gevonden." };
+  if (session.status !== "open") return { ok: false, error: "Telsessie is al afgesloten." };
+  await db.delete(inventoryCounts).where(and(eq(inventoryCounts.sessionId, input.sessionId), eq(inventoryCounts.stockKey, input.stockKey)));
+  return { ok: true };
 }
 
 export async function getInventorySession(sessionId: string) {

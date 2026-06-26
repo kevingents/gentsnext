@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import {
-  startInventorySession, scanInventory, getInventorySession,
+  startInventorySession, scanInventory, deleteInventoryCount, getInventorySession,
   listInventorySessions, completeInventorySession, applyInventoryVariances,
 } from "@/lib/inventory";
 
@@ -21,7 +21,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; location?: string; type?: string; section?: string; note?: string; startedBy?: string; sessionId?: string; code?: string; qty?: number; completedBy?: string; limit?: number };
+  let b: { action?: string; location?: string; type?: string; section?: string; note?: string; startedBy?: string; sessionId?: string; code?: string; qty?: number; mode?: string; stockKey?: string; completedBy?: string; limit?: number };
   try { b = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -34,7 +34,11 @@ export async function POST(req: Request) {
       }
       case "scan": {
         if (!b.sessionId || !b.code) return NextResponse.json({ ok: false, error: "sessionId + code vereist." }, { status: 400 });
-        return NextResponse.json(await scanInventory({ sessionId: b.sessionId, code: b.code, qty: b.qty }));
+        return NextResponse.json(await scanInventory({ sessionId: b.sessionId, code: b.code, qty: b.qty, mode: b.mode }));
+      }
+      case "delete": {
+        if (!b.sessionId || !b.stockKey) return NextResponse.json({ ok: false, error: "sessionId + stockKey vereist." }, { status: 400 });
+        return NextResponse.json(await deleteInventoryCount({ sessionId: b.sessionId, stockKey: b.stockKey }));
       }
       case "get": {
         if (!b.sessionId) return NextResponse.json({ ok: false, error: "sessionId vereist." }, { status: 400 });
