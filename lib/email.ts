@@ -293,6 +293,41 @@ export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]
   return true;
 }
 
+/* ── Conceptbestelling (kassa: "denk er nog over na") ── */
+
+type ConceptOrderEmail = {
+  email: string;
+  firstName: string;
+  orderNumber: string;
+  checkoutUrl: string;
+  store: string;
+  items: { title: string; size: string; color: string; qty: number; unitPriceCents: number }[];
+};
+
+/** Concept van de kassa: de klant twijfelt nog → krijgt z'n selectie gemaild met
+ *  een afrond-link. Rondt 'ie af, dan gaat de omzet naar de winkel. */
+export async function sendConceptOrderMail(c: ConceptOrderEmail): Promise<boolean> {
+  const hi = c.firstName ? `Hoi ${c.firstName},` : "Hoi,";
+  const rows = c.items
+    .map(
+      (l) => `<tr><td style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">
+        ${l.title}<div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && `maat ${l.size}`, `${l.qty}×`].filter(Boolean).join(" · ")}</div></td>
+        <td align="right" style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${euro(l.unitPriceCents * l.qty)}</td></tr>`,
+    )
+    .join("");
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Je selectie staat klaar</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} je was bij <strong>${c.store}</strong> en wilde er nog even over nadenken — geen probleem. Hieronder je selectie. Rond 'm af wanneer je wilt; we leggen 'm dan voor je klaar of bezorgen 'm.</p>
+    </td></tr>
+    <tr><td style="padding:8px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td></tr>
+    <tr><td style="padding:18px 28px 28px">
+      <a href="${c.checkoutUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Bestelling afronden</a>
+      <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:14px">De link blijft geldig — geen haast. Vragen? Antwoord gerust op deze mail.</p>
+    </td></tr>`;
+  return sendEmail(c.email, `Je GENTS-selectie van ${c.store} — rond af wanneer je wilt`, shell(inner));
+}
+
 /* ── Retouren ── */
 
 type ReturnRegisteredEmail = {

@@ -10,6 +10,8 @@ import {
 } from "@/lib/orders";
 import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
 import { recordPosOrder } from "@/lib/pos-orders-store";
+import { getOrderByNumber } from "@/lib/orders";
+import { sendConceptOrderMail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,6 +36,7 @@ export async function POST(req: Request) {
     deliveryMethod?: string;
     pickupStore?: string;
     paymentMode?: string;
+    conceptMail?: boolean;
   };
   try {
     body = await req.json();
@@ -105,6 +108,22 @@ export async function POST(req: Request) {
     });
     await attachMolliePayment(order.id, payment.id);
     if (!payment.checkoutUrl) return NextResponse.json({ ok: false, error: "Betaling kon niet worden gestart." }, { status: 502 });
+
+    // Conceptbestelling: mail de klant z'n selectie + de afrond-link (best-effort).
+    if (body?.conceptMail) {
+      try {
+        const full = await getOrderByNumber(order.orderNumber);
+        await sendConceptOrderMail({
+          email: String(c.email), firstName: String(c.firstName || ""), orderNumber: order.orderNumber,
+          checkoutUrl: payment.checkoutUrl, store: storeName,
+          items: (full?.lines || []).map((l) => ({ title: l.title, size: l.size, color: l.color, qty: l.quantity, unitPriceCents: l.unitPriceCents })),
+        });
+      } catch (e) {
+        console.error("[pos/order] concept-mail mislukt:", (e as Error).message);
+      }
+      return NextResponse.json({ ok: true, orderNumber: order.orderNumber, checkoutUrl: payment.checkoutUrl, conceptMailed: true });
+    }
+
     return NextResponse.json({ ok: true, orderNumber: order.orderNumber, checkoutUrl: payment.checkoutUrl });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Betaling starten mislukte." }, { status: 502 });
