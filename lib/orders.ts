@@ -13,7 +13,7 @@ import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
 import { availableInStore } from "@/lib/store-core";
-import { reserveOrderStock, releaseOrderHolds, renewOrderHolds, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
+import { reserveOrderStock, releaseOrderHolds, renewOrderHolds, activeStoreHoldsBySku, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
 
 /**
  * Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB
@@ -242,8 +242,11 @@ export async function createOrder(
     const avail = await availableInStore(pickupStore.trim(), skuList);
     for (const s of skuList) grossBySku.set(s, avail.get(s) ?? 0);
   } else {
-    const avail = await availableForSkus(skuList);
-    for (const s of skuList) grossBySku.set(s, avail.get(s)?.online ?? 0);
+    // Online-pool: trek óók de actieve afhaal-holds in winkels af, zodat een
+    // onbetaalde click&collect-reservering het laatste stuk niet alsnog online
+    // laat verkopen (cross-pool anti-oversell). Web-pool-holds zitten al in de gate-teller.
+    const [avail, storeHolds] = await Promise.all([availableForSkus(skuList), activeStoreHoldsBySku(skuList)]);
+    for (const s of skuList) grossBySku.set(s, Math.max(0, (avail.get(s)?.online ?? 0) - (storeHolds.get(s.toLowerCase()) ?? 0)));
   }
   const reserveLoc = isPickup ? pickupStore.trim() : WEB_POOL;
   const requests: ReserveRequest[] = lines.map((l) => ({

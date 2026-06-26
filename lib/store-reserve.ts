@@ -50,6 +50,33 @@ export async function sweepExpiredHolds(): Promise<void> {
   }
 }
 
+/**
+ * Actieve (niet-verlopen) holds in FYSIEKE filialen (dus niet de online-pool),
+ * per stockKey. De online-pool-gross trekt dit af: een onbetaalde afhaal-
+ * reservering in een winkel mag het laatste stuk niet alsnog online laten
+ * verkopen (cross-pool anti-oversell). Web-pool-holds zitten al in de teller-gate
+ * van de online-pool, dus die NIET hier (geen dubbeltelling).
+ */
+export async function activeStoreHoldsBySku(skus: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const clean = [...new Set(skus.map(lower).filter(Boolean))];
+  if (!clean.length) return out;
+  const db = getDb();
+  try {
+    const rows = await db.execute<{ stock_key: string; qty: number }>(sql`
+      select stock_key, sum(qty)::int as qty
+      from web_stock_holds
+      where expires_at > now() and location <> ${WEB_POOL}
+        and stock_key in (${sql.join(clean.map((k) => sql`${k}`), sql`, `)})
+      group by stock_key
+    `);
+    for (const r of rows.rows) out.set(r.stock_key, Math.max(0, Number(r.qty) || 0));
+  } catch {
+    // Best-effort: liever bruto tonen dan de checkout blokkeren bij een leesfout.
+  }
+  return out;
+}
+
 /** Probeer één (locatie, sku) atomair te claimen. true = gereserveerd. */
 async function tryReserveOne(orderId: string, loc: string, key: string, qty: number, gross: number, ttlMin: number): Promise<boolean> {
   const db = getDb();
