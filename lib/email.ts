@@ -253,6 +253,23 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
   return sendEmail(email, "Welkom bij GENTS", shell(inner));
 }
 
+/** "Rond je profiel af voor +50 punten" — incentive-mail met afrond-link. */
+export async function sendProfileCompletionIncentiveEmail(email: string, firstName: string, token: string): Promise<boolean> {
+  const site = getSiteUrl();
+  const url = `${site}/profiel-afronden?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const hi = firstName ? `Hoi ${firstName},` : "Hoi,";
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Rond je profiel af — 50 punten cadeau</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} maak je GENTS-profiel even compleet (je maten + voorkeuren). We zetten dan <strong>50 spaarpunten</strong> op je voucherkaart, en je krijgt voortaan advies en aanbiedingen die echt bij je passen.</p>
+    </td></tr>
+    <tr><td style="padding:18px 28px 28px">
+      <a href="${url}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Profiel afronden (+50 punten)</a>
+      <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:14px">Duurt een halve minuut; de punten staan er meteen op.</p>
+    </td></tr>`;
+  return sendEmail(email, "Rond je GENTS-profiel af — 50 punten cadeau", shell(inner));
+}
+
 /** Double-opt-in: bevestigingsmail voor de nieuwsbrief. */
 export async function sendNewsletterConfirmation(email: string, confirmUrl: string): Promise<boolean> {
   const inner = `

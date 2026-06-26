@@ -525,6 +525,10 @@ export const customers = pgTable(
     /** Stijl-/maatvoorkeuren en notities (vrij). */
     preferences: jsonb("preferences").notNull().default({}),
     marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    /** "Rond je profiel af voor +50 punten"-token (SHA256) + of de bonus al
+     *  toegekend is (idempotent — één keer +50). */
+    profileCompletionTokenHash: text("profile_completion_token_hash"),
+    profileCompletionBonusClaimed: boolean("profile_completion_bonus_claimed").notNull().default(false),
     /** Beheerder — toegang tot de instellingen-backend. */
     isAdmin: boolean("is_admin").notNull().default(false),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),

@@ -46,6 +46,50 @@ export async function findOrCreateCustomer(email: string) {
   return created;
 }
 
+/* ── "Rond je profiel af voor +50 punten" ── */
+const PROFILE_BONUS_POINTS = 50;
+
+/** Geef een (gehasht opgeslagen) profiel-afrond-token uit voor de incentive-mail. */
+export async function issueProfileCompletionToken(customerId: string): Promise<string> {
+  const db = getDb();
+  const raw = newToken();
+  await db.update(customers).set({ profileCompletionTokenHash: sha256(raw), updatedAt: new Date() }).where(eq(customers.id, customerId));
+  return raw;
+}
+
+/** Verzilver het token: profiel bijwerken + éénmalig +50 punten (idempotent). */
+export async function redeemProfileCompletionBonus(
+  rawToken: string,
+  profile?: { firstName?: string; lastName?: string; phone?: string; sizeProfile?: Record<string, unknown> },
+): Promise<{ ok: boolean; alreadyClaimed?: boolean; points?: number; customerId?: string }> {
+  if (!rawToken) return { ok: false };
+  const db = getDb();
+  const [c] = await db.select().from(customers).where(eq(customers.profileCompletionTokenHash, sha256(String(rawToken)))).limit(1);
+  if (!c) return { ok: false };
+
+  const patch: Partial<typeof customers.$inferInsert> = { updatedAt: new Date() };
+  if (profile?.firstName && !c.firstName) patch.firstName = profile.firstName.trim();
+  if (profile?.lastName && !c.lastName) patch.lastName = profile.lastName.trim();
+  if (profile?.phone && !c.phone) patch.phone = profile.phone.trim();
+  if (profile?.sizeProfile && typeof profile.sizeProfile === "object") {
+    patch.sizeProfile = { ...((c.sizeProfile as Record<string, unknown>) || {}), ...profile.sizeProfile };
+  }
+
+  if (c.profileCompletionBonusClaimed) {
+    await db.update(customers).set(patch).where(eq(customers.id, c.id)); // wel profiel, geen dubbele bonus
+    return { ok: true, alreadyClaimed: true, customerId: c.id };
+  }
+
+  await db.insert(loyaltyEvents).values({ customerId: c.id, points: PROFILE_BONUS_POINTS, reason: "Profiel afgerond", refType: "profile_completion" });
+  await db.update(customers).set({
+    ...patch,
+    loyaltyPoints: (c.loyaltyPoints || 0) + PROFILE_BONUS_POINTS,
+    profileCompletionBonusClaimed: true,
+    profileCompletionTokenHash: null,
+  }).where(eq(customers.id, c.id));
+  return { ok: true, points: PROFILE_BONUS_POINTS, customerId: c.id };
+}
+
 /**
  * Throttle tegen e-mail-bombing: max N magic-links per e-mailadres per 10 min.
  * Telt alleen bestaande klanten (onbekend adres = nog geen sessies = niet beperkt).
