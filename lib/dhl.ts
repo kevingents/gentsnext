@@ -45,6 +45,60 @@ export type ReturnAddress = {
 
 export type ReturnLabel = { ok: boolean; labelUrl?: string; labelBase64?: string; tracking?: string; error?: string };
 
+/**
+ * Maak een DHL-VERZENDLABEL (ship-from-store): afzender = GENTS (het
+ * DHL_RETURN_*-adres als bedrijfsafzender), ontvanger = de klant. Env-gated zoals
+ * createReturnLabel. Het exacte body-schema moet één keer tegen het echte DHL-
+ * account gevalideerd worden.
+ */
+export async function createShipmentLabel(orderNumber: string, customer: ReturnAddress): Promise<ReturnLabel> {
+  if (!dhlConfigured()) return { ok: false, error: "DHL niet geconfigureerd" };
+  const token = await dhlToken();
+  if (!token) return { ok: false, error: "DHL-authenticatie mislukt" };
+
+  const body = {
+    orderReference: orderNumber,
+    accountId: process.env.DHL_ACCOUNT_ID,
+    returnLabel: false,
+    parcelType: "SMALL",
+    options: [{ key: "DOOR" }],
+    shipper: {
+      name: { companyName: process.env.DHL_RETURN_NAME || "GENTS Herenmode" },
+      address: {
+        countryCode: (process.env.DHL_RETURN_COUNTRY || "NL").toUpperCase(),
+        postalCode: process.env.DHL_RETURN_ZIP,
+        city: process.env.DHL_RETURN_CITY,
+        street: process.env.DHL_RETURN_STREET,
+        number: process.env.DHL_RETURN_NUMBER,
+      },
+    },
+    receiver: {
+      name: { firstName: customer.name },
+      address: {
+        countryCode: (customer.country || "NL").toUpperCase(),
+        postalCode: customer.postalCode,
+        city: customer.city,
+        street: customer.street,
+        number: customer.number,
+      },
+      email: customer.email || undefined,
+    },
+  };
+
+  try {
+    const r = await fetch(`${BASE}/labels`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    const d = (await r.json().catch(() => null)) as Record<string, string> | null;
+    if (!r.ok || !d) return { ok: false, error: (d && (d.message as string)) || `DHL ${r.status}` };
+    return { ok: true, labelBase64: d.pdf || d.label || "", labelUrl: d.labelUrl || "", tracking: d.trackerCode || d.barcode || d.shipmentId || "" };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 /** Maak een DHL-retourlabel: afzender = klant, ontvanger = ons retouradres. */
 export async function createReturnLabel(orderNumber: string, customer: ReturnAddress): Promise<ReturnLabel> {
   if (!dhlConfigured()) return { ok: false, error: "DHL niet geconfigureerd" };
