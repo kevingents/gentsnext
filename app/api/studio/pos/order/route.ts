@@ -4,6 +4,7 @@ import {
   createOrder,
   attachMolliePayment,
   finalizeGiftcardCoveredOrder,
+  finalizeRegisterPaidOrder,
   type CheckoutItem,
   type DeliveryMethod,
 } from "@/lib/orders";
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
     staff?: string;
     deliveryMethod?: string;
     pickupStore?: string;
+    paymentMode?: string;
   };
   try {
     body = await req.json();
@@ -74,6 +76,13 @@ export async function POST(req: Request) {
 
   const origin = new URL(req.url).origin;
   const confirmUrl = `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`;
+
+  // Aan de kassa afgerekend (contant/pin) → geen betaallink; betaald markeren +
+  // inplannen voor fulfilment uit het bron-filiaal. De omzet zit in de kassa-verkoop.
+  if (body?.paymentMode === "register") {
+    await finalizeRegisterPaidOrder(order.id);
+    return NextResponse.json({ ok: true, orderNumber: order.orderNumber, paid: true, registerPaid: true, confirmUrl, totalCents: order.totalCents });
+  }
 
   // Volledig met cadeaubon/voucher gedekt → geen betaling nodig.
   if (order.totalCents === 0) {

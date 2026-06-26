@@ -311,6 +311,22 @@ export async function finalizeGiftcardCoveredOrder(orderId: string): Promise<voi
   await planAndPushFulfillmentOnce(synthetic);
 }
 
+/**
+ * "Bestel voor klant" afgerekend AAN DE KASSA (contant/pin) i.p.v. via een
+ * betaallink: de klant betaalde fysiek in de winkel (vastgelegd als kassa-verkoop,
+ * omzet naar het filiaal). De order wordt hier betaald gemarkeerd + ingepland voor
+ * fulfilment uit het bron-filiaal/magazijn — zonder Mollie. De synthetische ref
+ * `register-…` maakt 'm herkenbaar (omzet zit al in de kassa-dagstaat → niet
+ * dubbeltellen in web-omzet).
+ */
+export async function finalizeRegisterPaidOrder(orderId: string): Promise<void> {
+  const synthetic = `register-${orderId}`;
+  await attachMolliePayment(orderId, synthetic);
+  await applyPaymentStatus(synthetic, "paid");
+  await sendOrderConfirmationOnce(synthetic);
+  await planAndPushFulfillmentOnce(synthetic);
+}
+
 /** Geeft de cadeaubon van een order terug wanneer de betaling mislukt/verloopt. */
 export async function releaseOrderGiftcard(molliePaymentId: string): Promise<void> {
   const db = getDb();
