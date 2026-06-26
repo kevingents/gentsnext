@@ -56,25 +56,25 @@ export async function scanInventory(input: { sessionId: string; code: string; qt
   const setMode = input.mode === "set";
   const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
 
-  const [existing] = await db.select().from(inventoryCounts)
-    .where(and(eq(inventoryCounts.sessionId, session.id), eq(inventoryCounts.stockKey, meta.stockKey))).limit(1);
-  if (existing) {
-    const [upd] = await db.update(inventoryCounts)
-      .set({ scannedQty: setMode ? qty : existing.scannedQty + qty, lastScannedAt: new Date() })
-      .where(eq(inventoryCounts.id, existing.id)).returning();
-    return { ok: true, count: withVariance(upd) };
-  }
-
-  // Verwachte voorraad bij de eerste scan = SRS-baseline + kassa-delta (fysiek).
+  // Verwachte voorraad bij de eerste observatie = SRS-baseline + kassa-delta (fysiek).
   const breakdown = await availableBreakdown(session.location, [meta.stockKey]);
   const b = breakdown.get(meta.stockKey);
   const expected = b ? Math.max(0, b.baseline + b.posDelta) : 0;
-  const [ins] = await db.insert(inventoryCounts).values({
+
+  // ATOMAIRE upsert: bij +1-scannen telt de DB zelf op (scanned_qty + qty) zodat
+  // MEERDERE tellers tegelijk hetzelfde artikel kunnen scannen zonder lost updates.
+  // expected_qty wordt alleen bij de eerste insert gezet (ON CONFLICT laat 'm staan).
+  const [row] = await db.insert(inventoryCounts).values({
     sessionId: session.id, stockKey: meta.stockKey, sku: meta.sku, barcode: meta.barcode,
     title: meta.title, size: meta.size, color: meta.color, imageUrl: meta.imageUrl,
     scannedQty: qty, expectedQty: expected,
+  }).onConflictDoUpdate({
+    target: [inventoryCounts.sessionId, inventoryCounts.stockKey],
+    set: setMode
+      ? { scannedQty: qty, lastScannedAt: new Date() }
+      : { scannedQty: sql`${inventoryCounts.scannedQty} + ${qty}`, lastScannedAt: new Date() },
   }).returning();
-  return { ok: true, count: withVariance(ins) };
+  return { ok: true, count: withVariance(row) };
 }
 
 /** Een geteld artikel uit de sessie verwijderen (per ongeluk gescand / corrigeren). */
