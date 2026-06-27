@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import {
-  createReservation, getReservation, listReservations,
+  createReservation, getReservation, listReservations, listAllReservations,
   cancelReservation, markPickedUp, expireReservations, type ReservationLine,
 } from "@/lib/reservations";
 import { sendReserveringEmail } from "@/lib/email";
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
   let b: {
-    action?: string; id?: string; location?: string; status?: string; limit?: number; actor?: string; createdBy?: string;
+    action?: string; id?: string; location?: string; status?: string; statuses?: string[]; limit?: number; actor?: string; createdBy?: string;
     customer?: { customerId?: string; email?: string; name?: string; phone?: string }; lines?: ReservationLine[]; reason?: string; note?: string;
   };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
@@ -60,6 +60,11 @@ export async function POST(req: Request) {
       case "list": {
         if (!b.location) return NextResponse.json({ ok: false, error: "location vereist." }, { status: 400 });
         return NextResponse.json({ ok: true, reservations: await listReservations(b.location, b.status, b.limit) });
+      }
+      case "overview": {
+        // Supply-chain: alle reserveringen (alle winkels), default actief (open).
+        const statuses = Array.isArray(b.statuses) && b.statuses.length ? b.statuses : ["open"];
+        return NextResponse.json({ ok: true, reservations: await listAllReservations(statuses, b.limit) });
       }
       case "cancel":
         return NextResponse.json(await cancelReservation(String(b.id || ""), b.actor));

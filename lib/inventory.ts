@@ -8,12 +8,21 @@ import { getDb } from "@/db";
 import { inventorySessions, inventoryCounts } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { availableBreakdown, recordMovements } from "@/lib/store-core";
+import { heldQtyByStockKey } from "@/lib/reservations";
 
 type Count = typeof inventoryCounts.$inferSelect;
 type ScanMeta = { sku: string; barcode: string; title: string; size: string; color: string; imageUrl: string; stockKey: string };
 
 function withVariance(c: Count) {
   return { ...c, variance: c.scannedQty - c.expectedQty };
+}
+
+/** Verrijk tel-regels met het apart-gehouden (gereserveerde) aantal in deze winkel,
+ *  zodat de teller/supply-chain ziet welke stuks apart liggen en meegeteld moeten. */
+async function enrichHeld<T extends { stockKey: string }>(location: string, counts: T[]): Promise<(T & { heldQty: number })[]> {
+  if (!counts.length) return [];
+  const held = await heldQtyByStockKey(location, counts.map((c) => c.stockKey)).catch(() => new Map<string, number>());
+  return counts.map((c) => ({ ...c, heldQty: held.get(String(c.stockKey).toLowerCase()) || 0 }));
 }
 
 /** Gescande code (barcode of sku) → variant-metadata + tel-sleutel. */
@@ -144,7 +153,7 @@ export async function getInventorySession(sessionId: string) {
   const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, sessionId)).limit(1);
   if (!session) return null;
   const counts = await db.select().from(inventoryCounts).where(eq(inventoryCounts.sessionId, sessionId)).orderBy(desc(inventoryCounts.lastScannedAt));
-  return { session, counts: counts.map(withVariance) };
+  return { session, counts: await enrichHeld(session.location, counts.map(withVariance)) };
 }
 
 export async function listInventorySessions(location: string, status?: string, limit = 30) {
@@ -188,6 +197,10 @@ export async function completeInventorySession(sessionId: string, completedBy?: 
   if (session.status === "open" && scopeSkus.length) {
     const existing = await db.select({ stockKey: inventoryCounts.stockKey }).from(inventoryCounts).where(eq(inventoryCounts.sessionId, sessionId));
     const have = new Set(existing.map((c) => c.stockKey));
+    // Apart-gehouden (gereserveerde) stuks per SKU: die liggen fysiek apart en mogen
+    // NIET als 0 weggeboekt worden → de zeroing-vloer is het gereserveerde aantal.
+    const scopeKeys = scopeSkus.map((sk) => String(sk.barcode || sk.sku || "").toLowerCase()).filter(Boolean);
+    const held = await heldQtyByStockKey(session.location, scopeKeys).catch(() => new Map<string, number>());
     const toInsert = [];
     for (const sk of scopeSkus) {
       const key = String(sk.barcode || sk.sku || "").toLowerCase();
@@ -195,7 +208,7 @@ export async function completeInventorySession(sessionId: string, completedBy?: 
       toInsert.push({
         sessionId, stockKey: key, sku: sk.sku || "", barcode: sk.barcode || "",
         title: sk.title || "", size: sk.size || "", color: sk.color || "", imageUrl: sk.imageUrl || "",
-        scannedQty: 0, expectedQty: Number(sk.expected) || 0,
+        scannedQty: held.get(key) || 0, expectedQty: Number(sk.expected) || 0,
       });
     }
     if (toInsert.length) await db.insert(inventoryCounts).values(toInsert);
@@ -204,7 +217,7 @@ export async function completeInventorySession(sessionId: string, completedBy?: 
   const [s] = await db.update(inventorySessions)
     .set({ status: "completed", completedAt: new Date(), completedBy: completedBy || "" })
     .where(and(eq(inventorySessions.id, sessionId), eq(inventorySessions.status, "open"))).returning();
-  const counts = (await db.select().from(inventoryCounts).where(eq(inventoryCounts.sessionId, sessionId))).map(withVariance);
+  const counts = await enrichHeld(session.location, (await db.select().from(inventoryCounts).where(eq(inventoryCounts.sessionId, sessionId))).map(withVariance));
   const summary = {
     items: counts.length,
     totalScanned: counts.reduce((n, c) => n + c.scannedQty, 0),

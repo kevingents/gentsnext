@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { getDb } from "@/db";
 import { reservations } from "@/db/schema";
@@ -69,6 +69,39 @@ export async function createReservation(input: {
     return { ok: false, failed: hold.failed, error: "Niet genoeg voorraad om vast te houden." };
   }
   return { ok: true, reservation: row };
+}
+
+/** Voor supply-chain: alle reserveringen (alle winkels) met de gegeven statussen. */
+export async function listAllReservations(statuses: string[] = ["open"], limit = 300) {
+  const db = getDb();
+  const q = db.select().from(reservations);
+  const rows = statuses.length
+    ? await q.where(inArray(reservations.status, statuses)).orderBy(desc(reservations.createdAt)).limit(limit)
+    : await q.orderBy(desc(reservations.createdAt)).limit(limit);
+  return rows;
+}
+
+/**
+ * Fysiek apart-gehouden aantal per stockKey in een winkel = de actieve
+ * voorraad-holds daar (reserveringen + onbetaalde click&collect). Voor de
+ * inventarisatie: deze stuks liggen apart en moeten meegeteld worden — de zeroing
+ * mag ze niet als "ontbrekend" wegboeken.
+ */
+export async function heldQtyByStockKey(location: string, keys?: string[]): Promise<Map<string, number>> {
+  const db = getDb();
+  const loc = lower(location);
+  const out = new Map<string, number>();
+  if (!loc) return out;
+  const clean = keys && keys.length ? [...new Set(keys.map(lower).filter(Boolean))] : null;
+  if (clean && !clean.length) return out;
+  const keyFilter = clean ? sql` and stock_key in (${sql.join(clean.map((k) => sql`${k}`), sql`, `)})` : sql``;
+  const rows = await db.execute<{ stock_key: string; qty: number }>(sql`
+    select stock_key, sum(qty)::int as qty
+    from web_stock_holds
+    where location = ${loc} and expires_at > now()${keyFilter}
+    group by stock_key`);
+  for (const r of rows.rows) out.set(r.stock_key, Math.max(0, Number(r.qty) || 0));
+  return out;
 }
 
 export async function getReservation(id: string) {
