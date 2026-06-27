@@ -7,6 +7,7 @@ import {
   releaseOrderGiftcard,
 } from "@/lib/orders";
 import { applyGiftcardPaymentStatus } from "@/lib/giftcards";
+import { convertReservationToOrder } from "@/lib/reservations";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -41,6 +42,16 @@ export async function POST(req: Request) {
     // Cadeaubon-aankoop (eigen flow) — activeer + mail de bon, geen order.
     if (payment.metadata && (payment.metadata as Record<string, unknown>).kind === "giftcard") {
       await applyGiftcardPaymentStatus(payment.id, payment.status);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Reservering online afgerekend → converteer naar een betaalde afhaalorder.
+    // (Geen order tot betaling binnen is; bij niet-betaald blijft de reservering staan.)
+    if (payment.metadata && (payment.metadata as Record<string, unknown>).kind === "reservation") {
+      if (payment.status === "paid" || payment.status === "authorized") {
+        const reservationId = String((payment.metadata as Record<string, unknown>).reservationId || "");
+        if (reservationId) await convertReservationToOrder(reservationId);
+      }
       return NextResponse.json({ ok: true });
     }
 

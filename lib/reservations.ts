@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { reservations } from "@/db/schema";
 import { reserveOrderStock, releaseOrderHolds } from "@/lib/store-reserve";
 import { availableInStore } from "@/lib/store-core";
+import { createOrder, finalizeRegisterPaidOrder, type CheckoutContact, type CheckoutItem } from "@/lib/orders";
 
 /**
  * Reserveringen — gents.nl-native (SRS = WMS, klanten in gents.nl). Een reservering
@@ -167,4 +168,42 @@ export async function markReservationConverted(id: string, orderId: string) {
     .set({ status: "converted", paid: true, validUntil: null, convertedOrderId: String(orderId || ""), updatedAt: new Date() })
     .where(eq(reservations.id, id)).returning();
   return u || null;
+}
+
+/** Te betalen bedrag (cent) van een reservering = som van de regels. */
+export function reservationAmountCents(lines: ReservationLine[]): number {
+  return (Array.isArray(lines) ? lines : []).reduce((n, l) => n + (Number(l.priceCents) || 0) * Math.max(1, Number(l.qty) || 1), 0);
+}
+
+/**
+ * Online afgerekend (Mollie betaald) → maak er een BETAALDE afhaalorder van.
+ * Idempotent. De RES-hold valt vrij en de order (pickup in dezelfde winkel) houdt
+ * de voorraad vast — het stuk zit in de SRS-baseline, dus de order-hold lukt.
+ * `finalizeRegisterPaidOrder` markeert betaald + plant de fulfilment (geen Mollie;
+ * de betaling liep al via de reserverings-betaallink).
+ */
+export async function convertReservationToOrder(reservationId: string): Promise<{ ok: boolean; orderNumber?: string; alreadyDone?: boolean; error?: string }> {
+  const db = getDb();
+  const [r] = await db.select().from(reservations).where(eq(reservations.id, reservationId)).limit(1);
+  if (!r) return { ok: false, error: "Reservering niet gevonden." };
+  if (r.status === "converted" || r.convertedOrderId) return { ok: true, orderNumber: r.convertedOrderId, alreadyDone: true };
+  const lines = (Array.isArray(r.lines) ? r.lines : []) as ReservationLine[];
+  if (!lines.length) return { ok: false, error: "Reservering zonder regels." };
+
+  await releaseOrderHolds(reservationHoldRef(reservationId)); // RES-hold vrij → order kan claimen
+  const contact: CheckoutContact = {
+    email: r.customerEmail || "", firstName: r.customerName || "Klant", lastName: "", phone: r.customerPhone || "",
+    street: "", houseNumber: "", postalCode: "", city: "", country: "NL",
+  };
+  const items: CheckoutItem[] = lines.map((l) => ({ sku: l.sku || "", qty: Math.max(1, Number(l.qty) || 1) }));
+
+  let order;
+  try {
+    order = await createOrder(contact, items, "pickup", "", "", r.location);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Order kon niet aangemaakt worden." };
+  }
+  await finalizeRegisterPaidOrder(order.id);
+  await markReservationConverted(reservationId, order.orderNumber);
+  return { ok: true, orderNumber: order.orderNumber };
 }
