@@ -148,6 +148,13 @@
       "when": 1782542796281,
       "tag": "0020_sleepy_puck",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782552427070,
+      "tag": "0021_fair_agent_zero",
+      "breakpoints": true
     }
   ]
 }

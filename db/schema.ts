@@ -964,3 +964,31 @@ export const reservations = pgTable(
     index("reservations_paytoken_idx").on(t.payToken),
   ],
 );
+
+/**
+ * Paspop / etalage — display-markering (NIET-blokkerend). Een stuk op de paspop
+ * blijft gewoon verkoopbaar (we raken de voorraad-availability niet aan); het is
+ * puur zichtbaarheid ("wat hangt er in de winkel") + telt mee bij inventarisatie
+ * (de teller ziet 't, de zeroing boekt 't niet weg). Eén rij per (winkel, stockKey),
+ * qty = aantal stuks op de poppen.
+ */
+export const displayItems = pgTable(
+  "display_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    location: text("location").notNull(),
+    stockKey: text("stock_key").notNull(), // lower(barcode||sku)
+    sku: text("sku").notNull().default(""),
+    barcode: text("barcode").notNull().default(""),
+    title: text("title").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    imageUrl: text("image_url").notNull().default(""),
+    qty: integer("qty").notNull().default(1),
+    note: text("note").notNull().default(""), // bv. "etalage links", "paspop 2"
+    createdBy: text("created_by").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("display_loc_key_unique").on(t.location, t.stockKey), index("display_loc_idx").on(t.location)],
+);

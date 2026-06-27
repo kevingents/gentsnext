@@ -9,6 +9,7 @@ import { inventorySessions, inventoryCounts } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { availableBreakdown, recordMovements } from "@/lib/store-core";
 import { heldQtyByStockKey } from "@/lib/reservations";
+import { displayQtyByStockKey } from "@/lib/display";
 
 type Count = typeof inventoryCounts.$inferSelect;
 type ScanMeta = { sku: string; barcode: string; title: string; size: string; color: string; imageUrl: string; stockKey: string };
@@ -19,10 +20,17 @@ function withVariance(c: Count) {
 
 /** Verrijk tel-regels met het apart-gehouden (gereserveerde) aantal in deze winkel,
  *  zodat de teller/supply-chain ziet welke stuks apart liggen en meegeteld moeten. */
-async function enrichHeld<T extends { stockKey: string }>(location: string, counts: T[]): Promise<(T & { heldQty: number })[]> {
+async function enrichHeld<T extends { stockKey: string }>(location: string, counts: T[]): Promise<(T & { heldQty: number; displayQty: number })[]> {
   if (!counts.length) return [];
-  const held = await heldQtyByStockKey(location, counts.map((c) => c.stockKey)).catch(() => new Map<string, number>());
-  return counts.map((c) => ({ ...c, heldQty: held.get(String(c.stockKey).toLowerCase()) || 0 }));
+  const keys = counts.map((c) => c.stockKey);
+  const [held, display] = await Promise.all([
+    heldQtyByStockKey(location, keys).catch(() => new Map<string, number>()),
+    displayQtyByStockKey(location, keys).catch(() => new Map<string, number>()),
+  ]);
+  return counts.map((c) => {
+    const k = String(c.stockKey).toLowerCase();
+    return { ...c, heldQty: held.get(k) || 0, displayQty: display.get(k) || 0 };
+  });
 }
 
 /** Gescande code (barcode of sku) → variant-metadata + tel-sleutel. */
@@ -200,7 +208,12 @@ export async function completeInventorySession(sessionId: string, completedBy?: 
     // Apart-gehouden (gereserveerde) stuks per SKU: die liggen fysiek apart en mogen
     // NIET als 0 weggeboekt worden → de zeroing-vloer is het gereserveerde aantal.
     const scopeKeys = scopeSkus.map((sk) => String(sk.barcode || sk.sku || "").toLowerCase()).filter(Boolean);
-    const held = await heldQtyByStockKey(session.location, scopeKeys).catch(() => new Map<string, number>());
+    // Bekend-aanwezig = gereserveerd (hold) + op de paspop → die liggen er fysiek,
+    // dus de zeroing zet ze op dat aantal i.p.v. 0 (niet wegboeken).
+    const [held, display] = await Promise.all([
+      heldQtyByStockKey(session.location, scopeKeys).catch(() => new Map<string, number>()),
+      displayQtyByStockKey(session.location, scopeKeys).catch(() => new Map<string, number>()),
+    ]);
     const toInsert = [];
     for (const sk of scopeSkus) {
       const key = String(sk.barcode || sk.sku || "").toLowerCase();
@@ -208,7 +221,7 @@ export async function completeInventorySession(sessionId: string, completedBy?: 
       toInsert.push({
         sessionId, stockKey: key, sku: sk.sku || "", barcode: sk.barcode || "",
         title: sk.title || "", size: sk.size || "", color: sk.color || "", imageUrl: sk.imageUrl || "",
-        scannedQty: held.get(key) || 0, expectedQty: Number(sk.expected) || 0,
+        scannedQty: (held.get(key) || 0) + (display.get(key) || 0), expectedQty: Number(sk.expected) || 0,
       });
     }
     if (toInsert.length) await db.insert(inventoryCounts).values(toInsert);
