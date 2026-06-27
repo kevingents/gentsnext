@@ -53,6 +53,33 @@ export async function listAllDisplay(limit = 500) {
   return db.select().from(displayItems).orderBy(desc(displayItems.updatedAt)).limit(limit);
 }
 
+/** Verkoop aan de kassa → haal verkochte stuks automatisch van de paspop. Alleen
+ *  bestaande markeringen worden verlaagd (de rest is een no-op). Non-fataal bedoeld. */
+export async function applySale(location: string, lines: { sku?: string; barcode?: string; stockKey?: string; qty?: number }[]) {
+  const db = getDb();
+  const loc = String(location || "").trim();
+  if (!loc || !Array.isArray(lines) || !lines.length) return { adjusted: 0 };
+  const byKey = new Map<string, number>();
+  for (const l of lines) {
+    const key = lower(l?.barcode || l?.stockKey || l?.sku);
+    const qty = Math.abs(Math.round(Number(l?.qty) || 0));
+    if (!key || !qty) continue;
+    byKey.set(key, (byKey.get(key) || 0) + qty);
+  }
+  if (!byKey.size) return { adjusted: 0 };
+  const rows = await db.select().from(displayItems).where(and(eq(displayItems.location, loc), inArray(displayItems.stockKey, [...byKey.keys()])));
+  let adjusted = 0;
+  for (const r of rows) {
+    const dec = byKey.get(r.stockKey) || 0;
+    if (!dec) continue;
+    const next = Math.max(0, r.qty - dec);
+    if (next <= 0) await db.delete(displayItems).where(eq(displayItems.id, r.id));
+    else await db.update(displayItems).set({ qty: next, updatedAt: new Date() }).where(eq(displayItems.id, r.id));
+    adjusted++;
+  }
+  return { adjusted };
+}
+
 /** Aantal "op de paspop" per stockKey in een winkel — voor de inventarisatie-vloer. */
 export async function displayQtyByStockKey(location: string, keys?: string[]): Promise<Map<string, number>> {
   const db = getDb();

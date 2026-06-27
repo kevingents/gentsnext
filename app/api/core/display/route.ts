@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { markDisplay, unmarkDisplay, listDisplay, listAllDisplay, type DisplayLine } from "@/lib/display";
+import { markDisplay, unmarkDisplay, listDisplay, listAllDisplay, applySale, type DisplayLine } from "@/lib/display";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; location?: string; line?: DisplayLine; stockKey?: string; qty?: number; note?: string; createdBy?: string; limit?: number };
+  let b: { action?: string; location?: string; line?: DisplayLine; lines?: { sku?: string; barcode?: string; stockKey?: string; qty?: number }[]; stockKey?: string; qty?: number; note?: string; createdBy?: string; limit?: number };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -32,6 +32,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, items: await listDisplay(b.location) });
       case "overview":
         return NextResponse.json({ ok: true, items: await listAllDisplay(b.limit) });
+      case "sold":
+        // Kassa-verkoop → verkochte stuks automatisch van de paspop halen.
+        if (!b.location) return NextResponse.json({ ok: false, error: "location vereist." }, { status: 400 });
+        return NextResponse.json({ ok: true, ...(await applySale(b.location, b.lines || [])) });
       default:
         return NextResponse.json({ ok: false, error: `Onbekende actie "${action}".` }, { status: 400 });
     }
