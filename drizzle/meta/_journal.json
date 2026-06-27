@@ -141,6 +141,13 @@
       "when": 1782498672507,
       "tag": "0019_chubby_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782542796281,
+      "tag": "0020_sleepy_puck",
+      "breakpoints": true
     }
   ]
 }

@@ -927,3 +927,40 @@ export const inventoryCounts = pgTable(
     index("inv_counts_session_idx").on(t.sessionId),
   ],
 );
+
+/**
+ * Reserveringen — gents.nl-native (SRS is alleen WMS, klanten leven in gents.nl).
+ * De winkel/scanner houdt een artikel apart voor een gents.nl-klant. De voorraad
+ * wordt HARD vastgehouden via het anti-oversell-primitief (web_stock_holds, ref
+ * "RES-<id>", 7-daagse TTL) — niemand anders verkoopt het stuk. Géén SRS-push.
+ * Rekent de klant online af → status 'converted' + de hold gaat over naar een
+ * betaalde afhaalorder. Verloopt na validUntil → status 'expired' (hold valt vrij).
+ */
+export const reservations = pgTable(
+  "reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    location: text("location").notNull(), // winkel waar 't apart ligt
+    customerId: text("customer_id").notNull().default(""), // gents.nl-klant UUID (optioneel)
+    customerEmail: text("customer_email").notNull().default(""),
+    customerName: text("customer_name").notNull().default(""),
+    customerPhone: text("customer_phone").notNull().default(""),
+    status: text("status").notNull().default("open"), // open | picked_up | expired | cancelled | converted
+    reason: text("reason").notNull().default(""), // klant_apart | klant_komt | apart_hangen
+    note: text("note").notNull().default(""),
+    // [{ stockKey, sku, barcode, title, size, color, imageUrl, qty, priceCents }]
+    lines: jsonb("lines").notNull().default([]),
+    validUntil: timestamp("valid_until", { withTimezone: true }), // null = onbeperkt (afgerekend)
+    paid: boolean("paid").notNull().default(false),
+    payToken: text("pay_token").notNull().default(""), // voor de online-afreken-link
+    convertedOrderId: text("converted_order_id").notNull().default(""),
+    createdBy: text("created_by").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("reservations_loc_status_idx").on(t.location, t.status),
+    index("reservations_customer_idx").on(t.customerId),
+    index("reservations_paytoken_idx").on(t.payToken),
+  ],
+);

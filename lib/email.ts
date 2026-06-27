@@ -270,6 +270,37 @@ export async function sendProfileCompletionIncentiveEmail(email: string, firstNa
   return sendEmail(email, "Rond je GENTS-profiel af — 50 punten cadeau", shell(inner));
 }
 
+/** Reservering-bevestiging: "we houden 'm 7 dagen voor je vast" + afreken-link
+ *  (online afrekenen → onbeperkt vasthouden). */
+export async function sendReserveringEmail(input: {
+  to: string; name?: string; store: string; validUntil?: Date | string | null;
+  lines: { title?: string; sku?: string; size?: string; color?: string; qty?: number }[]; payToken?: string;
+}): Promise<boolean> {
+  const hi = input.name ? `Hoi ${input.name},` : "Hoi,";
+  const tot = input.validUntil ? new Date(input.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const itemsHtml = (input.lines || []).map((l) => `
+    <tr><td style="padding:10px 0;border-bottom:1px solid #EAEAEA">
+      <div style="font:700 14px Arial,sans-serif;color:#0A0A0A">${(l.title || l.sku || "Artikel").replace(/</g, "&lt;")}</div>
+      <div style="font:12px Arial,sans-serif;color:#6B6B6B;margin-top:2px">${[l.color, l.size && `maat ${l.size}`, l.qty ? `${l.qty}×` : ""].filter(Boolean).join(" · ")}</div>
+    </td></tr>`).join("");
+  const payUrl = input.payToken ? `${getSiteUrl()}/reservering-afrekenen?token=${encodeURIComponent(input.payToken)}` : "";
+  const cta = payUrl ? `
+    <tr><td style="padding:6px 28px 28px">
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0 0 12px">Wil je 'm langer vasthouden? Reken je reservering online af — dan houden we 'm <strong>onbeperkt</strong> voor je vast tot je 'm ophaalt.</p>
+      <a href="${payUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Online afrekenen</a>
+    </td></tr>` : "";
+  const inner = `
+    <tr><td style="padding:24px 28px 4px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">We houden 'm voor je apart</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} je reservering staat klaar in <strong>${input.store.replace(/</g, "&lt;")}</strong>${tot ? ` — we houden 'm tot en met <strong>${tot}</strong> voor je vast` : ""}.</p>
+    </td></tr>
+    <tr><td style="padding:8px 28px 8px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${itemsHtml}</table>
+    </td></tr>
+    ${cta}`;
+  return sendEmail(input.to, `We houden je reservering vast in ${input.store}`, shell(inner));
+}
+
 /** Double-opt-in: bevestigingsmail voor de nieuwsbrief. */
 export async function sendNewsletterConfirmation(email: string, confirmUrl: string): Promise<boolean> {
   const inner = `
