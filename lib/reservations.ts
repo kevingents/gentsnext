@@ -5,6 +5,7 @@ import { reservations } from "@/db/schema";
 import { reserveOrderStock, releaseOrderHolds } from "@/lib/store-reserve";
 import { availableInStore } from "@/lib/store-core";
 import { createOrder, finalizeRegisterPaidOrder, type CheckoutContact, type CheckoutItem } from "@/lib/orders";
+import { getReservationHoldDays } from "@/lib/reservation-config";
 
 /**
  * Reserveringen — gents.nl-native (SRS = WMS, klanten in gents.nl). Een reservering
@@ -13,8 +14,8 @@ import { createOrder, finalizeRegisterPaidOrder, type CheckoutContact, type Chec
  * Géén SRS-push. Afrekenen → converteert naar een betaalde afhaalorder (aparte stap).
  */
 
-const HOLD_DAYS = 7;
-const HOLD_TTL_MIN = HOLD_DAYS * 24 * 60; // 10080
+// Hold-/geldigheidsduur is instelbaar via de ReserveringConfig-kaart → zie
+// getReservationHoldDays() (default 7 dagen).
 // web_stock_holds.order_id is een uuid-kolom (geen FK) — de reservering-uuid zelf
 // is de hold-sleutel. Een hold = een hold; anti-oversell telt 'm correct mee.
 export const reservationHoldRef = (id: string) => id;
@@ -49,7 +50,8 @@ export async function createReservation(input: {
   const keys = [...new Set(lines.map((l) => l.stockKey))];
   const avail = await availableInStore(location, keys);
 
-  const validUntil = new Date(Date.now() + HOLD_TTL_MIN * 60_000);
+  const holdTtlMin = (await getReservationHoldDays()) * 24 * 60; // instelbaar (default 7 dagen)
+  const validUntil = new Date(Date.now() + holdTtlMin * 60_000);
   const payToken = randomBytes(24).toString("base64url");
 
   const [row] = await db.insert(reservations).values({
@@ -64,7 +66,7 @@ export async function createReservation(input: {
 
   // HARDE hold (anti-oversell): claim de stukken in de winkel voor 7 dagen.
   const requests = lines.map((l) => ({ location, stockKey: l.stockKey, qty: l.qty, gross: Math.max(0, Number(avail.get(l.stockKey) || 0)) }));
-  const hold = await reserveOrderStock(reservationHoldRef(row.id), requests, HOLD_TTL_MIN);
+  const hold = await reserveOrderStock(reservationHoldRef(row.id), requests, holdTtlMin);
   if (!hold.ok) {
     await db.update(reservations).set({ status: "cancelled", updatedAt: new Date() }).where(eq(reservations.id, row.id));
     return { ok: false, failed: hold.failed, error: "Niet genoeg voorraad om vast te houden." };
