@@ -96,3 +96,26 @@ export async function importStorePurchases(customer: CustomerRow): Promise<Store
 
   return { ok: true, srsCustomerId: srsId, found: txns.length, imported: rows.length, skipped: txns.length - rows.length };
 }
+
+const REFRESH_MS = 7 * 24 * 60 * 60 * 1000; // wekelijkse refresh van de winkelhistorie
+
+/**
+ * Self-healing: importeer de winkelhistorie van een klant 1× (en daarna max
+ * wekelijks), getriggerd bij login via `after()` (non-blocking). De vlag wordt
+ * VOORAF gezet zodat gelijktijdige logins niet dubbel draaien en een mislukte/
+ * lege import niet elke login SRS bestookt. Idempotent (dedup op receiptId).
+ */
+export async function importStorePurchasesOnce(customerId: string): Promise<void> {
+  if (!messagesConfigured()) return;
+  const db = getDb();
+  const [c] = await db.select({ id: customers.id, email: customers.email, srsCustomerId: customers.srsCustomerId, importedAt: customers.storeHistoryImportedAt })
+    .from(customers).where(eq(customers.id, customerId)).limit(1);
+  if (!c) return;
+  if (c.importedAt && Date.now() - new Date(c.importedAt).getTime() < REFRESH_MS) return;
+  await db.update(customers).set({ storeHistoryImportedAt: sql`now()` }).where(eq(customers.id, customerId));
+  try {
+    await importStorePurchases({ id: c.id, email: c.email, srsCustomerId: c.srsCustomerId });
+  } catch {
+    // Stil: de vlag staat, dus pas over een week opnieuw — geen login-impact.
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "customers" ADD COLUMN "store_history_imported_at" timestamp with time zone;

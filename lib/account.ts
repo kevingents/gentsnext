@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -18,6 +19,7 @@ import {
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
 import { getSettings } from "@/lib/settings";
 import { sendWelcomeEmail } from "@/lib/email";
+import { importStorePurchasesOnce } from "@/lib/srs-store-import";
 
 /**
  * Klant-accountlaag. Auth via magic-link (wachtwoordloos): e-mail → login-token
@@ -155,6 +157,12 @@ export async function consumeMagicToken(rawToken: string): Promise<boolean> {
       }
     }
   }
+
+  // Self-healing omnichannel: importeer de SRS-winkelhistorie op de achtergrond
+  // (non-blocking — ná de response; 1× + wekelijkse refresh; stil als SRS niet
+  // geconfigureerd is). Zo vult srs_customer_id + store_purchases vanzelf.
+  after(() => importStorePurchasesOnce(magic.customerId).catch(() => {}));
+
   return true;
 }
 
