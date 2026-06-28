@@ -18,6 +18,7 @@ import { inboundShipments, inboundReceiptCounts } from "@/db/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { recordMovements, markMovementsSrsPosted } from "@/lib/store-core";
 import { buildSamplePlan, type SamplePlan } from "@/lib/inbound-sampling";
+import { logDiscrepancies } from "@/lib/inbound-discrepancies";
 
 type Shipment = typeof inboundShipments.$inferSelect;
 type Count = typeof inboundReceiptCounts.$inferSelect;
@@ -242,7 +243,7 @@ export async function deleteReceiptCount(shipmentId: string, stockKey: string): 
  * boekt nooit dubbel. Het missende stuk wordt simpelweg nooit toegevoegd → geen
  * fantoomvoorraad. Status → 'received'.
  */
-export async function receiveShipment(shipmentId: string, receivedBy?: string): Promise<{ ok: boolean; error?: string; booked: { stockKey: string; delta: number }[]; lines: ReturnType<typeof withVariance>[]; alreadyReceived?: boolean; verdict?: "accepted" | "escalate" | "full"; need100?: boolean; sampleDiscrepancies?: number; message?: string }> {
+export async function receiveShipment(shipmentId: string, receivedBy?: string): Promise<{ ok: boolean; error?: string; booked: { stockKey: string; delta: number }[]; lines: ReturnType<typeof withVariance>[]; alreadyReceived?: boolean; verdict?: "accepted" | "escalate" | "full"; need100?: boolean; sampleDiscrepancies?: number; discrepancies?: number; message?: string }> {
   const data = await getInboundShipment(shipmentId);
   if (!data) return { ok: false, error: "Zending niet gevonden.", booked: [], lines: [] };
   const { shipment, counts } = data;
@@ -288,13 +289,15 @@ export async function receiveShipment(shipmentId: string, receivedBy?: string): 
     for (const c of counts) if (!asnKeys.has(c.stockKey) && c.scannedQty > 0) bookLines.push({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty });
     const booked = await book(bookLines);
     await setShipmentStatus(shipment.id, "received", receivedBy);
-    return { ok: true, booked, lines: counts, verdict: "accepted" };
+    const disc = await logDiscrepancies(shipment, counts, plan).catch(() => ({ count: 0, codes: {} }));
+    return { ok: true, booked, lines: counts, verdict: "accepted", discrepancies: disc.count };
   }
 
   // FULL (of geen plan): boek alleen het gescande (F1-gedrag).
   const booked = await book(counts.map((c) => ({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty })));
   await setShipmentStatus(shipment.id, "received", receivedBy);
-  return { ok: true, booked, lines: counts, verdict: "full" };
+  const disc = await logDiscrepancies(shipment, counts, plan).catch(() => ({ count: 0, codes: {} }));
+  return { ok: true, booked, lines: counts, verdict: "full", discrepancies: disc.count };
 }
 
 /** Markeer de ontvangst-movements als 'in SRS verwerkt' (overdracht naar de baseline).

@@ -5,6 +5,7 @@ import {
   setShipmentStatus, startReceiving, scanReceipt, deleteReceiptCount, receiveShipment,
   inTransitQtyForStore, markInboundReceiptPosted, type ExpectedLine,
 } from "@/lib/inbound";
+import { listOpenDiscrepancies, resolveDiscrepancy, getReceivingStats } from "@/lib/inbound-discrepancies";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     code?: string; qty?: number; mode?: string; stockKey?: string; by?: string; receivedBy?: string;
     keys?: string[]; source?: string; sourceType?: string; fromLocation?: string; linkRef?: string;
     parts?: number; expectedLines?: ExpectedLine[]; skuExpected?: { sku: string; expected: number }[];
-    note?: string; createdBy?: string;
+    note?: string; createdBy?: string; days?: number;
   };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
@@ -67,6 +68,12 @@ export async function POST(req: Request) {
       case "mark-srs-posted":
         await markInboundReceiptPosted(String(b.id || ""));
         return NextResponse.json({ ok: true });
+      case "discrepancies":
+        return NextResponse.json({ ok: true, discrepancies: await listOpenDiscrepancies(b.toStore || undefined, b.limit) });
+      case "resolve-discrepancy":
+        return NextResponse.json({ ok: true, discrepancy: await resolveDiscrepancy(String(b.id || ""), String(b.status || ""), b.by, b.note) });
+      case "stats":
+        return NextResponse.json({ ok: true, stats: await getReceivingStats(b.days) });
       default:
         return NextResponse.json({ ok: false, error: `Onbekende actie "${action}".` }, { status: 400 });
     }

@@ -1094,3 +1094,43 @@ export const inboundReceiptCounts = pgTable(
     index("inbound_counts_shipment_idx").on(t.shipmentId),
   ],
 );
+
+/**
+ * Afwijkingen bij goederenontvangst (F3) — de tegenhanger van fulfillment_misses,
+ * maar dan inbound. Per regel die niet klopte: code (vaste taxonomie zodat het
+ * dashboard erop filtert) + status-spoor (open → claim → afgehandeld). Voedt de
+ * supply-chain-melding én het manco-profiel/dashboard (manco-rate per bron/winkel).
+ */
+export const receivingDiscrepancies = pgTable(
+  "receiving_discrepancies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shipmentId: uuid("shipment_id").notNull().references(() => inboundShipments.id, { onDelete: "cascade" }),
+    source: text("source").notNull().default(""), // bron/leverancier
+    sourceType: text("source_type").notNull().default("transfer"),
+    toStore: text("to_store").notNull().default(""),
+    linkRef: text("link_ref").notNull().default(""),
+    stockKey: text("stock_key").notNull().default(""),
+    sku: text("sku").notNull().default(""),
+    title: text("title").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    expectedQty: integer("expected_qty").notNull().default(0),
+    scannedQty: integer("scanned_qty").notNull().default(0),
+    variance: integer("variance").notNull().default(0), // scanned − expected
+    code: text("code").notNull().default("SHORT"), // SHORT | OVER | DAMAGED | WRONG_ITEM | NOT_ORDERED | QUALITY | MISLABELED
+    status: text("status").notNull().default("open"), // open | claim_filed | credited | written_off | resolved
+    note: text("note").notNull().default(""),
+    photoUrl: text("photo_url").notNull().default(""),
+    resolvedBy: text("resolved_by").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("recdisc_source_idx").on(t.source, t.createdAt),
+    index("recdisc_store_idx").on(t.toStore, t.createdAt),
+    index("recdisc_code_idx").on(t.code),
+    index("recdisc_status_idx").on(t.status),
+    index("recdisc_shipment_idx").on(t.shipmentId),
+  ],
+);
