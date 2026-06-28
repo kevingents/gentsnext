@@ -1023,3 +1023,72 @@ export const posSales = pgTable(
     index("pos_sales_store_flags_idx").on(t.store, t.cancelled, t.srsPosted),
   ],
 );
+
+/**
+ * Inbound goederenontvangst — een zending naar een winkel (replenishment vanuit
+ * het magazijn, leverancier-levering of winkel→winkel-herverdeling). DE ASN: wat
+ * verwacht wordt + de status (gepickt → onderweg → ontvangen). Gespiegeld op
+ * inventorySessions. KERN-REGEL: voorraad ontstaat PAS bij de scan-ontvangst (een
+ * channel:'inbound' +1-movement, ref `RCV-<id>`); onderweg-voorraad telt NIET mee
+ * in `available` (anti-fantoomvoorraad — niets verkoopbaar zolang 't onderweg is).
+ */
+export const inboundShipments = pgTable(
+  "inbound_shipments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: text("source").notNull().default(""), // "magazijn" of leverancier-naam
+    sourceType: text("source_type").notNull().default("transfer"), // transfer | supplier | interstore
+    fromLocation: text("from_location").notNull().default(""), // bronwinkel bij herverdeling
+    toStore: text("to_store").notNull(), // ontvangende winkel
+    status: text("status").notNull().default("picked"), // picked | in_transit | receiving | received | closed | cancelled
+    linkRef: text("link_ref").notNull().default(""), // MAG-YYYY-NNNN / srsOrderNr → traceability
+    parts: integer("parts").notNull().default(1), // aantal dozen/colli
+    // De ASN-regels: [{ stockKey, sku, barcode, title, size, color, imageUrl, expectedQty }]
+    expectedLines: jsonb("expected_lines").notNull().default([]),
+    note: text("note").notNull().default(""),
+    createdBy: text("created_by").notNull().default(""),
+    pickedBy: text("picked_by").notNull().default(""),
+    receivedBy: text("received_by").notNull().default(""), // winkelmedewerker die afsloot
+    pickedAt: timestamp("picked_at", { withTimezone: true }),
+    inTransitAt: timestamp("in_transit_at", { withTimezone: true }),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("inbound_tostore_status_idx").on(t.toStore, t.status),
+    index("inbound_source_idx").on(t.source),
+    index("inbound_created_idx").on(t.createdAt),
+    index("inbound_linkref_idx").on(t.linkRef),
+  ],
+);
+
+/**
+ * Per-SKU scanresultaat van een ontvangst (gespiegeld op inventoryCounts). Atomaire
+ * upsert (scanned_qty += qty) zodat meerdere medewerkers tegelijk kunnen scannen.
+ * variance = scannedQty − expectedQty (afgeleid). `blind` (F2-steekproef) verbergt
+ * het verwachte aantal in de UI tot ná het tellen.
+ */
+export const inboundReceiptCounts = pgTable(
+  "inbound_receipt_counts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shipmentId: uuid("shipment_id").notNull().references(() => inboundShipments.id, { onDelete: "cascade" }),
+    stockKey: text("stock_key").notNull(), // lower(barcode||sku)
+    sku: text("sku").notNull().default(""),
+    barcode: text("barcode").notNull().default(""),
+    title: text("title").notNull().default(""),
+    size: text("size").notNull().default(""),
+    color: text("color").notNull().default(""),
+    imageUrl: text("image_url").notNull().default(""),
+    expectedQty: integer("expected_qty").notNull().default(0), // uit de ASN
+    scannedQty: integer("scanned_qty").notNull().default(0),
+    blind: boolean("blind").notNull().default(false), // F2: steekproefregel → verwacht aantal verborgen
+    firstScannedAt: timestamp("first_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+    lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("inbound_counts_shipment_key_unique").on(t.shipmentId, t.stockKey),
+    index("inbound_counts_shipment_idx").on(t.shipmentId),
+  ],
+);

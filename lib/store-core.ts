@@ -37,7 +37,7 @@ export function stockKey(line: Pick<MovementLine, "barcode" | "sku" | "articleNu
 
 export type RecordInput = {
   location: string;
-  channel?: "pos" | "web" | "correction";
+  channel?: "pos" | "web" | "correction" | "inbound";
   reason?: string;
   ref?: string | null;
   /** sign −1 = verkoop/reservering (eraf), +1 = inboeken/retour/vrijgave (erbij). Default −1. */
@@ -94,14 +94,15 @@ export async function recordMovements(input: RecordInput): Promise<{ applied: { 
  * bijwerkt; daarna valt 'ie uit de posDelta-som (geen dubbeltelling). Aangeroepen
  * door storegents zodra een POS-verkoop succesvol naar SRS is gepost.
  */
-export async function markMovementsSrsPosted(ref: string): Promise<void> {
+export async function markMovementsSrsPosted(ref: string, channel: "pos" | "inbound" = "pos"): Promise<void> {
   const r = String(ref || "").trim();
   if (!r) return;
+  const ch = channel === "inbound" ? "inbound" : "pos";
   const db = getDb();
   await db.execute(sql`
     update store_stock_movements
     set srs_posted_at = now()
-    where ref = ${r} and channel = 'pos' and srs_posted_at is null
+    where ref = ${r} and channel = ${ch} and srs_posted_at is null
   `);
 }
 
