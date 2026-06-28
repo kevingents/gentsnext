@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { getDb } from "@/db";
 import { posSales } from "@/db/schema";
 
@@ -69,6 +69,17 @@ export async function listUnpostedPosSalesCore(store: string, limit = 200): Prom
     ? and(eq(posSales.cancelled, false), eq(posSales.srsPosted, false), eq(posSales.store, store))
     : and(eq(posSales.cancelled, false), eq(posSales.srsPosted, false));
   const rows = await db.select().from(posSales).where(cond).orderBy(desc(posSales.createdAt)).limit(lim);
+  return rows.map(rowToSale);
+}
+
+/** Verkopen van een winkel binnen een created_at-venster (UTC) — voor de
+ *  dagafsluiting/kasstaat (die filtert daarna exact op Amsterdam-dag). */
+export async function listPosSalesByRangeCore(store: string, fromIso: string, toIso: string): Promise<Sale[]> {
+  if (!store || !fromIso || !toIso) return [];
+  const db = getDb();
+  const rows = await db.select().from(posSales)
+    .where(and(eq(posSales.store, store), gte(posSales.createdAt, new Date(fromIso)), lt(posSales.createdAt, new Date(toIso))))
+    .orderBy(desc(posSales.createdAt)).limit(5000);
   return rows.map(rowToSale);
 }
 
