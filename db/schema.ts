@@ -10,6 +10,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Commerce-DB van gentsnext — system of record voor de productcatalogus.
@@ -991,4 +992,34 @@ export const displayItems = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("display_loc_key_unique").on(t.location, t.stockKey), index("display_loc_idx").on(t.location)],
+);
+
+/**
+ * Kassa-verkopen (POS) — de bron-van-waarheid voor retail-verkoop in de Neon-core.
+ * Vervangt de storegents-blob `admin/pos-sales.json` (last-writer-wins). Fase 1: een
+ * getrouwe mirror — queryable kolommen + de volledige verkoop als JSONB `data`
+ * (euro's, lines/payments/korting/loyalty/SRS-velden), zodat de bestaande
+ * storegents-rekenlogica ongewijzigd blijft. Idempotent op client_ref (offline sync).
+ */
+export const posSales = pgTable(
+  "pos_sales",
+  {
+    id: text("id").primaryKey(), // pos-<...> id van de kassa
+    clientRef: text("client_ref").notNull().default(""), // idempotentie offline-sync
+    store: text("store").notNull(),
+    cashier: text("cashier").notNull().default(""),
+    cashierId: text("cashier_id").notNull().default(""),
+    customerId: text("customer_id").notNull().default(""),
+    totalCents: integer("total_cents").notNull().default(0),
+    itemCount: integer("item_count").notNull().default(0),
+    cancelled: boolean("cancelled").notNull().default(false),
+    srsPosted: boolean("srs_posted").notNull().default(false),
+    data: jsonb("data").notNull(), // de volledige verkoop (zoals de kassa 'm bouwt)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pos_sales_clientref_unique").on(t.clientRef).where(sql`${t.clientRef} <> ''`),
+    index("pos_sales_store_created_idx").on(t.store, t.createdAt),
+    index("pos_sales_store_flags_idx").on(t.store, t.cancelled, t.srsPosted),
+  ],
 );
