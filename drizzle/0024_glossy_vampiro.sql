@@ -1,0 +1,1 @@
+ALTER TABLE "inbound_shipments" ADD COLUMN "sample_plan" jsonb;

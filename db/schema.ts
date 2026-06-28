@@ -1045,6 +1045,8 @@ export const inboundShipments = pgTable(
     parts: integer("parts").notNull().default(1), // aantal dozen/colli
     // De ASN-regels: [{ stockKey, sku, barcode, title, size, color, imageUrl, expectedQty }]
     expectedLines: jsonb("expected_lines").notNull().default([]),
+    // Bevroren steekproefplan (F2): { mode, sampledStockKeys, mandatoryStockKeys, n, ac, re, trustLevel, ... }
+    samplePlan: jsonb("sample_plan"),
     note: text("note").notNull().default(""),
     createdBy: text("created_by").notNull().default(""),
     pickedBy: text("picked_by").notNull().default(""),

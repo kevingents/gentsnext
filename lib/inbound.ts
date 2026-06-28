@@ -17,6 +17,7 @@ import { getDb } from "@/db";
 import { inboundShipments, inboundReceiptCounts } from "@/db/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { recordMovements, markMovementsSrsPosted } from "@/lib/store-core";
+import { buildSamplePlan, type SamplePlan } from "@/lib/inbound-sampling";
 
 type Shipment = typeof inboundShipments.$inferSelect;
 type Count = typeof inboundReceiptCounts.$inferSelect;
@@ -117,15 +118,25 @@ export async function setShipmentStatus(shipmentId: string, status: string, by?:
   return s || null;
 }
 
-/** Winkel opent een zending om te ontvangen: → 'receiving'. */
-export async function startReceiving(shipmentId: string, startedBy?: string): Promise<Shipment | null> {
+/** Bevries het steekproefplan op de zending (idempotent — eenmaal berekend blijft 't
+ *  staan zodat de medewerker-UI deterministisch is en de audit klopt). */
+export async function prepareSamplePlan(shipmentId: string): Promise<Shipment | null> {
+  const s = await getShipment(shipmentId);
+  if (!s) return null;
+  if (s.samplePlan) return s;
+  const plan = await buildSamplePlan(s);
   const db = getDb();
-  const [s] = await db.update(inboundShipments)
+  const [u] = await db.update(inboundShipments).set({ samplePlan: plan }).where(eq(inboundShipments.id, shipmentId)).returning();
+  return u || s;
+}
+
+/** Winkel opent een zending om te ontvangen: → 'receiving' + bevries het steekproefplan. */
+export async function startReceiving(shipmentId: string, _startedBy?: string): Promise<Shipment | null> {
+  const db = getDb();
+  await db.update(inboundShipments)
     .set({ status: "receiving" })
-    .where(and(eq(inboundShipments.id, shipmentId), inArray(inboundShipments.status, ["picked", "in_transit"])))
-    .returning();
-  if (!s && startedBy) { /* al in receiving/received → laat staan */ }
-  return s || (await getShipment(shipmentId));
+    .where(and(eq(inboundShipments.id, shipmentId), inArray(inboundShipments.status, ["picked", "in_transit"])));
+  return prepareSamplePlan(shipmentId);
 }
 
 async function getShipment(id: string): Promise<Shipment | null> {
@@ -231,31 +242,59 @@ export async function deleteReceiptCount(shipmentId: string, stockKey: string): 
  * boekt nooit dubbel. Het missende stuk wordt simpelweg nooit toegevoegd → geen
  * fantoomvoorraad. Status → 'received'.
  */
-export async function receiveShipment(shipmentId: string, receivedBy?: string): Promise<{ ok: boolean; error?: string; booked: { stockKey: string; delta: number }[]; lines: ReturnType<typeof withVariance>[]; alreadyReceived?: boolean }> {
+export async function receiveShipment(shipmentId: string, receivedBy?: string): Promise<{ ok: boolean; error?: string; booked: { stockKey: string; delta: number }[]; lines: ReturnType<typeof withVariance>[]; alreadyReceived?: boolean; verdict?: "accepted" | "escalate" | "full"; need100?: boolean; sampleDiscrepancies?: number; message?: string }> {
   const data = await getInboundShipment(shipmentId);
   if (!data) return { ok: false, error: "Zending niet gevonden.", booked: [], lines: [] };
   const { shipment, counts } = data;
   if (["received", "closed"].includes(shipment.status)) {
     return { ok: true, booked: [], lines: counts, alreadyReceived: true };
   }
-  const lines = counts
-    .filter((c) => c.scannedQty > 0)
-    .map((c) => ({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty }));
 
-  let booked: { stockKey: string; delta: number }[] = [];
-  if (lines.length) {
+  const book = async (lines: { barcode: string; sku: string; name: string; color: string; size: string; qty: number }[]) => {
+    const real = lines.filter((l) => l.qty > 0);
+    if (!real.length) return [];
     const res = await recordMovements({
-      location: shipment.toStore,
-      channel: "inbound",
-      sign: 1,
-      ref: refFor(shipment.id),
-      reason: `ontvangst ${shipment.linkRef || shipment.source || ""}`.trim(),
-      lines,
+      location: shipment.toStore, channel: "inbound", sign: 1, ref: refFor(shipment.id),
+      reason: `ontvangst ${shipment.linkRef || shipment.source || ""}`.trim(), lines: real,
     });
-    booked = res.applied;
+    return res.applied;
+  };
+
+  const plan = shipment.samplePlan as SamplePlan | null;
+  const asn = (shipment.expectedLines as ExpectedLine[]) || [];
+  const countByKey = new Map(counts.map((c) => [c.stockKey, c]));
+
+  // STEEKPROEF: AQL-acceptatie vóór boeken.
+  if (plan && plan.mode === "sample") {
+    const sampled = new Set(plan.sampledStockKeys);
+    let d = 0;
+    for (const key of plan.sampledStockKeys) {
+      const exp = asn.find((l) => l.stockKey === key)?.expectedQty ?? 0;
+      const scanned = countByKey.get(key)?.scannedQty ?? 0;
+      if (scanned !== exp) d++;
+    }
+    if (d >= plan.re) {
+      // Afgekeurd → escaleer naar 100%: plan → full, nog NIET boeken.
+      const fullPlan: SamplePlan = { ...plan, mode: "full", reason: `afgekeurd (${d} afwijkingen ≥ ${plan.re}) → tel de hele levering`, sampledStockKeys: asn.map((l) => l.stockKey) };
+      await getDb().update(inboundShipments).set({ samplePlan: fullPlan }).where(eq(inboundShipments.id, shipmentId));
+      return { ok: true, booked: [], lines: counts, verdict: "escalate", need100: true, sampleDiscrepancies: d, message: `Te veel afwijkingen in de steekproef (${d}). Tel nu de hele levering.` };
+    }
+    // Geaccepteerd → sampled = gescand, vertrouwd = verwacht, onverwacht = gescand.
+    const asnKeys = new Set(asn.map((l) => l.stockKey));
+    const bookLines = asn.map((l) => ({
+      barcode: l.barcode, sku: l.sku, name: l.title, color: l.color, size: l.size,
+      qty: sampled.has(l.stockKey) ? (countByKey.get(l.stockKey)?.scannedQty ?? 0) : (Number(l.expectedQty) || 0),
+    }));
+    for (const c of counts) if (!asnKeys.has(c.stockKey) && c.scannedQty > 0) bookLines.push({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty });
+    const booked = await book(bookLines);
+    await setShipmentStatus(shipment.id, "received", receivedBy);
+    return { ok: true, booked, lines: counts, verdict: "accepted" };
   }
+
+  // FULL (of geen plan): boek alleen het gescande (F1-gedrag).
+  const booked = await book(counts.map((c) => ({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty })));
   await setShipmentStatus(shipment.id, "received", receivedBy);
-  return { ok: true, booked, lines: counts };
+  return { ok: true, booked, lines: counts, verdict: "full" };
 }
 
 /** Markeer de ontvangst-movements als 'in SRS verwerkt' (overdracht naar de baseline).

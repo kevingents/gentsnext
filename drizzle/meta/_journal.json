@@ -169,6 +169,13 @@
       "when": 1782644819695,
       "tag": "0023_wet_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782646489678,
+      "tag": "0024_glossy_vampiro",
+      "breakpoints": true
     }
   ]
 }
