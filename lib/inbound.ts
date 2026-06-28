@@ -35,7 +35,7 @@ function refFor(shipmentId: string) {
 
 /** Gescande code (barcode of sku) → variant-metadata + tel-sleutel. Zelfde resolutie
  *  als de inventarisatie/kassa zodat de stockKey 1-op-1 overeenkomt. */
-async function resolveCode(code: string): Promise<Omit<ExpectedLine, "expectedQty"> | null> {
+export async function resolveCode(code: string): Promise<Omit<ExpectedLine, "expectedQty"> | null> {
   const c = String(code || "").trim();
   if (!c) return null;
   const db = getDb();
@@ -104,6 +104,48 @@ export async function createInboundShipment(input: {
     pickedAt: new Date(),
   }).returning();
   return s;
+}
+
+/**
+ * Winkel→winkel-herverdeling (F4). Een bronwinkel stuurt voorraad naar een doelwinkel:
+ * (1) de voorraad gaat ER AF bij de bron (channel:'transfer' −1, ref `XFER-OUT-<id>`) —
+ * de stuks zijn fysiek weg/onderweg, dus niet meer beschikbaar bij de bron (anti-
+ * dubbeltelling); (2) er ontstaat een interstore-zending die de doelwinkel via de
+ * gewone scan-to-receive flow ontvangt (+1 bij ontvangst). Onderweg telt het bij geen
+ * van beide mee. Idempotent op de refs.
+ */
+export async function createInterstoreTransfer(input: {
+  fromStore: string; toStore: string; expectedLines?: ExpectedLine[]; skuExpected?: { sku: string; expected: number }[]; createdBy?: string; note?: string;
+}): Promise<{ ok: boolean; error?: string; shipment?: Shipment; deducted?: { stockKey: string; delta: number }[] }> {
+  const fromStore = String(input.fromStore || "").trim();
+  const toStore = String(input.toStore || "").trim();
+  if (!fromStore || !toStore) return { ok: false, error: "Bron- en doelwinkel vereist." };
+  if (fromStore.toLowerCase() === toStore.toLowerCase()) return { ok: false, error: "Bron en doel zijn dezelfde winkel." };
+  const lines = Array.isArray(input.expectedLines) && input.expectedLines.length
+    ? input.expectedLines
+    : await buildExpectedLines(input.skuExpected || []);
+  if (!lines.length) return { ok: false, error: "Geen artikelen om te versturen." };
+
+  const db = getDb();
+  const [ship] = await db.insert(inboundShipments).values({
+    toStore, source: fromStore, sourceType: "interstore", fromLocation: fromStore,
+    linkRef: "", parts: 1, expectedLines: lines, status: "in_transit",
+    note: input.note || "", createdBy: input.createdBy || "", pickedAt: new Date(), inTransitAt: new Date(),
+  }).returning();
+  await db.update(inboundShipments).set({ linkRef: `XFER-${ship.id.slice(0, 8).toUpperCase()}` }).where(eq(inboundShipments.id, ship.id));
+
+  // Afboeken bij de bron (de stuks zijn weg/onderweg).
+  const movLines = lines.map((l) => ({ barcode: l.barcode, sku: l.sku, name: l.title, color: l.color, size: l.size, qty: Number(l.expectedQty) || 0 }));
+  const res = await recordMovements({
+    location: fromStore, channel: "transfer", sign: -1, ref: `XFER-OUT-${ship.id}`,
+    reason: `herverdeling → ${toStore}`, lines: movLines,
+  });
+  return { ok: true, shipment: { ...ship, linkRef: `XFER-${ship.id.slice(0, 8).toUpperCase()}` }, deducted: res.applied };
+}
+
+/** Markeer de bron-afboeking van een herverdeling als 'in SRS verwerkt'. */
+export async function markTransferOutPosted(shipmentId: string): Promise<void> {
+  await markMovementsSrsPosted(`XFER-OUT-${shipmentId}`, "transfer");
 }
 
 /** Status-overgang met de bijbehorende timestamp. */

@@ -3,7 +3,7 @@ import { coreAuth } from "@/lib/store-core-token";
 import {
   createInboundShipment, listInboundShipments, openInboundForStore, getInboundShipment,
   setShipmentStatus, startReceiving, scanReceipt, deleteReceiptCount, receiveShipment,
-  inTransitQtyForStore, markInboundReceiptPosted, type ExpectedLine,
+  inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, resolveCode, type ExpectedLine,
 } from "@/lib/inbound";
 import { listOpenDiscrepancies, resolveDiscrepancy, getReceivingStats } from "@/lib/inbound-discrepancies";
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   let b: {
     action?: string; id?: string; shipmentId?: string; toStore?: string; status?: string; limit?: number;
     code?: string; qty?: number; mode?: string; stockKey?: string; by?: string; receivedBy?: string;
-    keys?: string[]; source?: string; sourceType?: string; fromLocation?: string; linkRef?: string;
+    keys?: string[]; source?: string; sourceType?: string; fromLocation?: string; fromStore?: string; linkRef?: string;
     parts?: number; expectedLines?: ExpectedLine[]; skuExpected?: { sku: string; expected: number }[];
     note?: string; createdBy?: string; days?: number;
   };
@@ -61,6 +61,12 @@ export async function POST(req: Request) {
         return NextResponse.json(await deleteReceiptCount(String(b.shipmentId || ""), String(b.stockKey || "")));
       case "receive":
         return NextResponse.json(await receiveShipment(String(b.id || ""), b.receivedBy));
+      case "transfer-out":
+        return NextResponse.json(await createInterstoreTransfer({ fromStore: b.fromStore || "", toStore: b.toStore || "", expectedLines: b.expectedLines, skuExpected: b.skuExpected, createdBy: b.by, note: b.note }));
+      case "resolve": {
+        const m = await resolveCode(String(b.code || ""));
+        return NextResponse.json({ ok: !!m, item: m });
+      }
       case "in-transit": {
         const m = await inTransitQtyForStore(b.toStore || "", b.keys);
         return NextResponse.json({ ok: true, qty: Object.fromEntries(m) });
