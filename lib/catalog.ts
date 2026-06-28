@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 import { getDb } from "@/db";
 import {
   products,
@@ -601,116 +602,96 @@ export async function getFilteredProducts(
   return { items: await buildProductCards(ordered), total };
 }
 
-export async function getFacets(f: ProductFilters): Promise<Facets> {
+/** Facetten zonder cache-laag (rechtstreeks de DB). getFacets() wrapt dit met caching. */
+export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   const db = getDb();
   // Facetten binnen de context (collectie/categorie), onafhankelijk van de
   // gekozen kleur/maat/pasvorm — zo blijven alle opties met telling zichtbaar.
   const ctx = sql.join(contextConditions(f), sql` and `);
 
-  const [typeRows, materialRows, patternRows, seasonRows, ironRow, colorRows, sizeRows, fitRows, priceRow, effenRow] = await Promise.all([
-    db.execute<{ v: string; n: number }>(sql`
-      select ${products.attributes} ->> 'subgroep' as v, count(*)::int as n
-      from ${products}
-      where ${ctx} and coalesce(${products.attributes} ->> 'subgroep','') <> ''
-      group by ${products.attributes} ->> 'subgroep'`),
-    db.execute<{ v: string; n: number }>(sql`
-      select ${products.attributes} ->> 'materiaal' as v, count(*)::int as n
-      from ${products}
-      where ${ctx} and coalesce(${products.attributes} ->> 'materiaal','') <> ''
-      group by ${products.attributes} ->> 'materiaal'`),
-    db.execute<{ v: string; n: number }>(sql`
-      select ${products.attributes} ->> 'print_design' as v, count(*)::int as n
-      from ${products}
-      where ${ctx} and coalesce(${products.attributes} ->> 'print_design','') <> ''
-      group by ${products.attributes} ->> 'print_design'`),
-    db.execute<{ v: string; n: number }>(sql`
-      select ${products.attributes} ->> 'seizoen' as v, count(*)::int as n
-      from ${products}
-      where ${ctx} and coalesce(${products.attributes} ->> 'seizoen','') <> ''
-      group by ${products.attributes} ->> 'seizoen'`),
-    db.execute<{ n: number }>(sql`
-      select count(*)::int as n from ${products}
-      where ${ctx} and ${products.attributes} ->> 'strijkvrij' = 'Ja'`),
-    db.execute<{ fam: string; n: number }>(sql`
-      select v.color_family as fam, count(distinct ${products.id})::int as n
-      from ${products} join ${productVariants} v on v.product_id = ${products.id}
-      where ${ctx} and v.color_family <> '' and v.stock_qty > 0
-      group by v.color_family`),
-    db.execute<{ size: string; n: number }>(sql`
-      select v.size_label as size, count(distinct ${products.id})::int as n
-      from ${products} join ${productVariants} v on v.product_id = ${products.id}
-      where ${ctx} and v.size_label <> '' and v.stock_qty > 0
-      group by v.size_label`),
-    db.execute<{ fit: string; n: number }>(sql`
-      select ${products.attributes} ->> 'pasvorm' as fit, count(*)::int as n
-      from ${products}
-      where ${ctx} and ${products.attributes} ->> 'pasvorm' is not null and ${products.attributes} ->> 'pasvorm' <> ''
-      group by ${products.attributes} ->> 'pasvorm'`),
-    db.execute<{ lo: number; hi: number }>(sql`
-      select min(v.price_cents)::int as lo, max(v.price_cents)::int as hi
-      from ${products} join ${productVariants} v on v.product_id = ${products.id}
-      where ${ctx}`),
-    db.execute<{ n: number }>(sql`
-      select count(*)::int as n from ${products}
-      where ${ctx} and coalesce(trim(${products.attributes} ->> 'print_design'), '') = ''`),
+  // Twee gebundelde queries i.p.v. tien losse round-trips: alle products-attribuut-
+  // facetten in één MATERIALIZED CTE (de context wordt één keer gescand), en
+  // kleur/maat/prijs (variant-join) in de tweede. Scheelt 8 Neon-round-trips + 8
+  // her-scans van dezelfde context.
+  const [prodAgg, varAgg] = await Promise.all([
+    db.execute<{ facet: string; v: string | null; n: number }>(sql`
+      with ctxp as materialized (
+        select ${products.id} as id, ${products.attributes} as attributes
+        from ${products}
+        where ${ctx}
+      )
+      select 'subgroep' as facet, attributes->>'subgroep' as v, count(*)::int as n from ctxp where coalesce(attributes->>'subgroep','') <> '' group by attributes->>'subgroep'
+      union all select 'materiaal', attributes->>'materiaal', count(*)::int from ctxp where coalesce(attributes->>'materiaal','') <> '' group by attributes->>'materiaal'
+      union all select 'print_design', attributes->>'print_design', count(*)::int from ctxp where coalesce(attributes->>'print_design','') <> '' group by attributes->>'print_design'
+      union all select 'seizoen', attributes->>'seizoen', count(*)::int from ctxp where coalesce(attributes->>'seizoen','') <> '' group by attributes->>'seizoen'
+      union all select 'pasvorm', attributes->>'pasvorm', count(*)::int from ctxp where coalesce(attributes->>'pasvorm','') <> '' group by attributes->>'pasvorm'
+      union all select 'strijkvrij', ''::text, count(*)::int from ctxp where attributes->>'strijkvrij' = 'Ja'
+      union all select 'effen', ''::text, count(*)::int from ctxp where coalesce(trim(attributes->>'print_design'),'') = ''
+    `),
+    db.execute<{ facet: string; v: string | null; n: number }>(sql`
+      with ctxv as materialized (
+        select ${products.id} as id, v.color_family, v.size_label, v.stock_qty, v.price_cents
+        from ${products} join ${productVariants} v on v.product_id = ${products.id}
+        where ${ctx}
+      )
+      select 'color' as facet, color_family as v, count(distinct id)::int as n from ctxv where color_family <> '' and stock_qty > 0 group by color_family
+      union all select 'size', size_label, count(distinct id)::int from ctxv where size_label <> '' and stock_qty > 0 group by size_label
+      union all select 'price_lo', ''::text, coalesce(min(price_cents),0)::int from ctxv
+      union all select 'price_hi', ''::text, coalesce(max(price_cents),0)::int from ctxv
+    `),
   ]);
 
-  const colorCount = new Map(colorRows.rows.map((r) => [r.fam, r.n]));
-  const colors = COLOR_FAMILIES.filter((c) => colorCount.has(c.key)).map((c) => ({
-    ...c,
-    count: colorCount.get(c.key) ?? 0,
-  }));
+  const pRows = prodAgg.rows, vRows = varAgg.rows;
+  const of = (rows: typeof pRows, facet: string) => rows.filter((r) => r.facet === facet);
+  const scalar = (rows: typeof pRows, facet: string) => Number(of(rows, facet)[0]?.n ?? 0);
 
-  // Lettermaat-buckets (XS/M/L/…) in natuurlijke volgorde — nette filter i.p.v.
-  // een platte lijst van 44/46/98/25/One door elkaar.
-  const sizes = sizeRows.rows
-    .map((r) => ({ value: r.size, label: rowDisplayLabel(r.size), count: r.n }))
+  const colorCount = new Map(of(vRows, "color").map((r) => [r.v ?? "", r.n]));
+  const colors = COLOR_FAMILIES.filter((c) => colorCount.has(c.key)).map((c) => ({ ...c, count: colorCount.get(c.key) ?? 0 }));
+
+  // Lettermaat-buckets (XS/M/L/…) in natuurlijke volgorde.
+  const sizes = of(vRows, "size")
+    .map((r) => ({ value: r.v ?? "", label: rowDisplayLabel(r.v ?? ""), count: r.n }))
     .sort((a, b) => rowSortIndex(a.value) - rowSortIndex(b.value));
 
-  const fits = fitRows.rows
-    .map((r) => ({ value: r.fit, count: r.n }))
-    .sort((a, b) => b.count - a.count);
+  const fits = of(pRows, "pasvorm").map((r) => ({ value: r.v ?? "", count: r.n })).sort((a, b) => b.count - a.count);
 
-  const types = typeRows.rows
-    .map((r) => ({ value: r.v, label: typeLabel(r.v), count: r.n }))
-    .sort((a, b) => b.count - a.count);
+  const types = of(pRows, "subgroep").map((r) => ({ value: r.v ?? "", label: typeLabel(r.v ?? ""), count: r.n })).sort((a, b) => b.count - a.count);
 
-  // Materiaal: alleen tonen wat genoeg voorkomt (anders een te lange lijst).
-  const materials = materialRows.rows
-    .map((r) => ({ value: r.v, count: r.n }))
-    .filter((m) => m.count >= 2)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 12);
+  // Materiaal: alleen tonen wat genoeg voorkomt.
+  const materials = of(pRows, "materiaal").map((r) => ({ value: r.v ?? "", count: r.n })).filter((m) => m.count >= 2).sort((a, b) => b.count - a.count).slice(0, 12);
 
   // Seizoen: alleen echte seizoenen (geen "NOS"/"Black friday"-ruis).
-  const seasons = seasonRows.rows
-    .filter((r) => REAL_SEASONS.has(r.v))
-    .map((r) => ({ value: r.v, count: r.n }))
-    .sort((a, b) => b.count - a.count);
+  const seasons = of(pRows, "seizoen").filter((r) => REAL_SEASONS.has(r.v ?? "")).map((r) => ({ value: r.v ?? "", count: r.n })).sort((a, b) => b.count - a.count);
 
   // "Effen" (geen dessin) als eerste optie — meestal de grootste groep.
-  const effenCount = Number(effenRow.rows[0]?.n ?? 0);
+  const effenCount = scalar(pRows, "effen");
   const patterns = [
     ...(effenCount >= 2 ? [{ value: "Effen", count: effenCount }] : []),
-    ...patternRows.rows
-      .map((r) => ({ value: r.v, count: r.n }))
-      .filter((p) => p.count >= 2)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 12),
+    ...of(pRows, "print_design").map((r) => ({ value: r.v ?? "", count: r.n })).filter((p) => p.count >= 2).sort((a, b) => b.count - a.count).slice(0, 12),
   ];
 
   return {
-    types,
-    materials,
-    patterns,
-    seasons,
-    ironFreeCount: Number(ironRow.rows[0]?.n ?? 0),
-    colors,
-    sizes,
-    fits,
-    priceMinCents: Number(priceRow.rows[0]?.lo ?? 0),
-    priceMaxCents: Number(priceRow.rows[0]?.hi ?? 0),
+    types, materials, patterns, seasons,
+    ironFreeCount: scalar(pRows, "strijkvrij"),
+    colors, sizes, fits,
+    priceMinCents: scalar(vRows, "price_lo"),
+    priceMaxCents: scalar(vRows, "price_hi"),
   };
+}
+
+/**
+ * Facetten hangen alleen van de context (categorie/collectie) af — niet van de
+ * gekozen filters. Daarom cachen we per context (revalidate 180s): een handvol
+ * distinct sleutels die door álle bezoekers gedeeld worden, i.p.v. 10 DB-queries
+ * per PLP-render. Een catalogus-wijziging is binnen 3 min zichtbaar.
+ */
+const _facetsCached = unstable_cache(
+  (collectionId: string, category: string) => getFacetsUncached({ collectionId: collectionId || undefined, category: category || undefined }),
+  ["plp-facets-v2"],
+  { revalidate: 180 },
+);
+export function getFacets(f: ProductFilters): Promise<Facets> {
+  return _facetsCached(f.collectionId || "", f.category || "");
 }
 
 /* ─────────────────────────── Bijverkoop / cross-sell ──────────────────── */

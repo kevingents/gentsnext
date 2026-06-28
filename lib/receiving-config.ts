@@ -1,4 +1,5 @@
 import { list } from "@vercel/blob";
+import { singleflight } from "@/lib/inflight";
 
 /**
  * Steekproef-instellingen voor de goederenontvangst (F2). Instelbaar via de
@@ -49,9 +50,14 @@ function num(v: unknown, def: number, min: number, max: number): number {
 }
 
 let cache: { cfg: ReceivingConfig; at: number } | null = null;
+const flight = singleflight<ReceivingConfig>();
 
 export async function getReceivingConfig(): Promise<ReceivingConfig> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.cfg;
+  return flight(loadConfig);
+}
+
+async function loadConfig(): Promise<ReceivingConfig> {
   let cfg = { ...DEFAULTS };
   try {
     const token = blobToken();

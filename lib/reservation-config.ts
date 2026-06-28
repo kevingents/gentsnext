@@ -1,4 +1,5 @@
 import { list } from "@vercel/blob";
+import { singleflight } from "@/lib/inflight";
 
 /**
  * Reservering-hold-duur (dagen) — instelbaar via de ReserveringConfig-kaart in de
@@ -21,9 +22,14 @@ function clampDays(n: unknown): number {
 }
 
 let cache: { days: number; at: number } | null = null;
+const flight = singleflight<number>();
 
 export async function getReservationHoldDays(): Promise<number> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.days;
+  return flight(loadDays);
+}
+
+async function loadDays(): Promise<number> {
   let days = DEFAULT_DAYS;
   try {
     const token = blobToken();

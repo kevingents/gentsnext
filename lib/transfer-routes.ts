@@ -1,4 +1,5 @@
 import { list } from "@vercel/blob";
+import { singleflight } from "@/lib/inflight";
 
 /**
  * Verzendadvies voor winkel→winkel-herverdeling (F4+): rit (gratis, vaste dagen) vs
@@ -29,9 +30,14 @@ function num(v: unknown, def: number, min: number, max: number): number {
 }
 
 let cache: { cfg: TransferRoutesConfig; at: number } | null = null;
+const flight = singleflight<TransferRoutesConfig>();
 
 export async function getTransferRoutesConfig(): Promise<TransferRoutesConfig> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.cfg;
+  return flight(loadConfig);
+}
+
+async function loadConfig(): Promise<TransferRoutesConfig> {
   let cfg = { ...DEFAULTS };
   try {
     const token = blobToken();
