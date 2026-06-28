@@ -1090,6 +1090,10 @@ export const inboundReceiptCounts = pgTable(
     expectedQty: integer("expected_qty").notNull().default(0), // uit de ASN
     scannedQty: integer("scanned_qty").notNull().default(0),
     blind: boolean("blind").notNull().default(false), // F2: steekproefregel → verwacht aantal verborgen
+    // F3+ schade-melding: een deel van het gescande is beschadigd/verkeerd → niet als
+    // verkoopbare voorraad boeken (quarantaine) + een afwijking met deze code.
+    flagCode: text("flag_code").notNull().default(""), // DAMAGED | WRONG_ITEM | QUALITY | MISLABELED
+    flagQty: integer("flag_qty").notNull().default(0),
     firstScannedAt: timestamp("first_scanned_at", { withTimezone: true }).notNull().defaultNow(),
     lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }).notNull().defaultNow(),
   },

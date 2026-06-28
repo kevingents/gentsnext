@@ -274,6 +274,23 @@ export async function scanReceipt(input: { shipmentId: string; code: string; qty
   return { ok: true, count: withVariance(row) };
 }
 
+const FLAG_CODES = ["DAMAGED", "WRONG_ITEM", "QUALITY", "MISLABELED"];
+
+/** Markeer (een deel van) een gescande regel als beschadigd/verkeerd → die stuks
+ *  worden NIET als verkoopbare voorraad geboekt (quarantaine) + leveren een afwijking.
+ *  code '' = melding intrekken. qty default = het volledige gescande aantal. */
+export async function flagReceiptLine(input: { shipmentId: string; stockKey: string; code: string; qty?: number }): Promise<{ ok: boolean; error?: string; count?: ReturnType<typeof withVariance> }> {
+  const code = FLAG_CODES.includes(input.code) ? input.code : "";
+  const db = getDb();
+  const [c] = await db.select().from(inboundReceiptCounts)
+    .where(and(eq(inboundReceiptCounts.shipmentId, input.shipmentId), eq(inboundReceiptCounts.stockKey, input.stockKey))).limit(1);
+  if (!c) return { ok: false, error: "Regel niet gevonden." };
+  const qty = code ? Math.max(1, Math.min(c.scannedQty, Number(input.qty) || c.scannedQty)) : 0;
+  const [row] = await db.update(inboundReceiptCounts).set({ flagCode: code, flagQty: qty })
+    .where(and(eq(inboundReceiptCounts.shipmentId, input.shipmentId), eq(inboundReceiptCounts.stockKey, input.stockKey))).returning();
+  return { ok: true, count: withVariance(row) };
+}
+
 /** Een gescande regel verwijderen (per ongeluk gescand). */
 export async function deleteReceiptCount(shipmentId: string, stockKey: string): Promise<{ ok: boolean }> {
   const db = getDb();
@@ -309,6 +326,8 @@ export async function receiveShipment(shipmentId: string, receivedBy?: string): 
   const plan = shipment.samplePlan as SamplePlan | null;
   const asn = (shipment.expectedLines as ExpectedLine[]) || [];
   const countByKey = new Map(counts.map((c) => [c.stockKey, c]));
+  // Alleen de GOEDE stuks boeken: gescand − gevlagd (beschadigd/verkeerd = quarantaine).
+  const good = (c?: { scannedQty: number; flagQty?: number } | null) => Math.max(0, (c?.scannedQty ?? 0) - (c?.flagQty ?? 0));
 
   // STEEKPROEF: AQL-acceptatie vóór boeken.
   if (plan && plan.mode === "sample") {
@@ -329,17 +348,17 @@ export async function receiveShipment(shipmentId: string, receivedBy?: string): 
     const asnKeys = new Set(asn.map((l) => l.stockKey));
     const bookLines = asn.map((l) => ({
       barcode: l.barcode, sku: l.sku, name: l.title, color: l.color, size: l.size,
-      qty: sampled.has(l.stockKey) ? (countByKey.get(l.stockKey)?.scannedQty ?? 0) : (Number(l.expectedQty) || 0),
+      qty: sampled.has(l.stockKey) ? good(countByKey.get(l.stockKey)) : (Number(l.expectedQty) || 0),
     }));
-    for (const c of counts) if (!asnKeys.has(c.stockKey) && c.scannedQty > 0) bookLines.push({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty });
+    for (const c of counts) if (!asnKeys.has(c.stockKey) && c.scannedQty > 0) bookLines.push({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: good(c) });
     const booked = await book(bookLines);
     await setShipmentStatus(shipment.id, "received", receivedBy);
     const disc = await logDiscrepancies(shipment, counts, plan).catch(() => ({ count: 0, codes: {} }));
     return { ok: true, booked, lines: counts, verdict: "accepted", discrepancies: disc.count };
   }
 
-  // FULL (of geen plan): boek alleen het gescande (F1-gedrag).
-  const booked = await book(counts.map((c) => ({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: c.scannedQty })));
+  // FULL (of geen plan): boek alleen de goede stuks (gescand − gevlagd).
+  const booked = await book(counts.map((c) => ({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: good(c) })));
   await setShipmentStatus(shipment.id, "received", receivedBy);
   const disc = await logDiscrepancies(shipment, counts, plan).catch(() => ({ count: 0, codes: {} }));
   return { ok: true, booked, lines: counts, verdict: "full", discrepancies: disc.count };

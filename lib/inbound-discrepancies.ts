@@ -12,7 +12,7 @@ import type { ExpectedLine } from "@/lib/inbound";
 import type { SamplePlan } from "@/lib/inbound-sampling";
 
 type Shipment = typeof inboundShipments.$inferSelect;
-type Count = { stockKey: string; sku: string; title: string; size: string; color: string; scannedQty: number };
+type Count = { stockKey: string; sku: string; title: string; size: string; color: string; scannedQty: number; flagCode?: string; flagQty?: number };
 export type DiscCode = "SHORT" | "OVER" | "DAMAGED" | "WRONG_ITEM" | "NOT_ORDERED" | "QUALITY" | "MISLABELED";
 
 /** Leg de afwijkingen van een afgesloten ontvangst vast. Alleen GEVERIFIEERDE regels
@@ -41,6 +41,13 @@ export async function logDiscrepancies(shipment: Shipment, counts: Count[], plan
   for (const c of counts) {
     if (asnKeys.has(c.stockKey) || c.scannedQty <= 0) continue;
     rows.push({ ...base, stockKey: c.stockKey, sku: c.sku, title: c.title, size: c.size, color: c.color, expectedQty: 0, scannedQty: c.scannedQty, variance: c.scannedQty, code: "NOT_ORDERED" });
+  }
+  // Expliciete schade-/verkeerd-meldingen (knoppen in de scanner): aparte afwijking
+  // met de gekozen code, naast een eventuele tekort/teveel op dezelfde regel.
+  for (const c of counts) {
+    if (!c.flagCode || (c.flagQty ?? 0) <= 0) continue;
+    const exp = asn.find((l) => l.stockKey === c.stockKey)?.expectedQty ?? 0;
+    rows.push({ ...base, stockKey: c.stockKey, sku: c.sku, title: c.title, size: c.size, color: c.color, expectedQty: exp, scannedQty: c.scannedQty, variance: -(c.flagQty ?? 0), code: c.flagCode });
   }
 
   const codes: Record<string, number> = {};

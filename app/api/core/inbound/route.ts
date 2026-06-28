@@ -3,7 +3,7 @@ import { coreAuth } from "@/lib/store-core-token";
 import {
   createInboundShipment, listInboundShipments, openInboundForStore, getInboundShipment,
   setShipmentStatus, startReceiving, scanReceipt, deleteReceiptCount, receiveShipment,
-  inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, resolveCode, type ExpectedLine,
+  inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, resolveCode, flagReceiptLine, type ExpectedLine,
 } from "@/lib/inbound";
 import { listOpenDiscrepancies, resolveDiscrepancy, getReceivingStats } from "@/lib/inbound-discrepancies";
 import { adviseShipMethod } from "@/lib/transfer-routes";
@@ -61,6 +61,8 @@ export async function POST(req: Request) {
         return NextResponse.json(await scanReceipt({ shipmentId: String(b.shipmentId || ""), code: String(b.code || ""), qty: b.qty, mode: b.mode }));
       case "delete-count":
         return NextResponse.json(await deleteReceiptCount(String(b.shipmentId || ""), String(b.stockKey || "")));
+      case "flag":
+        return NextResponse.json(await flagReceiptLine({ shipmentId: String(b.shipmentId || ""), stockKey: String(b.stockKey || ""), code: String(b.code || ""), qty: b.qty }));
       case "receive":
         return NextResponse.json(await receiveShipment(String(b.id || ""), b.receivedBy));
       case "transfer-out":
