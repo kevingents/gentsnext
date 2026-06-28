@@ -12,6 +12,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "migrate:possales": "tsx scripts/migrate-pos-sales-to-neon.ts",
+    "seed:redirects": "tsx scripts/seed-redirects.ts",
     "import:cache": "tsx scripts/import-from-cache.ts",
     "import:shopify": "tsx scripts/import-shopify-bulk.ts",
     "cache:publish": "tsx scripts/publish-cache.ts",

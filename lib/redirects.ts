@@ -33,12 +33,38 @@ export async function getRedirects(): Promise<Redirect[]> {
   return _cache;
 }
 
-/** Snelle lookup voor de middleware op het canonieke (locale-loze) pad. */
+const isWild = (s: string) => /\/\*+$/.test(String(s || ""));
+const st = (s: 301 | 302) => (s === 302 ? 302 : 301);
+
+/**
+ * Snelle lookup voor de middleware op het canonieke (locale-loze) pad. Ondersteunt
+ * exacte regels én prefix-wildcards (source eindigt op `/*`):
+ *   - `/blogs/*` → `/blog`        : alles onder /blogs naar de blog-hub
+ *   - `/oud/*`   → `/nieuw/*`      : behoudt het restpad (/oud/x/y → /nieuw/x/y)
+ * Exacte match wint van wildcard; bij meerdere wildcards wint de LANGSTE prefix.
+ */
 export async function matchRedirect(path: string): Promise<{ target: string; status: number } | null> {
   const p = normPath(path);
   if (p === "/") return null;
   const list = await getRedirects();
-  const hit = list.find((r) => r.active && normPath(r.source) === p);
-  if (!hit) return null;
-  return { target: hit.target, status: hit.status === 302 ? 302 : 301 };
+
+  // 1. Exacte match (meest specifiek).
+  const exact = list.find((r) => r.active && !isWild(r.source) && normPath(r.source) === p);
+  if (exact) return { target: exact.target, status: st(exact.status) };
+
+  // 2. Prefix-wildcard: langste prefix wint.
+  let best: { r: Redirect; splat: string; len: number } | null = null;
+  for (const r of list) {
+    if (!r.active || !isWild(r.source)) continue;
+    const prefix = normPath(r.source.replace(/\/\*+$/, ""));
+    if (p === prefix || p.startsWith(prefix + "/")) {
+      if (!best || prefix.length > best.len) best = { r, splat: p.slice(prefix.length), len: prefix.length };
+    }
+  }
+  if (best) {
+    const t = best.r.target;
+    const target = isWild(t) ? normPath(t.replace(/\/\*+$/, "") + best.splat) : t;
+    return { target, status: st(best.r.status) };
+  }
+  return null;
 }
