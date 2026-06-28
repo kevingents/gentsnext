@@ -116,6 +116,7 @@ export async function createInboundShipment(input: {
  */
 export async function createInterstoreTransfer(input: {
   fromStore: string; toStore: string; expectedLines?: ExpectedLine[]; skuExpected?: { sku: string; expected: number }[]; createdBy?: string; note?: string;
+  shipMethod?: string; plannedRouteDate?: string; urgent?: boolean;
 }): Promise<{ ok: boolean; error?: string; shipment?: Shipment; deducted?: { stockKey: string; delta: number }[] }> {
   const fromStore = String(input.fromStore || "").trim();
   const toStore = String(input.toStore || "").trim();
@@ -127,10 +128,12 @@ export async function createInterstoreTransfer(input: {
   if (!lines.length) return { ok: false, error: "Geen artikelen om te versturen." };
 
   const db = getDb();
+  const shipMethod = input.shipMethod === "route" || input.shipMethod === "dhl" ? input.shipMethod : "";
   const [ship] = await db.insert(inboundShipments).values({
     toStore, source: fromStore, sourceType: "interstore", fromLocation: fromStore,
     linkRef: "", parts: 1, expectedLines: lines, status: "in_transit",
     note: input.note || "", createdBy: input.createdBy || "", pickedAt: new Date(), inTransitAt: new Date(),
+    shipMethod, plannedRouteDate: input.plannedRouteDate ? new Date(input.plannedRouteDate) : null, urgent: !!input.urgent,
   }).returning();
   await db.update(inboundShipments).set({ linkRef: `XFER-${ship.id.slice(0, 8).toUpperCase()}` }).where(eq(inboundShipments.id, ship.id));
 

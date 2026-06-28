@@ -1043,6 +1043,10 @@ export const inboundShipments = pgTable(
     status: text("status").notNull().default("picked"), // picked | in_transit | receiving | received | closed | cancelled
     linkRef: text("link_ref").notNull().default(""), // MAG-YYYY-NNNN / srsOrderNr → traceability
     parts: integer("parts").notNull().default(1), // aantal dozen/colli
+    // Verzendmethode bij winkel→winkel-herverdeling (F4+): 'route' (eigen rit) of 'dhl'.
+    shipMethod: text("ship_method").notNull().default(""),
+    plannedRouteDate: timestamp("planned_route_date", { withTimezone: true }), // geplande rit-datum bij 'route'
+    urgent: boolean("urgent").notNull().default(false),
     // De ASN-regels: [{ stockKey, sku, barcode, title, size, color, imageUrl, expectedQty }]
     expectedLines: jsonb("expected_lines").notNull().default([]),
     // Bevroren steekproefplan (F2): { mode, sampledStockKeys, mandatoryStockKeys, n, ac, re, trustLevel, ... }

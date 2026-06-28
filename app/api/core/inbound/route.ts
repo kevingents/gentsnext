@@ -6,6 +6,7 @@ import {
   inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, resolveCode, type ExpectedLine,
 } from "@/lib/inbound";
 import { listOpenDiscrepancies, resolveDiscrepancy, getReceivingStats } from "@/lib/inbound-discrepancies";
+import { adviseShipMethod } from "@/lib/transfer-routes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     keys?: string[]; source?: string; sourceType?: string; fromLocation?: string; fromStore?: string; linkRef?: string;
     parts?: number; expectedLines?: ExpectedLine[]; skuExpected?: { sku: string; expected: number }[];
     note?: string; createdBy?: string; days?: number;
+    shipMethod?: string; plannedRouteDate?: string; urgent?: boolean;
   };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
@@ -62,7 +64,9 @@ export async function POST(req: Request) {
       case "receive":
         return NextResponse.json(await receiveShipment(String(b.id || ""), b.receivedBy));
       case "transfer-out":
-        return NextResponse.json(await createInterstoreTransfer({ fromStore: b.fromStore || "", toStore: b.toStore || "", expectedLines: b.expectedLines, skuExpected: b.skuExpected, createdBy: b.by, note: b.note }));
+        return NextResponse.json(await createInterstoreTransfer({ fromStore: b.fromStore || "", toStore: b.toStore || "", expectedLines: b.expectedLines, skuExpected: b.skuExpected, createdBy: b.by, note: b.note, shipMethod: b.shipMethod, plannedRouteDate: b.plannedRouteDate, urgent: b.urgent }));
+      case "ship-advice":
+        return NextResponse.json({ ok: true, advice: await adviseShipMethod(b.fromStore || "", b.toStore || "", !!b.urgent) });
       case "resolve": {
         const m = await resolveCode(String(b.code || ""));
         return NextResponse.json({ ok: !!m, item: m });
