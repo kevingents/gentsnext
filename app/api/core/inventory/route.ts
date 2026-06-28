@@ -4,6 +4,7 @@ import {
   startInventorySession, prepareInventorySession, startPreparedSession,
   scanInventory, deleteInventoryCount, getInventorySession,
   listInventorySessions, listSessionsForReview, completeInventorySession, applyInventoryVariances,
+  listProductGroups,
 } from "@/lib/inventory";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,9 @@ export async function POST(req: Request) {
       }
       case "review-list": {
         return NextResponse.json({ ok: true, reviews: await listSessionsForReview(b.limit) });
+      }
+      case "groups": {
+        return NextResponse.json({ ok: true, groups: await listProductGroups() });
       }
       case "complete": {
         if (!b.sessionId) return NextResponse.json({ ok: false, error: "sessionId vereist." }, { status: 400 });

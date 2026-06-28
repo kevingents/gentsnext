@@ -66,21 +66,27 @@ type ScopeSku = { sku?: string; barcode?: string; expected?: number; title?: str
 
 /** Verrijk een {sku, expected}-lijst met variant-meta (barcode/title/size/color/image)
  *  → zodat de zeroing dezelfde stockKey (barcode||sku) krijgt als een scan. */
-async function buildScopeSkus(skuExpected: { sku: string; expected: number }[]): Promise<ScopeSku[]> {
+async function buildScopeSkus(skuExpected: { sku: string; expected: number }[], groupFilter?: string[]): Promise<ScopeSku[]> {
   const list = (skuExpected || []).filter((s) => s && s.sku);
   if (!list.length) return [];
   const db = getDb();
   const skus = [...new Set(list.map((s) => String(s.sku)))];
-  const rows = await db.execute<{ sku: string; barcode: string; title: string; size: string; color: string; img: string | null }>(sql`
+  const rows = await db.execute<{ sku: string; barcode: string; title: string; size: string; color: string; img: string | null; hoofdgroep: string | null }>(sql`
     select v.sku, v.barcode, p.title, v.size, v.color,
-      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img,
+      (p.attributes ->> 'hoofdgroep_omschrijving') as hoofdgroep
     from product_variants v join products p on p.id = v.product_id
     where v.sku in (${sql.join(skus.map((s) => sql`${s}`), sql`, `)})`);
   const meta = new Map(rows.rows.map((r) => [r.sku, r]));
-  return list.map(({ sku, expected }) => {
+  // Groep-scope: filter op hoofdgroep (NULL/onbekende groep valt buiten een groep-telling).
+  const groups = groupFilter && groupFilter.length ? new Set(groupFilter.map((g) => String(g).trim().toLowerCase())) : null;
+  const out: ScopeSku[] = [];
+  for (const { sku, expected } of list) {
     const m = meta.get(String(sku));
-    return { sku: String(sku), barcode: m?.barcode || "", expected: Number(expected) || 0, title: m?.title || "", size: m?.size || "", color: m?.color || "", imageUrl: m?.img || "" };
-  });
+    if (groups && !(m && groups.has(String(m.hoofdgroep || "").trim().toLowerCase()))) continue;
+    out.push({ sku: String(sku), barcode: m?.barcode || "", expected: Number(expected) || 0, title: m?.title || "", size: m?.size || "", color: m?.color || "", imageUrl: m?.img || "" });
+  }
+  return out;
 }
 
 /** Supply-chain zet een telling klaar (status 'prepared') met scope + de verwachte
@@ -88,9 +94,10 @@ async function buildScopeSkus(skuExpected: { sku: string; expected: number }[]):
  *  óf een kant-en-klare scopeSkus, óf een skuExpected-lijst die we hier verrijken. */
 export async function prepareInventorySession(input: { location: string; scope?: string; scopeValues?: unknown[]; scopeSkus?: ScopeSku[]; skuExpected?: { sku: string; expected: number }[]; type?: string; section?: string; note?: string; assignedBy?: string }) {
   const db = getDb();
+  const groupFilter = input.scope === "group" && Array.isArray(input.scopeValues) ? input.scopeValues.map(String) : undefined;
   const scopeSkus = Array.isArray(input.scopeSkus) && input.scopeSkus.length
     ? input.scopeSkus
-    : await buildScopeSkus(input.skuExpected || []);
+    : await buildScopeSkus(input.skuExpected || [], groupFilter);
   const [s] = await db.insert(inventorySessions).values({
     location: input.location,
     status: "prepared",
@@ -103,6 +110,18 @@ export async function prepareInventorySession(input: { location: string; scope?:
     assignedBy: input.assignedBy || "",
   }).returning();
   return s;
+}
+
+/** Productgroepen (hoofdgroep_omschrijving) — voor de groep-scope-keuze bij het
+ *  klaarzetten van een telling. */
+export async function listProductGroups(): Promise<string[]> {
+  const db = getDb();
+  const rows = await db.execute<{ g: string }>(sql`
+    select distinct (attributes ->> 'hoofdgroep_omschrijving') as g
+    from products
+    where (attributes ->> 'hoofdgroep_omschrijving') is not null and (attributes ->> 'hoofdgroep_omschrijving') <> ''
+    order by g`);
+  return rows.rows.map((r) => r.g).filter(Boolean);
 }
 
 /** Winkel start een klaargezette telling: prepared → open. */
