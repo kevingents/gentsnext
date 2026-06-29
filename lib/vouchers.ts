@@ -36,13 +36,34 @@ export async function validateVoucher(rawCode: string, subtotalCents: number): P
   return { valid: true, code, discountCents, label };
 }
 
-/** Markeert een (single-use) code als verzilverd. */
-export async function redeemVoucher(code: string): Promise<void> {
+/**
+ * Verzilvert een single-use code ATOMAIR: de UPDATE eist `status='active'`, dus van
+ * twee gelijktijdige checkouts kan er maar één 'm flippen (active→redeemed). Voorkomt
+ * dat dezelfde eenmalige code dubbel wordt gebruikt (bv. een vast-bedrag-code die het
+ * totaal naar €0 duwt). Retourneert false ALLEEN als een single-use code al verzilverd
+ * was (race verloren); herbruikbare codes geven altijd true.
+ */
+export async function redeemVoucher(code: string): Promise<boolean> {
+  const db = getDb();
+  const norm = code.trim().toUpperCase();
+  const rows = await db
+    .update(vouchers)
+    .set({ status: "redeemed", redeemedAt: sql`now()` })
+    .where(and(eq(vouchers.code, norm), eq(vouchers.singleUse, true), eq(vouchers.status, "active")))
+    .returning({ id: vouchers.id });
+  if (rows.length) return true; // single-use net atomair verzilverd
+  // Niets geraakt: óf een herbruikbare code (prima), óf een single-use die al weg was.
+  const [v] = await db.select({ singleUse: vouchers.singleUse }).from(vouchers).where(eq(vouchers.code, norm)).limit(1);
+  return !!v && !v.singleUse;
+}
+
+/** Maakt een net-verzilverde single-use code weer actief (bij een teruggedraaide order). */
+export async function releaseVoucher(code: string): Promise<void> {
   const db = getDb();
   await db
     .update(vouchers)
-    .set({ status: "redeemed", redeemedAt: sql`now()` })
-    .where(and(eq(vouchers.code, code.trim().toUpperCase()), eq(vouchers.singleUse, true)));
+    .set({ status: "active", redeemedAt: null })
+    .where(and(eq(vouchers.code, code.trim().toUpperCase()), eq(vouchers.singleUse, true), eq(vouchers.status, "redeemed")));
 }
 
 /** Maakt een unieke welkomstvoucher (percentage) voor een e-mailadres. */
