@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { SizeAdvisor } from "@/components/maatadvies/size-advisor";
 
 export const metadata: Metadata = {
@@ -18,6 +19,13 @@ export default function MaatadviesPage() {
           Onze maattabellen lopen van colbertmaten en lengtematen tot boordmaten —
           niet altijd even overzichtelijk. Vul je gegevens in en wij vertalen ze
           naar de juiste maat per onderdeel.
+        </p>
+        <p className="mt-3 font-sans text-sm text-ink-soft">
+          Liever zelf de tabellen bekijken?{" "}
+          <Link href="/maattabellen" className="text-ink underline underline-offset-4">
+            Bekijk alle maattabellen
+          </Link>
+          .
         </p>
       </div>
       <div className="mt-12">

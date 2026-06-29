@@ -48,6 +48,35 @@ export async function findOrCreateCustomer(email: string) {
   return created;
 }
 
+/**
+ * Maak/vind een gents.nl-klant met naam + telefoon, voor de kassa/scanner.
+ * GEEN SRS-push — dit is puur de gents.nl-klantkaart (omnichannel-profiel). Bestaat
+ * de klant al (op e-mail), dan vullen we alleen lege velden aan (niet overschrijven).
+ */
+export async function createPosCustomer(input: { email: string; firstName?: string; lastName?: string; phone?: string }) {
+  const db = getDb();
+  const email = String(input.email || "").trim().toLowerCase();
+  if (!/.+@.+\..+/.test(email)) throw new Error("Geldig e-mailadres vereist.");
+  const firstName = String(input.firstName || "").trim();
+  const lastName = String(input.lastName || "").trim();
+  const phone = String(input.phone || "").trim();
+
+  const [existing] = await db.select().from(customers).where(eq(customers.email, email)).limit(1);
+  if (existing) {
+    const patch: Partial<typeof customers.$inferInsert> = {};
+    if (firstName && !existing.firstName) patch.firstName = firstName;
+    if (lastName && !existing.lastName) patch.lastName = lastName;
+    if (phone && !existing.phone) patch.phone = phone;
+    if (Object.keys(patch).length) {
+      patch.updatedAt = new Date();
+      await db.update(customers).set(patch).where(eq(customers.id, existing.id));
+    }
+    return { ...existing, ...patch };
+  }
+  const [created] = await db.insert(customers).values({ email, firstName, lastName, phone }).returning();
+  return created;
+}
+
 /* ── "Rond je profiel af voor +50 punten" ── */
 const PROFILE_BONUS_POINTS = 50;
 

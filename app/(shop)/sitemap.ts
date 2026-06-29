@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { listCollections, listProductHandles } from "@/lib/catalog";
 import { getSiteUrl } from "@/lib/site-url";
+import { SIZE_GUIDES } from "@/lib/size-chart-hub";
 
 export const revalidate = 3600;
 
@@ -14,6 +15,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: siteUrl, changeFrequency: "daily", priority: 1 },
     { url: `${siteUrl}/collections`, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${siteUrl}/maatadvies`, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${siteUrl}/maattabellen`, changeFrequency: "monthly", priority: 0.6 },
+    ...SIZE_GUIDES.map((g) => ({
+      url: `${siteUrl}/maattabellen/${g.slug}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    })),
   ];
 
   try {
