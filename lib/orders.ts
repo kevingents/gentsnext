@@ -8,7 +8,7 @@ import { sendOrderConfirmation } from "@/lib/email";
 import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
-import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
+import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
@@ -294,9 +294,26 @@ export async function createOrder(
     throw e;
   }
 
-  if (appliedCode) await redeemVoucher(appliedCode);
-  // Cadeaubon afboeken (idempotent per order; geeft het werkelijk afgeboekte terug).
-  if (appliedGiftcard) await redeemGiftcard(appliedGiftcard, order.orderNumber, giftcardCents);
+  // Single-use codes ATOMAIR verzilveren als laatste stap. Faalt er één — de voucher
+  // is net door een gelijktijdige checkout gebruikt, of het cadeaubon-saldo dekt het
+  // niet meer — draai dan de hele order terug + geef de andere code weer vrij. Zo
+  // blijft er nooit een dubbel-verzilverde code of een niet-gedekte "gratis" order staan.
+  const voucherConsumed = appliedCode ? await redeemVoucher(appliedCode) : true;
+  const giftcardApplied = voucherConsumed && appliedGiftcard
+    ? await redeemGiftcard(appliedGiftcard, order.orderNumber, giftcardCents)
+    : 0;
+  const giftcardCovered = !appliedGiftcard || giftcardApplied >= giftcardCents;
+  if (!voucherConsumed || !giftcardCovered) {
+    if (appliedGiftcard && giftcardApplied > 0) await releaseGiftcard(appliedGiftcard, order.orderNumber);
+    if (appliedCode && voucherConsumed) await releaseVoucher(appliedCode);
+    await releaseOrderHolds(order.id);
+    await db.delete(orders).where(eq(orders.id, order.id)); // cascade → orderLines
+    throw new Error(
+      !voucherConsumed
+        ? "Deze kortingscode is net gebruikt of verlopen. Verwijder 'm en probeer opnieuw."
+        : "Het cadeaubon-saldo is net gewijzigd. Probeer het opnieuw."
+    );
+  }
 
   return { id: order.id, orderNumber: order.orderNumber, accessToken, totalCents, subtotalCents, shippingCents, giftcardCents };
 }
