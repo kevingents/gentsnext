@@ -43,7 +43,7 @@ type ReturnRow = {
 };
 type Data = {
   onlineOrders: Order[]; storeBuys: StoreBuy[]; vouchers: Voucher[]; activeVouchers: Voucher[];
-  giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; addresses: Address[];
+  giftcards: Giftcard[]; loyalty: Loyalty[]; pointsBalance: number; pointsAvailable: number; pointsPending: number; addresses: Address[];
   returns: ReturnRow[]; returnWindowDays: number; newInSize: ProductCardData[]; recommended: ProductCardData[];
 };
 
@@ -151,7 +151,7 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
   return (
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Spaarpunten" value={String(data.pointsBalance)} sub={toNext > 0 ? `Nog ${toNext} tot je volgende beloning` : "Beloning beschikbaar!"} onClick={() => onTab("punten")} />
+        <Stat label="Spaarpunten" value={String(data.pointsAvailable)} sub={data.pointsPending > 0 ? `+${data.pointsPending} in behandeling` : toNext > 0 ? `Nog ${toNext} tot je volgende beloning` : "Beloning beschikbaar!"} onClick={() => onTab("punten")} />
         <Stat label="Actieve vouchers" value={String(data.activeVouchers.length)} sub="Bekijk je tegoeden" onClick={() => onTab("vouchers")} />
         <Stat label="Aankopen" value={String(totalOrders)} sub="Online + in de winkel" onClick={() => onTab("bestellingen")} />
       </div>
@@ -392,7 +392,10 @@ function Punten({ data }: { data: Data }) {
     <div className="space-y-6">
       <div className="border border-line p-6">
         <p className="label-brand">Je saldo</p>
-        <p className="mt-2 font-display text-4xl font-light">{data.pointsBalance} <span className="text-lg text-muted">punten</span></p>
+        <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">punten beschikbaar</span></p>
+        {data.pointsPending > 0 && (
+          <p className="mt-1 font-sans text-sm text-ink-soft">+{data.pointsPending} punten in behandeling — beschikbaar na de retourperiode.</p>
+        )}
         <p className="mt-2 font-sans text-sm text-ink-soft">Je spaart 1 punt per bestede euro — online én in de winkel. Punten verzilver je voor kortingen en exclusieve acties.</p>
       </div>
       {data.loyalty.length ? (

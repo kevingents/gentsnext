@@ -1,0 +1,1 @@
+ALTER TABLE "loyalty_events" ADD COLUMN "vests_at" timestamp with time zone;

@@ -78,6 +78,12 @@ export type Settings = {
     signalMinRatePct: number;
     signalFastDays: number;
   };
+  // Spaarpunten: na hoeveel dagen na BETALING verdiende punten besteedbaar worden
+  // (vesting). Dekt de retourperiode, zodat een retour binnen het venster geen
+  // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
+  loyaltyConfig: {
+    vestingDays: number;
+  };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -127,6 +133,9 @@ export const DEFAULT_SETTINGS: Settings = {
     signalMinReturns: num(process.env.GENTS_RETURN_SIGNAL_MIN, 3),
     signalMinRatePct: num(process.env.GENTS_RETURN_SIGNAL_RATE, 30),
     signalFastDays: num(process.env.GENTS_RETURN_SIGNAL_FAST_DAYS, 7),
+  },
+  loyaltyConfig: {
+    vestingDays: num(process.env.GENTS_LOYALTY_VESTING_DAYS, 21),
   },
 };
 

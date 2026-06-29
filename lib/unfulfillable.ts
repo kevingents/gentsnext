@@ -5,6 +5,7 @@ import { getOrderByNumber } from "@/lib/orders";
 import { allocateOrder, type FulfillmentPlan } from "@/lib/fulfillment";
 import { recordMovements } from "@/lib/store-core";
 import { refundMolliePayment } from "@/lib/mollie";
+import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
 import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
 
 /**
@@ -181,6 +182,12 @@ export async function resolveUnfulfillable(orderNumber: string, mode: "cancel" |
   if (order.molliePaymentId && refundCents > 0) {
     const r = await refundMolliePayment(order.molliePaymentId, refundCents, `Pak niet compleet leverbaar — ${order.orderNumber}`);
     if (!r.ok) return { ok: false, error: r.error || "Terugbetaling mislukt." };
+  }
+  // Verdiende punten van de terugbetaalde set terugdraaien (idempotent, gecapt op de
+  // gecrediteerde order-punten) — anders houdt de klant punten voor een 100%-refund.
+  if (order.customerId && refundCents > 0) {
+    try { await reverseOrderLoyalty(order.customerId, order.id, refundCents, `unf-${order.orderNumber}`); }
+    catch (e) { console.warn("[unfulfillable] punten terugdraaien mislukt:", (e as Error).message); }
   }
 
   // 2. Bij 'return': systeem-retour voor het al-verstuurde deel (set minus niet-leverbaar).
