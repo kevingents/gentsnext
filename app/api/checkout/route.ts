@@ -3,6 +3,7 @@ import {
   createOrder,
   attachMolliePayment,
   finalizeGiftcardCoveredOrder,
+  OutOfStockError,
   type CheckoutItem,
   type DeliveryMethod,
 } from "@/lib/orders";
@@ -50,6 +51,11 @@ export async function POST(req: Request) {
   try {
     order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore);
   } catch (e) {
+    // Voorraad-gate weigert → geef de niet-leverbare SKU's terug zodat de checkout
+    // ze kan markeren en de klant ze in één klik kan verwijderen.
+    if (e instanceof OutOfStockError) {
+      return NextResponse.json({ ok: false, error: e.message, unavailableSkus: e.skus }, { status: 409 });
+    }
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
   }
 

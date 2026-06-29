@@ -6,7 +6,6 @@ import { parseCare, type CareItem } from "@/lib/care";
 import { getRecommendations, getOrderCrossSell, type ProductCardData } from "@/lib/catalog";
 import { sendOrderConfirmation } from "@/lib/email";
 import { allocateOrder } from "@/lib/fulfillment";
-import { pushOrderToSRS } from "@/lib/srs";
 import { getSettings } from "@/lib/settings";
 import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
@@ -25,10 +24,12 @@ export type DeliveryMethod = "standard" | "express" | "pickup";
 /** Gegooid wanneer de voorraad-gate een order weigert (net uitverkocht). */
 export class OutOfStockError extends Error {
   titles: string[];
-  constructor(titles: string[]) {
+  skus: string[];
+  constructor(titles: string[], skus: string[] = []) {
     super(`Niet meer op voorraad: ${titles.join(", ")}`);
     this.name = "OutOfStockError";
     this.titles = titles;
+    this.skus = skus;
   }
 }
 
@@ -259,11 +260,12 @@ export async function createOrder(
   if (!reservation.ok) {
     // Niet leverbaar → order weer weg (nog geen voucher/cadeaubon verzilverd).
     await db.delete(orders).where(eq(orders.id, order.id));
-    const titles = lines
-      .filter((l) => reservation.failed.includes(l.sku.toLowerCase()) || reservation.failed.includes(l.sku))
-      .map((l) => l.title)
-      .filter((v, i, a) => a.indexOf(v) === i);
-    throw new OutOfStockError(titles.length ? titles : ["een of meer artikelen"]);
+    const failedLines = lines.filter(
+      (l) => reservation.failed.includes(l.sku.toLowerCase()) || reservation.failed.includes(l.sku)
+    );
+    const titles = failedLines.map((l) => l.title).filter((v, i, a) => a.indexOf(v) === i);
+    const skus = failedLines.map((l) => l.sku).filter((v, i, a) => a.indexOf(v) === i);
+    throw new OutOfStockError(titles.length ? titles : ["een of meer artikelen"], skus);
   }
 
   // Order-regels EERST — zo heeft een order altijd z'n regels vóór we single-use
@@ -469,14 +471,10 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
       lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title, groupId: l.groupId ?? undefined })),
       { country: order.country, postalCode: order.postalCode }
     );
-    const result = await pushOrderToSRS(
-      order,
-      plan,
-      lines.map((l) => ({ sku: l.sku, quantity: l.quantity, title: l.title, unitPriceCents: l.unitPriceCents }))
-    );
-    // Niet volledig toewijsbaar (voorraad-tekort) → markeer voor handmatige
-    // review/nalevering i.p.v. stilzwijgend 'afgerond'. We pushen wél wat kan.
-    const status = plan.fullyAllocated ? result.status : "review";
+    // SRS-push is afgeschaft (SRS = alleen WMS): we bewaren alléén het eigen
+    // Neon-fulfilmentplan; dispatch loopt lokaal. Niet volledig toewijsbaar
+    // (voorraad-tekort) → markeer voor handmatige review i.p.v. stil 'afgerond'.
+    const status = plan.fullyAllocated ? "planned" : "review";
     if (!plan.fullyAllocated) {
       console.warn(
         "[fulfillment] order",
@@ -490,7 +488,6 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
       .set({
         fulfillmentPlan: plan,
         fulfillmentStatus: status,
-        srsPushedAt: result.pushed > 0 ? sql`now()` : null,
         updatedAt: sql`now()`,
       })
       .where(eq(orders.id, orderId));

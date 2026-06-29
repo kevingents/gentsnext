@@ -9,6 +9,7 @@ import {
   BOORD_CHART,
   type ChartCategory,
 } from "@/lib/size-chart";
+import { hubSlugForHoofdgroep } from "@/lib/size-chart-hub";
 import { useT } from "@/components/i18n/locale-provider";
 
 /** Catalogus-hoofdgroep → tabel: een chest/waist-categorie of de boord-tabel. */
@@ -32,6 +33,7 @@ export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string
   const t = useT();
   const [open, setOpen] = useState(false);
   const target = chartFor(hoofdgroep);
+  const hubSlug = hubSlugForHoofdgroep(hoofdgroep);
   if (!target.category && !target.boord) return null;
 
   return (
@@ -53,7 +55,11 @@ export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string
                   {target.boord ? <BoordTable /> : <CategoryTable category={target.category!} />}
                   <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-sans text-xs">
                     <Link href="/maatadvies" onClick={() => setOpen(false)} className="text-ink underline underline-offset-4">Vind mijn maat →</Link>
-                    {pageHandle ? <Link href={`/pages/${pageHandle}`} onClick={() => setOpen(false)} className="text-ink-soft underline underline-offset-4">Uitgebreide maatinformatie</Link> : null}
+                    {hubSlug ? (
+                      <Link href={`/maattabellen/${hubSlug}`} onClick={() => setOpen(false)} className="text-ink-soft underline underline-offset-4">Volledige maattabel</Link>
+                    ) : pageHandle ? (
+                      <Link href={`/pages/${pageHandle}`} onClick={() => setOpen(false)} className="text-ink-soft underline underline-offset-4">Uitgebreide maatinformatie</Link>
+                    ) : null}
                   </div>
                 </div>
               </div>

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useCart } from "@/components/cart/cart-context";
 import { DeliveryOptions } from "@/components/cart/delivery-options";
@@ -85,6 +85,8 @@ function CheckoutForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // SKU's die de voorraad-gate weigerde — markeren + in één klik verwijderbaar.
+  const [unavailableSkus, setUnavailableSkus] = useState<string[]>([]);
 
   // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm).
   type PayMethod = { id: string; description: string; image: string };
@@ -113,6 +115,43 @@ function CheckoutForm() {
       .catch(() => {});
     return () => { active = false; };
   }, []);
+  // Voorraad per winkel voor de afhaal-keuze: welke winkel heeft álles op voorraad?
+  type StoreAvail = { name: string; city: string; allOk: boolean; okCount: number; total: number; missingSkus: string[] };
+  const [pickupAvail, setPickupAvail] = useState<Record<string, StoreAvail>>({});
+  const [pickupAvailLoading, setPickupAvailLoading] = useState(false);
+  const pickupSig = cart.lines.map((l) => `${l.sku}:${l.qty}`).join("|");
+  useEffect(() => {
+    if (!pickupMode || cart.lines.length === 0) { setPickupAvail({}); return; }
+    let active = true;
+    setPickupAvailLoading(true);
+    fetch("/api/pickup-availability", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty })) }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!active) return;
+        const map: Record<string, StoreAvail> = {};
+        for (const s of (d.stores || []) as StoreAvail[]) map[s.name] = s;
+        setPickupAvail(map);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setPickupAvailLoading(false); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickupMode, pickupSig]);
+  const storesByAvail = useMemo(() => {
+    const rank = (n: string) => {
+      const a = pickupAvail[n];
+      if (!a || a.total === 0) return -1;
+      return a.allOk ? 2 : a.okCount > 0 ? 1 : 0;
+    };
+    return [...stores].sort((x, y) => {
+      const d = rank(y.name) - rank(x.name);
+      return d !== 0 ? d : x.name.localeCompare(y.name, "nl");
+    });
+  }, [stores, pickupAvail]);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
   const [tiered, setTiered] = useState<TieredDiscountCfg | null>(null);
@@ -194,6 +233,18 @@ function CheckoutForm() {
   const giftcardCents = giftcard ? Math.min(giftcard.balanceCents, totalCents) : 0;
   const payableCents = Math.max(0, totalCents - giftcardCents);
 
+  const unavailableSet = new Set(unavailableSkus.map((s) => s.toLowerCase()));
+  function removeLine(id: string) {
+    cart.remove(id);
+    setError("");
+    setUnavailableSkus([]);
+  }
+  function removeUnavailable() {
+    for (const l of cart.lines) if (unavailableSet.has(l.sku.toLowerCase())) cart.remove(l.id);
+    setError("");
+    setUnavailableSkus([]);
+  }
+
   async function applyCode() {
     setCodeErr("");
     const code = codeInput.trim();
@@ -233,6 +284,7 @@ function CheckoutForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setUnavailableSkus([]);
     if (pickupMode) {
       if (!pickupStore) { setError("Kies een winkel om af te halen."); return; }
     } else {
@@ -277,6 +329,7 @@ function CheckoutForm() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || "Er ging iets mis.");
+        setUnavailableSkus(Array.isArray(data.unavailableSkus) ? data.unavailableSkus.map(String) : []);
         return;
       }
       if (data.configured && data.checkoutUrl) {
@@ -407,9 +460,35 @@ function CheckoutForm() {
                 onChange={(e) => setPickupStore(e.target.value)}
                 className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
               >
-                {stores.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+                {storesByAvail.map((s) => {
+                  const a = pickupAvail[s.name];
+                  const suffix = !a || a.total === 0 ? "" : a.allOk ? " — alles op voorraad" : ` — ${a.okCount}/${a.total} op voorraad`;
+                  return <option key={s.name} value={s.name}>{s.name}{suffix}</option>;
+                })}
               </select>
-              <span className="mt-1 block font-sans text-xs text-muted">Gratis afhalen — je krijgt bericht zodra je bestelling klaarligt.</span>
+              {(() => {
+                const sel = pickupAvail[pickupStore];
+                if (pickupAvailLoading && !sel) return <span className="mt-1 block font-sans text-xs text-muted">Voorraad in winkels controleren…</span>;
+                if (!sel || sel.total === 0) return <span className="mt-1 block font-sans text-xs text-muted">Gratis afhalen — je krijgt bericht zodra je bestelling klaarligt.</span>;
+                if (sel.allOk) return <span className="mt-1 block font-sans text-xs text-success">Alles ligt op voorraad in {pickupStore} — gratis afhalen, je krijgt bericht zodra het klaarligt.</span>;
+                const missingTitles = sel.missingSkus
+                  .map((sku) => cart.lines.find((l) => l.sku.toLowerCase() === sku.toLowerCase())?.title)
+                  .filter(Boolean) as string[];
+                const best = storesByAvail.find((s) => pickupAvail[s.name]?.allOk);
+                return (
+                  <span className="mt-1 block font-sans text-xs text-ink-soft">
+                    <span className="text-danger">Niet alles ligt op voorraad in {pickupStore}</span>
+                    {missingTitles.length ? <> (mist: {missingTitles.join(", ")})</> : null}.{" "}
+                    {best && best.name !== pickupStore ? (
+                      <button type="button" onClick={() => setPickupStore(best.name)} className="font-medium text-ink underline">
+                        Kies {best.name} — alles op voorraad
+                      </button>
+                    ) : (
+                      "Kies een andere winkel of kies bezorgen."
+                    )}
+                  </span>
+                );
+              })()}
             </label>
           ) : null}
 
@@ -475,7 +554,16 @@ function CheckoutForm() {
             </span>
           </label>
 
-          {error ? <p role="alert" className="mt-4 font-sans text-sm text-danger">{error}</p> : null}
+          {error ? (
+            <div role="alert" className="mt-4 rounded-card border border-danger/40 bg-danger/5 px-4 py-3 font-sans text-sm">
+              <p className="text-danger">{error}</p>
+              {unavailableSkus.length ? (
+                <button type="button" onClick={removeUnavailable} className="btn-ghost mt-3 !px-4 !py-2">
+                  Verwijder niet-leverbare artikelen
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
             {busy
@@ -499,18 +587,32 @@ function CheckoutForm() {
           <div className="border border-line p-5">
             <p className="label-brand mb-3">Je bestelling</p>
             <ul className="space-y-3">
-              {cart.lines.map((l) => (
-                <li key={l.id} className="flex gap-3">
-                  <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-card bg-surface">
-                    {l.imageUrl ? <Image src={l.imageUrl} alt={l.title} fill sizes="48px" className="object-cover" /> : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-sans text-sm">{l.title}</p>
-                    <p className="font-sans text-xs text-muted">{[l.color, l.size && `maat ${l.size}`, `${l.qty}×`].filter(Boolean).join(" · ")}</p>
-                  </div>
-                  <p className="font-sans text-sm">{formatEuro(l.priceCents * l.qty)}</p>
-                </li>
-              ))}
+              {cart.lines.map((l) => {
+                const unavailable = unavailableSet.has(l.sku.toLowerCase());
+                return (
+                  <li key={l.id} className={`flex gap-3 ${unavailable ? "-mx-2 rounded-card border border-danger/30 bg-danger/5 px-2 py-1.5" : ""}`}>
+                    <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-card bg-surface">
+                      {l.imageUrl ? <Image src={l.imageUrl} alt={l.title} fill sizes="48px" className="object-cover" /> : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-sans text-sm">{l.title}</p>
+                      <p className="font-sans text-xs text-muted">{[l.color, l.size && `maat ${l.size}`, `${l.qty}×`].filter(Boolean).join(" · ")}</p>
+                      {unavailable ? <p className="mt-0.5 font-sans text-xs font-medium text-danger">Niet meer leverbaar</p> : null}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end justify-between">
+                      <p className="font-sans text-sm">{formatEuro(l.priceCents * l.qty)}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeLine(l.id)}
+                        aria-label={`Verwijder ${l.title}`}
+                        className="font-sans text-xs text-muted underline underline-offset-2 hover:text-ink"
+                      >
+                        Verwijder
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
             <div className="mt-4 border-t border-line pt-4">
               {pickupMode ? (
