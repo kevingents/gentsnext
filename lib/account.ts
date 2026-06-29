@@ -17,7 +17,7 @@ import {
   returnLines,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
-import { creditOrderLoyalty } from "@/lib/loyalty-claim";
+import { creditOrderLoyalty, reverseOrderLoyalty, redeemableBalance, pendingBalance } from "@/lib/loyalty-claim";
 import { getSettings } from "@/lib/settings";
 import { sendWelcomeEmail } from "@/lib/email";
 import { importStorePurchasesOnce } from "@/lib/srs-store-import";
@@ -115,7 +115,7 @@ export async function redeemProfileCompletionBonus(
   await db.insert(loyaltyEvents).values({ customerId: c.id, points: PROFILE_BONUS_POINTS, reason: "Profiel afgerond", refType: "profile_completion" });
   await db.update(customers).set({
     ...patch,
-    loyaltyPoints: (c.loyaltyPoints || 0) + PROFILE_BONUS_POINTS,
+    loyaltyPoints: sql`${customers.loyaltyPoints} + ${PROFILE_BONUS_POINTS}`, // atomair (geen lost-update bij gelijktijdige claim)
     profileCompletionBonusClaimed: true,
     profileCompletionTokenHash: null,
   }).where(eq(customers.id, c.id));
@@ -258,11 +258,18 @@ export async function claimGuestData(customerId: string, email: string): Promise
   // dus opnieuw inloggen schrijft nooit dubbel bij. Non-fataal.
   try {
     const linked = await db
-      .select({ id: orders.id, totalCents: orders.totalCents, status: orders.status })
+      .select({ id: orders.id, totalCents: orders.totalCents, status: orders.status, paidAt: orders.paidAt, createdAt: orders.createdAt })
       .from(orders)
       .where(eq(orders.customerId, customerId));
     for (const o of linked) {
-      await creditOrderLoyalty(customerId, { id: o.id, totalCents: o.totalCents, status: String(o.status) });
+      await creditOrderLoyalty(customerId, { id: o.id, totalCents: o.totalCents, status: String(o.status), paidAt: o.paidAt, createdAt: o.createdAt });
+      // Was dit (gast-)order al (deels) geretourneerd vóór het koppelen? Draai die
+      // punten alsnog terug — anders krijgt de klant punten voor teruggestuurde waar.
+      const doneReturns = await db
+        .select({ id: returns.id, itemsCents: returns.itemsCents })
+        .from(returns)
+        .where(and(eq(returns.orderId, o.id), eq(returns.status, "completed")));
+      for (const r of doneReturns) await reverseOrderLoyalty(customerId, o.id, r.itemsCents, r.id);
     }
   } catch (e) {
     console.warn("[claimGuestData] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
@@ -294,7 +301,13 @@ export async function getProfileData(customerId: string, email = "") {
     linesByOrder.get(l.orderId)!.push(l);
   }
 
-  const pointsBalance = loyalty.reduce((s, e) => s + e.points, 0);
+  // Beschikbaar (gevest) vs in behandeling — uit het HELE grootboek (SUM, niet de op
+  // 100 gekapte history-lijst), en geklemd op 0. De `loyalty`-array blijft puur voor
+  // de mutatie-weergave.
+  const [availRaw, pendRaw] = await Promise.all([redeemableBalance(customerId), pendingBalance(customerId)]);
+  const pointsAvailable = Math.max(0, availRaw);
+  const pointsPending = Math.max(0, pendRaw);
+  const pointsBalance = pointsAvailable + pointsPending;
   const activeVouchers = vouchersList.filter(
     (v) => v.status === "active" && (!v.expiresAt || v.expiresAt.getTime() > Date.now())
   );
@@ -321,6 +334,8 @@ export async function getProfileData(customerId: string, email = "") {
     giftcards: giftcardsList,
     loyalty,
     pointsBalance,
+    pointsAvailable,
+    pointsPending,
     addresses,
     returnWindowDays: (await getSettings()).returnConfig.windowDays,
     returns: retRows.map((r) => ({

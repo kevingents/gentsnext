@@ -424,7 +424,7 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   // bevestiging blokkeren.
   if (order?.customerId) {
     try {
-      await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status) });
+      await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status), paidAt: order.paidAt, createdAt: order.createdAt });
     } catch (e) {
       console.warn("[order] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
     }

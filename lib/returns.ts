@@ -5,6 +5,7 @@ import { orders, orderLines, returns, returnLines, giftcards } from "@/db/schema
 import { getSettings } from "@/lib/settings";
 import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
 import { refundMolliePayment } from "@/lib/mollie";
+import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
 import { sendReturnRegistered, sendReturnRefunded } from "@/lib/email";
 
 /**
@@ -264,6 +265,10 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
   if (ret.refundType === "credit") {
     const code = await issueStoreCredit(ret.itemsCents, ret.email, order?.customerId ?? null, `Retour ${ret.orderNumber}`);
     await db.update(returns).set({ status: "completed", creditCode: code, refundedCents: ret.itemsCents, updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+    if (order?.customerId) {
+      try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
+      catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
+    }
     await mailRefunded("credit", ret.itemsCents, code);
     return { ok: true, status: "completed", refundedCents: ret.itemsCents, creditCode: code };
   }
@@ -276,6 +281,10 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
   const r = await refundMolliePayment(order.molliePaymentId, refundCents, `Retour ${ret.orderNumber}`);
   if (!r.ok) return { ok: false, status: "received", error: r.error || "Terugbetaling mislukt." };
   await db.update(returns).set({ status: "completed", refundedCents: refundCents, updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+  if (order?.customerId) {
+    try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
+    catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
+  }
   await mailRefunded("money", refundCents, "");
   return { ok: true, status: "completed", refundedCents: refundCents };
 }

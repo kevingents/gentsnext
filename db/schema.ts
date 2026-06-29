@@ -628,6 +628,10 @@ export const loyaltyEvents = pgTable(
     reason: text("reason").notNull().default(""),
     refType: text("ref_type"),
     refId: text("ref_id"),
+    /** Besteedbaar-vanaf (vesting). NULL = direct besteedbaar (bv. profielbonus,
+     *  retour-correcties). Verdiende order/bon-punten staan tot deze datum "in
+     *  behandeling" zodat een retour geen negatief saldo geeft. */
+    vestsAt: timestamp("vests_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
