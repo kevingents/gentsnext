@@ -11,9 +11,11 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   let email = "";
+  let next = "";
   try {
     const body = await req.json();
     email = String(body?.email || "").trim().toLowerCase();
+    next = String(body?.next || "").trim();
   } catch {
     return NextResponse.json({ ok: false, error: "ongeldige body" }, { status: 400 });
   }
@@ -28,7 +30,9 @@ export async function POST(req: Request) {
   }
 
   const { rawToken } = await issueMagicToken(email);
-  const link = `${getSiteUrl()}/api/account/verify?token=${encodeURIComponent(rawToken)}`;
+  // next mag alleen een interne (relatieve) pad zijn — geen open redirect.
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "";
+  const link = `${getSiteUrl()}/api/account/verify?token=${encodeURIComponent(rawToken)}${safeNext ? `&next=${encodeURIComponent(safeNext)}` : ""}`;
 
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM;

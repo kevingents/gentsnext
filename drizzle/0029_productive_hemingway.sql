@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "loyalty_events_ref_unique" ON "loyalty_events" USING btree ("ref_type","ref_id");

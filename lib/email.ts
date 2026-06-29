@@ -41,6 +41,7 @@ type CrossSellItem = { handle: string; title: string; imageUrl: string; minPrice
 
 function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = []): string {
   const site = getSiteUrl();
+  const points = Math.max(0, Math.floor(order.totalCents / 100)); // 1 punt per euro
   const rows = lines
     .map(
       (l) => `<tr>
@@ -93,6 +94,16 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
               )
               .join("")}
           </tr></table>
+        </td></tr>`
+            : ""
+        }
+        ${
+          points > 0
+            ? `<tr><td style="padding:8px 28px 0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#F6F5F2;border:1px solid #E6E4DF;padding:16px">
+            <div style="font:600 14px Arial,sans-serif;color:#0A0A0A">Je spaart ${points} punten met deze bestelling</div>
+            <div style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin-top:4px">Bekijk en verzilver ze in je <a href="${site}/account" style="color:#0A0A0A">GENTS-account</a>. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.</div>
+          </td></tr></table>
         </td></tr>`
             : ""
         }

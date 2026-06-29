@@ -1,0 +1,166 @@
+{
+  "titleSub": "Hoe de nieuwe website, kassa, handscanner, voorraad en portal samen één eigen platform vormen.",
+  "sections": [
+    {
+      "key": "architectuur",
+      "title": "Architectuur — alles met elkaar verbonden",
+      "headline": "Drie eigen systemen op één centrale database. Geen platform-afhankelijkheid meer.",
+      "bullets": [
+        "Webshop gents.nl — eigen storefront met Mollie en real-time voorraad",
+        "Portal — back-office voor het hele team, met rechten per rol",
+        "Backend — koppelt SRS (magazijn), betalingen en verzending",
+        "Eén database als enige bron van waarheid voor alles",
+        "Voorraad-core houdt kassa én webshop continu in sync",
+        "Klant betaalt → toewijzing → pick → kassa-scan: altijd kloppend"
+      ],
+      "stats": [
+        { "value": "3 → 1", "label": "eigen systemen op één database" },
+        { "value": "0", "label": "platform-lock-in (Shopify eruit)" },
+        { "value": "SRS", "label": "alleen nog als magazijn (WMS)" }
+      ],
+      "connects": "De site, kassa en handscanner schrijven allemaal naar dezelfde voorraad-core — nul oversell."
+    },
+    {
+      "key": "site",
+      "title": "De nieuwe website — gents.nl",
+      "headline": "Een volledig eigen webshop: sneller, op maat en gekoppeld aan de winkel.",
+      "bullets": [
+        "Catalogus, maatadvies en pak-samensteller (los colbert/broek/gilet, één prijs)",
+        "Shop-the-look: complete looks per gelegenheid (bruiloft, zakelijk, gala)",
+        "Eerlijke social-proof uit eigen data — geen verzonnen cijfers",
+        "Klant-accounts (magic-link) met winkel- én web-historie op één plek",
+        "Checkout met Mollie, vouchers, cadeaubonnen en zakelijk bestellen",
+        "Reviews, AI-stijlgids-blog en meertalig (NL / EN / DE)"
+      ],
+      "stats": [
+        { "value": "Eigen", "label": "platform — geen Shopify" },
+        { "value": "Mollie", "label": "betaling, meerdere methoden" },
+        { "value": "Omnichannel", "label": "profiel: web + winkel" }
+      ],
+      "connects": "Toont live de voorraad uit de centrale core en de winkel-historie uit de kassa."
+    },
+    {
+      "key": "kassa",
+      "title": "De nieuwe kassa-software",
+      "headline": "Onze eigen kassa in de portal — minder afhankelijk van SRS, alle omzet in één bron.",
+      "bullets": [
+        "Verkopen, betaalmethoden, kortingen, cadeaubonnen, loyalty en klant-koppeling",
+        "Verkopen draaien nu op de eigen database — real-time omzetinzicht",
+        "Bestel voor klant uit ander filiaal, concept-bestelling, parkeren",
+        "Dagafsluiting met BTW-uitsplitsing en kasstaat — fiscaal sluitend",
+        "Idempotent: nooit dubbel boeken, ook bij netwerk-haperingen",
+        "Kaartdata blijft bij de betaalterminal — geen PCI-risico in de portal"
+      ],
+      "stats": [
+        { "value": "Neon", "label": "eigen database i.p.v. losse bestanden" },
+        { "value": "Omnichannel", "label": "web + winkel, één bron" },
+        { "value": "BTW", "label": "automatische dagafsluiting" }
+      ],
+      "connects": "Schrijft naar dezelfde voorraad-core en klant-database als de webshop."
+    },
+    {
+      "key": "handscanner",
+      "title": "De handscanner — één app voor de winkel",
+      "headline": "Alle winkeltaken op één apparaat: orders, voorraad, ontvangst en herverdeling.",
+      "bullets": [
+        "Orders picken (web + afhaal) met urgentie-volgorde en scan-controle",
+        "Voorraad checken: eigen winkel, magazijn én andere winkels",
+        "Inventariseren: tellen vs systeem, verschillen direct verwerken",
+        "Levering binnenmelden: scannen → pas dan voorraad (anti-fantoom)",
+        "Naar andere winkel sturen: herverdeling + advies rit of DHL",
+        "Klantorder / reserveren + schade melden — alles via scannen"
+      ],
+      "stats": [
+        { "value": "7", "label": "functies in één app" },
+        { "value": "Scan-to-receive", "label": "voorraad pas bij ontvangst" },
+        { "value": "Realtime", "label": "voorraad over alle winkels" }
+      ],
+      "connects": "Werkt op dezelfde voorraad-core; ontvangst en herverdeling boeken pas bij de scan."
+    },
+    {
+      "key": "voorraad",
+      "title": "Voorraadbeheer",
+      "headline": "Nooit meer overselllen, minder derving, volle grip op de keten.",
+      "bullets": [
+        "Eén voorraad-waarheid: magazijn + kassa/web-mutaties − reserveringen",
+        "Anti-oversell: het laatste stuk kan maar één keer verkocht worden",
+        "Scan-to-receive: onderweg telt niet mee → geen fantoomvoorraad",
+        "Manco-gedreven steekproef: probleemartikelen altijd, rest slim gewogen",
+        "Afwijking → automatisch naar supply chain + dashboard",
+        "Winkel→winkel-herverdeling met gratis of betaald verzendadvies"
+      ],
+      "stats": [
+        { "value": "0", "label": "oversell (atomaire reservering)" },
+        { "value": "F1–F4", "label": "goederenontvangst compleet" },
+        { "value": "AQL", "label": "lerende steekproef per bron" }
+      ],
+      "connects": "Voedt de beschikbaarheid op de site én de handscanner; SRS levert alleen de magazijn-basis."
+    },
+    {
+      "key": "portal",
+      "title": "De portal — kantoor- en winkelbrein",
+      "headline": "Eén plek waar het team álles beheert — zonder developer.",
+      "bullets": [
+        "Orders, retouren en niet-leverbaar real-time volgen",
+        "Klanten beheren: zoeken, segmenteren, loyalty en deals",
+        "Voorraad, inkoop, ritten en herverdeling coördineren",
+        "Webshop zelf instellen: verzending, cutoffs, kortingen, KPI's",
+        "Marketing, content en SEO in eigen hand (met AI)",
+        "Rapportages, eigen dashboards en exports"
+      ],
+      "stats": [
+        { "value": "Alles", "label": "instelbaar in de tool, niet in code" },
+        { "value": "Rollen", "label": "rechten per functie (RBAC)" },
+        { "value": "1 plek", "label": "voor kantoor én winkelvloer" }
+      ],
+      "connects": "Praat veilig via een beveiligde tussenlaag met de backend; het admin-geheim verlaat nooit de server."
+    },
+    {
+      "key": "ai",
+      "title": "Slimme & AI-functies",
+      "headline": "AI door de hele keten: minder handwerk, betere content, slimmere beslissingen.",
+      "bullets": [
+        "AI-review-samenvattingen + AI-productteksten met SEO (alleen op feiten)",
+        "AI-klantinzichten voor MT (geaggregeerd, geen persoonsgegevens)",
+        "AI-stijlgids/blog: automatisch, met echte producten",
+        "Lerende sfeerbeeld- & modellen-studio: leert van afkeuren",
+        "Maatadvies + MixMatch (los → compleet pak) verhogen conversie & AOV",
+        "Manco-gedreven inkoop-steekproef + verzendadvies rit/DHL"
+      ],
+      "stats": [
+        { "value": "9+", "label": "slimme/AI-functies live" },
+        { "value": "Lerend", "label": "AI verbetert met feedback" },
+        { "value": "Eigen", "label": "analytics + dashboards" }
+      ],
+      "connects": "De AI-lagen voeden de productpagina's, het portal-dashboard, de blog en de inkoop."
+    },
+    {
+      "key": "security",
+      "title": "Backup, veiligheid & betrouwbaarheid",
+      "headline": "Klantdata veilig, geen platform-risico, en niets valt om bij een storing.",
+      "bullets": [
+        "Identiteit ondertekend (HMAC) — niemand kan zich voordoen als een ander",
+        "Admin-geheimen niet in de URL; webhooks en crons fail-closed",
+        "Idempotente boekingen: orders, kassa en ontvangst nooit dubbel",
+        "Anti-oversell op één transactionele database",
+        "Fail-soft: een SRS-storing breekt checkout of kassa niet",
+        "Dagelijkse off-site backup + herstel in de back-office; AVG export/verwijder"
+      ],
+      "stats": [
+        { "value": "Audit", "label": "uitgevoerd + gefixt (multi-agent)" },
+        { "value": "Idempotent", "label": "nooit dubbel geboekt" },
+        { "value": "Backup", "label": "dagelijks + restore-knop" }
+      ],
+      "connects": "Beveiliging zit in beide systemen; rate-limiting en audit-logs maken misbruik traceerbaar."
+    }
+  ],
+  "closing": {
+    "headline": "Eén eigen, slim platform — sneller, veiliger en minder afhankelijk.",
+    "pillars": [
+      { "k": "Eigen regie", "v": "Geen Shopify-lock-in; alles in eigen beheer en zelf instelbaar." },
+      { "k": "Slim", "v": "AI en automatisering door de hele keten — minder handwerk, meer omzet." },
+      { "k": "Betrouwbaar", "v": "Anti-oversell, idempotent en beveiligd; niets valt om bij een storing." }
+    ],
+    "status": "Status: de kern draait live (test-omgeving). Go-live = enkele schakelaars (Mollie live, indexeren aan)."
+  }
+}

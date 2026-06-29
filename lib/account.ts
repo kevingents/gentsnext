@@ -17,6 +17,7 @@ import {
   returnLines,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
+import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { getSettings } from "@/lib/settings";
 import { sendWelcomeEmail } from "@/lib/email";
 import { importStorePurchasesOnce } from "@/lib/srs-store-import";
@@ -253,6 +254,19 @@ export async function claimGuestData(customerId: string, email: string): Promise
     .update(storePurchases)
     .set({ customerId })
     .where(and(eq(storePurchases.email, email), isNull(storePurchases.customerId)));
+  // Spaarpunten van de (zojuist gekoppelde) betaalde weborders bijschrijven — idempotent,
+  // dus opnieuw inloggen schrijft nooit dubbel bij. Non-fataal.
+  try {
+    const linked = await db
+      .select({ id: orders.id, totalCents: orders.totalCents, status: orders.status })
+      .from(orders)
+      .where(eq(orders.customerId, customerId));
+    for (const o of linked) {
+      await creditOrderLoyalty(customerId, { id: o.id, totalCents: o.totalCents, status: String(o.status) });
+    }
+  } catch (e) {
+    console.warn("[claimGuestData] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
+  }
 }
 
 export type ProfileData = Awaited<ReturnType<typeof getProfileData>>;
