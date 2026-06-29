@@ -630,7 +630,13 @@ export const loyaltyEvents = pgTable(
     refId: text("ref_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("loyalty_events_customer_idx").on(t.customerId)]
+  (t) => [
+    index("loyalty_events_customer_idx").on(t.customerId),
+    // Idempotentie voor punten-claims: één event per bron (pos_receipt:saleId,
+    // web_order:orderId). Events zonder refId (bv. profile_completion) botsen niet —
+    // NULLs zijn distinct in een unieke index.
+    uniqueIndex("loyalty_events_ref_unique").on(t.refType, t.refId),
+  ]
 );
 
 /**

@@ -266,8 +266,8 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {paid && !order.customerId ? (
         <section className="mt-10 flex flex-col items-start gap-3 rounded-card bg-surface p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-display text-lg">Maak een account aan</p>
-            <p className="mt-1 font-sans text-sm text-ink-soft">Volg je bestelling, bewaar je maten en bestel een volgende keer sneller.</p>
+            <p className="font-display text-lg">Maak een account aan en spaar punten</p>
+            <p className="mt-1 font-sans text-sm text-ink-soft">De spaarpunten van deze bestelling worden automatisch bijgeschreven. Volg je bestelling, bewaar je maten en bestel een volgende keer sneller.</p>
           </div>
           <Link href="/account/login" className="btn-primary shrink-0">Account aanmaken</Link>
         </section>

@@ -5,6 +5,7 @@ import { orders, orderLines, products, productVariants } from "@/db/schema";
 import { parseCare, type CareItem } from "@/lib/care";
 import { getRecommendations, getOrderCrossSell, type ProductCardData } from "@/lib/catalog";
 import { sendOrderConfirmation } from "@/lib/email";
+import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
 import { validateVoucher, redeemVoucher } from "@/lib/vouchers";
@@ -401,6 +402,16 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
 
   const orderId = claimed[0].id;
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  // Spaarpunten bijschrijven voor een ingelogde klant (gast-orders krijgen ze bij
+  // account-koppeling via claimGuestData). Idempotent + non-fataal — nooit de
+  // bevestiging blokkeren.
+  if (order?.customerId) {
+    try {
+      await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status) });
+    } catch (e) {
+      console.warn("[order] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
+    }
+  }
   const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
   const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
   const ok = await sendOrderConfirmation(order, lines, recs);
