@@ -2,24 +2,22 @@ import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
-import { searchProducts } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * POST /api/core/catalog/search — SNELLE fuzzy tekstzoek over de catalogus, rechtstreeks op
- * Neon. Voor het GETYPTE zoeken in de kassa (de tegenhanger van /catalog/lookup voor de
- * barcode-scan). Hergebruikt de gents.nl-zoekmachine (searchProducts: pg_trgm typo-tolerantie
- * + synoniemen + word_similarity) voor de RANKING, en hydrateert daarna per gevonden product
- * de variant-regels (sku/barcode/kleur/maat/prijs) in exact de "article-search"-vorm die de
- * kassa 1-op-1 gebruikt. Vervangt de trage in-memory Shopify-cache-scan.
+ * POST /api/core/catalog/search — SNELLE fuzzy tekstzoek over de catalogus voor het
+ * GETYPTE zoeken in de kassa (tegenhanger van /catalog/lookup voor de barcode-scan).
  *
- * Body: { q, limit? }
- *   → { ok, results:[{ articleNumber, barcode, sku, productId, articleKey, title, color, size,
- *        price, variantId, image, images, productUrl, totalPieces:0, branchCount:0, branches:[] }] }
- *   (voorraadloos: stock volgt async via /api/store/article-stock, net als de barcode-lookup)
- * Auth: STORE_CORE_TOKEN of admin/STUDIO_API_TOKEN.
+ * KALE, directe pg_trgm-query (geen searchProducts-overhead zoals locale/settings/kaart-
+ * opbouw): één query die per variant matcht op titel (word_similarity + ilike), sku,
+ * barcode en kleur, gerangschikt op score. Bewust GEEN in_stock/zichtbaarheids-filter:
+ * aan de kassa moet je élk actief artikel kunnen vinden (ook het laatste stuk, of iets
+ * dat de — soms verouderde — catalogus-voorraadvlag zou verbergen). Voorraad volgt async
+ * via /api/store/article-stock. Auth: STORE_CORE_TOKEN of admin/STUDIO_API_TOKEN.
+ *
+ * Body: { q, limit? } → { ok, results:[ ... article-search entry ... ] }
  */
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) {
@@ -33,15 +31,12 @@ export async function POST(req: Request) {
   }
   const q = String(body?.q || "").trim();
   const limit = Math.min(Math.max(Number(body?.limit) || 24, 1), 50);
-  if (!q) return NextResponse.json({ ok: true, results: [] });
+  if (q.length < 2) return NextResponse.json({ ok: true, results: [] });
 
-  // 1. Ranking via de bestaande gents.nl-zoek (typo-tolerantie + synoniemen + word_similarity).
-  const cards = await searchProducts(q, limit).catch(() => []);
-  const productIds = cards.map((c) => c.id).filter(Boolean);
-  if (!productIds.length) return NextResponse.json({ ok: true, results: [] });
-  const rank = new Map(productIds.map((id, i) => [id, i]));
+  const qLower = q.toLowerCase();
+  const like = `%${qLower}%`;
+  const rowCap = Math.min(limit * 6, 120); // variant-rijen; frontend groepeert per artikel+kleur
 
-  // 2. Hydrateer variant-regels in article-search-vorm (zelfde velden als /catalog/lookup).
   const rows = await getDb().execute<{
     product_id: string;
     handle: string;
@@ -57,23 +52,30 @@ export async function POST(req: Request) {
   }>(sql`
     select v.product_id, p.handle, p.title, v.barcode, v.sku, v.size, v.color, v.price_cents,
       v.shopify_variant_id, v.srs_artikel_id,
-      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
-    from product_variants v join products p on p.id = v.product_id
-    where v.product_id in (${sql.join(
-      productIds.map((id) => sql`${id}`),
-      sql`, `,
-    )})`);
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img,
+      greatest(
+        word_similarity(${qLower}, lower(p.title)),
+        case
+          when lower(coalesce(v.sku, '')) = ${qLower} or lower(coalesce(v.barcode, '')) = ${qLower} then 1.0
+          when lower(coalesce(v.sku, '')) like ${like} or lower(coalesce(v.barcode, '')) like ${like} then 0.95
+          when lower(p.title) like ${like} then 0.9
+          when lower(coalesce(v.color, '')) like ${like} then 0.5
+          else 0
+        end
+      ) as score
+    from product_variants v
+    join products p on p.id = v.product_id
+    where p.status = 'active' and (
+      word_similarity(${qLower}, lower(p.title)) > 0.3
+      or lower(p.title) like ${like}
+      or lower(coalesce(v.sku, '')) like ${like}
+      or lower(coalesce(v.barcode, '')) like ${like}
+      or lower(coalesce(v.color, '')) like ${like}
+    )
+    order by score desc, p.title asc, v.size asc
+    limit ${rowCap}`);
 
-  // Behoud de zoek-ranking (product-volgorde uit searchProducts), daarbinnen op maat.
-  const ordered = rows.rows
-    .slice()
-    .sort(
-      (a, b) =>
-        (rank.get(a.product_id) ?? 9999) - (rank.get(b.product_id) ?? 9999) ||
-        String(a.size).localeCompare(String(b.size)),
-    );
-
-  const results = ordered.map((r) => ({
+  const results = rows.rows.map((r) => ({
     articleNumber: r.srs_artikel_id || r.sku || "",
     barcode: r.barcode || "",
     sku: r.sku || r.barcode || "",
