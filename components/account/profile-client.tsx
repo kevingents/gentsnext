@@ -387,6 +387,90 @@ function Retouren({ data }: { data: Data }) {
 }
 
 /* ── Spaarpunten ──────────────────────────────────────────────────────────── */
+/** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). 500 punten = € 25. */
+function RedeemPoints({ available }: { available: number }) {
+  const STEP = 500;
+  const STEP_CENTS = 2500; // 500 punten = € 25 (server is bron van waarheid)
+  const maxSteps = Math.floor(available / STEP);
+  const [steps, setSteps] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ code: string; valueCents: number } | null>(null);
+  const [error, setError] = useState("");
+
+  if (maxSteps < 1) return null; // niet genoeg besteedbare punten → geen actie tonen
+  const points = Math.min(steps, maxSteps) * STEP;
+
+  async function redeem() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/account/redeem-points", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ points }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) {
+        setError(d.error || "Inwisselen mislukte.");
+        return;
+      }
+      setResult({ code: d.code, valueCents: d.valueCents });
+    } catch {
+      setError("Er ging iets mis. Probeer het opnieuw.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="border border-ink p-6">
+        <p className="label-brand">Gelukt</p>
+        <p className="mt-2 font-sans text-sm text-ink-soft">
+          Je tegoedbon van {formatEuro(result.valueCents)} staat klaar. Gebruik de code bij het afrekenen:
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <code className="bg-surface px-3 py-2 font-sans text-base tracking-wider">{result.code}</code>
+          <button onClick={() => window.location.reload()} className="font-sans text-sm underline">
+            Saldo vernieuwen
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-line p-6">
+      <p className="label-brand">Verzilver punten</p>
+      <p className="mt-2 font-sans text-sm text-ink-soft">
+        {STEP} punten = {formatEuro(STEP_CENTS)} tegoedbon. Kies hoeveel je inwisselt:
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <select
+          value={steps}
+          onChange={(e) => setSteps(Number(e.target.value))}
+          disabled={loading}
+          className="border border-line px-3 py-2 font-sans text-sm"
+        >
+          {Array.from({ length: maxSteps }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              {n * STEP} punten → {formatEuro(n * STEP_CENTS)}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={redeem}
+          disabled={loading}
+          className="bg-ink px-5 py-2 font-sans text-sm text-white transition hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? "Bezig…" : `Verzilver ${points} punten`}
+        </button>
+      </div>
+      {error && <p className="mt-2 font-sans text-sm text-danger">{error}</p>}
+    </div>
+  );
+}
+
 function Punten({ data }: { data: Data }) {
   return (
     <div className="space-y-6">
@@ -398,6 +482,7 @@ function Punten({ data }: { data: Data }) {
         )}
         <p className="mt-2 font-sans text-sm text-ink-soft">Je spaart 1 punt per bestede euro — online én in de winkel. Punten verzilver je voor kortingen en exclusieve acties.</p>
       </div>
+      <RedeemPoints available={data.pointsAvailable} />
       {data.loyalty.length ? (
         <ul className="divide-y divide-line border-y border-line">
           {data.loyalty.map((e) => (

@@ -9,7 +9,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { customers, loyaltyEvents } from "@/db/schema";
+import { customers, loyaltyEvents, vouchers } from "@/db/schema";
 import { getPosSaleCore } from "@/lib/pos-sales-core";
 import { verifyReceiptToken, receiptSecretConfigured } from "@/lib/receipt-token";
 import { getSettings } from "@/lib/settings";
@@ -65,6 +65,84 @@ export async function pendingBalance(customerId: string): Promise<number> {
     .from(loyaltyEvents)
     .where(and(eq(loyaltyEvents.customerId, customerId), sql`${loyaltyEvents.vestsAt} > now()`));
   return row?.total || 0;
+}
+
+/** Unieke inwissel-voucher-code (PUNT-XXXXXXXX, zonder verwarrende tekens). */
+function randVoucherCode(): string {
+  const ab = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 8; i++) s += ab[Math.floor(Math.random() * ab.length)];
+  return "PUNT-" + s;
+}
+
+export type RedeemResult = { ok: boolean; code?: string; valueCents?: number; points?: number; newBalance?: number; error?: string };
+
+/**
+ * Wissel spaarpunten in voor een GENTS-tegoedbon — VOLLEDIG Neon-native, geen SRS.
+ * Vervangt de oude SRS CreateFromLoyaltyPoints-flow. Boekt de punten af via een negatief
+ * loyalty_events-event én maakt een vaste-bedrag-voucher aan (aan deze klant). Rekent op
+ * het BESTEEDBARE (gevest) saldo; koers/minimum/stap/looptijd uit de settings-store.
+ */
+export async function redeemPointsForVoucher(customerId: string, points: number): Promise<RedeemResult> {
+  const pts = Math.floor(Number(points) || 0);
+  if (!customerId) return { ok: false, error: "Geen account." };
+
+  const lc = (await getSettings()).loyaltyConfig as {
+    redeemCentsPerPoint?: number; redeemMinPoints?: number; redeemStepPoints?: number; redeemVoucherDays?: number;
+  };
+  const centsPerPoint = Number(lc?.redeemCentsPerPoint) > 0 ? Number(lc.redeemCentsPerPoint) : 5;
+  const minPoints = Number(lc?.redeemMinPoints) > 0 ? Number(lc.redeemMinPoints) : 500;
+  const stepPoints = lc?.redeemStepPoints == null ? 500 : Math.max(0, Number(lc.redeemStepPoints));
+  const validDays = Number(lc?.redeemVoucherDays) > 0 ? Number(lc.redeemVoucherDays) : 365;
+
+  if (pts < minPoints) return { ok: false, error: `Je kunt vanaf ${minPoints} punten inwisselen.` };
+  if (stepPoints > 0 && pts % stepPoints !== 0) return { ok: false, error: `Inwisselen per ${stepPoints} punten.` };
+
+  const redeemable = await redeemableBalance(customerId);
+  if (pts > redeemable) return { ok: false, error: `Je hebt ${redeemable} besteedbare punten.` };
+
+  const valueCents = pts * centsPerPoint;
+  const db = getDb();
+
+  // Atomaire race-guard op de saldo-cache: de rij-lock serialiseert gelijktijdige inwisselingen
+  // en de WHERE voorkomt een negatief saldo. (loyalty_points = totaal-cache ≥ besteedbaar; samen
+  // met de redeemable-precheck kan er niet boven besteedbaar of onder 0 worden gegaan.)
+  const dec = await db
+    .update(customers)
+    .set({ loyaltyPoints: sql`${customers.loyaltyPoints} - ${pts}` })
+    .where(and(eq(customers.id, customerId), sql`${customers.loyaltyPoints} >= ${pts}`))
+    .returning({ balance: customers.loyaltyPoints });
+  if (!dec.length) return { ok: false, error: "Onvoldoende punten." };
+
+  // Saldo is geclaimd. Bij een fout hierna: de decrement terugdraaien (neon-http = geen transactie).
+  const code = randVoucherCode();
+  try {
+    await db.insert(loyaltyEvents).values({
+      customerId,
+      points: -pts,
+      reason: `Ingewisseld voor tegoedbon ${code} (€ ${(valueCents / 100).toFixed(2)})`,
+      refType: "redeem",
+      refId: code,
+    });
+    await db.insert(vouchers).values({
+      code,
+      customerId,
+      description: `Ingewisseld: ${pts} spaarpunten`,
+      kind: "amount",
+      valueCents,
+      status: "active",
+      singleUse: true,
+      expiresAt: new Date(Date.now() + validDays * 86400000),
+    });
+    return { ok: true, code, valueCents, points: pts, newBalance: Number(dec[0].balance) || 0 };
+  } catch {
+    await db
+      .update(customers)
+      .set({ loyaltyPoints: sql`${customers.loyaltyPoints} + ${pts}` })
+      .where(eq(customers.id, customerId))
+      .catch(() => {});
+    return { ok: false, error: "Inwisselen mislukte, probeer het opnieuw." };
+  }
 }
 
 /**
