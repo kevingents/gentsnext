@@ -398,6 +398,23 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
 }
 
 /**
+ * Opgeslagen betaalref (molliePaymentId-kolom = Mollie payment-id óf Worldline
+ * hostedCheckoutId) voor een ordernummer. Voor de Worldline-webhook/terugkeer, die
+ * de order via de merchantReference (= ordernummer) terugvindt en dan met deze ref
+ * de bestaande applyPaymentStatus/afrond-functies hergebruikt.
+ */
+export async function paymentRefForOrderNumber(orderNumber: string): Promise<string | null> {
+  if (!orderNumber) return null;
+  const db = getDb();
+  const [row] = await db
+    .select({ ref: orders.molliePaymentId })
+    .from(orders)
+    .where(eq(orders.orderNumber, orderNumber))
+    .limit(1);
+  return row?.ref || null;
+}
+
+/**
  * Verstuurt de orderbevestiging precies één keer (idempotent t.o.v. dubbele
  * webhooks). Claimt eerst de mail via een conditionele UPDATE, daarna pas
  * versturen — zo wint bij een race maar één webhook-call.

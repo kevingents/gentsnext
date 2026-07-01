@@ -7,7 +7,9 @@ import {
   type CheckoutItem,
   type DeliveryMethod,
 } from "@/lib/orders";
-import { mollieConfigured, createMolliePayment, isKnownMethod } from "@/lib/mollie";
+import { createMolliePayment, isKnownMethod } from "@/lib/mollie";
+import { createWorldlineCheckout } from "@/lib/worldline";
+import { activePaymentProvider, paymentConfigured } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -78,8 +80,9 @@ export async function POST(req: Request) {
     });
   }
 
-  // Niet geconfigureerd: order is bewaard, maar betalen kan nog niet.
-  if (!mollieConfigured()) {
+  // Provider-schakelaar: Worldline of Mollie. Niet geconfigureerd → order bewaard, betalen kan nog niet.
+  const provider = await activePaymentProvider();
+  if (!(await paymentConfigured(provider))) {
     return NextResponse.json({
       ok: true,
       configured: false,
@@ -90,19 +93,37 @@ export async function POST(req: Request) {
   }
 
   try {
-    const payment = await createMolliePayment({
-      amountCents: order.totalCents,
-      description: `GENTS bestelling ${order.orderNumber}`,
-      redirectUrl: `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`,
-      cancelUrl: `${origin}/afrekenen?geannuleerd=1`,
-      webhookUrl: `${origin}/api/webhooks/mollie`,
-      metadata: { orderNumber: order.orderNumber },
-      idempotencyKey: `order-${order.id}`,
-      method: payMethod,
-    });
-    await attachMolliePayment(order.id, payment.id);
-    if (!payment.checkoutUrl) return bad("Betaling kon niet worden gestart.");
-    return NextResponse.json({ ok: true, configured: true, checkoutUrl: payment.checkoutUrl });
+    let checkoutUrl = "";
+    let paymentRef = "";
+    if (provider === "worldline") {
+      const co = await createWorldlineCheckout({
+        amountCents: order.totalCents,
+        merchantReference: order.orderNumber,
+        // De klant komt terug op onze return-route (past de status meteen toe) → bevestigingspagina.
+        // De webhook is de onafhankelijke backup.
+        returnUrl: `${origin}/api/payments/worldline/return?on=${encodeURIComponent(order.orderNumber)}&t=${encodeURIComponent(order.accessToken)}`,
+      });
+      checkoutUrl = co.redirectUrl;
+      paymentRef = co.hostedCheckoutId;
+    } else {
+      const payment = await createMolliePayment({
+        amountCents: order.totalCents,
+        description: `GENTS bestelling ${order.orderNumber}`,
+        redirectUrl: `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`,
+        cancelUrl: `${origin}/afrekenen?geannuleerd=1`,
+        webhookUrl: `${origin}/api/webhooks/mollie`,
+        metadata: { orderNumber: order.orderNumber },
+        idempotencyKey: `order-${order.id}`,
+        method: payMethod,
+      });
+      checkoutUrl = payment.checkoutUrl || "";
+      paymentRef = payment.id;
+    }
+    // Betaalref opslaan in orders.molliePaymentId (generiek: Mollie-id óf Worldline-hostedCheckoutId)
+    // + de voorraad-hold verlengen naar 24u.
+    await attachMolliePayment(order.id, paymentRef);
+    if (!checkoutUrl) return bad("Betaling kon niet worden gestart.");
+    return NextResponse.json({ ok: true, configured: true, checkoutUrl });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "Betaling starten mislukte." },
