@@ -83,6 +83,14 @@ export type Settings = {
   // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
   loyaltyConfig: {
     vestingDays: number;
+    /** Inwisselkoers: centen tegoedbon per punt (5 = 500 punten → € 25). */
+    redeemCentsPerPoint: number;
+    /** Minimaal in te wisselen punten. */
+    redeemMinPoints: number;
+    /** Inwisselen per veelvoud (0 = vrij bedrag). */
+    redeemStepPoints: number;
+    /** Geldigheid van de ingewisselde tegoedbon (dagen). */
+    redeemVoucherDays: number;
   };
 };
 
@@ -136,6 +144,10 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   loyaltyConfig: {
     vestingDays: num(process.env.GENTS_LOYALTY_VESTING_DAYS, 21),
+    redeemCentsPerPoint: num(process.env.GENTS_LOYALTY_REDEEM_CENTS_PER_POINT, 5), // 500 punten = € 25
+    redeemMinPoints: num(process.env.GENTS_LOYALTY_REDEEM_MIN_POINTS, 500),
+    redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
+    redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
   },
 };
 
