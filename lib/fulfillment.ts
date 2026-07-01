@@ -319,6 +319,34 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
       .map(([sku, qty]) => ({ sku, qty, title: titleBySku.get(sku) }));
     if (sLines.length) shipments.push(toShipment(b, sLines));
   }
+
+  // Alle magazijn-filialen (99/90/704/705/98) zijn fysiek één magazijn. Voeg hun
+  // deel-zendingen samen tot ÉÉN "Vanuit ons magazijn"-zending: anders krijgt de
+  // klant meerdere identieke magazijn-zendingen en knipt het magazijnteam één
+  // fysieke pick op in meerdere taken/labels. (Voorraad kan per SRS-filiaalnummer
+  // verspreid staan; leverbaarheid verandert daar niet door — enkel de weergave.)
+  const warehouseShips = shipments.filter((s) => s.isWarehouse);
+  if (warehouseShips.length > 1) {
+    // Basis = de magazijn-deelzending die het LAATST de deur uit kan (niet te
+    // optimistisch beloven), met hoogste prioriteit (bv. 99) als tie-break.
+    const base = warehouseShips
+      .slice()
+      .sort((a, b) => b.dispatchInDays - a.dispatchInDays || branchPriority(b.branchId) - branchPriority(a.branchId))[0];
+    const mergedLines = new Map<string, ShipmentLine>();
+    for (const s of warehouseShips) {
+      for (const l of s.lines) {
+        const cur = mergedLines.get(l.sku);
+        if (cur) cur.qty += l.qty;
+        else mergedLines.set(l.sku, { ...l });
+      }
+    }
+    const lines = [...mergedLines.values()];
+    const one: Shipment = { ...base, lines, units: lines.reduce((sum, l) => sum + l.qty, 0) };
+    const stores = shipments.filter((s) => !s.isWarehouse);
+    shipments.length = 0;
+    shipments.push(one, ...stores);
+  }
+
   shipments.sort((a, b) => Number(b.isWarehouse) - Number(a.isWarehouse) || b.units - a.units);
 
   const shortages = [...remaining.entries()]
