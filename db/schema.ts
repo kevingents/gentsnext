@@ -260,6 +260,34 @@ export const srsStockMeta = pgTable("srs_stock_meta", {
 });
 
 /**
+ * Print-inbox: wachtrij van print-opdrachten per winkel. De backend kan een winkel niet
+ * direct laten printen (de kassa-agent zit op localhost achter NAT), dus een opdracht wordt
+ * hier gequeued; de kassa van díe winkel pollt de inbox en print 'm via z'n lokale agent
+ * (en ackt 'm). Gebruikt voor de winkel→winkel-uitwisseling: de bronwinkel krijgt een
+ * pick-opdracht met scanbare barcode (ref = shipment linkRef → koppelt de scan aan de zending).
+ */
+export const storePrintJobs = pgTable(
+  "store_print_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    store: text("store").notNull(), // winkel die moet printen
+    type: text("type").notNull().default("pick"), // 'pick' | 'note' | ...
+    ref: text("ref").notNull().default(""), // shipment linkRef e.d. (idempotentie + scan-koppeling)
+    payload: jsonb("payload").notNull().default({}), // wat te printen (titel/barcode/regels/voor-winkel/eta)
+    status: text("status").notNull().default("pending"), // 'pending' | 'printed' | 'cancelled'
+    createdBy: text("created_by").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    printedAt: timestamp("printed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("spj_store_status_idx").on(t.store, t.status),
+    // Idempotentie: dezelfde (store, ref, type) queuet niet dubbel bij retries — alleen als
+    // er een ref is (lege-ref-opdrachten mogen wél meerdere keren).
+    uniqueIndex("spj_store_ref_type_unique").on(t.store, t.ref, t.type).where(sql`ref <> ''`),
+  ],
+);
+
+/**
  * Fase D — anti-oversell. Atomaire web-reserveringsteller per (locatie, stockKey).
  * De gate bij het aanmaken van een order is één SQL-statement (ON CONFLICT DO
  * UPDATE ... WHERE) → de rij-lock serialiseert gelijktijdige checkouts, zodat het

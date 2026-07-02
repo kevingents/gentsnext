@@ -239,6 +239,13 @@
       "when": 1782995237516,
       "tag": "0033_slim_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783000719685,
+      "tag": "0034_puzzling_black_bird",
+      "breakpoints": true
     }
   ]
 }
