@@ -114,6 +114,39 @@ export async function listPosSalesByCustomerCore(input: { customerId?: string; e
   return rows.map(rowToSale);
 }
 
+/**
+ * Koppel een klant achteraf aan een bestaande bon (klant kocht zonder z'n profiel te koppelen).
+ * IDEMPOTENT via een DB-guard: de update slaagt alléén als de bon nog geen customer_id had.
+ *   assigned:true  → nieuw gekoppeld (de aanroeper mag nú de spaarpunten toekennen).
+ *   assigned:false → had al een klant / race → NIET opnieuw toekennen.
+ * Zet zowel de queryable kolom als het customerId/customer/customerEmail in de data-jsonb, zodat
+ * de bon voortaan bij de klant-historie (listPosSalesByCustomerCore) verschijnt.
+ */
+export async function assignCustomerToSaleCore(saleId: string, customerId: string, name?: string, email?: string): Promise<{ ok: boolean; assigned: boolean; sale?: Sale; error?: string }> {
+  const id = String(saleId || "").trim();
+  const cid = String(customerId || "").trim();
+  if (!id || !cid) return { ok: false, assigned: false, error: "saleId + customerId vereist." };
+  const db = getDb();
+  const [existing] = await db.select().from(posSales).where(eq(posSales.id, id)).limit(1);
+  if (!existing) return { ok: false, assigned: false, error: "Bon niet gevonden." };
+  const cur = rowToSale(existing) as Sale & { customerId?: string; customer?: string; customerEmail?: string };
+  if (String(cur.customerId || "").trim()) return { ok: true, assigned: false, sale: cur }; // al gekoppeld
+
+  const nm = String(name || "").trim();
+  const em = String(email || "").trim();
+  const newData = { ...(cur as object), customerId: cid, customer: nm || cur.customer || "", customerEmail: em || cur.customerEmail || "" };
+  const [upd] = await db
+    .update(posSales)
+    .set({ customerId: cid, data: newData as object })
+    .where(and(eq(posSales.id, id), eq(posSales.customerId, ""))) // guard: alleen als nog niet gekoppeld
+    .returning();
+  if (!upd) {
+    const [again] = await db.select().from(posSales).where(eq(posSales.id, id)).limit(1);
+    return { ok: true, assigned: false, sale: again ? rowToSale(again) : cur };
+  }
+  return { ok: true, assigned: true, sale: rowToSale(upd) };
+}
+
 export async function findSaleByClientRefCore(clientRef: string): Promise<Sale | null> {
   const ref = String(clientRef || "").trim();
   if (!ref) return null;
