@@ -112,8 +112,10 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
                   onClick={() => apply({ colors: toggle(selection.colors, c.key) })}
                   aria-pressed={active}
                   title={`${c.label} (${c.count})`}
+                  // Selectie via ring + vetgedrukt label — niet alléén randkleur (duidelijk
+                  // voor kleurenblinde gebruikers).
                   className={`flex items-center gap-2 border px-2.5 py-1.5 font-sans text-xs transition-colors ${
-                    active ? "border-ink" : "border-line hover:border-muted"
+                    active ? "border-ink ring-1 ring-ink font-medium" : "border-line hover:border-muted"
                   }`}
                 >
                   <span

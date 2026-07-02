@@ -37,6 +37,9 @@ function DesktopItem({ item }: { item: MenuItem }) {
   // waardoor het mega-paneel open blijft. We forceren het dicht bij een klik en
   // herstellen zodra de muis het menu-item verlaat.
   const [closed, setClosed] = useState(false);
+  // Open-staat (hover OF toetsenbordfocus) — puur voor de juiste aria-expanded-
+  // aankondiging; de zichtbaarheid zelf blijft via de CSS-reveal lopen.
+  const [open, setOpen] = useState(false);
 
   if (!hasMega) {
     return (
@@ -58,8 +61,21 @@ function DesktopItem({ item }: { item: MenuItem }) {
     "group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100";
 
   return (
-    <li className="group" onMouseLeave={() => setClosed(false)}>
-      <button type="button" aria-haspopup="true" className="cursor-default">
+    <li
+      className="group"
+      onMouseEnter={() => { setOpen(true); setClosed(false); }}
+      onMouseLeave={() => { setOpen(false); setClosed(false); }}
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false); }}
+      // Escape sluit het paneel voor toetsenbordgebruikers (verbergt + geeft focus vrij).
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          setClosed(true);
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        }
+      }}
+    >
+      <button type="button" aria-haspopup="true" aria-expanded={open && !closed} className="cursor-default">
         <Label>{item.label}</Label>
       </button>
       <div className={`${base} ${closed ? "" : reveal}`}>

@@ -138,7 +138,10 @@ export function CartDrawer() {
                   Nog <strong>{formatEuro(remaining)}</strong> tot gratis verzending
                 </p>
               ) : (
-                <p className="font-sans text-xs text-success">✓ Je komt in aanmerking voor gratis verzending</p>
+                <p className="flex items-center gap-1.5 font-sans text-xs text-success">
+                  <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                  Je komt in aanmerking voor gratis verzending
+                </p>
               )}
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
                 <div className="h-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
