@@ -169,9 +169,6 @@ export default async function ProductPage({ params }: Props) {
   // Brede/kleine accessoires (riem, das, strik, manchetknoop, pochet) passen niet
   // in de 4:5-tegel met object-cover → toon ze heel met object-contain.
   const fitContain = ["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"].includes(hoofdgroep);
-  // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
-  const sessionCustomer = await getSessionCustomer();
-  const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
   const rating = parseRating(attrs);
   // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
   const cat = categoryByHoofdgroep(hoofdgroep);
@@ -181,7 +178,9 @@ export default async function ProductPage({ params }: Props) {
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts] = await Promise.all([
+  // getSessionCustomer (maat-voorselectie) + getSettings (look-config) zijn onafhankelijk
+  // van de productdata → mee in de parallelle batch i.p.v. twee losse round-trips.
+  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 4),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
@@ -192,14 +191,18 @@ export default async function ProductPage({ params }: Props) {
     getCachedReviewAiSummary(product.handle),
     getProductContentOverride(product.handle),
     getBlogPostsForProduct(product.handle),
+    getSessionCustomer(),
+    getSettings(),
   ]);
+  // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
+  const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
   // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde tekst.
   const descriptionHtml = contentOverride?.descriptionHtml || product.descriptionHtml;
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
   // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
-  // we maken die (samen met dit product) klikbaar/shoppbaar.
-  const settings = await getSettings();
+  // we maken die (samen met dit product) klikbaar/shoppbaar. (settings komt uit de
+  // parallelle batch hierboven.)
   // MixMatch (USP): toon het samenstelbare pak — colbert + broek + gilet in dezelfde
   // stof — i.p.v. de generieke basis-outfit. Valt terug op de slimme look.
   const isMixMatch = String(attrs.mix_and_match || "") === "Ja" && ["Colberts", "Broeken", "Gilets"].includes(hoofdgroep);
