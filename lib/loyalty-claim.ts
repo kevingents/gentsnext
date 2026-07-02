@@ -104,26 +104,33 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
   const valueCents = pts * centsPerPoint;
   const db = getDb();
 
-  // Atomaire race-guard op de saldo-cache: de rij-lock serialiseert gelijktijdige inwisselingen
-  // en de WHERE voorkomt een negatief saldo. (loyalty_points = totaal-cache ≥ besteedbaar; samen
-  // met de redeemable-precheck kan er niet boven besteedbaar of onder 0 worden gegaan.)
+  // Niet-geveste (nog "in behandeling") punten = totaal-cache − besteedbaar. De atomische guard
+  // borgt dat het totaal ná de afboeking NOOIT onder dit niet-geveste bedrag zakt — anders
+  // konden gelijktijdige inwisselingen samen nog-niet-geveste punten opmaken (de oude guard
+  // checkte alleen ≥ 0 op het totaal, niet op het geveste saldo).
+  const [cur] = await db.select({ total: customers.loyaltyPoints }).from(customers).where(eq(customers.id, customerId)).limit(1);
+  const nonVested = Math.max(0, (Number(cur?.total) || 0) - redeemable);
   const dec = await db
     .update(customers)
     .set({ loyaltyPoints: sql`${customers.loyaltyPoints} - ${pts}` })
-    .where(and(eq(customers.id, customerId), sql`${customers.loyaltyPoints} >= ${pts}`))
+    .where(and(eq(customers.id, customerId), sql`${customers.loyaltyPoints} - ${pts} >= ${nonVested}`))
     .returning({ balance: customers.loyaltyPoints });
-  if (!dec.length) return { ok: false, error: "Onvoldoende punten." };
+  if (!dec.length) return { ok: false, error: "Onvoldoende besteedbare punten." };
 
-  // Saldo is geclaimd. Bij een fout hierna: de decrement terugdraaien (neon-http = geen transactie).
+  // Saldo is geclaimd. Bij een fout hierna: de decrement ÉN het zojuist ingeboekte negatieve
+  // ledger-event terugdraaien (neon-http = geen transactie). Anders bleef een wees-'redeem'-
+  // event staan → de klant verliest besteedbare punten in het grootboek zonder bon.
   const code = randVoucherCode();
+  let eventId: string | undefined;
   try {
-    await db.insert(loyaltyEvents).values({
+    const [ev] = await db.insert(loyaltyEvents).values({
       customerId,
       points: -pts,
       reason: `Ingewisseld voor tegoedbon ${code} (€ ${(valueCents / 100).toFixed(2)})`,
       refType: "redeem",
       refId: code,
-    });
+    }).returning({ id: loyaltyEvents.id });
+    eventId = ev?.id;
     await db.insert(vouchers).values({
       code,
       customerId,
@@ -136,11 +143,14 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     });
     return { ok: true, code, valueCents, points: pts, newBalance: Number(dec[0].balance) || 0 };
   } catch {
+    // Cache terug + het negatieve ledger-event verwijderen → cache én grootboek blijven
+    // consistent (geen wees-event, geen verloren besteedbare punten).
     await db
       .update(customers)
       .set({ loyaltyPoints: sql`${customers.loyaltyPoints} + ${pts}` })
       .where(eq(customers.id, customerId))
       .catch(() => {});
+    if (eventId) await db.delete(loyaltyEvents).where(eq(loyaltyEvents.id, eventId)).catch(() => {});
     return { ok: false, error: "Inwisselen mislukte, probeer het opnieuw." };
   }
 }
@@ -195,7 +205,12 @@ export async function claimReceiptPoints(input: { saleId: string; token: string;
   if (!sale) return { ok: false, error: "Bon niet gevonden." };
   const s = sale as { cancelled?: boolean; customerId?: string; total?: number };
   if (s.cancelled) return { ok: false, error: "Deze bon is geannuleerd." };
-  if (String(s.customerId || "")) return { ok: false, error: "Deze bon hoort al bij een klant." };
+  // Alleen weigeren als de bon bij een ÁNDERE klant hoort. Hoort 'ie al bij DEZE klant
+  // (kassa-verkoop op naam), dan mag die z'n bon-punten alsnog in Neon claimen — creditOnce
+  // is idempotent op (customerId, 'pos_receipt', saleId), dus nooit dubbel.
+  if (String(s.customerId || "") && String(s.customerId) !== customerId) {
+    return { ok: false, error: "Deze bon hoort bij een andere klant." };
+  }
   const points = pointsForCents(Math.round((Number(s.total) || 0) * 100));
   const saleDate = (sale as { createdAt?: string }).createdAt ? new Date(String((sale as { createdAt?: string }).createdAt)) : null;
   return creditOnce(customerId, points, "Kassabon gekoppeld", "pos_receipt", saleId, await vestsAtFrom(saleDate));

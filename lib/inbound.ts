@@ -383,7 +383,11 @@ export async function receiveShipment(shipmentId: string, receivedBy?: string): 
     const asnKeys = new Set(asn.map((l) => l.stockKey));
     const bookLines = asn.map((l) => ({
       barcode: l.barcode, sku: l.sku, name: l.title, color: l.color, size: l.size,
-      qty: sampled.has(l.stockKey) ? good(countByKey.get(l.stockKey)) : (Number(l.expectedQty) || 0),
+      // Gesamplede regels: gescand − gevlagd. Vertrouwde regels: verwacht − gevlagd — een
+      // schade-/verkeerd-melding op een vertrouwde regel mag niet als verkoopbaar geboekt.
+      qty: sampled.has(l.stockKey)
+        ? good(countByKey.get(l.stockKey))
+        : Math.max(0, (Number(l.expectedQty) || 0) - (countByKey.get(l.stockKey)?.flagQty ?? 0)),
     }));
     for (const c of counts) if (!asnKeys.has(c.stockKey) && c.scannedQty > 0) bookLines.push({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: good(c) });
     const booked = await book(bookLines);
