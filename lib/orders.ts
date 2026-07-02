@@ -362,6 +362,38 @@ export async function releaseOrderGiftcard(molliePaymentId: string): Promise<voi
   }
 }
 
+/**
+ * Draait een nog-onbetaalde order volledig terug: geeft de voorraad-holds, een
+ * ingezette single-use voucher én een afgeboekte cadeaubon terug en zet de order
+ * op 'canceled'. Voor het geval het STARTEN van de betaling faalt ná createOrder
+ * (provider-API-fout of lege checkout-URL) — anders blijft de order achter met
+ * verbruikte codes + gereserveerde voorraad zonder dat de klant kán betalen.
+ * Best-effort + idempotent: elke release is een no-op als er niets vrij te geven is.
+ */
+export async function voidUnpaidOrder(orderId: string): Promise<void> {
+  const db = getDb();
+  const [o] = await db
+    .select({
+      voucherCode: orders.voucherCode,
+      giftcardCode: orders.giftcardCode,
+      giftcardCents: orders.giftcardCents,
+      orderNumber: orders.orderNumber,
+      status: orders.status,
+    })
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+  if (!o) return;
+  // Nooit een al-betaalde order terugdraaien (race met een binnengekomen webhook).
+  if (o.status === "paid" || o.status === "shipped" || o.status === "delivered") return;
+  try { await releaseOrderHolds(orderId); } catch (e) { console.error("[voidUnpaidOrder] holds", e); }
+  if (o.voucherCode) { try { await releaseVoucher(o.voucherCode); } catch (e) { console.error("[voidUnpaidOrder] voucher", e); } }
+  if (o.giftcardCode && o.giftcardCents > 0) {
+    try { await releaseGiftcard(o.giftcardCode, o.orderNumber); } catch (e) { console.error("[voidUnpaidOrder] giftcard", e); }
+  }
+  await db.update(orders).set({ status: "canceled", paymentStatus: "failed", updatedAt: sql`now()` }).where(eq(orders.id, orderId));
+}
+
 export async function attachMolliePayment(orderId: string, molliePaymentId: string) {
   const db = getDb();
   await db
@@ -392,10 +424,15 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     .update(orders)
     .set(set)
     .where(eq(orders.molliePaymentId, molliePaymentId))
-    .returning({ id: orders.id });
-  // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven.
+    .returning({ id: orders.id, voucherCode: orders.voucherCode });
+  // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven ÉN een
+  // ingezette single-use voucher (welkomstkorting/spaarpunten-bon) weer activeren. Dit
+  // is het choke-point voor álle betaalstatussen (Mollie + Worldline, webhook + return),
+  // zodat geen enkel faal-pad de voucher permanent kan verbranden. releaseVoucher is
+  // idempotent (no-op op multi-use of al-actief) → een dubbele webhook doet geen kwaad.
   if (updated.length && (orderStatus === "canceled" || orderStatus === "expired" || orderStatus === "failed")) {
     await releaseOrderHolds(updated[0].id);
+    if (updated[0].voucherCode) await releaseVoucher(updated[0].voucherCode);
   }
 }
 

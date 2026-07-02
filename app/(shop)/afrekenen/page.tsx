@@ -171,9 +171,19 @@ function CheckoutForm() {
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
   const [tiered, setTiered] = useState<TieredDiscountCfg | null>(null);
+  // Verzend-drempels uit de instelbare settings (fallback = de oude defaults) zodat de
+  // getoonde verzendkosten meelopen als een beheerder ze wijzigt — de server rekent er
+  // toch mee (createOrder), dus dit houdt "getoond = afgeschreven" in sync.
+  const [freeShipCents, setFreeShipCents] = useState(7500);
+  const [shipCents, setShipCents] = useState(495);
   useEffect(() => {
     let active = true;
-    fetch("/api/promo").then((r) => r.json()).then((d) => { if (active) setTiered(d?.tieredDiscount || null); }).catch(() => {});
+    fetch("/api/promo").then((r) => r.json()).then((d) => {
+      if (!active) return;
+      setTiered(d?.tieredDiscount || null);
+      if (Number.isFinite(d?.freeShippingCents)) setFreeShipCents(d.freeShippingCents);
+      if (Number.isFinite(d?.shippingCents)) setShipCents(d.shippingCents);
+    }).catch(() => {});
     return () => { active = false; };
   }, []);
   // Eén veld voor kortingscode óf cadeaubon — de server bepaalt welke het is.
@@ -237,7 +247,7 @@ function CheckoutForm() {
     };
   }, [form.postalCode, form.houseNumber]);
 
-  const baseShipping = pickupMode ? 0 : cart.subtotalCents >= 7500 ? 0 : cart.subtotalCents > 0 ? 495 : 0;
+  const baseShipping = pickupMode ? 0 : cart.subtotalCents >= freeShipCents ? 0 : cart.subtotalCents > 0 ? shipCents : 0;
   const surcharge = pickupMode ? 0 : delivery === "express" ? expressSurcharge : 0;
   const shippingCents = baseShipping + surcharge;
   const itemCount = cart.lines.reduce((n, l) => n + l.qty, 0);
