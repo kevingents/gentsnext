@@ -24,6 +24,24 @@ const nextConfig = {
     // Correctheid wordt bewaakt door `tsc --noEmit`; eslint-flat-config volgt later.
     ignoreDuringBuilds: true,
   },
+  // Veilige, breed-toepasbare beveiligingsheaders (uit de Lighthouse-best-practices):
+  // HSTS (Vercel is altijd HTTPS), clickjacking-bescherming, MIME-sniffing uit, en een
+  // strak referrer-/permissions-beleid. Bewust GEEN CSP/COOP hier — die vergen
+  // nonce-/OAuth-afstemming en kunnen legitieme flows breken; apart oppakken.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

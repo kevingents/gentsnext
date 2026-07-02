@@ -7,7 +7,7 @@ import type { Config } from "tailwindcss";
  * zodat de huisstijl op één plek leeft.
  *   ink        #0A0A0A  hoofdtekst / knoppen (near-black i.p.v. puur zwart voor zachtere editorial uitstraling)
  *   ink-soft   #2C2C2C  secundaire tekst (brandbook donkergrijs)
- *   muted      #767676  tertiaire tekst, iconen (donker genoeg voor WCAG AA 4.5:1 op wit)
+ *   muted      #6B6B6B  tertiaire tekst, iconen (WCAG AA 4.5:1 op wit én surface)
  *   line       #E6E4DF  subtiele borders/dividers
  *   canvas     #FFFFFF  pagina-achtergrond
  *   surface    #F6F5F2  sectie-achtergrond (warme off-white)
@@ -24,9 +24,9 @@ const config: Config = {
     extend: {
       colors: {
         ink: { DEFAULT: "#0A0A0A", soft: "#2C2C2C" },
-        // #767676 haalt WCAG AA (4.5:1) op wit — voor tellingen, prijs-fineprint,
-        // "In X kleuren", zoek-metadata die eerder op #8B8B8B (~3.4:1) stonden.
-        muted: "#767676",
+        // #6B6B6B haalt WCAG AA (4.5:1) op zowel wit ALS de warme surface-achtergrond
+        // (#f6f5f2) — #767676 zakte daar naar 4.16:1 (label-brand op sectie-achtergrond).
+        muted: "#6B6B6B",
         line: "#E6E4DF",
         canvas: "#FFFFFF",
         surface: "#F6F5F2",
