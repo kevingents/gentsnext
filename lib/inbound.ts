@@ -75,7 +75,60 @@ export async function buildExpectedLines(skuExpected: { sku: string; expected: n
       expectedQty: Number(expected) || 0,
     });
   }
-  return out;
+  return canonicalizeExpectedLines(out);
+}
+
+/**
+ * Herken elke verwachte ASN-regel via de catalogus en zet de stockKey canoniek =
+ * lower(catalogus-barcode || catalogus-sku) — precies wat resolveCode() bij een SCAN
+ * produceert. Zo delen verwacht en scan altijd dezelfde sleutel, ook als de bron
+ * (SRS-drager/uitwisseling) een andere code aanlevert dan de catalogus-barcode.
+ * Matcht op barcode, sku ÉN srs_artikel_id (de SRS-drager stuurt vaak een artikel_id/
+ * barcode die niet in de sku-kolom staat). Onbekend in de catalogus → rauwe waarden
+ * behouden (blijft een 'onverwacht/afwijking'-regel, geen fantoom).
+ */
+export async function canonicalizeExpectedLines(lines: ExpectedLine[]): Promise<ExpectedLine[]> {
+  const arr = (lines || []).filter(Boolean);
+  if (!arr.length) return [];
+  const codes = [
+    ...new Set(arr.flatMap((l) => [String(l.barcode || "").trim(), String(l.sku || "").trim()]).filter(Boolean)),
+  ];
+  type CatRow = { sku: string; barcode: string; artikel: string; title: string; size: string; color: string; img: string | null };
+  const bySku = new Map<string, CatRow>();
+  const byBarcode = new Map<string, CatRow>();
+  const byArtikel = new Map<string, CatRow>();
+  if (codes.length) {
+    const db = getDb();
+    const rows = await db.execute<CatRow>(sql`
+      select v.sku, v.barcode, coalesce(v.srs_artikel_id, '') artikel, p.title, v.size, v.color,
+        coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
+      from product_variants v join products p on p.id = v.product_id
+      where v.barcode in (${sql.join(codes.map((s) => sql`${s}`), sql`, `)})
+         or v.sku in (${sql.join(codes.map((s) => sql`${s}`), sql`, `)})
+         or v.srs_artikel_id in (${sql.join(codes.map((s) => sql`${s}`), sql`, `)})`);
+    for (const r of rows.rows) {
+      if (r.sku) bySku.set(r.sku, r);
+      if (r.barcode) byBarcode.set(r.barcode, r);
+      if (r.artikel) byArtikel.set(r.artikel, r);
+    }
+  }
+  return arr.map((l) => {
+    const bc = String(l.barcode || "").trim();
+    const sk = String(l.sku || "").trim();
+    const m =
+      (bc && (byBarcode.get(bc) || bySku.get(bc) || byArtikel.get(bc))) ||
+      (sk && (bySku.get(sk) || byArtikel.get(sk) || byBarcode.get(sk))) ||
+      null;
+    if (m) {
+      return {
+        stockKey: String(m.barcode || m.sku || "").toLowerCase(), // = resolveCode()-sleutel
+        sku: m.sku || sk, barcode: m.barcode || bc, title: m.title || l.title || "",
+        size: m.size || l.size || "", color: m.color || l.color || "", imageUrl: m.img || l.imageUrl || "",
+        expectedQty: Number(l.expectedQty) || 0,
+      };
+    }
+    return { ...l, stockKey: String(l.stockKey || bc || sk || "").toLowerCase(), expectedQty: Number(l.expectedQty) || 0 };
+  });
 }
 
 /** Maak een zending klaar (de ASN). Levert óf kant-en-klare expectedLines, óf een
@@ -86,9 +139,11 @@ export async function createInboundShipment(input: {
   status?: string; note?: string; createdBy?: string;
 }): Promise<Shipment> {
   if (!input.toStore) throw new Error("toStore vereist");
-  const expectedLines = Array.isArray(input.expectedLines) && input.expectedLines.length
-    ? input.expectedLines
-    : await buildExpectedLines(input.skuExpected || []);
+  const expectedLines = await canonicalizeExpectedLines(
+    Array.isArray(input.expectedLines) && input.expectedLines.length
+      ? input.expectedLines
+      : await buildExpectedLines(input.skuExpected || [])
+  );
   const status = ["picked", "in_transit", "receiving"].includes(String(input.status)) ? String(input.status) : "picked";
   const db = getDb();
   const [s] = await db.insert(inboundShipments).values({
@@ -123,9 +178,11 @@ export async function createInterstoreTransfer(input: {
   const toStore = String(input.toStore || "").trim();
   if (!fromStore || !toStore) return { ok: false, error: "Bron- en doelwinkel vereist." };
   if (fromStore.toLowerCase() === toStore.toLowerCase()) return { ok: false, error: "Bron en doel zijn dezelfde winkel." };
-  const lines = Array.isArray(input.expectedLines) && input.expectedLines.length
-    ? input.expectedLines
-    : await buildExpectedLines(input.skuExpected || []);
+  const lines = await canonicalizeExpectedLines(
+    Array.isArray(input.expectedLines) && input.expectedLines.length
+      ? input.expectedLines
+      : await buildExpectedLines(input.skuExpected || [])
+  );
   if (!lines.length) return { ok: false, error: "Geen artikelen om te versturen." };
 
   // Weiger als de bronwinkel onvoldoende voorraad heeft: anders zou de afboeking de bron
@@ -214,8 +271,16 @@ export async function prepareSamplePlan(shipmentId: string): Promise<Shipment | 
 /** Winkel opent een zending om te ontvangen: → 'receiving' + bevries het steekproefplan. */
 export async function startReceiving(shipmentId: string, _startedBy?: string): Promise<Shipment | null> {
   const db = getDb();
-  await db.update(inboundShipments)
-    .set({ status: "receiving" })
+  const s = await getShipment(shipmentId);
+  if (!s) return null;
+  // Nog niet aan het scannen (picked/in_transit) → her-canonicaliseer de verwachte regels
+  // tegen de huidige catalogus. Fixt oude zendingen waarvan een SRS-code niet met de
+  // catalogus-barcode matchte (titelloze 'verwacht'-regel + latere 'niet besteld'-scans).
+  const patch: Partial<Shipment> = { status: "receiving" };
+  if (["picked", "in_transit"].includes(s.status)) {
+    patch.expectedLines = await canonicalizeExpectedLines((s.expectedLines as ExpectedLine[]) || []);
+  }
+  await db.update(inboundShipments).set(patch)
     .where(and(eq(inboundShipments.id, shipmentId), inArray(inboundShipments.status, ["picked", "in_transit"])));
   return prepareSamplePlan(shipmentId);
 }
@@ -290,14 +355,27 @@ export async function scanReceipt(input: { shipmentId: string; code: string; qty
   const setMode = input.mode === "set";
   const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
   // Verwacht aantal uit de ASN; onbekend in de ASN → 0 (onverwacht → wordt in F3 een afwijking).
-  const asnLine = ((s.expectedLines as ExpectedLine[]) || []).find((l) => String(l.stockKey).toLowerCase() === meta.stockKey);
+  // Exact op de canonieke stockKey; anders fuzzy op sku/barcode (dezelfde fysieke item kan
+  // een andere bron-code hebben dan de catalogus-barcode) → vouw op de verwachte regel i.p.v.
+  // een losse 'niet besteld'-regel. De count wordt dan onder de ASN-sleutel geboekt.
+  const asnLines = (s.expectedLines as ExpectedLine[]) || [];
+  const ml = (v?: string) => String(v || "").toLowerCase();
+  let asnLine = asnLines.find((l) => ml(l.stockKey) === meta.stockKey);
+  if (!asnLine) {
+    asnLine = asnLines.find((l) =>
+      (!!meta.sku && ml(l.sku) === ml(meta.sku)) ||
+      (!!meta.barcode && ml(l.barcode) === ml(meta.barcode)) ||
+      ml(l.stockKey) === ml(meta.sku) ||
+      ml(l.stockKey) === ml(meta.barcode));
+  }
+  const targetKey = asnLine ? ml(asnLine.stockKey) : meta.stockKey;
   const expected = asnLine ? Number(asnLine.expectedQty) || 0 : 0;
 
   // Eerste scan zet 'receiving' (als 'ie nog picked/in_transit was).
   if (s.status !== "receiving") await setShipmentStatus(s.id, "receiving");
 
   const [row] = await db.insert(inboundReceiptCounts).values({
-    shipmentId: s.id, stockKey: meta.stockKey, sku: meta.sku, barcode: meta.barcode,
+    shipmentId: s.id, stockKey: targetKey, sku: meta.sku, barcode: meta.barcode,
     title: meta.title, size: meta.size, color: meta.color, imageUrl: meta.imageUrl,
     scannedQty: qty, expectedQty: expected,
   }).onConflictDoUpdate({
