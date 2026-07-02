@@ -49,7 +49,9 @@ export const SITE_SETTINGS: SiteSettings = {
     subtitle:
       "Van bruiloft tot boardroom. Betaalbare luxe met persoonlijk advies van de dresscode-experts van GENTS.",
     videoUrl: "https://cdn.shopify.com/videos/c/o/v/57250833ccb74de5ade8487047a669f5.mp4",
-    posterUrl: "/brand/brand-model-charcoal.jpg",
+    // Terugval-poster = een stilstaand frame UIT de hero-video zelf (naadloze fallback
+    // als de video niet speelt), i.p.v. een losse merkfoto. Zie public/brand/.
+    posterUrl: "/brand/hero-video-poster.jpg",
     primary: { label: "Shop pakken", href: "/categorie/pakken" },
     secondary: { label: "Stel je pak samen", href: "/pak-samenstellen" },
   },
