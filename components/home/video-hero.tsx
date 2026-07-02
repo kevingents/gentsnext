@@ -24,19 +24,23 @@ type Props = {
 export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title, subtitle, primary, secondary }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [src, setSrc] = useState<string | null>(null);
-  // De poster is de instant eerste paint (geen zwart), maar de video laadt nu
-  // METEEN parallel (niet meer wachten tot de poster volledig binnen is) en fade't
-  // in zodra hij écht speelt — zo staat die stilstaande afbeelding zo kort mogelijk.
   const [playing, setPlaying] = useState(false);
+  // De poster tonen we ALLEEN als terugval wanneer de video niet speelt. Speelt de
+  // video wél, dan blijft de poster onzichtbaar; de donkere bg-ink overbrugt de korte
+  // buffer en de video fade't erin (geen stilstaande afbeelding meer in beeld).
+  const [videoOff, setVideoOff] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const conn = (navigator as any).connection;
-    if (conn?.saveData) return; // data-saver → poster laten staan
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isMobile = window.matchMedia("(max-width: 640px)").matches;
-    // Op smalle schermen alleen als er een lichtere mobiele variant is.
-    if (isMobile && !videoUrlMobile) return;
+    // Geen video → poster als terugval: niet ingesteld, data-saver, reduce-motion,
+    // of mobiel zonder lichte variant.
+    if (!videoUrl || conn?.saveData || reduce || (isMobile && !videoUrlMobile)) {
+      setVideoOff(true);
+      return;
+    }
     setSrc(isMobile ? (videoUrlMobile || videoUrl) : videoUrl);
   }, [videoUrl, videoUrlMobile]);
 
@@ -58,20 +62,22 @@ export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title,
 
   return (
     <section className="relative h-[72vh] min-h-[460px] w-full overflow-hidden bg-ink">
-      {/* Poster blijft altijd zichtbaar als achtergrond (eerste paint = de afbeelding). */}
-      <Image
-        src={posterUrl}
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="object-cover opacity-90"
-      />
+      {/* Poster ALLEEN als terugval wanneer de video niet speelt. Speelt de video wél,
+          dan tonen we géén poster — de donkere bg-ink overbrugt de korte buffer. */}
+      {videoOff ? (
+        <Image
+          src={posterUrl}
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover opacity-90"
+        />
+      ) : null}
       {src ? (
         <video
           ref={ref}
           src={src}
-          poster={posterUrl}
           muted
           loop
           playsInline
