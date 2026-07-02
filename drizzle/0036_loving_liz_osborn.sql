@@ -1,0 +1,2 @@
+CREATE INDEX "products_hoofdgroep_idx" ON "products" USING btree (((attributes ->> 'hoofdgroep_omschrijving')));--> statement-breakpoint
+CREATE INDEX "products_merk_idx" ON "products" USING btree (((attributes ->> 'merk')));
