@@ -58,20 +58,32 @@ export async function buildExpectedLines(skuExpected: { sku: string; expected: n
   const list = (skuExpected || []).filter((s) => s && s.sku && Number(s.expected) > 0);
   if (!list.length) return [];
   const db = getDb();
-  const skus = [...new Set(list.map((s) => String(s.sku)))];
+  const codes = [...new Set(list.map((s) => String(s.sku)))];
+  // Los op via sku ÓF barcode: de replenishment kan in het sku-veld een barcode/EAN
+  // meegeven — dan zou een enkel-op-sku match de regel onopgelost laten (kale code,
+  // geen naam) én een andere stockKey geven dan de scan (barcode). Beide dekken.
   const rows = await db.execute<{ sku: string; barcode: string; title: string; size: string; color: string; img: string | null }>(sql`
     select v.sku, v.barcode, p.title, v.size, v.color,
       coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
     from product_variants v join products p on p.id = v.product_id
-    where v.sku in (${sql.join(skus.map((s) => sql`${s}`), sql`, `)})`);
-  const meta = new Map(rows.rows.map((r) => [r.sku, r]));
+    where v.sku in (${sql.join(codes.map((s) => sql`${s}`), sql`, `)})
+       or v.barcode in (${sql.join(codes.map((s) => sql`${s}`), sql`, `)})`);
+  // Indexeer op zowel sku als barcode zodat een 'sku' die eigenlijk een barcode is óók matcht.
+  const meta = new Map<string, { sku: string; barcode: string; title: string; size: string; color: string; img: string | null }>();
+  for (const r of rows.rows) {
+    if (r.sku) meta.set(String(r.sku), r);
+    if (r.barcode) meta.set(String(r.barcode), r);
+  }
   const out: ExpectedLine[] = [];
   for (const { sku, expected } of list) {
     const m = meta.get(String(sku));
+    const realSku = m?.sku || String(sku);
     const barcode = m?.barcode || "";
     out.push({
-      stockKey: String(barcode || sku).toLowerCase(),
-      sku: String(sku), barcode, title: m?.title || "", size: m?.size || "", color: m?.color || "", imageUrl: m?.img || "",
+      // Zelfde sleutel-afleiding als resolveCode (lower(barcode||sku)) zodat scannen en
+      // verwacht 1-op-1 dezelfde stockKey delen.
+      stockKey: String(barcode || realSku).toLowerCase(),
+      sku: realSku, barcode, title: m?.title || "", size: m?.size || "", color: m?.color || "", imageUrl: m?.img || "",
       expectedQty: Number(expected) || 0,
     });
   }
@@ -289,16 +301,34 @@ export async function scanReceipt(input: { shipmentId: string; code: string; qty
 
   const setMode = input.mode === "set";
   const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
-  // Verwacht aantal uit de ASN; onbekend in de ASN → 0 (onverwacht → wordt in F3 een afwijking).
-  const asnLine = ((s.expectedLines as ExpectedLine[]) || []).find((l) => String(l.stockKey).toLowerCase() === meta.stockKey);
+  // Verwacht aantal uit de ASN. Match het gescande artikel tegen de ASN op stockKey,
+  // anders op barcode, anders op sku — zodat een verwacht artikel dat met een ándere
+  // sleutel is opgevoerd (barcode-vs-sku, of een niet-opgeloste ASN-regel) tóch op z'n
+  // eigen regel telt i.p.v. als "niet besteld / teveel" te verschijnen. Deelt het niets
+  // met de ASN → écht onverwacht → 0 (wordt in F3 een afwijking).
+  const nrm = (v?: string) => String(v || "").trim().toLowerCase();
+  const asn = (s.expectedLines as ExpectedLine[]) || [];
+  const asnLine =
+    asn.find((l) => nrm(l.stockKey) === nrm(meta.stockKey)) ||
+    (meta.barcode ? asn.find((l) => l.barcode && nrm(l.barcode) === nrm(meta.barcode)) : undefined) ||
+    (meta.sku ? asn.find((l) => l.sku && nrm(l.sku) === nrm(meta.sku)) : undefined);
   const expected = asnLine ? Number(asnLine.expectedQty) || 0 : 0;
+  // Bij een match: tel op de ASN-sleutel (fold → één regel) en gebruik de rijkste meta
+  // (de scan-resolutie vult een niet-opgeloste ASN-regel meteen aan met naam/kleur/maat).
+  const key = asnLine ? String(asnLine.stockKey) : meta.stockKey;
+  const sku = meta.sku || asnLine?.sku || "";
+  const barcode = meta.barcode || asnLine?.barcode || "";
+  const title = meta.title || asnLine?.title || "";
+  const size = meta.size || asnLine?.size || "";
+  const color = meta.color || asnLine?.color || "";
+  const imageUrl = meta.imageUrl || asnLine?.imageUrl || "";
 
   // Eerste scan zet 'receiving' (als 'ie nog picked/in_transit was).
   if (s.status !== "receiving") await setShipmentStatus(s.id, "receiving");
 
   const [row] = await db.insert(inboundReceiptCounts).values({
-    shipmentId: s.id, stockKey: meta.stockKey, sku: meta.sku, barcode: meta.barcode,
-    title: meta.title, size: meta.size, color: meta.color, imageUrl: meta.imageUrl,
+    shipmentId: s.id, stockKey: key, sku, barcode,
+    title, size, color, imageUrl,
     scannedQty: qty, expectedQty: expected,
   }).onConflictDoUpdate({
     target: [inboundReceiptCounts.shipmentId, inboundReceiptCounts.stockKey],
