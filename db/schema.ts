@@ -211,6 +211,55 @@ export const storeStockMovements = pgTable(
 );
 
 /**
+ * SRS-voorraadbaseline in Neon (vervangt de cross-repo blob
+ * `srs-voorraad/srs-rows-latest.json` die de webshop las via een gedeeld
+ * storegents-blob-token). Bron van waarheid voor de bruto fysieke voorraad per
+ * SKU per filiaal; de kassa/web-delta (store_stock_movements) en web-reserveringen
+ * worden er bovenop verrekend (lib/stock-reservations, lib/store-core).
+ *
+ * De storegents SRS-import (3×/dag) pusht de volledige snapshot in batches onder
+ * één `gen` (= `<epoch-ms>-<uuid>`, chronologisch sorteerbaar) en commit daarna: de
+ * flip van srs_stock_meta.active_gen is MONOTOON (alleen vooruit naar een nieuwere gen)
+ * en de cleanup verwijdert uitsluitend STRIKT OUDERE generaties. Reads filteren op
+ * active_gen, dus een half-geschreven sync wordt nooit getoond. Twee gelijktijdige
+ * imports (cron + handmatige admin-trigger) kunnen elkaar zo niet afknotten — nodig
+ * omdat de neon-http-driver geen transactie/lock kent die begin→upsert→commit
+ * serialiseert. Zie commitBaselineGen in lib/srs-stock-core.ts.
+ */
+export const srsStock = pgTable(
+  "srs_stock",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gen: text("gen").notNull(),
+    sku: text("sku").notNull(),
+    branchId: text("branch_id").notNull(),
+    store: text("store").notNull().default(""),
+    qty: integer("qty").notNull().default(0),
+    tekort: integer("tekort").notNull().default(0),
+    ideaal: integer("ideaal").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Reads: WHERE gen = active_gen [AND sku IN (...)]. Één index dekt beide.
+    index("srs_stock_gen_sku_idx").on(t.gen, t.sku),
+    // Eén rij per (gen, filiaal, sku) → upsert-idempotent bij batch-retries.
+    uniqueIndex("srs_stock_gen_branch_sku_unique").on(t.gen, t.branchId, t.sku),
+  ],
+);
+
+/**
+ * Pointer naar de actieve SRS-voorraadgeneratie (één rij, id='latest'). De commit
+ * van een sync zet active_gen + synced_at atomair; reads lezen deze rij eerst.
+ */
+export const srsStockMeta = pgTable("srs_stock_meta", {
+  id: text("id").primaryKey(), // altijd 'latest'
+  activeGen: text("active_gen"),
+  syncedAt: timestamp("synced_at", { withTimezone: true }),
+  rowCount: integer("row_count").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Fase D — anti-oversell. Atomaire web-reserveringsteller per (locatie, stockKey).
  * De gate bij het aanmaken van een order is één SQL-statement (ON CONFLICT DO
  * UPDATE ... WHERE) → de rij-lock serialiseert gelijktijdige checkouts, zodat het

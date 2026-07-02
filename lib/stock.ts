@@ -1,11 +1,14 @@
 import { list } from "@vercel/blob";
+import { readActiveBaseline } from "@/lib/srs-stock-core";
 
 /**
  * Voorraad uit de SRS-data-export (voorkeur van de business boven Shopify-stock).
  *
- * Bron: blob `srs-voorraad/srs-rows-latest.json` in de storegents-blobstore —
- * de RAUWE SRS-voorraad (alle filialen), gevuld door de SRS-SFTP-import 3×/dag.
- * Rij-formaat: { filiaalNummer, store, sku, voorraad, ideaal, tekort }.
+ * Bron (voorkeur): Neon-tabel `srs_stock` (bron van waarheid, gepusht door de
+ * storegents SRS-import 3×/dag; zie lib/srs-stock-core). Val terug op de blob
+ * `srs-voorraad/srs-rows-latest.json` zolang Neon nog niet gevuld is (transitie) —
+ * zo blijft de PDP werken ongeacht welke bron actief is.
+ * Rij-formaat blob: { filiaalNummer, store, sku, voorraad, ideaal, tekort }.
  *
  * We bouwen één keer per proces (5 min TTL) een SKU-index:
  *   sku → { total, online, byBranch: [{ branchId, store, qty }] }
@@ -39,7 +42,50 @@ export function onlineBranchSet(): Set<string> | null {
   );
 }
 
-async function loadIndex(): Promise<StockIndex> {
+/** Voeg één voorraad-rij toe aan de index (gedeeld door de Neon- en blob-bron). */
+function addRow(
+  index: StockIndex,
+  online: Set<string> | null,
+  sku: string,
+  qty: number,
+  branchId: string,
+  store: string,
+  tekort: number,
+  ideaal: number
+) {
+  if (!sku) return;
+  let entry = index.get(sku);
+  if (!entry) {
+    entry = { total: 0, online: 0, byBranch: [] };
+    index.set(sku, entry);
+  }
+  if (qty > 0) {
+    entry.total += qty;
+    if (!online || online.has(branchId)) entry.online += qty;
+    entry.byBranch.push({ branchId, store, qty, tekort, ideaal });
+  }
+}
+
+/** Bron van waarheid: de Neon-baseline (active gen). Null → nog niet gevuld. */
+async function loadIndexFromNeon(): Promise<StockIndex | null> {
+  try {
+    const { gen, rows, syncedAt } = await readActiveBaseline();
+    if (!gen || !rows.length) return null;
+    const index: StockIndex = new Map();
+    const online = onlineBranchSet();
+    for (const r of rows) {
+      const branchId = String(r.branchId || "").trim();
+      addRow(index, online, String(r.sku || "").trim(), Number(r.qty) || 0, branchId, r.store || `Filiaal ${branchId}`, r.tekort, r.ideaal);
+    }
+    _syncedAt = syncedAt;
+    return index;
+  } catch {
+    return null; // Neon onbereikbaar → val terug op de blob (PDP blijft werken)
+  }
+}
+
+/** Transitie-fallback: de cross-repo storegents-blob (oude bron). */
+async function loadIndexFromBlob(): Promise<StockIndex> {
   const token =
     process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
   const index: StockIndex = new Map();
@@ -57,25 +103,25 @@ async function loadIndex(): Promise<StockIndex> {
   const online = onlineBranchSet();
 
   for (const r of rows) {
-    const sku = String(r?.sku || "").trim();
-    if (!sku) continue;
-    const qty = Number(r?.voorraad) || 0;
     const branchId = String(r?.filiaalNummer || "").trim();
-    const store = String(r?.store || `Filiaal ${branchId}`);
-    const tekort = Number(r?.tekort) || 0;
-    const ideaal = Number(r?.ideaal) || 0;
-    let entry = index.get(sku);
-    if (!entry) {
-      entry = { total: 0, online: 0, byBranch: [] };
-      index.set(sku, entry);
-    }
-    if (qty > 0) {
-      entry.total += qty;
-      if (!online || online.has(branchId)) entry.online += qty;
-      entry.byBranch.push({ branchId, store, qty, tekort, ideaal });
-    }
+    addRow(
+      index,
+      online,
+      String(r?.sku || "").trim(),
+      Number(r?.voorraad) || 0,
+      branchId,
+      String(r?.store || `Filiaal ${branchId}`),
+      Number(r?.tekort) || 0,
+      Number(r?.ideaal) || 0
+    );
   }
   return index;
+}
+
+async function loadIndex(): Promise<StockIndex> {
+  const neon = await loadIndexFromNeon();
+  if (neon) return neon;
+  return loadIndexFromBlob();
 }
 
 async function getIndex(): Promise<StockIndex> {
