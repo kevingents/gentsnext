@@ -13,7 +13,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Retourneren — GENTS",
     description: "Iets retourneren? Start hier of vanuit je bestelling. Kies een DHL-retourlabel of inleveren in de winkel, en geld terug of GENTS-tegoed (gratis retour).",
     alternates: await localeAlternates("/retourneren"),
-    robots: { index: true, follow: true },
+    // Geen expliciete index:true meer — dan volgt de pagina de site-brede
+    // SITE_INDEXABLE-gate (robots.txt) i.p.v. die te forceren tijdens pre-launch.
   };
 }
 
