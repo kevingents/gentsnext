@@ -16,7 +16,7 @@ export type PlpSelection = {
   page: number;
 };
 
-const SORTS: ProductSort[] = ["nieuw", "prijs-op", "prijs-af", "naam"];
+const SORTS: ProductSort[] = ["aanbevolen", "populair", "nieuw", "prijs-op", "prijs-af", "naam"];
 
 function csv(v: string | undefined): string[] {
   return (v || "")
@@ -43,7 +43,7 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
     fits: csv(get("pasvorm")),
     priceMin: Number.isFinite(pMin) && pMin > 0 ? pMin : undefined,
     priceMax: Number.isFinite(pMax) && pMax > 0 ? pMax : undefined,
-    sort: sortRaw && SORTS.includes(sortRaw) ? sortRaw : "nieuw",
+    sort: sortRaw && SORTS.includes(sortRaw) ? sortRaw : "aanbevolen",
     page: Math.max(1, Math.floor(Number(get("page")) || 1)),
   };
 }
@@ -60,7 +60,7 @@ export function buildPlpQuery(sel: Partial<PlpSelection>): string {
   if (sel.sizes?.length) p.set("maat", sel.sizes.join(","));
   if (sel.fits?.length) p.set("pasvorm", sel.fits.join(","));
   if (sel.priceMin || sel.priceMax) p.set("prijs", `${sel.priceMin ?? 0}-${sel.priceMax ?? 0}`);
-  if (sel.sort && sel.sort !== "nieuw") p.set("sort", sel.sort);
+  if (sel.sort && sel.sort !== "aanbevolen") p.set("sort", sel.sort);
   if (sel.page && sel.page > 1) p.set("page", String(sel.page));
   return p.toString();
 }
@@ -86,6 +86,8 @@ export function selectionToFilters(
 }
 
 export const SORT_LABELS: Record<ProductSort, string> = {
+  aanbevolen: "Aanbevolen",
+  populair: "Populair",
   nieuw: "Nieuwste",
   "prijs-op": "Prijs oplopend",
   "prijs-af": "Prijs aflopend",

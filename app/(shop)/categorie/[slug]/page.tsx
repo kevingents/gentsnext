@@ -5,7 +5,7 @@ import { ProductCard } from "@/components/product-card";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
-import { getFilteredProducts, getFacets } from "@/lib/catalog";
+import { getFilteredProducts, getFacets, getCustomerTasteCats } from "@/lib/catalog";
 import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
@@ -44,15 +44,22 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   if (!cat) notFound();
 
   const filters = selectionToFilters(sel, { category: cat.hoofdgroep });
-  const [{ items, total }, facets, sessionCustomer] = await Promise.all([
-    getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE),
-    getFacets({ category: cat.hoofdgroep }),
+  // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
+  const [sessionCustomer, facets] = await Promise.all([
     getSessionCustomer(),
+    getFacets({ category: cat.hoofdgroep }),
   ]);
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
   const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);
   const mySize = my ? { row: my.row, raw: my.raw } : null;
+  // Gepersonaliseerde boost alleen op de default ("Aanbevolen") en alleen ingelogd.
+  const tasteCats =
+    sel.sort === "aanbevolen" && sessionCustomer?.id ? await getCustomerTasteCats(sessionCustomer.id) : [];
+  const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
+    mySizeRows: my ? [my.row] : [],
+    tasteCats,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   function pageHref(p: number): string {
     const params = new URLSearchParams();
