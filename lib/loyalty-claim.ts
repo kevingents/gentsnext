@@ -117,16 +117,20 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     .returning({ balance: customers.loyaltyPoints });
   if (!dec.length) return { ok: false, error: "Onvoldoende besteedbare punten." };
 
-  // Saldo is geclaimd. Bij een fout hierna: de decrement terugdraaien (neon-http = geen transactie).
+  // Saldo is geclaimd. Bij een fout hierna: de decrement ÉN het zojuist ingeboekte negatieve
+  // ledger-event terugdraaien (neon-http = geen transactie). Anders bleef een wees-'redeem'-
+  // event staan → de klant verliest besteedbare punten in het grootboek zonder bon.
   const code = randVoucherCode();
+  let eventId: string | undefined;
   try {
-    await db.insert(loyaltyEvents).values({
+    const [ev] = await db.insert(loyaltyEvents).values({
       customerId,
       points: -pts,
       reason: `Ingewisseld voor tegoedbon ${code} (€ ${(valueCents / 100).toFixed(2)})`,
       refType: "redeem",
       refId: code,
-    });
+    }).returning({ id: loyaltyEvents.id });
+    eventId = ev?.id;
     await db.insert(vouchers).values({
       code,
       customerId,
@@ -139,11 +143,14 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     });
     return { ok: true, code, valueCents, points: pts, newBalance: Number(dec[0].balance) || 0 };
   } catch {
+    // Cache terug + het negatieve ledger-event verwijderen → cache én grootboek blijven
+    // consistent (geen wees-event, geen verloren besteedbare punten).
     await db
       .update(customers)
       .set({ loyaltyPoints: sql`${customers.loyaltyPoints} + ${pts}` })
       .where(eq(customers.id, customerId))
       .catch(() => {});
+    if (eventId) await db.delete(loyaltyEvents).where(eq(loyaltyEvents.id, eventId)).catch(() => {});
     return { ok: false, error: "Inwisselen mislukte, probeer het opnieuw." };
   }
 }
