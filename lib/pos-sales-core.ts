@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { posSales } from "@/db/schema";
 
@@ -88,6 +88,30 @@ export async function getPosSaleCore(id: string): Promise<Sale | null> {
   const db = getDb();
   const [r] = await db.select().from(posSales).where(eq(posSales.id, String(id))).limit(1);
   return r ? rowToSale(r) : null;
+}
+
+/**
+ * Bonnen van één klant — voor de klant-historie in de kassa ("de bon aan de klant koppelen").
+ * Matcht op het opgeslagen customer_id ÉN (uit de data-jsonb) het e-mailadres, zodat een
+ * verkoop óók wordt gevonden als de kassa destijds alleen het e-mail koppelde. Alleen
+ * niet-geannuleerde bonnen, nieuwste eerst.
+ */
+export async function listPosSalesByCustomerCore(input: { customerId?: string; email?: string; limit?: number }): Promise<Sale[]> {
+  const cid = String(input.customerId || "").trim();
+  const email = String(input.email || "").trim().toLowerCase();
+  if (!cid && !email) return [];
+  const db = getDb();
+  const lim = Math.max(1, Math.min(100, Number(input.limit) || 25));
+  const ors = [];
+  if (cid) ors.push(eq(posSales.customerId, cid));
+  if (email) ors.push(sql`lower(${posSales.data} ->> 'customerEmail') = ${email}`);
+  const rows = await db
+    .select()
+    .from(posSales)
+    .where(and(eq(posSales.cancelled, false), or(...ors)))
+    .orderBy(desc(posSales.createdAt))
+    .limit(lim);
+  return rows.map(rowToSale);
 }
 
 export async function findSaleByClientRefCore(clientRef: string): Promise<Sale | null> {
