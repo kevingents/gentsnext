@@ -480,6 +480,29 @@ export const orders = pgTable(
   ]
 );
 
+/**
+ * Completeness-gate voor split-orders (lib/split-fulfilment). Bij een order die
+ * uit meerdere WINKELS geleverd wordt, legt elke winkel vast dat zijn deel gepickt/
+ * gereed is. Pas als álle winkel-delen gereed zijn mag er een verzendlabel komen
+ * (order-docs blokkeert anders) — voorkomt een half-verscheepte order. Eén rij per
+ * (ordernummer, genormaliseerde winkelnaam); afwezige rij = nog niet gereed.
+ */
+export const orderShipmentPicks = pgTable(
+  "order_shipment_picks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderNumber: text("order_number").notNull(),
+    shipmentKey: text("shipment_key").notNull(), // lower(store)
+    store: text("store").notNull().default(""), // weergavenaam
+    pickedBy: text("picked_by").notNull().default(""),
+    pickedAt: timestamp("picked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("order_shipment_picks_uq").on(t.orderNumber, t.shipmentKey),
+    index("order_shipment_picks_order_idx").on(t.orderNumber),
+  ]
+);
+
 export const orderLines = pgTable(
   "order_lines",
   {
