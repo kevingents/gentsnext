@@ -1153,5 +1153,8 @@ export const receivingDiscrepancies = pgTable(
     index("recdisc_code_idx").on(t.code),
     index("recdisc_status_idx").on(t.status),
     index("recdisc_shipment_idx").on(t.shipmentId),
+    // Uniek per (zending, regel, code): twee gelijktijdige ontvangst-afrondingen loggen zo
+    // geen dubbele afwijkingen (logDiscrepancies gebruikt onConflictDoNothing hierop).
+    uniqueIndex("recdisc_uq").on(t.shipmentId, t.stockKey, t.code),
   ],
 );
