@@ -24,22 +24,21 @@ type Props = {
 export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title, subtitle, primary, secondary }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [src, setSrc] = useState<string | null>(null);
-  // Eerst de afbeelding, dán de video: pas laden nadat de poster geladen is
-  // (afbeelding krijgt zo de volle bandbreedte/LCP), en pas invaden zodra de
-  // video écht speelt (geen flits van een nog-niet-klare video).
-  const [posterLoaded, setPosterLoaded] = useState(false);
+  // De poster is de instant eerste paint (geen zwart), maar de video laadt nu
+  // METEEN parallel (niet meer wachten tot de poster volledig binnen is) en fade't
+  // in zodra hij écht speelt — zo staat die stilstaande afbeelding zo kort mogelijk.
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !posterLoaded) return;
+    if (typeof window === "undefined") return;
     const conn = (navigator as any).connection;
-    if (conn?.saveData) return;
+    if (conn?.saveData) return; // data-saver → poster laten staan
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const isMobile = window.matchMedia("(max-width: 640px)").matches;
     // Op smalle schermen alleen als er een lichtere mobiele variant is.
     if (isMobile && !videoUrlMobile) return;
     setSrc(isMobile ? (videoUrlMobile || videoUrl) : videoUrl);
-  }, [videoUrl, videoUrlMobile, posterLoaded]);
+  }, [videoUrl, videoUrlMobile]);
 
   useEffect(() => {
     const v = ref.current;
@@ -66,7 +65,6 @@ export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title,
         fill
         priority
         sizes="100vw"
-        onLoad={() => setPosterLoaded(true)}
         className="object-cover opacity-90"
       />
       {src ? (
@@ -77,10 +75,11 @@ export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title,
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           aria-hidden
+          onCanPlay={() => ref.current?.play().catch(() => {})}
           onPlaying={() => setPlaying(true)}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${playing ? "opacity-100" : "opacity-0"}`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${playing ? "opacity-100" : "opacity-0"}`}
         />
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/15 to-transparent" />
