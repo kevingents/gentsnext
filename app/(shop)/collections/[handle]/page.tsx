@@ -11,6 +11,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
+import { getMerchandisingPins } from "@/lib/merchandising";
 
 export const dynamic = "force-dynamic";
 
@@ -54,12 +55,16 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const my = resolveMySize(`${collection.handle} ${collection.title}`, sessionCustomer?.sizeProfile);
   const mySize = my ? { row: my.row, raw: my.raw } : null;
   // Gemengde collectie → boost op álle bewaarde maten (een schoen matcht nooit een
-  // colbert-bucket, dus dat is veilig). Smaak-boost alleen op de default + ingelogd.
-  const tasteCats =
-    sel.sort === "aanbevolen" && sessionCustomer?.id ? await getCustomerTasteCats(sessionCustomer.id) : [];
+  // colbert-bucket, dus dat is veilig). Smaak + pins alleen op de default.
+  const isDefault = sel.sort === "aanbevolen";
+  const [tasteCats, pinnedHandles] = await Promise.all([
+    isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
+    isDefault ? getMerchandisingPins("collection", handle) : Promise.resolve([]),
+  ]);
   const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
     mySizeRows: mySizeBuckets(sessionCustomer?.sizeProfile),
     tasteCats,
+    pinnedHandles,
   });
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
