@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { handleSupportQuestion } from "@/lib/support";
 
 export const dynamic = "force-dynamic";
@@ -6,6 +7,10 @@ export const maxDuration = 30;
 
 /** AI-klantenservice: beantwoordt of escaleert een vraag. */
 export async function POST(req: Request) {
+  // Backstop rate-limit per IP (LLM-call + DB-insert + escalatie-mail per request).
+  const _ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  const _rl = rateLimit("support:" + fingerprint(_ip), 8, 60000);
+  if (!_rl.ok) return NextResponse.json({ ok: false, error: "Te veel verzoeken — probeer het zo weer." }, { status: 429, headers: { "retry-after": String(_rl.retryAfterSec) } });
   let body: { question?: string; email?: string };
   try {
     body = await req.json();

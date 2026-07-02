@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ const FALLBACK = process.env.CONTACT_EMAIL_GENERAL || process.env.CONTACT_EMAIL_
  * zodat de UX-flow tijdens de bouw werkt.
  */
 export async function POST(req: Request) {
+  // Backstop rate-limit per IP (DB-insert + mail).
+  const _ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  const _rl = rateLimit("contact:" + fingerprint(_ip), 8, 60000);
+  if (!_rl.ok) return NextResponse.json({ ok: false, error: "Te veel verzoeken — probeer het zo weer." }, { status: 429, headers: { "retry-after": String(_rl.retryAfterSec) } });
   let payload: Record<string, string>;
   try {
     payload = await req.json();
