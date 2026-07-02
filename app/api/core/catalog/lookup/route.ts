@@ -47,6 +47,7 @@ export async function POST(req: Request) {
       coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
     from product_variants v join products p on p.id = v.product_id
     where lower(v.barcode) = ${code} or lower(v.sku) = ${code} or lower(v.srs_artikel_id) = ${code}
+    order by (case when lower(v.barcode) = ${code} then 0 when lower(v.sku) = ${code} then 1 else 2 end), v.id
     limit 1`);
 
   const results = rows.rows.map((r) => ({
