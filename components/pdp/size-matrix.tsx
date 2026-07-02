@@ -29,25 +29,34 @@ function Cell({
   cell,
   selected,
   onSelect,
+  soldOutHint,
 }: {
   cell: BuySize | null;
   selected: string | null;
   onSelect: (size: string) => void;
+  soldOutHint: string;
 }) {
   if (!cell) return <span aria-hidden className="block" />;
-  const low = cell.known && cell.qty > 0 && cell.qty <= 3;
+  const out = cell.known && cell.qty <= 0;
+  const low = !out && cell.known && cell.qty > 0 && cell.qty <= 3;
   const on = selected === cell.size;
   return (
     <button
       type="button"
       onClick={() => onSelect(cell.size)}
       aria-pressed={on}
-      title={low ? `Nog ${cell.qty} op voorraad` : undefined}
+      title={out ? soldOutHint : low ? `Nog ${cell.qty} op voorraad` : undefined}
       className={`relative flex h-10 w-full items-center justify-center border font-sans text-sm transition-colors ${
-        on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
+        on
+          ? out
+            ? "border-ink text-ink ring-1 ring-ink"
+            : "border-ink bg-ink text-canvas"
+          : out
+            ? "border-line/70 text-muted hover:border-ink"
+            : "border-line text-ink hover:border-ink"
       }`}
     >
-      {sizeToken(cell.size)}
+      <span className={out ? "line-through decoration-muted" : undefined}>{sizeToken(cell.size)}</span>
       {low ? <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" /> : null}
     </button>
   );
@@ -65,8 +74,11 @@ export function SizeMatrix({
   onSelect: (size: string) => void;
 }) {
   const t = useT();
-  // Uitverkochte maten niet tonen (i.p.v. doorstrepen).
-  const live = sizes.filter((s) => !(s.known && s.qty <= 0));
+  const soldOutHint = t("pdp.size.soldoutHint");
+  // Uitverkochte maten WÉL tonen (doorgestreept + klikbaar): zo kan de klant zich
+  // per maat aanmelden voor een terug-op-voorraad-tip. Alleen als er geen énkele
+  // maat bekend is, is er niets te tonen.
+  const live = sizes;
   if (!live.length) {
     return <p className="mt-2 font-sans text-sm text-muted">{t("pdp.size.soldout")}</p>;
   }
@@ -85,7 +97,8 @@ export function SizeMatrix({
     return (
       <ul className="mt-2 flex flex-wrap gap-2">
         {sorted.map((s) => {
-          const low = s.known && s.qty > 0 && s.qty <= 3;
+          const out = s.known && s.qty <= 0;
+          const low = !out && s.known && s.qty > 0 && s.qty <= 3;
           const on = selected === s.size;
           return (
             <li key={s.size}>
@@ -93,13 +106,23 @@ export function SizeMatrix({
                 type="button"
                 onClick={() => onSelect(s.size)}
                 aria-pressed={on}
-                title={low ? `Nog ${s.qty} op voorraad` : undefined}
+                title={out ? soldOutHint : low ? `Nog ${s.qty} op voorraad` : undefined}
                 className={`flex min-w-[3rem] flex-col items-center border px-3 py-2 text-center font-sans text-sm transition-colors ${
-                  on ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:border-ink"
+                  on
+                    ? out
+                      ? "border-ink text-ink ring-1 ring-ink"
+                      : "border-ink bg-ink text-canvas"
+                    : out
+                      ? "border-line/70 text-muted hover:border-ink"
+                      : "border-line text-ink hover:border-ink"
                 }`}
               >
-                {sizeToken(s.size)}
-                {low ? <span className="mt-0.5 text-[0.6rem] text-danger">nog {s.qty}</span> : null}
+                <span className={out ? "line-through decoration-muted" : undefined}>{sizeToken(s.size)}</span>
+                {out ? (
+                  <span className="mt-0.5 text-[0.6rem] text-muted">{t("pdp.size.soldoutTile")}</span>
+                ) : low ? (
+                  <span className="mt-0.5 text-[0.6rem] text-danger">nog {s.qty}</span>
+                ) : null}
               </button>
             </li>
           );
@@ -146,7 +169,7 @@ export function SizeMatrix({
             <div key={row} className="grid items-center gap-1.5" style={{ gridTemplateColumns: gridCols }}>
               <span className="font-sans text-xs font-medium text-muted">{row}</span>
               {columns.map((c) => (
-                <Cell key={c.key} cell={cellMap.get(row)?.[c.key] ?? null} selected={selected} onSelect={onSelect} />
+                <Cell key={c.key} cell={cellMap.get(row)?.[c.key] ?? null} selected={selected} onSelect={onSelect} soldOutHint={soldOutHint} />
               ))}
             </div>
           ))}
