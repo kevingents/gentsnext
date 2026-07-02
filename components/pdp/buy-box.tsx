@@ -193,8 +193,11 @@ export function BuyBox({
                     setSize(null);
                   }}
                   aria-pressed={on}
+                  aria-label={`Kleur ${c.color}`}
                   title={c.color}
-                  className={`h-8 w-8 rounded-card border-2 ${on ? "border-ink" : "border-line"}`}
+                  // Selectie ook via een ring (niet alléén randkleur) → duidelijk voor
+                  // kleurenblinde gebruikers.
+                  className={`h-8 w-8 rounded-card border-2 ${on ? "border-ink ring-2 ring-ink ring-offset-1" : "border-line"}`}
                   style={{ background: sw.gradient ?? sw.hex }}
                 />
               );
