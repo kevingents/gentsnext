@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { getDb } from "@/db";
 import { customers, customerAddresses } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,7 +32,9 @@ export async function POST(req: Request) {
   const city = String(b?.city || "").trim();
 
   const db = getDb();
-  let [c] = await db.select().from(customers).where(eq(customers.email, email)).limit(1);
+  // Case-insensitief matchen (e-mail is al lowercased): een bestaande klant met een andere
+  // hoofdletter-casing wordt zo gevonden i.p.v. een dubbele klantkaart aan te maken.
+  let [c] = await db.select().from(customers).where(sql`lower(${customers.email}) = ${email}`).limit(1);
   let created = false;
   if (!c) {
     [c] = await db.insert(customers).values({ email, firstName, lastName, phone }).returning();
