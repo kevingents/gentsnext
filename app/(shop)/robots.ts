@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getSiteUrl } from "@/lib/site-url";
 
 /**
  * Tot de cutover blijft de hele site dicht voor crawlers. Pas bij livegang
@@ -8,7 +9,16 @@ import type { MetadataRoute } from "next";
  */
 export default function robots(): MetadataRoute.Robots {
   if (process.env.SITE_INDEXABLE === "true") {
-    return { rules: { userAgent: "*", allow: "/" } };
+    return {
+      // Crawl toestaan, maar transactionele/persoonlijke/API-paden uitsluiten
+      // (geen crawlbudget-verspilling of thin-content-indexatie), + sitemap-hint.
+      rules: {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/account", "/afrekenen", "/winkelwagen", "/favorieten", "/punten-claim", "/api/", "/zoeken"],
+      },
+      sitemap: `${getSiteUrl()}/sitemap.xml`,
+    };
   }
   return { rules: { userAgent: "*", disallow: "/" } };
 }

@@ -273,6 +273,18 @@ export default async function ProductPage({ params }: Props) {
       highPrice: (maxPrice / 100).toFixed(2),
       offerCount: variants.length,
       availability: anyInStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      // Prijsgeldigheid (voorkomt de veelvoorkomende GSC-waarschuwing "priceValidUntil").
+      priceValidUntil: `${new Date().getFullYear() + 1}-12-31`,
+      // Retourbeleid (rich results) — 14 dagen, NL, per post; kosten voor de klant tenzij
+      // in de winkel / met GENTS-tegoed (bewust geen "gratis" claim in het algemene geval).
+      hasMerchantReturnPolicy: {
+        "@type": "MerchantReturnPolicy",
+        applicableCountry: "NL",
+        returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
+        merchantReturnDays: 14,
+        returnMethod: "https://schema.org/ReturnByMail",
+        returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
+      },
     },
   };
   if (displayRating) {

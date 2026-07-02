@@ -29,7 +29,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (!collection) return {};
   return {
     title: collection.seoTitle || collection.title,
-    description: collection.seoDescription || undefined,
+    description:
+      collection.seoDescription ||
+      `${collection.title} bij GENTS — betaalbare luxe voor elk formeel moment.`,
     // Gefilterde/gepagineerde views niet als aparte canonical indexeren.
     alternates: await localeAlternates(
       sel.page > 1 ? `/collections/${handle}?page=${sel.page}` : `/collections/${handle}`,
