@@ -218,6 +218,13 @@
       "when": 1782764458547,
       "tag": "0030_careless_the_hand",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1782974574149,
+      "tag": "0031_skinny_viper",
+      "breakpoints": true
     }
   ]
 }

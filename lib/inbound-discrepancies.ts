@@ -52,7 +52,10 @@ export async function logDiscrepancies(shipment: Shipment, counts: Count[], plan
 
   const codes: Record<string, number> = {};
   if (rows.length) {
-    await getDb().insert(receivingDiscrepancies).values(rows);
+    // onConflictDoNothing op de unieke (shipment_id, stock_key, code): twee gelijktijdige
+    // ontvangst-afrondingen loggen de afwijking niet dubbel (binnen één call zijn de rijen
+    // al uniek op stockKey+code, dus dit raakt alleen cross-call races).
+    await getDb().insert(receivingDiscrepancies).values(rows).onConflictDoNothing();
     for (const r of rows) codes[r.code as string] = (codes[r.code as string] || 0) + 1;
   }
   return { count: rows.length, codes };
