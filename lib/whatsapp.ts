@@ -111,3 +111,56 @@ export async function sendBackInStockWhatsApp(rawPhone: string, msg: StockMsg): 
     return false;
   }
 }
+
+type AltMsg = { origTitle: string; altTitle: string; size?: string; url: string };
+
+/**
+ * "Je maat is nog niet terug, maar dit alternatief hebben we wél in jouw maat" —
+ * de 2-weken-vervolg-WhatsApp. Optioneel via WHATSAPP_TEMPLATE_ALTERNATIVE
+ * (params: origineel, alternatief, url); anders tekst-fallback. Env-gated/stub.
+ */
+export async function sendAlternativeWhatsApp(rawPhone: string, msg: AltMsg): Promise<boolean> {
+  const to = normalizePhone(rawPhone);
+  if (!to) return false;
+  const maat = msg.size ? ` (maat ${msg.size})` : "";
+  const text = `${msg.origTitle}${maat} is helaas nog niet terug op voorraad. Maar dit alternatief hebben we wél in jouw maat: ${msg.altTitle} — ${msg.url}`;
+  if (!whatsappConfigured()) {
+    console.log(`[whatsapp] (stub) zou alternatief sturen → +${to}: ${text.slice(0, 140)}`);
+    return true;
+  }
+  const endpoint = `https://graph.facebook.com/${API_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const headers = { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" };
+  const template = process.env.WHATSAPP_TEMPLATE_ALTERNATIVE;
+  const body = template
+    ? {
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: template,
+          language: { code: process.env.WHATSAPP_TEMPLATE_LANG || "nl" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: msg.origTitle + maat },
+                { type: "text", text: msg.altTitle },
+                { type: "text", text: msg.url },
+              ],
+            },
+          ],
+        },
+      }
+    : { messaging_product: "whatsapp", to, type: "text", text: { body: text } };
+  try {
+    const res = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+    if (!res.ok) {
+      console.error("[whatsapp] alt-fout:", res.status, (await res.text()).slice(0, 200));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[whatsapp] alt fetch-fout:", e);
+    return false;
+  }
+}
