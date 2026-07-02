@@ -3,6 +3,7 @@ import {
   createOrder,
   attachMolliePayment,
   finalizeGiftcardCoveredOrder,
+  voidUnpaidOrder,
   OutOfStockError,
   type CheckoutItem,
   type DeliveryMethod,
@@ -10,6 +11,7 @@ import {
 import { createMolliePayment, isKnownMethod } from "@/lib/mollie";
 import { createWorldlineCheckout } from "@/lib/worldline";
 import { activePaymentProvider, paymentConfigured } from "@/lib/payments";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -61,7 +63,9 @@ export async function POST(req: Request) {
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
   }
 
-  const origin = new URL(req.url).origin;
+  // Vaste, server-bepaalde site-URL (nooit de client-Host) voor betaal-callbacks/
+  // redirects — host-header-injectie mag een webhook/return niet kunnen wegkapen.
+  const origin = getSiteUrl();
 
   // Volledig met cadeaubon (of 100%-voucher) betaald → geen Mollie nodig.
   if (order.totalCents === 0) {
@@ -122,9 +126,17 @@ export async function POST(req: Request) {
     // Betaalref opslaan in orders.molliePaymentId (generiek: Mollie-id óf Worldline-hostedCheckoutId)
     // + de voorraad-hold verlengen naar 24u.
     await attachMolliePayment(order.id, paymentRef);
-    if (!checkoutUrl) return bad("Betaling kon niet worden gestart.");
+    if (!checkoutUrl) {
+      // Geen betaal-URL → de klant kán niet betalen; draai de order terug zodat de
+      // voucher/cadeaubon/voorraad niet verbrand achterblijven (B2).
+      await voidUnpaidOrder(order.id).catch((err) => console.error("[checkout] void na lege checkout-URL:", err));
+      return bad("Betaling kon niet worden gestart.");
+    }
     return NextResponse.json({ ok: true, configured: true, checkoutUrl });
   } catch (e) {
+    // Betaalprovider gooide (API-fout/timeout) → geen bruikbare betaling; order terugdraaien
+    // zodat verbruikte voucher/cadeaubon + voorraad-holds direct vrijkomen.
+    await voidUnpaidOrder(order.id).catch((err) => console.error("[checkout] void na provider-fout:", err));
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "Betaling starten mislukte." },
       { status: 502 }

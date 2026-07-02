@@ -192,6 +192,27 @@ export async function convertReservationToOrder(reservationId: string): Promise<
   const lines = (Array.isArray(r.lines) ? r.lines : []) as ReservationLine[];
   if (!lines.length) return { ok: false, error: "Reservering zonder regels." };
 
+  // Atomaire claim (compare-and-swap op de status): twee overlappende Mollie-webhooks
+  // voor dezelfde reservering lezen beide status "open"; de UPDATE flipt maar één keer
+  // naar "converting" (de tweede matcht 0 rijen). Zo maakt nooit meer dan één webhook
+  // een betaalde afhaalorder. neon-http kent geen transacties → een conditionele UPDATE
+  // is hier de atomaire primitief.
+  const prevStatus = r.status;
+  const claimed = await db
+    .update(reservations)
+    .set({ status: "converting", updatedAt: new Date() })
+    .where(and(eq(reservations.id, reservationId), eq(reservations.status, prevStatus), eq(reservations.convertedOrderId, "")))
+    .returning({ id: reservations.id });
+  if (!claimed.length) {
+    // Een parallelle call won de claim → geef de (mogelijk net gezette) conversie terug.
+    const [again] = await db
+      .select({ convertedOrderId: reservations.convertedOrderId })
+      .from(reservations)
+      .where(eq(reservations.id, reservationId))
+      .limit(1);
+    return { ok: true, orderNumber: again?.convertedOrderId || undefined, alreadyDone: true };
+  }
+
   await releaseOrderHolds(reservationHoldRef(reservationId)); // RES-hold vrij → order kan claimen
   const contact: CheckoutContact = {
     email: r.customerEmail || "", firstName: r.customerName || "Klant", lastName: "", phone: r.customerPhone || "",
@@ -203,6 +224,9 @@ export async function convertReservationToOrder(reservationId: string): Promise<
   try {
     order = await createOrder(contact, items, "pickup", "", "", r.location);
   } catch (e) {
+    // Order aanmaken faalde → claim teruggeven zodat een volgende webhook/retry het
+    // opnieuw kan proberen (anders blijft de reservering voorgoed op "converting" staan).
+    await db.update(reservations).set({ status: prevStatus, updatedAt: new Date() }).where(eq(reservations.id, reservationId)).catch(() => {});
     return { ok: false, error: e instanceof Error ? e.message : "Order kon niet aangemaakt worden." };
   }
   await finalizeRegisterPaidOrder(order.id);
