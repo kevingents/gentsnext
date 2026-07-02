@@ -57,7 +57,7 @@ function Cell({
       aria-pressed={on}
       aria-label={out ? `${sizeToken(cell.size)} — ${soldOutHint}` : undefined}
       title={out ? soldOutHint : low ? `Nog ${cell.qty} op voorraad` : undefined}
-      className={`relative flex h-10 w-full items-center justify-center border font-sans text-sm transition-colors ${
+      className={`relative flex h-11 w-full items-center justify-center border font-sans text-sm transition-colors ${
         on
           ? out
             ? "border-ink text-ink ring-1 ring-ink"
@@ -123,7 +123,7 @@ export function SizeMatrix({
                 aria-pressed={on}
                 aria-label={out ? `${sizeToken(s.size)} — ${soldOutHint}` : undefined}
                 title={out ? soldOutHint : low ? `Nog ${s.qty} op voorraad` : undefined}
-                className={`flex min-w-[3rem] flex-col items-center border px-3 py-2 text-center font-sans text-sm transition-colors ${
+                className={`flex min-w-[3rem] flex-col items-center border px-3 py-2.5 text-center font-sans text-sm transition-colors ${
                   on
                     ? out
                       ? "border-ink text-ink ring-1 ring-ink"

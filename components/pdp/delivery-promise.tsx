@@ -81,8 +81,9 @@ export function DeliveryPromise({
 
   return (
     <div className="mt-6 border-y border-line py-3">
-      <p className="font-sans text-sm">
-        <span className="text-success">●</span> <span className="font-medium">{headline}</span>
+      <p className="flex items-center gap-1.5 font-sans text-sm">
+        <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0 text-success"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+        <span className="font-medium">{headline}</span>
       </p>
       {note ? <p className="mt-1 font-sans text-xs text-muted">{note}</p> : null}
       {countdown ? (

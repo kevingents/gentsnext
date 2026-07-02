@@ -382,10 +382,10 @@ export default async function ProductPage({ params }: Props) {
         ]
       : []),
     {
-      title: "Bezorging & retour",
+      title: "Retour & maatadvies",
       content: (
         <div className="font-sans text-sm leading-relaxed text-ink-soft">
-          <p>Gratis retourneren binnen 14 dagen. Ophalen in één van onze 19 winkels is ook mogelijk.</p>
+          <p>Niet helemaal goed? Retourneer gratis binnen 14 dagen — per post of in één van onze winkels. Je krijgt het volledige bedrag terug.</p>
           <p className="mt-2">
             Twijfel je over je maat? Gebruik ons{" "}
             <Link href="/maatadvies" className="text-ink underline underline-offset-4">
@@ -480,22 +480,18 @@ export default async function ProductPage({ params }: Props) {
             deliveryNote={delivery?.note ?? null}
             cutoffHour={delivery?.cutoffHour ?? 16}
             mySize={mySize?.raw ?? null}
+            fitNote={String(attrs.pasvorm ?? "").trim() || null}
+            freeShipThresholdCents={settings.freeShippingCents}
           />
 
           <SocialProof stats={viewStats} />
 
-          {String(attrs.pasvorm ?? "").trim() ? (
-            <p className="mt-6 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
-              <span className="font-medium text-ink">Pasvorm: {String(attrs.pasvorm)}.</span> Twijfel je tussen twee maten? Kies de grootste.
-            </p>
-          ) : null}
-
           <ul className="mt-8 space-y-1.5">
             {TRUST.map((t) => (
               <li key={t} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
-                <span aria-hidden className="text-success">
-                  ✓
-                </span>
+                <svg aria-hidden className="h-4 w-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
                 {t}
               </li>
             ))}
