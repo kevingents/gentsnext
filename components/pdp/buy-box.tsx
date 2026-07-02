@@ -48,6 +48,15 @@ function TruckIcon({ className }: { className?: string }) {
   );
 }
 
+/** Winkelpui — omnichannel-voorraad (19 winkels). */
+function StoreIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 9l1.5-4.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 20v-6h6v6" />
+    </svg>
+  );
+}
+
 export type BuyColor = { color: string; sizes: BuySize[] };
 export type BuySize = {
   size: string;
@@ -161,8 +170,21 @@ export function BuyBox({
     () => active?.sizes.find((s) => s.size === size) ?? null,
     [active, size]
   );
+  // Omnichannel-USP: aantal winkels met voorraad — voor de gekozen maat als er
+  // een gekozen is, anders over alle maten van deze kleur ("kies je maat om te
+  // zien welke"). Zichtbaar vanaf de eerste scroll, niet pas na een maatklik.
+  const storeCount = useMemo(() => {
+    const set = new Set<string>();
+    const src = selectedSize ? [selectedSize] : active?.sizes ?? [];
+    for (const s of src) for (const b of s.branches ?? []) if (b.qty > 0) set.add(b.store);
+    return set.size;
+  }, [active, selectedSize]);
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? "vanaf " : "") + formatEuro(priceCents);
+  // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
+  // referentieprijs écht hoger is dan de getoonde prijs — anders zou bij een
+  // duurdere maat een doorgestreepte lagere prijs een prijsVERHOGING suggereren.
+  const hasDiscount = Boolean(referenceCents && referenceCents > priceCents);
   const soldOut = Boolean(selectedSize && selectedSize.known && selectedSize.qty <= 0);
   // Hele kleur/product uitverkocht: geen enkele bekende maat heeft voorraad.
   const allSoldOut = Boolean(
@@ -198,18 +220,18 @@ export function BuyBox({
       ) : null}
 
       <div className="mt-4 flex items-baseline gap-3">
-        {referenceCents ? (
-          <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents)}</span>
+        {hasDiscount ? (
+          <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents!)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
-        {referenceCents && referenceCents > priceCents ? (
+        {hasDiscount ? (
           <span className="rounded bg-danger/10 px-1.5 py-0.5 font-sans text-xs font-medium text-danger">
-            −{Math.round((1 - priceCents / referenceCents) * 100)}%
+            −{Math.round((1 - priceCents / referenceCents!) * 100)}%
           </span>
         ) : null}
         <span className="font-sans text-xs text-muted">{t("common.vat")}</span>
       </div>
-      {referenceCents ? (
+      {hasDiscount ? (
         <p className="mt-1 font-sans text-xs text-muted">
           {t("pdp.price.reference")}
         </p>
@@ -256,6 +278,21 @@ export function BuyBox({
           <span className="text-muted">{t("pdp.color.prefix")} </span>
           <span className="font-medium">{active.color}</span>
         </p>
+      ) : null}
+
+      {/* Omnichannel-USP: winkelvoorraad zichtbaar vanaf de eerste scroll. */}
+      {hasStock && !oneSize && storeCount > 0 ? (
+        <div className="mt-6 flex items-start gap-2.5 rounded-card border border-line px-3 py-2.5">
+          <StoreIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink" />
+          <p className="font-sans text-sm">
+            <span className="font-medium text-ink">
+              {selectedSize
+                ? t(storeCount === 1 ? "pdp.storeStock.mineOne" : "pdp.storeStock.mine", { count: storeCount })
+                : t(storeCount === 1 ? "pdp.storeStock.anyOne" : "pdp.storeStock.any", { count: storeCount })}
+            </span>
+            {!selectedSize ? <span className="block text-xs text-muted">{t("pdp.storeStock.hint")}</span> : null}
+          </p>
+        </div>
       ) : null}
 
       {/* Maat — verborgen bij one-size (niets te kiezen). */}
