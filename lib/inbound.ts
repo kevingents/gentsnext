@@ -16,7 +16,8 @@
 import { getDb } from "@/db";
 import { inboundShipments, inboundReceiptCounts } from "@/db/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
-import { recordMovements, markMovementsSrsPosted, availableInStore } from "@/lib/store-core";
+import { recordMovements, markMovementsSrsPosted, availableBreakdown } from "@/lib/store-core";
+import { stockAvailable } from "@/lib/stock";
 import { buildSamplePlan, type SamplePlan } from "@/lib/inbound-sampling";
 import { logDiscrepancies } from "@/lib/inbound-discrepancies";
 
@@ -128,26 +129,36 @@ export async function createInterstoreTransfer(input: {
   if (!lines.length) return { ok: false, error: "Geen artikelen om te versturen." };
 
   // Weiger als de bronwinkel onvoldoende voorraad heeft: anders zou de afboeking de bron
-  // NEGATIEF maken (en zou de doelwinkel fantoomvoorraad krijgen). Beschikbaar = de gedeelde
-  // waarheid (SRS-baseline + kassa-delta − webreservering), dus ook wat online al gereserveerd is.
-  const need = new Map<string, number>();
-  for (const l of lines) {
-    const key = String(l.stockKey || "").trim().toLowerCase();
-    if (!key) continue;
-    need.set(key, (need.get(key) || 0) + (Number(l.expectedQty) || 0));
-  }
-  if (need.size) {
-    const avail = await availableInStore(fromStore, [...need.keys()]);
-    const short = [...need.entries()].filter(([key, qty]) => qty > (avail.get(key) ?? 0));
-    if (short.length) {
-      const detail = short
-        .map(([key, qty]) => {
-          const l = lines.find((x) => String(x.stockKey || "").trim().toLowerCase() === key);
-          const label = [l?.title, l?.size && `maat ${l.size}`].filter(Boolean).join(" ") || key;
-          return `${label}: nodig ${qty}, beschikbaar ${avail.get(key) ?? 0}`;
-        })
-        .join("; ");
-      return { ok: false, error: `Onvoldoende voorraad in ${fromStore} — ${detail}.` };
+  // NEGATIEF maken (en zou de doelwinkel fantoomvoorraad krijgen). We toetsen op SKU (de
+  // SRS-baseline-index is op SKU gesleuteld, niet op barcode) tegen de FYSIEK beschikbare
+  // voorraad = baseline + kassa-delta − webreservering, ZÓNDER de veiligheidsbuffer (die is
+  // voor anti-oversell bij verkoop, niet voor een fysieke herverdeling waar de spullen er
+  // al liggen). Bij een niet-geladen voorraad-index (blob/token-storing) slaan we de gate
+  // over i.p.v. álles onterecht te weigeren.
+  if (await stockAvailable().catch(() => false)) {
+    const need = new Map<string, number>();
+    for (const l of lines) {
+      const key = String(l.sku || "").trim();
+      if (!key) continue;
+      need.set(key, (need.get(key) || 0) + (Number(l.expectedQty) || 0));
+    }
+    if (need.size) {
+      const bd = await availableBreakdown(fromStore, [...need.keys()]);
+      const physicalOf = (key: string) => {
+        const b = bd.get(key);
+        return b ? Math.max(0, b.baseline + b.posDelta - b.webReserved) : 0;
+      };
+      const short = [...need.entries()].filter(([key, qty]) => qty > physicalOf(key));
+      if (short.length) {
+        const detail = short
+          .map(([key, qty]) => {
+            const l = lines.find((x) => String(x.sku || "").trim() === key);
+            const label = [l?.title, l?.size && `maat ${l.size}`].filter(Boolean).join(" ") || key;
+            return `${label}: nodig ${qty}, beschikbaar ${physicalOf(key)}`;
+          })
+          .join("; ");
+        return { ok: false, error: `Onvoldoende voorraad in ${fromStore} — ${detail}.` };
+      }
     }
   }
 
