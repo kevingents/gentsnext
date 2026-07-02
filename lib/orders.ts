@@ -673,3 +673,34 @@ export async function getPostPurchase(
   const recommendations = hg ? await getRecommendations(hg, excludeId, 4) : [];
   return { careItems: careItems.slice(0, 6), recommendations };
 }
+
+/**
+ * Online orders van één klant — voor het kassa-klant-paneel (omnichannel-historie). Matcht op
+ * customerId (uuid; veilig via ::text zodat een niet-uuid kassa/SRS-code niet crasht) ÓF het
+ * e-mailadres (gast-checkout heeft geen account maar wél het e-mail = de cross-channel-brug).
+ * Alleen 'echte' orders (niet open/mislukt/verlopen/geannuleerd), nieuwste eerst.
+ */
+export async function listOrdersByCustomerCore(input: { customerId?: string; email?: string; limit?: number }): Promise<{ orderNumber: string; status: string; totalCents: number; createdAt: string; paidAt: string | null }[]> {
+  const cid = String(input.customerId || "").trim();
+  const email = String(input.email || "").trim().toLowerCase();
+  if (!cid && !email) return [];
+  const db = getDb();
+  const lim = Math.max(1, Math.min(50, Number(input.limit) || 20));
+  const ors = [];
+  if (cid) ors.push(sql`customer_id::text = ${cid}`);
+  if (email) ors.push(sql`lower(email) = ${email}`);
+  const rows = await db.execute<{ order_number: string; status: string; total_cents: number; created_at: string; paid_at: string | null }>(sql`
+    select order_number, status, total_cents, created_at, paid_at
+    from orders
+    where (${sql.join(ors, sql` or `)}) and status not in ('open','failed','expired','canceled')
+    order by created_at desc
+    limit ${lim}
+  `);
+  return rows.rows.map((r) => ({
+    orderNumber: String(r.order_number),
+    status: String(r.status),
+    totalCents: Number(r.total_cents) || 0,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : "",
+    paidAt: r.paid_at ? new Date(r.paid_at).toISOString() : null,
+  }));
+}
