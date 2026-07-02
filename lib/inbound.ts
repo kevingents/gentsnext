@@ -16,7 +16,7 @@
 import { getDb } from "@/db";
 import { inboundShipments, inboundReceiptCounts } from "@/db/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
-import { recordMovements, markMovementsSrsPosted } from "@/lib/store-core";
+import { recordMovements, markMovementsSrsPosted, availableInStore } from "@/lib/store-core";
 import { buildSamplePlan, type SamplePlan } from "@/lib/inbound-sampling";
 import { logDiscrepancies } from "@/lib/inbound-discrepancies";
 
@@ -126,6 +126,30 @@ export async function createInterstoreTransfer(input: {
     ? input.expectedLines
     : await buildExpectedLines(input.skuExpected || []);
   if (!lines.length) return { ok: false, error: "Geen artikelen om te versturen." };
+
+  // Weiger als de bronwinkel onvoldoende voorraad heeft: anders zou de afboeking de bron
+  // NEGATIEF maken (en zou de doelwinkel fantoomvoorraad krijgen). Beschikbaar = de gedeelde
+  // waarheid (SRS-baseline + kassa-delta − webreservering), dus ook wat online al gereserveerd is.
+  const need = new Map<string, number>();
+  for (const l of lines) {
+    const key = String(l.stockKey || "").trim().toLowerCase();
+    if (!key) continue;
+    need.set(key, (need.get(key) || 0) + (Number(l.expectedQty) || 0));
+  }
+  if (need.size) {
+    const avail = await availableInStore(fromStore, [...need.keys()]);
+    const short = [...need.entries()].filter(([key, qty]) => qty > (avail.get(key) ?? 0));
+    if (short.length) {
+      const detail = short
+        .map(([key, qty]) => {
+          const l = lines.find((x) => String(x.stockKey || "").trim().toLowerCase() === key);
+          const label = [l?.title, l?.size && `maat ${l.size}`].filter(Boolean).join(" ") || key;
+          return `${label}: nodig ${qty}, beschikbaar ${avail.get(key) ?? 0}`;
+        })
+        .join("; ");
+      return { ok: false, error: `Onvoldoende voorraad in ${fromStore} — ${detail}.` };
+    }
+  }
 
   const db = getDb();
   const shipMethod = input.shipMethod === "route" || input.shipMethod === "dhl" ? input.shipMethod : "";
