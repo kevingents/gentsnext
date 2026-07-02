@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { validateGiftcard } from "@/lib/giftcards";
 import { validateVoucher } from "@/lib/vouchers";
 
@@ -10,6 +11,10 @@ export const dynamic = "force-dynamic";
  * (specifiek GIFT-formaat), dan voucher.
  */
 export async function POST(req: Request) {
+  // Backstop rate-limit per IP (code-enumeratie (voucher/cadeaubon)).
+  const _ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  const _rl = rateLimit("redeem:" + fingerprint(_ip), 20, 60000);
+  if (!_rl.ok) return NextResponse.json({ ok: false, error: "Te veel verzoeken — probeer het zo weer." }, { status: 429, headers: { "retry-after": String(_rl.retryAfterSec) } });
   let body: any;
   try {
     body = await req.json();

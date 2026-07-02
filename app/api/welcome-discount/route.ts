@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { createWelcomeVoucher } from "@/lib/vouchers";
 import { getSettings } from "@/lib/settings";
 
@@ -9,6 +10,10 @@ export const dynamic = "force-dynamic";
  * in op de nieuwsbrief en geeft de code terug voor de popup.
  */
 export async function POST(req: Request) {
+  // Backstop rate-limit per IP (mint vouchers).
+  const _ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  const _rl = rateLimit("welcome:" + fingerprint(_ip), 5, 60000);
+  if (!_rl.ok) return NextResponse.json({ ok: false, error: "Te veel verzoeken — probeer het zo weer." }, { status: 429, headers: { "retry-after": String(_rl.retryAfterSec) } });
   let email = "";
   try {
     email = String((await req.json())?.email || "").trim().toLowerCase();

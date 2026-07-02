@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { validateGiftcard } from "@/lib/giftcards";
 
 export const dynamic = "force-dynamic";
 
 /** Checkout: cadeaubon-code valideren tegen het te dekken orderbedrag. */
 export async function POST(req: Request) {
+  // Backstop rate-limit per IP (cadeaubon-code-enumeratie + saldo-onthulling).
+  const _ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  const _rl = rateLimit("gcval:" + fingerprint(_ip), 20, 60000);
+  if (!_rl.ok) return NextResponse.json({ ok: false, error: "Te veel verzoeken — probeer het zo weer." }, { status: 429, headers: { "retry-after": String(_rl.retryAfterSec) } });
   let body: any;
   try {
     body = await req.json();
