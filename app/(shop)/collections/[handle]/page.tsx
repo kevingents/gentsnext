@@ -5,12 +5,12 @@ import { ProductCard } from "@/components/product-card";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
-import { getCollectionByHandle, getFilteredProducts, getFacets } from "@/lib/catalog";
+import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTasteCats } from "@/lib/catalog";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getSessionCustomer } from "@/lib/account";
-import { resolveMySize } from "@/lib/size-match";
+import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 
 export const dynamic = "force-dynamic";
 
@@ -44,16 +44,24 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   if (!collection) notFound();
 
   const filters = selectionToFilters(sel, { collectionId: collection.id });
-  const [{ items, total }, facets, sessionCustomer] = await Promise.all([
-    getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE),
-    getFacets({ collectionId: collection.id }),
+  // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
+  const [sessionCustomer, facets] = await Promise.all([
     getSessionCustomer(),
+    getFacets({ collectionId: collection.id }),
   ]);
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
   // Shop in jouw maat: leid de categorie af uit de collectie-naam (gemengde
   // collecties matchen niet → geen chip).
   const my = resolveMySize(`${collection.handle} ${collection.title}`, sessionCustomer?.sizeProfile);
   const mySize = my ? { row: my.row, raw: my.raw } : null;
+  // Gemengde collectie → boost op álle bewaarde maten (een schoen matcht nooit een
+  // colbert-bucket, dus dat is veilig). Smaak-boost alleen op de default + ingelogd.
+  const tasteCats =
+    sel.sort === "aanbevolen" && sessionCustomer?.id ? await getCustomerTasteCats(sessionCustomer.id) : [];
+  const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
+    mySizeRows: mySizeBuckets(sessionCustomer?.sizeProfile),
+    tasteCats,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   function pageHref(p: number): string {
     const params = new URLSearchParams();

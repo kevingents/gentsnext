@@ -11,6 +11,7 @@ import {
   productSizeMedia,
   orders,
   orderLines,
+  events,
 } from "@/db/schema";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
@@ -311,7 +312,45 @@ export async function listProductHandles(limit = 50000) {
 
 /* ───────────────────────── Gefilterde PLP + facetten ───────────────────── */
 
-export type ProductSort = "nieuw" | "prijs-op" | "prijs-af" | "naam";
+export type ProductSort = "aanbevolen" | "populair" | "nieuw" | "prijs-op" | "prijs-af" | "naam";
+
+/**
+ * Rang-context voor de "Aanbevolen"-sort (de slimme default). Alle velden
+ * optioneel: zonder context valt "Aanbevolen" terug op de objectieve blend
+ * (populariteit · maatbreedte · voorraad · versheid). De boosts herschikken
+ * alleen — ze filteren niet — dus de totaaltelling en paginering blijven kloppen.
+ */
+export type PlpRankContext = {
+  /** Filter-buckets (size_label) van het maatprofiel van de klant → in-jouw-maat vooraan. */
+  mySizeRows?: string[];
+  /** Vertrouwde hoofdgroepen uit de aankoophistorie → gepersonaliseerde boost. */
+  tasteCats?: string[];
+  /** Merchandising-pins (product-handles, in volgorde) → altijd bovenaan in de default. */
+  pinnedHandles?: string[];
+  /** Populariteits-venster in dagen (default 30). */
+  popularityDays?: number;
+};
+
+/**
+ * Smaak-categorieën (hoofdgroep) van een klant uit z'n aankoophistorie — voor de
+ * gepersonaliseerde boost op de PLP. Lichtgewicht (één query); leeg zonder klant
+ * of historie. Hergebruikt de logica van getRecommendedFromHistory.
+ */
+export async function getCustomerTasteCats(customerId: string, limit = 4): Promise<string[]> {
+  if (!customerId) return [];
+  const db = getDb();
+  const res = await db.execute<{ hg: string }>(sql`
+    select p.attributes ->> 'hoofdgroep_omschrijving' hg
+    from ${orderLines} ol
+    join ${orders} o on o.id = ol.order_id
+    join ${productVariants} v on v.sku = ol.sku
+    join ${products} p on p.id = v.product_id
+    where o.customer_id = ${customerId} and o.status in ('paid','shipped','delivered','ready_pickup')
+      and coalesce(p.attributes ->> 'hoofdgroep_omschrijving','') <> ''
+    group by 1 order by count(*) desc limit ${limit}
+  `);
+  return res.rows.map((r) => r.hg).filter(Boolean);
+}
 
 export type ProductFilters = {
   collectionId?: string;
@@ -552,31 +591,91 @@ function allConditions(f: ProductFilters): SQL[] {
   return conds;
 }
 
-const SORT_ORDER: Record<ProductSort, SQL> = {
+/** Objectieve sorteringen (los van personalisatie). */
+const SORT_ORDER: Record<"nieuw" | "prijs-op" | "prijs-af" | "naam", SQL> = {
   nieuw: sql`${products.sourceCreatedAt} desc nulls last`,
   "prijs-op": sql`mp asc nulls last`,
   "prijs-af": sql`mp desc nulls last`,
   naam: sql`${products.title} asc`,
 };
 
+/** `col in ('a','b',…)` met correcte placeholders voor een ruwe sql-fragment. */
+function sqlInList(values: string[]): SQL {
+  return sql.join(values.map((v) => sql`${v}`), sql`, `);
+}
+
+/**
+ * Bouwt de ORDER BY voor een PLP-sort. "Aanbevolen" (default) blendt:
+ *   pins → in-jouw-maat → populariteit → jouw-smaakcategorie → maatbreedte →
+ *   voorraad → versheid. "Populair" = objectieve vraag (events). De overige
+ *   sorts blijven puur. Retourneert ook of het populariteits-CTE nodig is.
+ */
+function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; usesPop: boolean } {
+  if (sort !== "aanbevolen" && sort !== "populair") {
+    return { order: SORT_ORDER[sort], usesPop: false };
+  }
+  const popScore = sql`coalesce(pop.score, 0)`;
+  const breadth = sql`(select count(*) from ${productVariants} vb where vb.product_id = ${products.id} and vb.stock_qty > 0)`;
+  const tail = sql`${products.stockQty} desc nulls last, ${products.sourceCreatedAt} desc nulls last`;
+
+  if (sort === "populair") {
+    return { order: sql`${popScore} desc, ${tail}`, usesPop: true };
+  }
+
+  // "Aanbevolen": optionele boost-prefixes (elk een asc CASE, 0 = relevant).
+  const pins = (ctx?.pinnedHandles ?? []).filter(Boolean);
+  const pinBoost = pins.length
+    ? sql`(case ${sql.join(pins.map((h, i) => sql`when ${products.handle} = ${h} then ${i}`), sql` `)} else ${pins.length} end), `
+    : sql``;
+  const mySizeRows = (ctx?.mySizeRows ?? []).filter(Boolean);
+  const mySizeBoost = mySizeRows.length
+    ? sql`(case when exists(select 1 from ${productVariants} vs where vs.product_id = ${products.id} and vs.stock_qty > 0 and vs.size_label in (${sqlInList(mySizeRows)})) then 0 else 1 end), `
+    : sql``;
+  const tasteCats = (ctx?.tasteCats ?? []).filter(Boolean);
+  const tasteBoost = tasteCats.length
+    ? sql`(case when ${products.attributes} ->> 'hoofdgroep_omschrijving' in (${sqlInList(tasteCats)}) then 0 else 1 end), `
+    : sql``;
+
+  return {
+    order: sql`${pinBoost}${mySizeBoost}${popScore} desc, ${tasteBoost}${breadth} desc, ${tail}`,
+    usesPop: true,
+  };
+}
+
 export async function getFilteredProducts(
   f: ProductFilters,
   sort: ProductSort,
   page: number,
-  perPage: number
+  perPage: number,
+  ctx?: PlpRankContext
 ): Promise<{ items: ProductCardData[]; total: number }> {
   const db = getDb();
   const conds = allConditions(f);
   const whereSql = sql.join(conds, sql` and `);
   const offset = (page - 1) * perPage;
 
+  const { order, usesPop } = buildPlpOrder(sort, ctx);
+  // Populariteit: één aggregatie over de events (view=1, add_to_cart=3) in het
+  // venster, als CTE gejoined op handle. Alleen voor aanbevolen/populair; de
+  // overige sorts draaien exact de oude, lichte query.
+  const popDays = Math.max(1, Math.floor(ctx?.popularityDays ?? 30));
+  const withPop = usesPop
+    ? sql`with pop as (
+        select handle, sum(case when type='add_to_cart' then 3 when type='product_view' then 1 else 0 end)::int as score
+        from ${events}
+        where handle <> '' and type in ('product_view','add_to_cart') and created_at > now() - (${popDays} || ' days')::interval
+        group by handle
+      ) `
+    : sql``;
+  const popJoin = usesPop ? sql` left join pop on pop.handle = ${products.handle}` : sql``;
+
   // Pagineer op product-id met min-prijs voor de prijs-sortering.
   const idRows = await db.execute<{ id: string }>(sql`
-    select ${products.id} as id,
+    ${withPop}select ${products.id} as id,
            (select min(v2.price_cents) from ${productVariants} v2 where v2.product_id = ${products.id}) as mp
-    from ${products}
+    from ${products}${popJoin}
     where ${whereSql}
-    order by ${SORT_ORDER[sort]}
+    order by ${order}
     limit ${perPage} offset ${offset}
   `);
   const totalRes = await db.execute<{ n: number }>(sql`

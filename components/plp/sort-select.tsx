@@ -15,7 +15,7 @@ export function SortSelect({ value }: { value: ProductSort }) {
 
   function onChange(next: string) {
     const params = new URLSearchParams(sp.toString());
-    if (next === "nieuw") params.delete("sort");
+    if (next === "aanbevolen") params.delete("sort");
     else params.set("sort", next);
     params.delete("page");
     const qs = params.toString();
