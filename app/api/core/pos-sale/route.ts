@@ -3,6 +3,7 @@ import { coreAuth } from "@/lib/store-core-token";
 import {
   recordPosSaleCore, listPosSalesCore, listUnpostedPosSalesCore, getPosSaleCore,
   findSaleByClientRefCore, cancelPosSaleCore, markPosSaleSrsPostedCore, listPosSalesByRangeCore,
+  listPosSalesByCustomerCore,
 } from "@/lib/pos-sales-core";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; sale?: Record<string, unknown>; store?: string; limit?: number; id?: string; clientRef?: string; actor?: { name?: string }; opts?: Record<string, string>; from?: string; to?: string };
+  let b: { action?: string; sale?: Record<string, unknown>; store?: string; limit?: number; id?: string; clientRef?: string; actor?: { name?: string }; opts?: Record<string, string>; from?: string; to?: string; customerId?: string; email?: string };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -35,6 +36,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, sales: await listPosSalesCore(b.store || "", b.limit) });
       case "list-by-range":
         return NextResponse.json({ ok: true, sales: await listPosSalesByRangeCore(b.store || "", b.from || "", b.to || "") });
+      case "by-customer":
+        return NextResponse.json({ ok: true, sales: await listPosSalesByCustomerCore({ customerId: b.customerId, email: b.email, limit: b.limit }) });
       case "list-unposted":
         return NextResponse.json({ ok: true, sales: await listUnpostedPosSalesCore(b.store || "", b.limit) });
       case "get": {
