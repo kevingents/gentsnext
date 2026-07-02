@@ -185,6 +185,9 @@ export async function createInboundShipment(input: {
 export async function createInterstoreTransfer(input: {
   fromStore: string; toStore: string; expectedLines?: ExpectedLine[]; skuExpected?: { sku: string; expected: number }[]; createdBy?: string; note?: string;
   shipMethod?: string; plannedRouteDate?: string; urgent?: boolean;
+  // 'in_transit' (default; F4-push = bron pickt+verstuurt zelf) of 'picked' (pull-aanvraag:
+  // de bron moet nog fysiek picken → scan-to-pick zet 'm daarna op 'in_transit').
+  status?: string;
 }): Promise<{ ok: boolean; error?: string; shipment?: Shipment; deducted?: { stockKey: string; delta: number }[] }> {
   const fromStore = String(input.fromStore || "").trim();
   const toStore = String(input.toStore || "").trim();
@@ -233,10 +236,12 @@ export async function createInterstoreTransfer(input: {
 
   const db = getDb();
   const shipMethod = input.shipMethod === "route" || input.shipMethod === "dhl" ? input.shipMethod : "";
+  const reqStatus = input.status === "picked" ? "picked" : "in_transit";
   const [ship] = await db.insert(inboundShipments).values({
     toStore, source: fromStore, sourceType: "interstore", fromLocation: fromStore,
-    linkRef: "", parts: 1, expectedLines: lines, status: "in_transit",
-    note: input.note || "", createdBy: input.createdBy || "", pickedAt: new Date(), inTransitAt: new Date(),
+    linkRef: "", parts: 1, expectedLines: lines, status: reqStatus,
+    note: input.note || "", createdBy: input.createdBy || "", pickedAt: new Date(),
+    inTransitAt: reqStatus === "in_transit" ? new Date() : null,
     shipMethod, plannedRouteDate: input.plannedRouteDate ? new Date(input.plannedRouteDate) : null, urgent: !!input.urgent,
   }).returning();
   await db.update(inboundShipments).set({ linkRef: `XFER-${ship.id.slice(0, 8).toUpperCase()}` }).where(eq(inboundShipments.id, ship.id));
@@ -248,6 +253,27 @@ export async function createInterstoreTransfer(input: {
     reason: `herverdeling → ${toStore}`, lines: movLines,
   });
   return { ok: true, shipment: { ...ship, linkRef: `XFER-${ship.id.slice(0, 8).toUpperCase()}` }, deducted: res.applied };
+}
+
+/**
+ * Scan-to-pick: de bronwinkel scant de pick-bon (barcode = linkRef) → de aangevraagde
+ * uitwisseling gaat van 'picked' naar 'in_transit' (onderweg). Idempotent: een tweede scan op
+ * een al-onderweg/ontvangst-zending is een no-op. Al afgehandeld/geannuleerd → nette fout.
+ */
+export async function pickTransferByLinkRef(linkRef: string): Promise<{ ok: boolean; error?: string; shipment?: Shipment; alreadyInTransit?: boolean }> {
+  const ref = String(linkRef || "").trim();
+  if (!ref) return { ok: false, error: "linkRef vereist." };
+  const db = getDb();
+  const [s] = await db.select().from(inboundShipments).where(eq(inboundShipments.linkRef, ref)).limit(1);
+  if (!s) return { ok: false, error: `Geen uitwisseling gevonden voor ${ref}.` };
+  if (["received", "closed", "cancelled"].includes(s.status)) return { ok: false, error: "Deze uitwisseling is al afgehandeld." };
+  if (["in_transit", "receiving"].includes(s.status)) return { ok: true, shipment: s, alreadyInTransit: true };
+  const [u] = await db
+    .update(inboundShipments)
+    .set({ status: "in_transit", inTransitAt: new Date() })
+    .where(and(eq(inboundShipments.id, s.id), eq(inboundShipments.status, "picked")))
+    .returning();
+  return { ok: true, shipment: u || s };
 }
 
 /** Markeer de bron-afboeking van een herverdeling als 'in SRS verwerkt'. */
