@@ -148,7 +148,8 @@ export async function createOrder(
   deliveryMethod: DeliveryMethod = "standard",
   voucherCode = "",
   giftcardCode = "",
-  pickupStore = ""
+  pickupStore = "",
+  soldByStore = ""
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -224,6 +225,7 @@ export async function createOrder(
       vatNumber: (contact.vatNumber || "").trim(),
       deliveryMethod: method,
       pickupStore: isPickup ? pickupStore.trim() : "",
+      soldByStore: String(soldByStore || "").trim(),
       voucherCode: appliedCode,
       discountCents,
       giftcardCode: appliedGiftcard,

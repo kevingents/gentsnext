@@ -441,6 +441,9 @@ export const orders = pgTable(
     deliveryMethod: text("delivery_method").notNull().default("standard"),
     /** Bij 'pickup': de winkel waar de klant afhaalt (winkelnaam, bv. "GENTS Groningen"). */
     pickupStore: text("pickup_store").notNull().default(""),
+    /** Verkopende winkel bij een kassa-bestelling (endless aisle): de order wordt uit een ander
+     *  filiaal/magazijn geleverd, maar de OMZET hoort bij de winkel die 'm verkocht. '' = webshop. */
+    soldByStore: text("sold_by_store").notNull().default(""),
     voucherCode: text("voucher_code").notNull().default(""),
     discountCents: integer("discount_cents").notNull().default(0),
     /** Cadeaubon als betaalmiddel: ingezette code + afgeboekt bedrag (centen). */
