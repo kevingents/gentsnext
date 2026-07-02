@@ -720,7 +720,7 @@ function CheckoutForm() {
                     }}
                     placeholder="Kortingscode of cadeaubon"
                     aria-label="Kortingscode of cadeaubon"
-                    className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm uppercase focus:border-ink focus:outline-none"
+                    className="w-full min-w-0 border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"
                   />
                   <button type="button" onClick={applyCode} disabled={codeBusy} className="btn-ghost !px-4 !py-2 whitespace-nowrap">
                     {codeBusy ? "…" : "Toepassen"}

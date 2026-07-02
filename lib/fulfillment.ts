@@ -11,6 +11,7 @@ import {
   BRANCH_CITY,
 } from "@/lib/fulfillment-config";
 import { getSettings, type Settings } from "@/lib/settings";
+import { type Locale } from "@/lib/i18n";
 
 /**
  * Order-allocatie ("welke filialen leveren wat"). Doelen, in volgorde:
@@ -415,11 +416,81 @@ function addDeliveryDays(base: { dayIndex: number; y: number; m: number; d: numb
   return k;
 }
 
-function dayLabel(base: { dayIndex: number; y: number; m: number; d: number }, k: number): string {
-  if (k === 1) return "morgen";
-  if (k === 2) return "overmorgen";
+type DeliveryStrings = {
+  intl: string;
+  tomorrow: string;
+  dayAfter: string;
+  businessDays: (min: number, max?: number) => string;
+  promiseBeforeCutoff: (hour: number, date: string) => string;
+  promiseAfter: (date: string) => string;
+  noteSplit: string;
+  noteStore: string;
+};
+
+/**
+ * Bezorg-copy per taal. Deze labels worden server-side berekend mét datum-
+ * interpolatie ("bezorgd overmorgen", "2-3 werkdagen"), dus ze horen hier en
+ * niet in de messages-catalog. estimateDelivery krijgt de locale mee; alle
+ * bestaande NL-callers vallen terug op 'nl' (geen regressie).
+ */
+const DELIVERY_STRINGS: Record<Locale, DeliveryStrings> = {
+  nl: {
+    intl: "nl-NL",
+    tomorrow: "morgen",
+    dayAfter: "overmorgen",
+    businessDays: (a, b) => (b && b !== a ? `${a}-${b} werkdagen` : `${a} werkdag${a === 1 ? "" : "en"}`),
+    promiseBeforeCutoff: (h, d) => `Voor ${h}:00 besteld, ${d} in huis`,
+    promiseAfter: (d) => `Bezorging ${d}`,
+    noteSplit: "Je bestelling komt deels uit verschillende locaties; daarom kan een deel iets later aankomen.",
+    noteStore: "Dit artikel versturen we vanuit een van onze winkels, wat iets langer duurt dan vanuit het magazijn.",
+  },
+  en: {
+    intl: "en-GB",
+    tomorrow: "tomorrow",
+    dayAfter: "the day after tomorrow",
+    businessDays: (a, b) => (b && b !== a ? `${a}-${b} business days` : `${a} business day${a === 1 ? "" : "s"}`),
+    promiseBeforeCutoff: (h, d) => `Order before ${h}:00 and get it ${d}`,
+    promiseAfter: (d) => `Delivery ${d}`,
+    noteSplit: "Part of your order ships from different locations, so one part may arrive slightly later.",
+    noteStore: "We ship this item from one of our stores, which takes a little longer than from the warehouse.",
+  },
+  de: {
+    intl: "de-DE",
+    tomorrow: "morgen",
+    dayAfter: "übermorgen",
+    businessDays: (a, b) => (b && b !== a ? `${a}-${b} Werktage` : `${a} Werktag${a === 1 ? "" : "e"}`),
+    promiseBeforeCutoff: (h, d) => `Bis ${h}:00 Uhr bestellt, ${d} geliefert`,
+    promiseAfter: (d) => `Lieferung ${d}`,
+    noteSplit: "Ein Teil Ihrer Bestellung wird von verschiedenen Standorten versendet, daher kann ein Teil etwas später ankommen.",
+    noteStore: "Wir versenden diesen Artikel aus einer unserer Filialen, was etwas länger dauert als aus dem Lager.",
+  },
+  fr: {
+    intl: "fr-FR",
+    tomorrow: "demain",
+    dayAfter: "après-demain",
+    businessDays: (a, b) => (b && b !== a ? `${a}-${b} jours ouvrés` : `${a} jour ouvré${a === 1 ? "" : "s"}`),
+    promiseBeforeCutoff: (h, d) => `Commandé avant ${h}h, livré ${d}`,
+    promiseAfter: (d) => `Livraison ${d}`,
+    noteSplit: "Une partie de votre commande est expédiée depuis différents endroits ; une partie peut donc arriver un peu plus tard.",
+    noteStore: "Nous expédions cet article depuis l'une de nos boutiques, ce qui prend un peu plus de temps que depuis l'entrepôt.",
+  },
+  es: {
+    intl: "es-ES",
+    tomorrow: "mañana",
+    dayAfter: "pasado mañana",
+    businessDays: (a, b) => (b && b !== a ? `${a}-${b} días laborables` : `${a} día laborable${a === 1 ? "" : "s"}`),
+    promiseBeforeCutoff: (h, d) => `Pide antes de las ${h}:00 y recíbelo ${d}`,
+    promiseAfter: (d) => `Entrega ${d}`,
+    noteSplit: "Parte de tu pedido se envía desde distintas ubicaciones, por lo que una parte puede llegar un poco más tarde.",
+    noteStore: "Enviamos este artículo desde una de nuestras tiendas, lo que tarda un poco más que desde el almacén.",
+  },
+};
+
+function dayLabel(base: { dayIndex: number; y: number; m: number; d: number }, k: number, S: DeliveryStrings): string {
+  if (k === 1) return S.tomorrow;
+  if (k === 2) return S.dayAfter;
   const dt = new Date(Date.UTC(base.y, base.m - 1, base.d) + k * 86400000);
-  return new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(dt);
+  return new Intl.DateTimeFormat(S.intl, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(dt);
 }
 
 /**
@@ -428,8 +499,9 @@ function dayLabel(base: { dayIndex: number; y: number; m: number; d: number }, k
  * duurt logischerwijs langer dan rechtstreeks uit het magazijn — dat leggen we
  * ook uit aan de klant. Alle dagen/toeslagen komen uit de instelbare settings.
  */
-export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOptions = {}): Promise<DeliveryEstimate | null> {
+export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOptions & { locale?: Locale } = {}): Promise<DeliveryEstimate | null> {
   const settings = await getSettings();
+  const S = DELIVERY_STRINGS[opts.locale ?? "nl"] ?? DELIVERY_STRINGS.nl;
   const plan = await allocateOrder(lines, opts);
   if (!plan.shipments.length) return null;
 
@@ -449,8 +521,10 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
   const stdShownK = fromWarehouseOnly ? stdMinK : stdMaxK;
 
   const standard: DeliveryOption = {
-    dateLabel: dayLabel(n, stdShownK),
-    rangeLabel: fromWarehouseOnly ? `${settings.warehouseTransitDays}-${settings.warehouseTransitDays + 1} werkdagen` : `${settings.standardMinDays}-${settings.standardMaxDays} werkdagen`,
+    dateLabel: dayLabel(n, stdShownK, S),
+    rangeLabel: fromWarehouseOnly
+      ? S.businessDays(settings.warehouseTransitDays, settings.warehouseTransitDays + 1)
+      : S.businessDays(settings.standardMinDays, settings.standardMaxDays),
     surchargeCents: 0,
   };
   // Express kan ALLEEN als de hele order rechtstreeks uit het magazijn komt —
@@ -459,14 +533,10 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
   const ed = settings.expressTransitDays;
   const express: DeliveryOption | null =
     fromWarehouseOnly && plan.fullyAllocated && expK < stdShownK
-      ? { dateLabel: dayLabel(n, expK), rangeLabel: `${ed} werkdag${ed === 1 ? "" : "en"}`, surchargeCents: settings.expressSurchargeCents }
+      ? { dateLabel: dayLabel(n, expK, S), rangeLabel: S.businessDays(ed), surchargeCents: settings.expressSurchargeCents }
       : null;
 
-  const note = isSplit
-    ? "Je bestelling komt deels uit verschillende locaties; daarom kan een deel iets later aankomen."
-    : hasStoreSource
-      ? "Dit artikel versturen we vanuit een van onze winkels, wat iets langer duurt dan vanuit het magazijn."
-      : null;
+  const note = isSplit ? S.noteSplit : hasStoreSource ? S.noteStore : null;
 
   // Cutoff van vandaag, per-weekdag, van het filiaal/de filialen die vandaag
   // verzenden (bv. magazijn vrijdag 16:00) — niet langer het basisuur.
@@ -477,8 +547,8 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
     : cutoffHourFor("99", settings, today);
   const beforeCutoff = maxDispatch === 0;
   const promise = beforeCutoff
-    ? `Voor ${cutoffHour}:00 besteld, ${standard.dateLabel} in huis`
-    : `Bezorging ${standard.dateLabel}`;
+    ? S.promiseBeforeCutoff(cutoffHour, standard.dateLabel)
+    : S.promiseAfter(standard.dateLabel);
 
   return { inStock: plan.fullyAllocated, fromWarehouseOnly, isSplit, hasStoreSource, promise, cutoffHour, note, standard, express };
 }
