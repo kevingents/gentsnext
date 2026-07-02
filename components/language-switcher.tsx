@@ -21,7 +21,11 @@ export function LanguageSwitcher({ current }: { current: Locale }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Taal wijzigen"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        // De zichtbare code (bv. "DE") moet in de toegankelijke naam zitten (WCAG 2.5.3),
+        // dus begint de aria-label ermee i.p.v. alleen "Taal wijzigen".
+        aria-label={`${current.toUpperCase()} — taal wijzigen`}
         className="flex items-center gap-1 font-sans text-xs uppercase tracking-wide text-ink-soft transition-colors hover:text-ink"
       >
         {current}

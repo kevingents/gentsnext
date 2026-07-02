@@ -61,7 +61,7 @@ export async function SiteFooter() {
             {" · "}
             <CookieSettingsLink className="underline hover:text-canvas/80" />
           </p>
-          <p className="font-sans text-xs text-canvas/45">
+          <p className="font-sans text-xs text-canvas/60">
             © {new Date().getFullYear()} GENTS — Suits You. Alle prijzen incl. btw. Een geschil los je samen op; lukt dat niet, dan kun je terecht bij de{" "}
             <a href="https://www.sgc.nl" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">Geschillencommissie Thuiswinkel</a>{" "}
             of het{" "}
