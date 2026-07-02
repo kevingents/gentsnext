@@ -181,6 +181,10 @@ export function BuyBox({
   }, [active, selectedSize]);
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? "vanaf " : "") + formatEuro(priceCents);
+  // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
+  // referentieprijs écht hoger is dan de getoonde prijs — anders zou bij een
+  // duurdere maat een doorgestreepte lagere prijs een prijsVERHOGING suggereren.
+  const hasDiscount = Boolean(referenceCents && referenceCents > priceCents);
   const soldOut = Boolean(selectedSize && selectedSize.known && selectedSize.qty <= 0);
   // Hele kleur/product uitverkocht: geen enkele bekende maat heeft voorraad.
   const allSoldOut = Boolean(
@@ -216,18 +220,18 @@ export function BuyBox({
       ) : null}
 
       <div className="mt-4 flex items-baseline gap-3">
-        {referenceCents ? (
-          <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents)}</span>
+        {hasDiscount ? (
+          <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents!)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
-        {referenceCents && referenceCents > priceCents ? (
+        {hasDiscount ? (
           <span className="rounded bg-danger/10 px-1.5 py-0.5 font-sans text-xs font-medium text-danger">
-            −{Math.round((1 - priceCents / referenceCents) * 100)}%
+            −{Math.round((1 - priceCents / referenceCents!) * 100)}%
           </span>
         ) : null}
         <span className="font-sans text-xs text-muted">{t("common.vat")}</span>
       </div>
-      {referenceCents ? (
+      {hasDiscount ? (
         <p className="mt-1 font-sans text-xs text-muted">
           {t("pdp.price.reference")}
         </p>
