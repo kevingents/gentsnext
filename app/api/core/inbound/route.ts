@@ -3,7 +3,7 @@ import { coreAuth } from "@/lib/store-core-token";
 import {
   createInboundShipment, listInboundShipments, openInboundForStore, getInboundShipment,
   setShipmentStatus, startReceiving, scanReceipt, deleteReceiptCount, receiveShipment,
-  inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, resolveCode, flagReceiptLine, type ExpectedLine,
+  inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, pickTransferByLinkRef, resolveCode, flagReceiptLine, type ExpectedLine,
 } from "@/lib/inbound";
 import { listOpenDiscrepancies, resolveDiscrepancy, getReceivingStats } from "@/lib/inbound-discrepancies";
 import { adviseShipMethod } from "@/lib/transfer-routes";
@@ -66,7 +66,9 @@ export async function POST(req: Request) {
       case "receive":
         return NextResponse.json(await receiveShipment(String(b.id || ""), b.receivedBy));
       case "transfer-out":
-        return NextResponse.json(await createInterstoreTransfer({ fromStore: b.fromStore || "", toStore: b.toStore || "", expectedLines: b.expectedLines, skuExpected: b.skuExpected, createdBy: b.by, note: b.note, shipMethod: b.shipMethod, plannedRouteDate: b.plannedRouteDate, urgent: b.urgent }));
+        return NextResponse.json(await createInterstoreTransfer({ fromStore: b.fromStore || "", toStore: b.toStore || "", expectedLines: b.expectedLines, skuExpected: b.skuExpected, createdBy: b.by, note: b.note, shipMethod: b.shipMethod, plannedRouteDate: b.plannedRouteDate, urgent: b.urgent, status: b.status }));
+      case "pick":
+        return NextResponse.json(await pickTransferByLinkRef(b.linkRef || ""));
       case "ship-advice":
         return NextResponse.json({ ok: true, advice: await adviseShipMethod(b.fromStore || "", b.toStore || "", !!b.urgent) });
       case "resolve": {
