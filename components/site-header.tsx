@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
+import { HideOnCheckout } from "@/components/hide-on-checkout";
 import { CartButton } from "@/components/cart/cart-button";
 import { WishlistLink } from "@/components/wishlist/wishlist-link";
 import { AnnouncementBar } from "@/components/announcement-bar";
@@ -72,12 +73,14 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
         </div>
       </div>
 
-      {/* Onderrij: het volledige mega-menu (alleen desktop). */}
-      <div className="hidden border-t border-line lg:block">
-        <div className="mx-auto max-w-page px-gutter py-2.5">
-          <MegaMenuBar items={menu} />
+      {/* Onderrij: het volledige mega-menu (alleen desktop; niet op de checkout — focus). */}
+      <HideOnCheckout>
+        <div className="hidden border-t border-line lg:block">
+          <div className="mx-auto max-w-page px-gutter py-2.5">
+            <MegaMenuBar items={menu} />
+          </div>
         </div>
-      </div>
+      </HideOnCheckout>
     </header>
   );
 }

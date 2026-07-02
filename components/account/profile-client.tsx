@@ -5,6 +5,7 @@ import { formatEuro } from "@/lib/pricing";
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
+import { AppleWalletButton } from "@/components/account/apple-wallet-button";
 import type { ProductCardData } from "@/lib/catalog";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
@@ -82,7 +83,7 @@ const RET_STATUS_NL: Record<string, string> = {
 
 const NEXT_TIER = 500; // punten voor de volgende beloning
 
-export function ProfileClient({ customer, data }: { customer: Customer; data: Data }) {
+export function ProfileClient({ customer, data, walletEnabled = false }: { customer: Customer; data: Data; walletEnabled?: boolean }) {
   const [tab, setTab] = useState<TabKey>("overzicht");
   const name = customer.firstName || customer.email.split("@")[0];
 
@@ -131,7 +132,7 @@ export function ProfileClient({ customer, data }: { customer: Customer; data: Da
         {tab === "overzicht" && <Overzicht customer={customer} data={data} onTab={setTab} />}
         {tab === "bestellingen" && <Bestellingen data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
-        {tab === "punten" && <Punten data={data} />}
+        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
         {tab === "gegevens" && <Gegevens customer={customer} />}
@@ -471,7 +472,7 @@ function RedeemPoints({ available }: { available: number }) {
   );
 }
 
-function Punten({ data }: { data: Data }) {
+function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean }) {
   return (
     <div className="space-y-6">
       <div className="border border-line p-6">
@@ -481,6 +482,12 @@ function Punten({ data }: { data: Data }) {
           <p className="mt-1 font-sans text-sm text-ink-soft">+{data.pointsPending} punten in behandeling — beschikbaar na de retourperiode.</p>
         )}
         <p className="mt-2 font-sans text-sm text-ink-soft">Je spaart 1 punt per bestede euro — online én in de winkel. Punten verzilver je voor kortingen en exclusieve acties.</p>
+        {walletEnabled && (
+          <div className="mt-5">
+            <AppleWalletButton />
+            <p className="mt-2 font-sans text-xs text-muted">Zet je spaarpas in Apple Wallet — laat 'm scannen aan de kassa om te sparen en in te wisselen.</p>
+          </div>
+        )}
       </div>
       <RedeemPoints available={data.pointsAvailable} />
       {data.loyalty.length ? (

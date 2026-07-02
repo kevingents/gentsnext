@@ -24,9 +24,14 @@ type Props = {
 export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title, subtitle, primary, secondary }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [src, setSrc] = useState<string | null>(null);
+  // Eerst de afbeelding, dán de video: pas laden nadat de poster geladen is
+  // (afbeelding krijgt zo de volle bandbreedte/LCP), en pas invaden zodra de
+  // video écht speelt (geen flits van een nog-niet-klare video).
+  const [posterLoaded, setPosterLoaded] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !posterLoaded) return;
     const conn = (navigator as any).connection;
     if (conn?.saveData) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -34,7 +39,7 @@ export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title,
     // Op smalle schermen alleen als er een lichtere mobiele variant is.
     if (isMobile && !videoUrlMobile) return;
     setSrc(isMobile ? (videoUrlMobile || videoUrl) : videoUrl);
-  }, [videoUrl, videoUrlMobile]);
+  }, [videoUrl, videoUrlMobile, posterLoaded]);
 
   useEffect(() => {
     const v = ref.current;
@@ -54,13 +59,14 @@ export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title,
 
   return (
     <section className="relative h-[72vh] min-h-[460px] w-full overflow-hidden bg-ink">
-      {/* Poster blijft altijd zichtbaar als achtergrond. */}
+      {/* Poster blijft altijd zichtbaar als achtergrond (eerste paint = de afbeelding). */}
       <Image
         src={posterUrl}
         alt=""
         fill
         priority
         sizes="100vw"
+        onLoad={() => setPosterLoaded(true)}
         className="object-cover opacity-90"
       />
       {src ? (
@@ -73,7 +79,8 @@ export function VideoHero({ videoUrl, videoUrlMobile, posterUrl, eyebrow, title,
           playsInline
           preload="metadata"
           aria-hidden
-          className="absolute inset-0 h-full w-full object-cover"
+          onPlaying={() => setPlaying(true)}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${playing ? "opacity-100" : "opacity-0"}`}
         />
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/15 to-transparent" />

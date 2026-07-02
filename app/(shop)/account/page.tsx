@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
 import { getNewArrivalsInSize, getRecommendedFromHistory } from "@/lib/catalog";
+import { walletConfigured } from "@/lib/apple-wallet";
 import { ProfileClient } from "@/components/account/profile-client";
 
 export const dynamic = "force-dynamic";
@@ -35,5 +36,5 @@ export default async function AccountPage() {
     isAdmin: customer.isAdmin,
   };
 
-  return <ProfileClient customer={safeCustomer} data={safe} />;
+  return <ProfileClient customer={safeCustomer} data={safe} walletEnabled={walletConfigured()} />;
 }
