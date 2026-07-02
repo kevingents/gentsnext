@@ -2,6 +2,7 @@
   "crons": [
     { "path": "/api/cron/sync-reviews", "schedule": "0 2 * * *" },
     { "path": "/api/cron/blog", "schedule": "0 9 1,15 * *" },
-    { "path": "/api/cron/translate", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/translate", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/stock-check", "schedule": "0 */4 * * *" }
   ]
 }

@@ -93,6 +93,18 @@ export type Settings = {
     redeemVoucherDays: number;
   };
   /**
+   * Terug-op-voorraad-meldingen: aan/uit + welke kanalen (mail/WhatsApp) mogen
+   * versturen, en of + na hoeveel dagen een klant een ALTERNATIEF-op-maat krijgt
+   * wanneer zijn maat na die periode nog steeds niet terug is.
+   */
+  stockNotifyConfig: {
+    enabled: boolean;
+    emailEnabled: boolean;
+    whatsappEnabled: boolean;
+    alternativeEnabled: boolean;
+    alternativeAfterDays: number;
+  };
+  /**
    * Merchandising-pins: per PLP-context (categorie/collectie) een geordende lijst
    * product-handles die bovenaan de "Aanbevolen"-sort komen. Sleutel = `${kind}:${slug}`
    * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
@@ -155,6 +167,13 @@ export const DEFAULT_SETTINGS: Settings = {
     redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
     redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
   },
+  stockNotifyConfig: {
+    enabled: true,
+    emailEnabled: true,
+    whatsappEnabled: true,
+    alternativeEnabled: true,
+    alternativeAfterDays: num(process.env.GENTS_STOCK_ALT_DAYS, 14),
+  },
   merchandisingPins: {},
 };
 
@@ -179,6 +198,7 @@ export async function getSettings(): Promise<Settings> {
       tieredDiscount: { ...DEFAULT_SETTINGS.tieredDiscount, ...(stored.tieredDiscount || {}) },
       returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
+      stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;
