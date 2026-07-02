@@ -45,31 +45,30 @@ function findCollection(
 }
 
 export default async function Home() {
-  let collections: Awaited<ReturnType<typeof listCollections>> = [];
-  let pakHighlights: Awaited<ReturnType<typeof getHighlights>> = [];
-  let overhemdHighlights: Awaited<ReturnType<typeof getHighlights>> = [];
-  try {
-    [collections, pakHighlights, overhemdHighlights] = await Promise.all([
-      listCollections(),
-      getHighlights("Pakken", 4),
-      getHighlights("Overhemden", 4),
-    ]);
-  } catch {
-    // DB nog niet bereikbaar — hero + USP tonen, rest valt weg.
-  }
-  const featured = CATEGORIES.slice(0, 8);
-  const settings = await getSiteSettings();
-  const looks = await getAllLooks();
-  const heroLook = looks[0] ?? null;
+  // "Populair nu" (analytics, met fallback) start concurrent met de rest — het is een
+  // eigen 2-staps-keten die niet op de andere reads hoeft te wachten.
+  const trendingPromise: Promise<Awaited<ReturnType<typeof getProductsByHandles>>> = (async () => {
+    try {
+      const handles = await getTrendingHandles(14, 8);
+      if (handles.length >= 4) return (await getProductsByHandles(handles)).slice(0, 4);
+    } catch {
+      /* analytics nog leeg */
+    }
+    return [];
+  })();
 
-  // "Populair nu" — op basis van echte view/cart-data (analytics), met fallback.
-  let trending: Awaited<ReturnType<typeof getProductsByHandles>> = [];
-  try {
-    const handles = await getTrendingHandles(14, 8);
-    if (handles.length >= 4) trending = (await getProductsByHandles(handles)).slice(0, 4);
-  } catch {
-    /* analytics nog leeg */
-  }
+  // Alle onafhankelijke reads in één Promise.all i.p.v. sequentieel (geen render-waterfall);
+  // elk fail-soft zodat een lege/niet-bereikbare bron de hero + USP niet omvertrekt.
+  const [collections, pakHighlights, overhemdHighlights, settings, looks] = await Promise.all([
+    listCollections().catch(() => []),
+    getHighlights("Pakken", 4).catch(() => []),
+    getHighlights("Overhemden", 4).catch(() => []),
+    getSiteSettings(),
+    getAllLooks().catch(() => []),
+  ]);
+  const featured = CATEGORIES.slice(0, 8);
+  const heroLook = looks[0] ?? null;
+  const trending = await trendingPromise;
   const siteUrl = getSiteUrl();
   const stores = getStores();
   const orgJsonLd = {

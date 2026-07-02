@@ -129,8 +129,8 @@ export default async function ZoekenPage({ searchParams }: Props) {
 
             <p className="mt-6 font-sans text-sm text-muted">{results.length} artikelen</p>
             <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-              {results.map((p) => (
-                <ProductCard key={p.id} product={p} />
+              {results.map((p, i) => (
+                <ProductCard key={p.id} product={p} priority={i < 8} />
               ))}
             </div>
           </>

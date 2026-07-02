@@ -8,7 +8,7 @@ import { ProductCardBadge } from "@/components/product-card-badge";
 // Brede/kleine accessoires passen niet in de 3:4-tegel met object-cover → heel tonen.
 const FIT_CONTAIN = new Set(["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"]);
 
-export function ProductCard({ product }: { product: ProductCardData }) {
+export function ProductCard({ product, priority = false }: { product: ProductCardData; priority?: boolean }) {
   const contain = FIT_CONTAIN.has(product.category || "");
   return (
     <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
@@ -26,6 +26,8 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             src={product.imageUrl}
             alt={product.imageAlt}
             fill
+            // Boven-de-vouw kaarten (eerste rij) niet lazy-loaden → sneller LCP op de PLP.
+            priority={priority}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain p-4" : "object-cover"} ${product.hoverImageUrl ? "group-hover:opacity-0" : ""}`}
           />

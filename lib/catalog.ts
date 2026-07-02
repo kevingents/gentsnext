@@ -669,35 +669,23 @@ export async function getFilteredProducts(
     : sql``;
   const popJoin = usesPop ? sql` left join pop on pop.handle = ${products.handle}` : sql``;
 
-  // Pagineer op product-id met min-prijs voor de prijs-sortering.
-  const idRows = await db.execute<{ id: string }>(sql`
-    ${withPop}select ${products.id} as id,
-           (select min(v2.price_cents) from ${productVariants} v2 where v2.product_id = ${products.id}) as mp
-    from ${products}${popJoin}
-    where ${whereSql}
-    order by ${order}
-    limit ${perPage} offset ${offset}
-  `);
-  const totalRes = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from ${products} where ${whereSql}
-  `);
+  // Pagineer op product-id met min-prijs voor de prijs-sortering. De kaart-basiskolommen
+  // (handle/title/vendor) selecteren we meteen mee → de aparte hydrate-query vervalt, en
+  // de id- + count-query draaien parallel (scheelt 2 round-trips op neon-http per PLP).
+  const [idRows, totalRes] = await Promise.all([
+    db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
+      ${withPop}select ${products.id} as id, ${products.handle} as handle, ${products.title} as title, ${products.vendor} as vendor,
+             (select min(v2.price_cents) from ${productVariants} v2 where v2.product_id = ${products.id}) as mp
+      from ${products}${popJoin}
+      where ${whereSql}
+      order by ${order}
+      limit ${perPage} offset ${offset}
+    `),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from ${products} where ${whereSql}`),
+  ]);
   const total = Number(totalRes.rows[0]?.n ?? 0);
-
-  const ids = idRows.rows.map((r) => r.id);
-  if (!ids.length) return { items: [], total };
-
-  // Hydrateer kaarten in dezelfde volgorde.
-  const base = await db
-    .select({
-      id: products.id,
-      handle: products.handle,
-      title: products.title,
-      vendor: products.vendor,
-    })
-    .from(products)
-    .where(inArray(products.id, ids));
-  const byId = new Map(base.map((p) => [p.id, p]));
-  const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as typeof base;
+  const ordered = idRows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor }));
+  if (!ordered.length) return { items: [], total };
   return { items: await buildProductCards(ordered), total };
 }
 
