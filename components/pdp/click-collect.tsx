@@ -37,13 +37,16 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
             </svg>
             <span className="flex flex-col gap-0.5">
               <span className="font-medium text-ink">{t("clickCollect.title")}</span>
-              <span className="text-xs text-success">
-                ● {t("clickCollect.available")} {available.length} {available.length === 1 ? t("clickCollect.storeSingular") : t("clickCollect.storePlural")}
-                {openNow > 0 ? <span className="text-muted"> · {openNow} {t("clickCollect.openNow")}</span> : null}
+              <span className="inline-flex items-center gap-1.5 text-xs text-success">
+                <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+                <span>
+                  {t("clickCollect.available")} {available.length} {available.length === 1 ? t("clickCollect.storeSingular") : t("clickCollect.storePlural")}
+                  {openNow > 0 ? <span className="text-muted"> · {openNow} {t("clickCollect.openNow")}</span> : null}
+                </span>
               </span>
             </span>
           </span>
-          <span aria-hidden className="text-muted">→</span>
+          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4 shrink-0 text-muted"><path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </div>
 
@@ -73,8 +76,9 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
                       ) : null}
                     </span>
                     {inStock ? (
-                      <span className="shrink-0 text-xs text-success">
-                        ● {b.qty > 5 ? t("clickCollect.modal.inStock") : `Nog ${b.qty}`}
+                      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-success">
+                        <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+                        {b.qty > 5 ? t("clickCollect.modal.inStock") : `Nog ${b.qty}`}
                       </span>
                     ) : (
                       <span className="shrink-0 text-xs text-muted">{t("clickCollect.modal.outOfStock")}</span>

@@ -10,7 +10,7 @@ const COMMON: PdpFaq[] = [
 const BY_HG: Record<string, PdpFaq[]> = {
   Pakken: [
     { q: "Past dit pak slim of modern fit?", a: "Modern fit valt nét aangesloten zonder ergens te trekken. Slim fit is strakker (vooral op borst en taille). Twijfel je? Onze pasvorm-uitleg en maatadvies helpen je in een paar klikken." },
-    { q: "Kan ik de pijp laten innemen?", a: "Ja — in onze winkels passen we de broekpijp gratis voor je op. Vraag ernaar bij het afhalen of bij je pasafspraak." },
+    { q: "Kan ik de pijp laten innemen?", a: "Ja — in onze winkels nemen we de broekpijp voor je op met onze vermaakservice. Vraag ernaar bij het afhalen of bij je pasafspraak." },
     ...COMMON,
   ],
   Colberts: [

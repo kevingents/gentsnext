@@ -18,6 +18,36 @@ import type { ProductRating } from "@/lib/reviews";
 import { useCart } from "@/components/cart/cart-context";
 import { useT } from "@/components/i18n/locale-provider";
 
+/** Klein statusbolletje (SVG i.p.v. tekst-glyph "●"). */
+function Dot() {
+  return (
+    <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0">
+      <circle cx="4" cy="4" r="4" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Belletje — signaleert de terug-op-voorraad-tip. */
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </svg>
+  );
+}
+
+/** Vrachtwagen — bezorging/verzending. */
+function TruckIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 6.5h11v9H3zM14 9.5h3.6L21 13v2.5h-7z" />
+      <circle cx="7" cy="17.5" r="1.6" />
+      <circle cx="17.5" cy="17.5" r="1.6" />
+    </svg>
+  );
+}
+
 export type BuyColor = { color: string; sizes: BuySize[] };
 export type BuySize = {
   size: string;
@@ -48,6 +78,10 @@ type Props = {
   cutoffHour?: number;
   /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
   mySize?: string | null;
+  /** Pasvorm-noot (bv. "Modern fit") — getoond onder de maatkiezer. */
+  fitNote?: string | null;
+  /** Drempel gratis verzending (cents) uit de settings-store. */
+  freeShipThresholdCents?: number;
 };
 
 export function BuyBox({
@@ -68,6 +102,8 @@ export function BuyBox({
   deliveryNote,
   cutoffHour,
   mySize,
+  fitNote,
+  freeShipThresholdCents,
 }: Props) {
   const cart = useCart();
   const t = useT();
@@ -153,9 +189,12 @@ export function BuyBox({
       {vendor ? <p className="label-brand">{vendor}</p> : null}
       <h1 className="mt-2 text-display-md">{title}</h1>
       {rating ? (
-        <div className="mt-2">
+        <a href="#reviews" className="mt-2 inline-flex items-center gap-1.5 hover:opacity-80">
           <RatingStars rating={rating} size="sm" />
-        </div>
+          <span className="font-sans text-xs text-muted underline underline-offset-2">
+            {rating.count > 0 ? t("pdp.rating.readReviews") : t("pdp.rating.beFirst")}
+          </span>
+        </a>
       ) : null}
 
       <div className="mt-4 flex items-baseline gap-3">
@@ -163,6 +202,11 @@ export function BuyBox({
           <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
+        {referenceCents && referenceCents > priceCents ? (
+          <span className="rounded bg-danger/10 px-1.5 py-0.5 font-sans text-xs font-medium text-danger">
+            −{Math.round((1 - priceCents / referenceCents) * 100)}%
+          </span>
+        ) : null}
         <span className="font-sans text-xs text-muted">{t("common.vat")}</span>
       </div>
       {referenceCents ? (
@@ -247,13 +291,26 @@ export function BuyBox({
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
               selectedSize.qty <= 5 ? (
-                <span className="text-danger">● {t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
+                <span className="inline-flex items-center gap-1.5 text-danger"><Dot />{t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
               ) : (
-                <span className="text-success">● {t("pdp.stock.inStock")}</span>
+                <span className="inline-flex items-center gap-1.5 text-success"><Dot />{t("pdp.stock.inStock")}</span>
               )
             ) : (
               <span className="text-muted">{t("pdp.stock.sizeSoldOut", { size: selectedSize.size })}</span>
             )}
+          </p>
+        ) : null}
+        {/* Uitverkochte-maat-hint: maakt de terug-op-voorraad-tip vindbaar. */}
+        {hasStock && !oneSize && !soldOut && active && active.sizes.some((s) => s.known && s.qty <= 0) ? (
+          <p className="mt-2 flex items-center gap-1.5 font-sans text-xs text-muted">
+            <BellIcon className="h-3 w-3 shrink-0" />
+            {t("pdp.size.soldoutRowHint")}
+          </p>
+        ) : null}
+        {/* Pasvorm-noot — pal onder de maatkiezer, op het beslismoment. */}
+        {fitNote ? (
+          <p className="mt-2 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
+            <span className="font-medium text-ink">{t("pdp.fit.prefix")} {fitNote}.</span> {t("pdp.fit.tip")}
           </p>
         ) : null}
         {/* Mail-me zodra een uitverkochte maat is gekozen — ook als het hele
@@ -270,7 +327,19 @@ export function BuyBox({
         ) : null}
       </div>
 
-      {!allSoldOut ? <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} /> : null}
+      {!allSoldOut ? (
+        <>
+          <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
+          {freeShipThresholdCents ? (
+            <p className="mt-2 flex items-center gap-1.5 font-sans text-xs text-ink-soft">
+              <TruckIcon className="h-3.5 w-3.5 shrink-0 text-ink" />
+              {priceCents >= freeShipThresholdCents
+                ? t("pdp.freeShip.now")
+                : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })}
+            </p>
+          ) : null}
+        </>
+      ) : null}
 
       {/* Bestelknop + bewaren — of, als alles uitverkocht is, de mail-me-blok. */}
       {allSoldOut ? (
@@ -305,9 +374,12 @@ export function BuyBox({
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
-          <p className="mt-3 font-sans text-xs text-muted">
-            {t("pdp.fineprint")}
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted">
+            <span>{t("pdp.payment.label")}</span>
+            {["iDEAL", "Visa", "Mastercard", "Bancontact", "Apple Pay"].map((m) => (
+              <span key={m} className="rounded border border-line px-1.5 py-0.5 text-ink-soft">{m}</span>
+            ))}
+          </div>
         </>
       )}
 
@@ -318,7 +390,7 @@ export function BuyBox({
 
       {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is. */}
       {stickyOn && !allSoldOut ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 backdrop-blur lg:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-page items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate font-sans text-xs text-muted">{title}</p>
