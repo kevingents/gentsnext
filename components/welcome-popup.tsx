@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/i18n/locale-provider";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 
 const KEY = "gents-welcome-v1";
 
@@ -17,6 +18,7 @@ export function WelcomePopup() {
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [code, setCode] = useState("");
   const [err, setErr] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -83,12 +85,16 @@ export function WelcomePopup() {
     }
   }
 
+  // Focus-trap + Esc + scroll-lock + focus-terugkeer + achtergrond inert. De popup
+  // rendert als sibling van #main, dus inertMain is veilig.
+  useModalA11y(panelRef, { onClose: close, active: show, inertMain: true });
+
   if (!show) return null;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={t("welcome.dialogAriaLabel")}>
       <div className="absolute inset-0 bg-ink/50" onClick={close} />
-      <div className="relative w-full max-w-md overflow-hidden border border-line bg-canvas shadow-pop">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full max-w-md overflow-hidden border border-line bg-canvas shadow-pop focus:outline-none">
         <button type="button" onClick={close} aria-label={t("common.close")} className="absolute right-3 top-3 z-10 text-muted hover:text-ink">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -115,11 +121,14 @@ export function WelcomePopup() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); if (err) { setErr(""); setState("idle"); } }}
                 placeholder={t("newsletter.emailPlaceholder")}
+                aria-label={t("newsletter.emailPlaceholder")}
+                aria-invalid={state === "fail" || undefined}
+                aria-describedby={err ? "welcome-email-err" : undefined}
                 className="mt-4 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
               />
-              {err ? <p className="mt-1 font-sans text-xs text-danger">{err}</p> : null}
+              {err ? <p id="welcome-email-err" role="alert" className="mt-1 font-sans text-xs text-danger">{err}</p> : null}
               <button type="submit" disabled={state === "busy"} className="btn-primary mt-3 w-full">
                 {state === "busy" ? t("common.processing") : t("welcome.submit")}
               </button>

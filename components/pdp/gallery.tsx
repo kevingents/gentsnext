@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { rowSortIndex } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 
 type SizeMedia = { threshold: string; url: string; alt: string };
 // `contain`: hele beeld tonen (object-contain) i.p.v. bijsnijden — voor staande
@@ -55,16 +56,20 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
     (dir: number) => setLightbox((cur) => (cur === null ? cur : (cur + dir + shots.length) % shots.length)),
     [shots.length],
   );
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  // Focus-trap + Esc + scroll-lock + focus-terugkeer. inertMain=false: de lightbox
+  // rendert BINNEN #main, dus die mag niet inert gezet worden (zou zichzelf raken).
+  useModalA11y(lightboxRef, { onClose: close, active: lightbox !== null, inertMain: false });
   useEffect(() => {
     if (lightbox === null) return;
+    // Alleen de pijltjes hier; Escape sluit via useModalA11y.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
       if (e.key === "ArrowRight") step(1);
       if (e.key === "ArrowLeft") step(-1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox, close, step]);
+  }, [lightbox, step]);
 
   if (!shots.length) {
     return (
@@ -158,7 +163,7 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
       ) : null}
 
       {lightbox !== null ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4" role="dialog" aria-modal="true" aria-label="Foto vergroot">
+        <div ref={lightboxRef} tabIndex={-1} className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4 focus:outline-none" role="dialog" aria-modal="true" aria-label="Foto vergroot">
           <button type="button" onClick={close} aria-label="Sluiten" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" /></svg>
           </button>
