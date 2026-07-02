@@ -13,6 +13,7 @@ import { localeAlternates } from "@/lib/seo";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
+import { getMerchandisingPins } from "@/lib/merchandising";
 
 export const dynamic = "force-dynamic";
 
@@ -52,12 +53,16 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
   const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);
   const mySize = my ? { row: my.row, raw: my.raw } : null;
-  // Gepersonaliseerde boost alleen op de default ("Aanbevolen") en alleen ingelogd.
-  const tasteCats =
-    sel.sort === "aanbevolen" && sessionCustomer?.id ? await getCustomerTasteCats(sessionCustomer.id) : [];
+  // Personalisatie + merchandising-pins alleen op de default ("Aanbevolen").
+  const isDefault = sel.sort === "aanbevolen";
+  const [tasteCats, pinnedHandles] = await Promise.all([
+    isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
+    isDefault ? getMerchandisingPins("categorie", slug) : Promise.resolve([]),
+  ]);
   const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
     mySizeRows: my ? [my.row] : [],
     tasteCats,
+    pinnedHandles,
   });
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 

@@ -92,6 +92,12 @@ export type Settings = {
     /** Geldigheid van de ingewisselde tegoedbon (dagen). */
     redeemVoucherDays: number;
   };
+  /**
+   * Merchandising-pins: per PLP-context (categorie/collectie) een geordende lijst
+   * product-handles die bovenaan de "Aanbevolen"-sort komen. Sleutel = `${kind}:${slug}`
+   * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
+   */
+  merchandisingPins: Record<string, string[]>;
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -149,6 +155,7 @@ export const DEFAULT_SETTINGS: Settings = {
     redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
     redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
   },
+  merchandisingPins: {},
 };
 
 let _cache: Settings | null = null;
