@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { formatEuro } from "@/lib/pricing";
 import { track } from "@/lib/track-client";
 import { useT } from "@/components/i18n/locale-provider";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import type { ProductCardData } from "@/lib/catalog";
 
 /**
@@ -20,19 +21,18 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
   const [items, setItems] = useState<ProductCardData[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Focus (op het zoekveld = eerste focusable), scroll-lock, focus-trap, Esc en
+  // achtergrond inert komen uit de gedeelde hook (portal → body, dus inertMain veilig).
+  useModalA11y(panelRef, { onClose, active: open, inertMain: true });
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+    // Alleen de zoekstaat resetten bij sluiten; de rest doet useModalA11y.
+    if (!open) {
       setQ("");
       setItems([]);
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
   }, [open]);
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
   const tree = (
     <div className="fixed inset-0 z-[70]" role="dialog" aria-label={t("search.label")} aria-modal="true">
       <div className="absolute inset-0 bg-ink/30" onClick={onClose} />
-      <div className="absolute inset-x-0 top-0 max-h-[90vh] overflow-y-auto bg-canvas shadow-pop">
+      <div ref={panelRef} tabIndex={-1} className="absolute inset-x-0 top-0 max-h-[90vh] overflow-y-auto bg-canvas shadow-pop focus:outline-none">
         <div className="mx-auto max-w-page px-gutter py-5">
           <form
             action="/zoeken"

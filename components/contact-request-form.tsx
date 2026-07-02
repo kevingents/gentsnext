@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
@@ -31,18 +31,28 @@ export function ContactRequestForm({
   const [form, setForm] = useState<Record<string, string>>({});
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
+  const [invalid, setInvalid] = useState<Set<string>>(new Set());
+  const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
+  const errId = `contact-err-${channel}`;
 
   function set(k: string, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
+    if (invalid.has(k)) setInvalid((prev) => { const n = new Set(prev); n.delete(k); return n; });
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.email || !form.message) {
+    const missing = ["name", "email", "message"].filter((k) => !String(form[k] || "").trim());
+    if (missing.length) {
+      setInvalid(new Set(missing));
       setMsg(t("forms.contact.required"));
       setState("fail");
+      // Focus het eerste ontbrekende veld zodat een toetsenbord-/screenreader-
+      // gebruiker meteen bij de fout staat.
+      fieldRefs.current[missing[0]]?.focus();
       return;
     }
+    setInvalid(new Set());
     setState("busy");
     setMsg("");
     try {
@@ -86,23 +96,31 @@ export function ContactRequestForm({
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="font-sans text-sm">{t("forms.contact.name")}</span>
+          <span className="font-sans text-sm">{t("forms.contact.name")}<span aria-hidden className="text-danger"> *</span></span>
           <input
             type="text"
             required
+            aria-required
+            aria-invalid={invalid.has("name") || undefined}
+            aria-describedby={invalid.has("name") ? errId : undefined}
+            ref={(el) => { fieldRefs.current.name = el; }}
             value={form.name || ""}
             onChange={(e) => set("name", e.target.value)}
-            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            className={`mt-1 w-full border bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none ${invalid.has("name") ? "border-danger" : "border-line"}`}
           />
         </label>
         <label className="block">
-          <span className="font-sans text-sm">{t("forms.contact.email")}</span>
+          <span className="font-sans text-sm">{t("forms.contact.email")}<span aria-hidden className="text-danger"> *</span></span>
           <input
             type="email"
             required
+            aria-required
+            aria-invalid={invalid.has("email") || undefined}
+            aria-describedby={invalid.has("email") ? errId : undefined}
+            ref={(el) => { fieldRefs.current.email = el; }}
             value={form.email || ""}
             onChange={(e) => set("email", e.target.value)}
-            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            className={`mt-1 w-full border bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none ${invalid.has("email") ? "border-danger" : "border-line"}`}
           />
         </label>
         <label className="block">
@@ -150,19 +168,23 @@ export function ContactRequestForm({
           </label>
         ) : null}
         <label className="block sm:col-span-2">
-          <span className="font-sans text-sm">{t("forms.contact.message")}</span>
+          <span className="font-sans text-sm">{t("forms.contact.message")}<span aria-hidden className="text-danger"> *</span></span>
           <textarea
             required
+            aria-required
+            aria-invalid={invalid.has("message") || undefined}
+            aria-describedby={invalid.has("message") ? errId : undefined}
+            ref={(el) => { fieldRefs.current.message = el; }}
             rows={4}
             value={form.message || ""}
             onChange={(e) => set("message", e.target.value)}
-            className="mt-1 w-full resize-y border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            className={`mt-1 w-full resize-y border bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none ${invalid.has("message") ? "border-danger" : "border-line"}`}
           />
         </label>
       </div>
 
       {msg && state !== "busy" ? (
-        <p role="alert" className={`mt-4 font-sans text-sm ${state === "fail" ? "text-danger" : "text-ink-soft"}`}>
+        <p id={errId} role="alert" className={`mt-4 font-sans text-sm ${state === "fail" ? "text-danger" : "text-ink-soft"}`}>
           {msg}
         </p>
       ) : null}

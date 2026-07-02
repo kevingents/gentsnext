@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import {
   rowsForCategory,
   cmText,
@@ -32,6 +33,9 @@ function chartFor(hg: string): { category?: ChartCategory; boord?: boolean } {
 export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string; pageHandle?: string | null }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Focus-trap + Esc + scroll-lock + focus-terugkeer + achtergrond inert (portal → body).
+  useModalA11y(panelRef, { onClose: () => setOpen(false), active: open, inertMain: true });
   const target = chartFor(hoofdgroep);
   const hubSlug = hubSlugForHoofdgroep(hoofdgroep);
   if (!target.category && !target.boord) return null;
@@ -45,7 +49,7 @@ export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string
         ? createPortal(
             <div className="fixed inset-0 z-[60]" role="dialog" aria-label={t("pdp.size.chart")} aria-modal="true">
               <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
-              <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer">
+              <div ref={panelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer focus:outline-none">
                 <div className="flex items-center justify-between border-b border-line px-5 py-4">
                   <p className="font-display text-lg">Onze maattabel</p>
                   <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">{t("common.close")}</button>
