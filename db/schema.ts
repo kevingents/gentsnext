@@ -92,6 +92,11 @@ export const products = pgTable(
     index("products_status_idx").on(t.status),
     index("products_visible_idx").on(t.status, t.hasImage, t.inStock),
     index("products_variant_group_idx").on(t.variantGroupKey),
+    // Expressie-indexen op de hot JSON-attributen: de PLP filtert/facetteert per
+    // hoofdgroep en de merkpagina's per merk. Zonder deze indexen seq-scant elke
+    // PLP-query ~2900 producten (~15-19ms/query); met index → index-scan (~1-2ms).
+    index("products_hoofdgroep_idx").on(sql`((attributes ->> 'hoofdgroep_omschrijving'))`),
+    index("products_merk_idx").on(sql`((attributes ->> 'merk'))`),
   ]
 );
 
