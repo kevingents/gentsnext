@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
   let order;
   try {
-    order = await createOrder(c as never, items, deliveryMethod, "", "", pickupStore);
+    order = await createOrder(c as never, items, deliveryMethod, "", "", pickupStore, storeName);
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Bestelling mislukt." }, { status: 400 });
   }

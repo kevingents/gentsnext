@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "sold_by_store" text DEFAULT '' NOT NULL;
