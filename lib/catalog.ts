@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getDb } from "@/db";
 import {
@@ -264,7 +265,10 @@ export async function getCollectionProducts(collectionId: string, page: number, 
   };
 }
 
-export async function getProductByHandle(handle: string) {
+// React.cache: dedupliceert de aanroep binnen één request. De PDP haalt het product
+// zowel in generateMetadata als in de page op — zonder dit zijn dat 2× ~5 queries.
+// Request-scoped (geen cross-request cache, geen serialisatie) → altijd verse data.
+export const getProductByHandle = cache(async (handle: string) => {
   const db = getDb();
   const rows = await db
     .select()
@@ -299,7 +303,7 @@ export async function getProductByHandle(handle: string) {
     : null;
 
   return { product, variants, images, collections: links, sizeMedia };
-}
+});
 
 export async function listProductHandles(limit = 50000) {
   const db = getDb();
