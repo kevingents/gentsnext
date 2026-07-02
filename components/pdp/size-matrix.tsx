@@ -25,6 +25,16 @@ const COLUMNS: Record<string, Column[]> = {
   ],
 };
 
+/** Belletje op uitverkochte maten — signaleert dat je je kunt laten tippen zodra 'ie terug is. */
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </svg>
+  );
+}
+
 function Cell({
   cell,
   selected,
@@ -45,6 +55,7 @@ function Cell({
       type="button"
       onClick={() => onSelect(cell.size)}
       aria-pressed={on}
+      aria-label={out ? `${sizeToken(cell.size)} — ${soldOutHint}` : undefined}
       title={out ? soldOutHint : low ? `Nog ${cell.qty} op voorraad` : undefined}
       className={`relative flex h-10 w-full items-center justify-center border font-sans text-sm transition-colors ${
         on
@@ -57,7 +68,11 @@ function Cell({
       }`}
     >
       <span className={out ? "line-through decoration-muted" : undefined}>{sizeToken(cell.size)}</span>
-      {low ? <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" /> : null}
+      {out ? (
+        <BellIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-ink-soft" />
+      ) : low ? (
+        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" />
+      ) : null}
     </button>
   );
 }
@@ -106,6 +121,7 @@ export function SizeMatrix({
                 type="button"
                 onClick={() => onSelect(s.size)}
                 aria-pressed={on}
+                aria-label={out ? `${sizeToken(s.size)} — ${soldOutHint}` : undefined}
                 title={out ? soldOutHint : low ? `Nog ${s.qty} op voorraad` : undefined}
                 className={`flex min-w-[3rem] flex-col items-center border px-3 py-2 text-center font-sans text-sm transition-colors ${
                   on
@@ -119,7 +135,10 @@ export function SizeMatrix({
               >
                 <span className={out ? "line-through decoration-muted" : undefined}>{sizeToken(s.size)}</span>
                 {out ? (
-                  <span className="mt-0.5 text-[0.6rem] text-muted">{t("pdp.size.soldoutTile")}</span>
+                  <span className="mt-0.5 flex items-center gap-1 text-[0.6rem] text-muted">
+                    <BellIcon className="h-2.5 w-2.5" />
+                    {t("pdp.size.soldoutTile")}
+                  </span>
                 ) : low ? (
                   <span className="mt-0.5 text-[0.6rem] text-danger">nog {s.qty}</span>
                 ) : null}
