@@ -98,7 +98,9 @@ export function BuyBox({
   }, [active, mySize, myBucket, size]);
   const isMySize = Boolean(size && myBucket && sizeRowLabel(size) === myBucket);
 
-  // Eén beschikbare maat → meteen voorselecteren (scheelt een klik).
+  // Precies één maat → meteen voorselecteren (scheelt een klik). Is die ene maat
+  // uitverkocht, dan wordt 'ie óók geselecteerd: de klant ziet de maat en krijgt
+  // meteen de terug-op-voorraad-tip (add-to-cart blijft geblokkeerd).
   const singleSize = Boolean(active && active.sizes.length === 1);
   // ECHTE one-size (accessoires: "One"/"OS") → maatkiezer verbergen. Eén NORMALE
   // restmaat (bv. laatste pak in maat 50) blijft de maat tonen (klant moet 'm zien).
@@ -254,8 +256,9 @@ export function BuyBox({
             )}
           </p>
         ) : null}
-        {/* Mail-me bij een uitverkochte gekozen maat (niet als het hele product op is). */}
-        {soldOut && !allSoldOut ? (
+        {/* Mail-me zodra een uitverkochte maat is gekozen — ook als het hele
+            product op is (dan vervangt de per-maat-vorm de generieke block-vorm). */}
+        {soldOut ? (
           <StockNotify
             productHandle={productHandle}
             productTitle={title}
@@ -278,12 +281,16 @@ export function BuyBox({
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
-          <StockNotify
-            productHandle={productHandle}
-            productTitle={title}
-            color={active?.color}
-            variant="block"
-          />
+          {/* Generieke mail-me — alleen zolang de klant nog geen specifieke
+              (uitverkochte) maat koos; dan toont de per-maat-vorm hierboven. */}
+          {!soldOut ? (
+            <StockNotify
+              productHandle={productHandle}
+              productTitle={title}
+              color={active?.color}
+              variant="block"
+            />
+          ) : null}
         </div>
       ) : (
         <>

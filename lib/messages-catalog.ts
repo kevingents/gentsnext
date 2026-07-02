@@ -630,6 +630,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.size.my": "Jouw maat",
   "pdp.size.mysize": "Jouw maat",
   "pdp.size.soldout": "Tijdelijk uitverkocht.",
+  "pdp.size.soldoutHint": "Uitverkocht — klik om je te laten tippen zodra deze maat terug is",
+  "pdp.size.soldoutTile": "Uitverkocht",
   "pdp.specs.brand": "Merk",
   "pdp.specs.closure": "Sluiting",
   "pdp.specs.collar": "Boord",
