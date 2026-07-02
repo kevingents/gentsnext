@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { estimateDelivery } from "@/lib/fulfillment";
+import { getLocale } from "@/lib/locale-server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,8 @@ export async function POST(req: Request) {
           .slice(0, 50)
       : [];
     if (!items.length) return NextResponse.json({ estimate: null });
-    const estimate = await estimateDelivery(items, { country: String(body?.country || "NL") });
+    const locale = await getLocale();
+    const estimate = await estimateDelivery(items, { country: String(body?.country || "NL"), locale });
     return NextResponse.json({ estimate });
   } catch (e) {
     return NextResponse.json({ estimate: null, error: e instanceof Error ? e.message : "fout" }, { status: 200 });

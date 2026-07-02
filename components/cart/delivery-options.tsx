@@ -72,26 +72,39 @@ export function DeliveryOptions({
         return (
           <label
             key={method}
-            className={`flex cursor-pointer items-start gap-3 border p-4 transition-colors ${active ? "border-ink" : "border-line hover:border-muted"}`}
+            className={`flex cursor-pointer items-center gap-3 border px-3 py-2.5 transition-colors ${active ? "border-ink" : "border-line hover:border-muted"}`}
           >
             <input
               type="radio"
               name="delivery"
               checked={active}
               onChange={() => onChange(method, option.surchargeCents)}
-              className="mt-1 accent-ink"
+              className="accent-ink"
             />
-            <span className="flex-1">
-              <span className="flex items-center justify-between">
-                <span className="font-sans text-sm font-medium">
-                  {title} <span className="font-normal text-muted">· {option.rangeLabel}</span>
-                </span>
-                <span className="font-sans text-sm">
-                  {option.surchargeCents > 0 ? `+ ${formatEuro(option.surchargeCents)}` : t("checkout.free")}
+            {/* Icoon: vrachtwagen (standaard) of bliksem (sneller) */}
+            <span aria-hidden className="shrink-0 text-ink">
+              {method === "express" ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+                  <path d="M13 2 5 13h5l-1 9 9-12h-5z" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6.5h11v9H3zM14 9.5h3.6L21 13v2.5h-7z" />
+                  <circle cx="7" cy="17.5" r="1.6" />
+                  <circle cx="17.5" cy="17.5" r="1.6" />
+                </svg>
+              )}
+            </span>
+            {/* Eén heldere belofte: titel + concrete bezorgdag (geen dubbele range meer) */}
+            <span className="flex flex-1 items-center justify-between gap-2">
+              <span className="font-sans text-sm leading-tight">
+                <span className="font-medium">{title}</span>
+                <span className="mt-0.5 block text-xs text-ink-soft">
+                  {t("delivery.deliveredOn")} <strong className="text-ink">{option.dateLabel}</strong>
                 </span>
               </span>
-              <span className="mt-0.5 block font-sans text-xs text-ink-soft">
-                {t("delivery.deliveredOn")} <strong>{option.dateLabel}</strong>
+              <span className="shrink-0 font-sans text-sm font-medium">
+                {option.surchargeCents > 0 ? `+ ${formatEuro(option.surchargeCents)}` : t("checkout.free")}
               </span>
             </span>
           </label>
