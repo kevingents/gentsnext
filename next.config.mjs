@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // De Apple-Wallet-route leest de merk-PNG's van schijf; bundel die expliciet mee
+  // in de serverless functie (public/ wordt anders niet in de lambda opgenomen).
+  outputFileTracingIncludes: {
+    '/api/wallet/apple': ['./public/brand/brand-logo-vierkant.png', './public/brand/brand-logo-zwart.png'],
+  },
   images: {
     // Modern AVIF eerst (kleiner, betere kwaliteit), WebP als fallback.
     formats: ['image/avif', 'image/webp'],

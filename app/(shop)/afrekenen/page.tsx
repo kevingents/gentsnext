@@ -26,8 +26,8 @@ type Field = {
 const FIELDS: Field[] = [
   { name: "firstName", label: "Voornaam", col: 1, autoComplete: "given-name" },
   { name: "lastName", label: "Achternaam", col: 1, autoComplete: "family-name" },
-  { name: "email", label: "E-mailadres", col: 2, type: "email", autoComplete: "email", inputMode: "email" },
-  { name: "phone", label: "Telefoon (optioneel)", col: 2, type: "tel", optional: true, autoComplete: "tel", inputMode: "tel" },
+  { name: "email", label: "E-mailadres", col: 1, type: "email", autoComplete: "email", inputMode: "email" },
+  { name: "phone", label: "Telefoon (optioneel)", col: 1, type: "tel", optional: true, autoComplete: "tel", inputMode: "tel" },
   { name: "postalCode", label: "Postcode", col: 1, autoComplete: "postal-code", placeholder: "1234 AB" },
   { name: "houseNumber", label: "Huisnummer", col: 1, autoComplete: "address-line2", inputMode: "numeric", placeholder: "12" },
   { name: "street", label: "Straat", col: 1, autoComplete: "address-line1" },
@@ -37,15 +37,15 @@ const FIELDS: Field[] = [
 const POSTCODE_RE = /^[1-9][0-9]{3}\s?[a-zA-Z]{2}$/;
 const HOUSENR_RE = /^[0-9]+[a-zA-Z0-9 -]*$/;
 
-function Steps() {
+function Steps({ step }: { step: "gegevens" | "betalen" }) {
   const steps: { label: string; done?: boolean; active?: boolean }[] = [
     { label: "Winkelwagen", done: true },
-    { label: "Gegevens & bezorging", active: true },
-    { label: "Betalen" },
+    { label: "Gegevens & bezorging", done: step === "betalen", active: step === "gegevens" },
+    { label: "Betalen", active: step === "betalen" },
     { label: "Bevestiging" },
   ];
   return (
-    <ol className="mt-5 flex items-center">
+    <ol className="mt-3 flex items-center">
       {steps.map((s, i) => (
         <li key={s.label} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
           <span className="flex shrink-0 items-center gap-2">
@@ -87,6 +87,8 @@ function CheckoutForm() {
   const [notice, setNotice] = useState("");
   // SKU's die de voorraad-gate weigerde — markeren + in één klik verwijderbaar.
   const [unavailableSkus, setUnavailableSkus] = useState<string[]>([]);
+  // Stappen-checkout: gegevens → betalen (één sectie per scherm, past op elke resolutie).
+  const [step, setStep] = useState<"gegevens" | "betalen">("gegevens");
 
   // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm).
   type PayMethod = { id: string; description: string; image: string };
@@ -152,6 +154,20 @@ function CheckoutForm() {
       return d !== 0 ? d : x.name.localeCompare(y.name, "nl");
     });
   }, [stores, pickupAvail]);
+  // Toon alleen filialen waar (een deel van) de bestelling op voorraad ligt — verberg
+  // de 0-op-voorraad-winkels. Nog geen data → alles tonen (nooit terugvallen op leeg).
+  const pickupStores = useMemo(() => {
+    const withStock = storesByAvail.filter((s) => {
+      const a = pickupAvail[s.name];
+      return !a || a.total === 0 || a.okCount > 0;
+    });
+    return withStock.length ? withStock : storesByAvail;
+  }, [storesByAvail, pickupAvail]);
+  // Viel de gekozen winkel weg uit de lijst (geen voorraad) → schakel naar de beste.
+  useEffect(() => {
+    if (!pickupMode || !pickupStores.length) return;
+    if (!pickupStores.some((s) => s.name === pickupStore)) setPickupStore(pickupStores[0].name);
+  }, [pickupMode, pickupStores, pickupStore]);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
   const [tiered, setTiered] = useState<TieredDiscountCfg | null>(null);
@@ -281,6 +297,23 @@ function CheckoutForm() {
     );
   }
 
+  // Stap 1 → 2: valideer gegevens & bezorging vóór we naar betalen gaan.
+  function goToPayment() {
+    setError("");
+    if (pickupMode) {
+      if (!pickupStore) { setError("Kies een winkel om af te halen."); return; }
+    } else {
+      if (!POSTCODE_RE.test(form.postalCode || "")) { setError("Vul een geldige postcode in (bijv. 1234 AB)."); return; }
+      if (!HOUSENR_RE.test((form.houseNumber || "").trim())) { setError("Vul een geldig huisnummer in (begint met een cijfer)."); return; }
+    }
+    if (!(form.firstName || "").trim() || !(form.lastName || "").trim() || !/.+@.+\..+/.test(form.email || "")) {
+      setError("Vul je naam en een geldig e-mailadres in."); return;
+    }
+    if (business && !(form.companyName || "").trim()) { setError("Vul de bedrijfsnaam in voor een zakelijke bestelling."); return; }
+    setError("");
+    setStep("betalen");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -354,9 +387,11 @@ function CheckoutForm() {
   }
 
   return (
-    <div className="mx-auto max-w-page px-gutter py-12">
-      <h1 className="text-display-md">Afrekenen</h1>
-      <Steps />
+    <div className="mx-auto max-w-page px-gutter py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h1 className="text-2xl font-display font-light sm:text-3xl">Afrekenen</h1>
+        <div className="min-w-[16rem] flex-1"><Steps step={step} /></div>
+      </div>
 
       {canceled ? (
         <div className="mt-6 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft">
@@ -365,13 +400,13 @@ function CheckoutForm() {
       ) : null}
 
       {/* Al klant? — inloggen vult gegevens & adres vast in. Gast blijft mogelijk. */}
-      {prefill && !prefill.loggedIn ? (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm">
-          <span className="text-ink-soft"><span className="font-medium text-ink">Al klant?</span> Log in en we vullen je gegevens en bezorgadres vast in. Als gast bestellen kan gewoon door.</span>
-          <Link href="/account/login?next=/afrekenen" className="btn-ghost !px-4 !py-2 whitespace-nowrap">Inloggen</Link>
+      {step === "gegevens" && prefill && !prefill.loggedIn ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-surface px-3 py-2 font-sans text-xs">
+          <span className="text-ink-soft"><span className="font-medium text-ink">Al klant?</span> Log in — we vullen je gegevens vast in. Als gast bestellen kan ook.</span>
+          <Link href="/account/login?next=/afrekenen" className="btn-ghost !px-3 !py-1 whitespace-nowrap">Inloggen</Link>
         </div>
       ) : null}
-      {prefill?.loggedIn ? (
+      {step === "gegevens" && prefill?.loggedIn ? (
         <div className="mt-6 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-ink-soft"><span className="font-medium text-ink">Welkom terug.</span> We hebben je gegevens vast ingevuld{prefill.email ? ` (${prefill.email})` : ""}.</span>
@@ -387,9 +422,11 @@ function CheckoutForm() {
         </div>
       ) : null}
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="mt-5 grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Formulier */}
         <form onSubmit={submit} noValidate>
+          {step === "gegevens" ? (
+          <>
           {/* Particulier / Zakelijk */}
           <div className="inline-flex rounded-card border border-line p-0.5">
             {([["Particulier", false], ["Zakelijk", true]] as const).map(([label, val]) => (
@@ -409,8 +446,8 @@ function CheckoutForm() {
 
           {business ? (
             <>
-              <p className="label-brand mt-6">Bedrijfsgegevens</p>
-              <div className="mt-4 grid grid-cols-2 gap-4">
+              <p className="label-brand mt-4">Bedrijfsgegevens</p>
+              <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
                 <label className="col-span-2 block">
                   <span className="font-sans text-sm text-ink">Bedrijfsnaam</span>
                   <input
@@ -418,7 +455,7 @@ function CheckoutForm() {
                     onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))}
                     autoComplete="organization"
                     required
-                    className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                    className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
                   />
                 </label>
                 <label className="col-span-2 block">
@@ -430,7 +467,7 @@ function CheckoutForm() {
                     onChange={(e) => setForm((p) => ({ ...p, vatNumber: e.target.value.toUpperCase() }))}
                     autoComplete="off"
                     placeholder="NL000000000B00"
-                    className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                    className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
                   />
                   <span className="mt-1 block font-sans text-xs text-muted">Vermeld je BTW-nummer voor een correcte zakelijke factuur.</span>
                 </label>
@@ -439,7 +476,7 @@ function CheckoutForm() {
           ) : null}
 
           {/* Bezorgen of afhalen in winkel (click & collect) */}
-          <p className="label-brand mt-6">Ontvangen</p>
+          <p className="label-brand mt-4">Ontvangen</p>
           <div className="mt-3 inline-flex rounded-card border border-line p-0.5">
             {([["Bezorgen", false], ["Afhalen in winkel", true]] as const).map(([label, val]) => (
               <button
@@ -458,9 +495,9 @@ function CheckoutForm() {
               <select
                 value={pickupStore}
                 onChange={(e) => setPickupStore(e.target.value)}
-                className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
               >
-                {storesByAvail.map((s) => {
+                {pickupStores.map((s) => {
                   const a = pickupAvail[s.name];
                   const suffix = !a || a.total === 0 ? "" : a.allOk ? " — alles op voorraad" : ` — ${a.okCount}/${a.total} op voorraad`;
                   return <option key={s.name} value={s.name}>{s.name}{suffix}</option>;
@@ -492,8 +529,8 @@ function CheckoutForm() {
             </label>
           ) : null}
 
-          <p className="label-brand mt-6">{pickupMode ? "Contactgegevens" : "Contact & bezorgadres"}</p>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <p className="label-brand mt-4">{pickupMode ? "Contactgegevens" : "Contact & bezorgadres"}</p>
+          <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
             {FIELDS.filter((f) => !pickupMode || !["postalCode", "houseNumber", "street", "city"].includes(f.name)).map((f) => (
               <label key={f.name} className={f.col === 2 ? "col-span-2 block" : "block"}>
                 <span className="font-sans text-sm text-ink">{f.label}</span>
@@ -505,22 +542,33 @@ function CheckoutForm() {
                   value={form[f.name] || ""}
                   onChange={(e) => setForm((p) => ({ ...p, [f.name]: e.target.value }))}
                   required={!f.optional}
-                  className="mt-1.5 w-full border border-line bg-canvas px-4 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                  className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
                 />
               </label>
             ))}
             {!pickupMode ? (
-              <label className="col-span-2 block">
-                <span className="font-sans text-sm text-ink">Land</span>
-                <input value="Nederland" readOnly className="mt-1.5 w-full border border-line bg-surface px-4 py-2.5 font-sans text-sm text-muted" />
-              </label>
+              <p className="col-span-full font-sans text-xs text-muted">Levering binnen Nederland.</p>
             ) : null}
           </div>
+
+          {error ? (
+            <div role="alert" className="mt-4 rounded-card border border-danger/40 bg-danger/5 px-4 py-3 font-sans text-sm text-danger">{error}</div>
+          ) : null}
+          <button type="button" onClick={goToPayment} className="btn-primary mt-5 w-full">
+            Naar betalen
+          </button>
+          </>
+          ) : (
+          <>
+          <button type="button" onClick={() => { setStep("gegevens"); setError(""); }} className="mb-4 inline-flex items-center gap-1 font-sans text-sm text-ink-soft hover:text-ink">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Terug naar gegevens
+          </button>
 
           {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm. */}
           {payableCents > 0 && methods.length ? (
             <>
-              <p className="label-brand mt-6">Betaalmethode</p>
+              <p className="label-brand mt-4">Betaalmethode</p>
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {methods.map((m) => (
                   <button
@@ -541,7 +589,7 @@ function CheckoutForm() {
             </>
           ) : null}
 
-          <label className="mt-6 flex items-start gap-2 font-sans text-sm">
+          <label className="mt-3 flex items-start gap-2 font-sans text-sm">
             <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink" />
             <span className="text-ink-soft">Houd me per e-mail op de hoogte van nieuwe collecties en aanbiedingen. (Je kunt je altijd weer uitschrijven.)</span>
           </label>
@@ -565,7 +613,7 @@ function CheckoutForm() {
             </div>
           ) : null}
 
-          <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
+          <button type="submit" disabled={busy} className="btn-primary mt-4 w-full">
             {busy
               ? "Bezig…"
               : payableCents === 0
@@ -580,13 +628,15 @@ function CheckoutForm() {
                 : `Je rondt af via ${methods.find((m) => m.id === payMethod)?.description || "Mollie"} · totaal incl. btw · gratis retour binnen 14 dagen.`}
             </span>
           </div>
+          </>
+          )}
         </form>
 
         {/* Overzicht */}
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
-          <div className="border border-line p-5">
+        <aside className="lg:sticky lg:top-20 lg:h-fit">
+          <div className="border border-line p-4">
             <p className="label-brand mb-3">Je bestelling</p>
-            <ul className="space-y-3">
+            <ul className="hidden space-y-3 lg:block">
               {cart.lines.map((l) => {
                 const unavailable = unavailableSet.has(l.sku.toLowerCase());
                 return (
@@ -614,6 +664,7 @@ function CheckoutForm() {
                 );
               })}
             </ul>
+            <p className="font-sans text-sm text-ink-soft lg:hidden">{cart.lines.reduce((n, l) => n + l.qty, 0)} artikel(en) in je winkelwagen.</p>
             <div className="mt-4 border-t border-line pt-4">
               {pickupMode ? (
                 <div className="font-sans text-sm">

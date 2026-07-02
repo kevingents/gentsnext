@@ -1038,6 +1038,34 @@ export const posSales = pgTable(
 );
 
 /**
+ * Kassa-dagafsluitingen (Z + kasopmaak) — bron-van-waarheid in de Neon-core.
+ * Vervangt de storegents-blob admin/kassa-closings.json. De blob had geen atomaire
+ * read-modify-write, waardoor een tweede schrijver (bv. de mail-status) een zojuist
+ * vastgelegde afsluiting kon overschrijven. Unieke (store, date) → atomaire upsert,
+ * dus die klasse race-bugs is hier onmogelijk.
+ */
+export const posClosings = pgTable(
+  "pos_closings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    store: text("store").notNull(),
+    date: text("date").notNull(), // YYYY-MM-DD (Europa/Amsterdam)
+    dagstaat: jsonb("dagstaat").notNull(),
+    kasopmaak: jsonb("kasopmaak").notNull(),
+    note: text("note").notNull().default(""),
+    actor: jsonb("actor").notNull().default({}),
+    mailedAt: timestamp("mailed_at", { withTimezone: true }),
+    mailStatus: text("mail_status").notNull().default(""),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pos_closings_store_date_unique").on(t.store, t.date),
+    index("pos_closings_store_date_idx").on(t.store, t.date),
+  ],
+);
+
+/**
  * Inbound goederenontvangst — een zending naar een winkel (replenishment vanuit
  * het magazijn, leverancier-levering of winkel→winkel-herverdeling). DE ASN: wat
  * verwacht wordt + de status (gepickt → onderweg → ontvangen). Gespiegeld op

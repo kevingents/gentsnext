@@ -1,5 +1,6 @@
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { HideOnCheckout } from "@/components/hide-on-checkout";
 import { CartProvider } from "@/components/cart/cart-context";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddedToCartToast } from "@/components/cart/added-toast";
@@ -27,14 +28,15 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           <SkipLink />
           <SiteHeader />
           <main id="main" className="flex-1">{children}</main>
-          <SiteFooter />
+          <HideOnCheckout><SiteFooter /></HideOnCheckout>
           <CartDrawer />
           <AddedToCartToast />
           <CartToast />
           <BackToTop />
           <HelpButton />
           <CookieNotice />
-          <WelcomePopup />
+          {/* Geen welkom-/kortingspopup op de checkout: afleiding vlak vóór betalen. */}
+          <HideOnCheckout><WelcomePopup /></HideOnCheckout>
           <Tracker />
         </div>
       </WishlistProvider>

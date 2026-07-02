@@ -27,6 +27,7 @@
     "@vercel/blob": "^2.4.0",
     "drizzle-orm": "^0.45.2",
     "next": "^15.5.19",
+    "passkit-generator": "^3.5.7",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
