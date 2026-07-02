@@ -122,8 +122,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
-              {items.map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {items.map((product, i) => (
+                <ProductCard key={product.id} product={product} priority={i < 8} />
               ))}
             </div>
           )}
