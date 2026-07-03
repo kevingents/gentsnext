@@ -2,14 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
 import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
 import { CartSuggestions } from "@/components/cart/cart-suggestions";
 import { useT } from "@/components/i18n/locale-provider";
 import { formatEuro } from "@/lib/pricing";
 
-const FREE_SHIPPING_CENTS = 7500; // €50 — instelbaar; gratis verzending-drempel
+// Fallback; de echte, instelbare drempel komt uit /api/promo (freeShippingCents).
+const FREE_SHIPPING_FALLBACK = 7500;
 
 type Group = { groupId?: string; groupLabel?: string; lines: CartLine[] };
 
@@ -38,6 +39,17 @@ export function CartDrawer() {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(cart.close);
   closeRef.current = cart.close;
+
+  // Instelbare gratis-verzending-drempel (loopt mee met de settings; checkout blijft autoritatief).
+  const [freeShipCents, setFreeShipCents] = useState(FREE_SHIPPING_FALLBACK);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/promo")
+      .then((r) => r.json())
+      .then((d) => { if (active && Number(d?.freeShippingCents) > 0) setFreeShipCents(Number(d.freeShippingCents)); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // Toegankelijkheid: scroll-lock + Esc-sluiten + focus-trap + focus-terugkeer.
   useEffect(() => {
@@ -84,8 +96,8 @@ export function CartDrawer() {
 
   if (!cart.isOpen) return null;
 
-  const remaining = Math.max(0, FREE_SHIPPING_CENTS - cart.subtotalCents);
-  const pct = Math.min(100, Math.round((cart.subtotalCents / FREE_SHIPPING_CENTS) * 100));
+  const remaining = Math.max(0, freeShipCents - cart.subtotalCents);
+  const pct = Math.min(100, Math.round((cart.subtotalCents / freeShipCents) * 100));
   const groups = groupLines(cart.lines);
 
   // Slim: meerdere maten van hetzelfde artikel → moedig "houd de beste, retour de rest" aan.

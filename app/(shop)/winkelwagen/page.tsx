@@ -2,12 +2,23 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useCart } from "@/components/cart/cart-context";
 import { formatEuro } from "@/lib/pricing";
 import { BrandedState } from "@/components/brand-state";
 
 export default function WinkelwagenPage() {
   const cart = useCart();
+  // Instelbare gratis-verzending-drempel (i.p.v. hardcoded); checkout blijft autoritatief.
+  const [freeShipCents, setFreeShipCents] = useState(7500);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/promo")
+      .then((r) => r.json())
+      .then((d) => { if (active && Number(d?.freeShippingCents) > 0) setFreeShipCents(Number(d.freeShippingCents)); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   if (cart.lines.length === 0) {
     return (
@@ -84,11 +95,11 @@ export default function WinkelwagenPage() {
             </div>
             <div className="mt-2 flex items-center justify-between font-sans text-sm">
               <span className="text-muted">Verzending</span>
-              <span>{cart.subtotalCents >= 7500 ? "Gratis" : "Berekend bij afrekenen"}</span>
+              <span>{cart.subtotalCents >= freeShipCents ? "Gratis" : "Berekend bij afrekenen"}</span>
             </div>
-            {cart.subtotalCents > 0 && cart.subtotalCents < 7500 ? (
+            {cart.subtotalCents > 0 && cart.subtotalCents < freeShipCents ? (
               <p className="mt-2 font-sans text-xs text-ink-soft">
-                Nog <strong>{formatEuro(7500 - cart.subtotalCents)}</strong> tot gratis verzending.
+                Nog <strong>{formatEuro(freeShipCents - cart.subtotalCents)}</strong> tot gratis verzending.
               </p>
             ) : null}
             <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
