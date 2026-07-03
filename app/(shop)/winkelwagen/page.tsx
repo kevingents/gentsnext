@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { CheckIcon } from "@/components/icons";
 import { useCart } from "@/components/cart/cart-context";
 import { formatEuro } from "@/lib/pricing";
 import { BrandedState } from "@/components/brand-state";
@@ -116,7 +117,7 @@ export default function WinkelwagenPage() {
             <ul className="mt-5 space-y-1.5">
               {["Gratis retour binnen 14 dagen", "Veilig betalen met iDEAL", "Persoonlijk advies in 19 winkels"].map((t) => (
                 <li key={t} className="flex items-center gap-2 font-sans text-xs text-ink-soft">
-                  <span aria-hidden className="text-success">✓</span>
+                  <CheckIcon className="h-3.5 w-3.5 shrink-0 text-success" />
                   {t}
                 </li>
               ))}

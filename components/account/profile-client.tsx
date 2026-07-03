@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { CheckIcon } from "@/components/icons";
+import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
@@ -71,15 +73,9 @@ function nlDate(iso: string): string {
   }
 }
 
-const STATUS_NL: Record<string, string> = {
-  open: "In afwachting van betaling", paid: "Betaald", shipped: "Verzonden",
-  failed: "Mislukt", expired: "Verlopen", canceled: "Geannuleerd", refunded: "Terugbetaald",
-};
-
-const RET_STATUS_NL: Record<string, string> = {
-  requested: "aangemeld", label_created: "label klaar", received: "ontvangen",
-  completed: "afgehandeld", cancelled: "geannuleerd",
-};
+// Gedeelde status-labels (lib/order-status) — klant-varianten.
+const STATUS_NL = ORDER_STATUS_NL_KLANT;
+const RET_STATUS_NL = RETURN_STATUS_NL;
 
 const NEXT_TIER = 500; // punten voor de volgende beloning
 
@@ -741,7 +737,7 @@ function Gegevens({ customer }: { customer: Customer }) {
         <span className="font-sans text-sm">Ja, hou me op de hoogte van nieuwe collecties en acties</span>
       </label>
       <button type="submit" disabled={state === "busy"} className="btn-primary">
-        {state === "busy" ? "Opslaan…" : state === "done" ? "Opgeslagen ✓" : "Gegevens opslaan"}
+        {state === "busy" ? "Opslaan…" : state === "done" ? <>Opgeslagen <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" /></> : "Gegevens opslaan"}
       </button>
     </form>
   );

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { formatEuro } from "@/lib/format";
 import { getReservationByPayToken, reservationAmountCents, type ReservationLine } from "@/lib/reservations";
 import { AfrekenenButton } from "./AfrekenenButton";
 
@@ -8,10 +9,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function euro(c: number): string {
-  try { return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format((c || 0) / 100); }
-  catch { return `€ ${((c || 0) / 100).toFixed(2)}`; }
-}
+const euro = (c: number) => formatEuro(c || 0);
 
 /**
  * /reservering-afrekenen?token=… — landingspagina van de "online afrekenen"-link uit

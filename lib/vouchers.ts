@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { vouchers } from "@/db/schema";
+import { formatEuro } from "@/lib/format";
 
 /**
  * Vouchers / kortingscodes — valideren en verzilveren. Korting altijd
@@ -26,13 +27,13 @@ export async function validateVoucher(rawCode: string, subtotalCents: number): P
   if (!v || v.status !== "active") return { valid: false, code, discountCents: 0, label: "", error: "Onbekende of gebruikte code." };
   if (v.expiresAt && v.expiresAt.getTime() < Date.now()) return { valid: false, code, discountCents: 0, label: "", error: "Deze code is verlopen." };
   if (v.minSpendCents && subtotalCents < v.minSpendCents) {
-    return { valid: false, code, discountCents: 0, label: "", error: `Geldig vanaf € ${(v.minSpendCents / 100).toFixed(2)}.` };
+    return { valid: false, code, discountCents: 0, label: "", error: `Geldig vanaf ${formatEuro(v.minSpendCents)}.` };
   }
   const discountCents =
     v.kind === "percent"
       ? Math.min(subtotalCents, Math.round((subtotalCents * v.percentOff) / 100))
       : Math.min(subtotalCents, v.valueCents);
-  const label = v.kind === "percent" ? `${v.percentOff}% korting` : `€ ${(v.valueCents / 100).toFixed(2)} korting`;
+  const label = v.kind === "percent" ? `${v.percentOff}% korting` : `${formatEuro(v.valueCents)} korting`;
   return { valid: true, code, discountCents, label };
 }
 

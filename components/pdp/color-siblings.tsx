@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CrossIcon } from "@/components/icons";
 import { colorSwatch } from "@/lib/colors";
 
 /** Unie van de twee bronnen (titel-groepering + group_data-metafield). */
@@ -51,7 +52,7 @@ export function ColorSiblings({ siblings }: { siblings: SiblingItem[] }) {
               className={`relative flex-1 transition-opacity hover:opacity-80 ${soldOut ? "opacity-40" : ""}`}
               style={style}
             >
-              {soldOut ? <span className="absolute inset-0 flex items-center justify-center text-[0.6rem] text-canvas/90">✕</span> : null}
+              {soldOut ? <span className="absolute inset-0 flex items-center justify-center text-canvas/90"><CrossIcon className="h-2 w-2" /></span> : null}
             </Link>
           );
         })}

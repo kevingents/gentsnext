@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CheckIcon } from "@/components/icons";
 import { useT } from "@/components/i18n/locale-provider";
 
 type Props = {
@@ -64,7 +65,7 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
   if (state === "done") {
     return (
       <p className="mt-3 border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft">
-        ✓ Gelukt — we sturen je een {channel === "whatsapp" ? "WhatsApp" : "mail"}
+        <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px] text-success" /> Gelukt — we sturen je een {channel === "whatsapp" ? "WhatsApp" : "mail"}
         {size ? ` zodra maat ${size}` : " zodra dit product"} weer op voorraad is.
       </p>
     );

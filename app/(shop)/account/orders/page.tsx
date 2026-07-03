@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ORDER_STATUS_NL } from "@/lib/order-status";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
@@ -12,10 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Orders", robots: { index: false, follow: false } };
 
 const STATUSES = ["", "paid", "open", "shipped", "ready_pickup", "delivered", "refunded", "canceled", "failed", "expired"];
-const STATUS_NL: Record<string, string> = {
-  open: "Open", paid: "Betaald", shipped: "Verzonden", ready_pickup: "Klaar om af te halen",
-  delivered: "Bezorgd", refunded: "Terugbetaald", canceled: "Geannuleerd", failed: "Mislukt", expired: "Verlopen",
-};
+const STATUS_NL = ORDER_STATUS_NL; // gedeelde back-office-labels (lib/order-status)
 
 type Props = { searchParams: Promise<{ q?: string; status?: string; channel?: string; from?: string; to?: string; page?: string }> };
 

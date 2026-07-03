@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
+import { CrossIcon } from "@/components/icons";
 import { searchProducts, suggestCorrection } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
@@ -40,11 +41,23 @@ export default async function ZoekenPage({ searchParams }: Props) {
     }
   }
   const effectiveQuery = autoCorrected && didYouMean ? didYouMean : query;
-  const results = query
-    ? cat || size
-      ? await searchProducts(effectiveQuery, 48, { category: cat || undefined, sizeLabels: size ? [size] : undefined })
-      : base.slice(0, 48)
-    : [];
+  // Facet actief → in-memory faceteren uit `base` (de kaarten dragen category +
+  // availableSizes al, zelfde semantiek als het DB-facet) i.p.v. een TWEEDE volledige
+  // zoekquery per request. Vangnet: base is gecapt op 100 — zit 'ie vol op de cap én
+  // vindt het filter niets, dan kan het vals-leeg zijn → alsnog de DB-facet-query.
+  let results: typeof base = [];
+  if (query) {
+    if (cat || size) {
+      const filtered = base
+        .filter((r) => (!cat || r.category === cat) && (!size || (r.availableSizes || []).includes(size)))
+        .slice(0, 48);
+      results = filtered.length === 0 && base.length >= 100
+        ? await searchProducts(effectiveQuery, 48, { category: cat || undefined, sizeLabels: size ? [size] : undefined })
+        : filtered;
+    } else {
+      results = base.slice(0, 48);
+    }
+  }
 
   // Facet-opties uit de basisresultaten.
   const catCounts = new Map<string, number>();
@@ -105,7 +118,7 @@ export default async function ZoekenPage({ searchParams }: Props) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-sans text-xs uppercase tracking-wide text-muted">Categorie</span>
                   {cat ? (
-                    <Link href={qParam({ cat: "" })} className="border border-ink bg-ink px-3 py-1 font-sans text-xs text-canvas">{cat} ✕</Link>
+                    <Link href={qParam({ cat: "" })} className="inline-flex items-center gap-1.5 border border-ink bg-ink px-3 py-1 font-sans text-xs text-canvas">{cat} <CrossIcon className="h-2.5 w-2.5" /></Link>
                   ) : null}
                   {cats.filter(([c]) => c !== cat).map(([c, n]) => (
                     <Link key={c} href={qParam({ cat: c })} className="border border-line px-3 py-1 font-sans text-xs hover:border-ink">
@@ -118,7 +131,7 @@ export default async function ZoekenPage({ searchParams }: Props) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-sans text-xs uppercase tracking-wide text-muted">Maat</span>
                   {size ? (
-                    <Link href={qParam({ size: "" })} className="border border-ink bg-ink px-3 py-1 font-sans text-xs text-canvas">{size} ✕</Link>
+                    <Link href={qParam({ size: "" })} className="inline-flex items-center gap-1.5 border border-ink bg-ink px-3 py-1 font-sans text-xs text-canvas">{size} <CrossIcon className="h-2.5 w-2.5" /></Link>
                   ) : null}
                   {sizes.filter((s) => s !== size).slice(0, 16).map((s) => (
                     <Link key={s} href={qParam({ size: s })} className="border border-line px-3 py-1 font-sans text-xs hover:border-ink">{s}</Link>

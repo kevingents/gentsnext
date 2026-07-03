@@ -1,4 +1,5 @@
 import { getSiteUrl } from "@/lib/site-url";
+import { formatEuro as euro } from "@/lib/format";
 
 /**
  * Transactionele mail via Resend (env-gated op RESEND_API_KEY). Bewust zonder
@@ -8,10 +9,6 @@ import { getSiteUrl } from "@/lib/site-url";
 
 export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
-}
-
-function euro(cents: number): string {
-  return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(cents / 100);
 }
 
 type OrderLine = {

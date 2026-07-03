@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Dot } from "@/components/icons";
 import { DAYS, openStatus, mapsEmbedUrl, mapsLinkUrl, type Store } from "@/lib/stores";
 import { getLocale } from "@/lib/locale-server";
 import { t } from "@/lib/messages";
@@ -23,7 +24,7 @@ export async function StorePage({ store }: { store: Store }) {
           <p className="label-brand">{t("stores.page.eyebrow", locale)}</p>
           <h1 className="mt-2 text-display-lg">{store.city}</h1>
           <p className="mt-1 font-sans text-sm">
-            {open ? <span className="text-success">● {t("stores.openNow", locale)}</span> : <span className="text-muted">{t("stores.page.closedNow", locale)}</span>}
+            {open ? <span className="text-success"><Dot className="inline-block h-[7px] w-[7px]" /> {t("stores.openNow", locale)}</span> : <span className="text-muted">{t("stores.page.closedNow", locale)}</span>}
             {todayRange ? <span className="text-muted"> · {t("stores.page.todayPrefix", locale)} {todayRange}</span> : null}
           </p>
 

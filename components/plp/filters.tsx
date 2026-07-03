@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import type { Facets } from "@/lib/catalog";
 import { colorSwatch } from "@/lib/colors";
 import { buildPlpQuery, type PlpSelection } from "@/lib/plp-params";
 import { useT } from "@/components/i18n/locale-provider";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 
 type Props = {
   facets: Facets;
@@ -32,6 +34,11 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [openMobile, setOpenMobile] = useState(false);
+  // Modal-a11y voor de mobiele drawer: focus-trap, Escape-sluit, scroll-lock,
+  // focus-restore + #main inert. Portal naar body is verplicht bij inertMain —
+  // de drawer rendert binnen #main en zou zichzelf anders inert maken.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  useModalA11y(drawerRef, { onClose: () => setOpenMobile(false), active: openMobile, inertMain: true });
 
   // "Shop in jouw maat": alleen tonen als de bewaarde maat hier ook echt
   // bestaat (in de facetten van deze categorie).
@@ -274,23 +281,26 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
         {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `· ${activeCount}` : ""}
       </button>
 
-      {openMobile ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-ink/40" onClick={() => setOpenMobile(false)} />
-          <div className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="label-brand">{t("plp.filters.mobileDrawerTitle")}</p>
-              <button type="button" onClick={() => setOpenMobile(false)} className="font-sans text-sm underline">
-                {t("common.close")}
-              </button>
-            </div>
-            {body}
-            <button type="button" onClick={() => setOpenMobile(false)} className="btn-primary mt-6 w-full">
-              {t("plp.filters.showCountBtn")} {total} {t("plp.filters.itemPlural")}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {openMobile && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t("plp.filters.mobileDrawerTitle")}>
+              <div className="absolute inset-0 bg-ink/40" onClick={() => setOpenMobile(false)} />
+              <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="label-brand">{t("plp.filters.mobileDrawerTitle")}</p>
+                  <button type="button" onClick={() => setOpenMobile(false)} className="font-sans text-sm underline">
+                    {t("common.close")}
+                  </button>
+                </div>
+                {body}
+                <button type="button" onClick={() => setOpenMobile(false)} className="btn-primary mt-6 w-full">
+                  {t("plp.filters.showCountBtn")} {total} {t("plp.filters.itemPlural")}
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {/* Desktop: sidebar */}
       <div className="hidden lg:block">{body}</div>

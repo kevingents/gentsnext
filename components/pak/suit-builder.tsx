@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { Dot } from "@/components/icons";
 import type { SuitDetail, SuitRole } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
@@ -244,9 +245,9 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
                   <p className="mt-3 font-sans text-xs">
                     {variant.qty > 0 ? (
                       variant.qty <= 5 ? (
-                        <span className="text-danger">● Nog maar {variant.qty} — maat {variant.size}</span>
+                        <span className="text-danger"><Dot className="inline-block h-[7px] w-[7px]" /> Nog maar {variant.qty} — maat {variant.size}</span>
                       ) : (
-                        <span className="text-success">● Op voorraad — maat {variant.size}</span>
+                        <span className="text-success"><Dot className="inline-block h-[7px] w-[7px]" /> Op voorraad — maat {variant.size}</span>
                       )
                     ) : (
                       <span className="text-muted">Maat {variant.size} tijdelijk uitverkocht</span>

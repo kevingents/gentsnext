@@ -43,7 +43,9 @@ export type InsightNarrative = {
   actions: string[];
 };
 
-const euro = (cents: number) => Math.round((Number(cents) || 0) / 100);
+// Hele euro's voor prompt-stats (géén formatter — naam voorkomt verwarring met formatEuro).
+const toWholeEuros = (cents: number) => Math.round((Number(cents) || 0) / 100);
+const euro = toWholeEuros;
 const pctChange = (cur: number, prev: number): number | null => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
 const ratio = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 

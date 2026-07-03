@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { Dot } from "@/components/icons";
 import { useT } from "@/components/i18n/locale-provider";
 
 export type LocatorStore = {
@@ -55,7 +56,7 @@ export function StoreLocator({ stores }: { stores: LocatorStore[] }) {
               <div className="flex items-start justify-between gap-2">
                 <h2 className="font-display text-lg">{s.city}</h2>
                 {s.open ? (
-                  <span className="shrink-0 font-sans text-xs text-success">● {t("stores.openNow")}</span>
+                  <span className="shrink-0 font-sans text-xs text-success"><Dot className="inline-block h-1.5 w-1.5" /> {t("stores.openNow")}</span>
                 ) : (
                   <span className="shrink-0 font-sans text-xs text-muted">{t("stores.closed")}</span>
                 )}
