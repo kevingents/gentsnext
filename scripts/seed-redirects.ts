@@ -25,8 +25,9 @@ const PATTERNS: Redirect[] = [
   { source: "/cart", target: "/winkelwagen", status: 301, active: true },
   { source: "/search", target: "/zoeken", status: 301, active: true },
   { source: "/blogs/*", target: "/blog", status: 301, active: true }, // oude Shopify-blog → AI-stijlgids-hub
-  { source: "/account/login", target: "/account", status: 301, active: true },
-  { source: "/account/register", target: "/account", status: 301, active: true },
+  // GEEN /account/login of /account/register → /account: de nieuwe site HEEFT een
+  // eigen loginpagina, en die redirect botste met de auth-guard (uitgelogd → /account/login)
+  // = oneindige lus. De redirect-matcher slaat /account* nu sowieso over (PROTECTED_PREFIXES).
 ];
 
 function splitCsvLine(line: string): string[] {

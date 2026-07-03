@@ -37,6 +37,17 @@ const isWild = (s: string) => /\/\*+$/.test(String(s || ""));
 const st = (s: 301 | 302) => (s === 302 ? 302 : 301);
 
 /**
+ * Beschermde app-routes die een portal/legacy-redirect NOOIT mag overrulen.
+ * Fixt de redirect-lus die ontstond doordat een Shopify-erfenis-regel
+ * `/account/login → /account` (301) botste met de auth-guard die uitgelogde
+ * bezoekers juist naar `/account/login` (307) stuurt → inloggen onbereikbaar.
+ * Deze paden zijn kern-functionaliteit (auth/afrekenen/mandje/API); een redirect
+ * erop is per definitie een fout, dus we slaan matching ervoor onvoorwaardelijk over.
+ */
+const PROTECTED_PREFIXES = ["/account", "/afrekenen", "/winkelwagen", "/api"];
+const isProtected = (p: string) => PROTECTED_PREFIXES.some((pre) => p === pre || p.startsWith(pre + "/"));
+
+/**
  * Snelle lookup voor de middleware op het canonieke (locale-loze) pad. Ondersteunt
  * exacte regels én prefix-wildcards (source eindigt op `/*`):
  *   - `/blogs/*` → `/blog`        : alles onder /blogs naar de blog-hub
@@ -45,7 +56,7 @@ const st = (s: 301 | 302) => (s === 302 ? 302 : 301);
  */
 export async function matchRedirect(path: string): Promise<{ target: string; status: number } | null> {
   const p = normPath(path);
-  if (p === "/") return null;
+  if (p === "/" || isProtected(p)) return null;
   const list = await getRedirects();
 
   // 1. Exacte match (meest specifiek).
