@@ -149,11 +149,19 @@ export async function createOrder(
   voucherCode = "",
   giftcardCode = "",
   pickupStore = "",
-  soldByStore = ""
+  soldByStore = "",
+  customerId: string | null = null
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
   const lines = await resolveLines(items);
+  // Een tussentijds gearchiveerd/onbekend product mag NIET stil uit de order vallen
+  // (anders betaalt de klant voor de rest zonder het te weten): afwijzen mét de SKU's
+  // zodat de checkout ze markeert en de klant ze in één klik kan verwijderen.
+  const requestedSkus = [...new Set(items.map((i) => i.sku).filter(Boolean))];
+  const resolvedSkus = new Set(lines.map((l) => l.sku));
+  const missingSkus = requestedSkus.filter((s) => !resolvedSkus.has(s));
+  if (missingSkus.length) throw new OutOfStockError(missingSkus, missingSkus);
   if (!lines.length) throw new Error("Geen geldige producten in de bestelling.");
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
@@ -165,6 +173,10 @@ export async function createOrder(
     if (v.valid) {
       discountCents = v.discountCents;
       appliedCode = v.code;
+    } else {
+      // Voucher ongeldig geworden tussen 'toepassen' en 'betalen' → NIET stil doorgaan
+      // voor het (hogere) bedrag zonder korting; de klant moet de wagen verversen.
+      throw new Error("De kortingscode is niet meer geldig — ververs je winkelwagen en probeer opnieuw.");
     }
   }
   // Staffelkorting (instelbaar, default uit): vanaf N artikelen X% op 't subtotaal.
@@ -212,7 +224,8 @@ export async function createOrder(
       orderNumber,
       accessToken,
       status: "open",
-      email: contact.email.trim(),
+      customerId: customerId ?? null,
+      email: contact.email.trim().toLowerCase(),
       firstName: contact.firstName.trim(),
       lastName: contact.lastName.trim(),
       phone: (contact.phone || "").trim(),
