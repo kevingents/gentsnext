@@ -612,6 +612,7 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.pockets": "Zakken",
   "pdp.price.reference": "Doorgestreepte prijs: laagste prijs in de 30 dagen voor de korting.",
   "pdp.read_how_to_wear": "Lees hoe je dit draagt",
+  "pdp.returns.freeNote": "Niet helemaal goed? Retourneer gratis binnen 14 dagen — per post of in één van onze winkels. Je krijgt het volledige bedrag terug.",
   "pdp.return_policy": "Gratis retourneren binnen 14 dagen. Ophalen in één van onze 19 winkels is ook mogelijk.",
   "pdp.season": "Seizoen",
   "pdp.share.copied": "Link gekopieerd",

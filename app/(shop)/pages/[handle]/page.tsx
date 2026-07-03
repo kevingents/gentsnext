@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { StoreLocator, type LocatorStore } from "@/components/stores/store-locator";
 import { StorePage } from "@/components/stores/store-page";
 import { LandingPage } from "@/components/landing-page";
@@ -172,21 +173,8 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
     );
   }
 
-  // 4. Nog te bouwen
-  return (
-    <div className="mx-auto max-w-page px-gutter py-20">
-      <div className="max-w-xl">
-        <p className="label-brand">Binnenkort</p>
-        <h1 className="mt-2 text-display-md">{fallbackTitle(handle)}</h1>
-        <p className="mt-4 font-sans text-ink-soft">
-          Deze pagina wordt binnenkort toegevoegd. Bekijk ondertussen ons
-          assortiment of vraag onze stylisten om advies.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/collections/pakken" className="btn-primary">Shop pakken</Link>
-          <Link href="/" className="btn-ghost">Naar home</Link>
-        </div>
-      </div>
-    </div>
-  );
+  // 4. Onbekende slug (geen vaste pagina én geen CMS-content) → echte 404 i.p.v. een
+  // soft-404 (200). Voorkomt dat willekeurige /pages/*-URL's als geldig gelden voor
+  // crawlers/linkcheckers en dat typefouten in interne links onopgemerkt blijven.
+  notFound();
 }

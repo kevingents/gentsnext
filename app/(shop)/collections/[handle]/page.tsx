@@ -9,6 +9,8 @@ import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTaste
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
@@ -43,6 +45,8 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const { handle } = await params;
   const sp = await searchParams;
   const sel = parsePlpParams(sp);
+  const locale = await getLocale();
+  const t = await getT(locale);
   const collection = await getCollectionByHandle(handle);
   if (!collection) notFound();
 
@@ -94,12 +98,12 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     <div className="mx-auto max-w-page px-gutter py-10">
       <JsonLd data={breadcrumbJsonLd} />
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+        <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
         <span className="text-ink">{collection.title}</span>
       </nav>
       <div className="mt-6 border-b border-line pb-6">
-        <p className="label-brand">Collectie</p>
+        <p className="label-brand">{t("collection.header.eyebrow")}</p>
         <h1 className="mt-2 text-display-md">{collection.title}</h1>
         {collection.descriptionHtml ? (
           <div
@@ -127,7 +131,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
 
           {items.length === 0 ? (
             <div className="py-16 text-center font-sans text-ink-soft">
-              <p>Geen artikelen gevonden met deze filters.</p>
+              <p>{t("collection.empty.title")}</p>
               <Link href={`/collections/${handle}`} className="mt-3 inline-block text-sm text-ink underline underline-offset-4">
                 Wis alle filters
               </Link>

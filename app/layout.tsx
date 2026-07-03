@@ -39,7 +39,9 @@ export const metadata: Metadata = {
     siteName: "GENTS",
     title: "GENTS — Suits You",
     description: SITE_DESC,
-    url: siteUrl,
+    // Bewust GEEN vaste url hier: subpagina's die openGraph overschrijven (zonder eigen
+    // url) zouden anders allemaal og:url=homepage erven → verkeerde social-attributie.
+    // De homepage zet 'm expliciet; subpagina's krijgen 'm via hun eigen canonical-url.
   },
   twitter: {
     card: "summary_large_image",

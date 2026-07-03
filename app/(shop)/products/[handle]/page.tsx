@@ -13,6 +13,8 @@ import { RecentStrip } from "@/components/recent/recent-strip";
 import { ShareRow } from "@/components/pdp/share-row";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { buildModelLook, buildSuitLook, resolveLook, getLookBuyData } from "@/lib/looks";
 import { smartModelLook } from "@/lib/model-styling";
 import { getSuitPieceHandles } from "@/lib/suit-pairing";
@@ -92,6 +94,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductPage({ params }: Props) {
   const { handle } = await params;
   const data = await getProductByHandle(handle);
+  const locale = await getLocale();
+  const t = await getT(locale);
   if (!data) notFound();
   const { product, variants, images, collections, sizeMedia } = data;
   if (!variants.length) notFound();
@@ -385,7 +389,7 @@ export default async function ProductPage({ params }: Props) {
       title: "Retour & maatadvies",
       content: (
         <div className="font-sans text-sm leading-relaxed text-ink-soft">
-          <p>Niet helemaal goed? Retourneer gratis binnen 14 dagen — per post of in één van onze winkels. Je krijgt het volledige bedrag terug.</p>
+          <p>{t("pdp.returns.freeNote")}</p>
           <p className="mt-2">
             Twijfel je over je maat? Gebruik ons{" "}
             <Link href="/maatadvies" className="text-ink underline underline-offset-4">
@@ -508,8 +512,8 @@ export default async function ProductPage({ params }: Props) {
       {/* Sfeerbeeld — AI-lifestyle (model in setting), groot en ongecropt */}
       {product.lifestyleImageUrl ? (
         <section className="mt-20">
-          <p className="label-brand">Lifestyle</p>
-          <h2 className="mt-2 text-display-md">In the moment</h2>
+          <p className="label-brand">{t("pdp.lifestyle.eyebrow")}</p>
+          <h2 className="mt-2 text-display-md">{t("pdp.lifestyle.title")}</h2>
           <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[product.lifestyleImageUrl, product.lifestyleImageUrl2, product.lifestyleImageUrl3].filter(Boolean).map((src, i) => (
               <div key={i} className="relative aspect-[2/3] overflow-hidden rounded-card bg-surface">
@@ -523,8 +527,8 @@ export default async function ProductPage({ params }: Props) {
       {/* Shop de look — de outfit van het model klikbaar/shoppbaar */}
       {resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? (
         <section id="shop-de-look" className="mt-20 scroll-mt-24">
-          <p className="label-brand">Shop de look</p>
-          <h2 className="mt-2 text-display-md">Zo draag je het</h2>
+          <p className="label-brand">{t("pdp.shopLook.eyebrow")}</p>
+          <h2 className="mt-2 text-display-md">{t("pdp.shopLook.title")}</h2>
           <p className="mt-2 max-w-prose font-sans text-ink-soft">
             Gestyled op ons model. Klik op een onderdeel om het te shoppen — of shop de hele outfit in één keer.
           </p>
@@ -537,8 +541,8 @@ export default async function ProductPage({ params }: Props) {
       {/* Maak de look compleet — slimme bijverkoop */}
       {recommendations.length > 0 ? (
         <section className="mt-20">
-          <p className="label-brand">Maak de look compleet</p>
-          <h2 className="mt-2 text-display-md">Hier draag je het bij</h2>
+          <p className="label-brand">{t("pdp.complementary.eyebrow")}</p>
+          <h2 className="mt-2 text-display-md">{t("pdp.complementary.title")}</h2>
           <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
             {recommendations.map((p) => (
               <ProductCard key={p.id} product={p} />
@@ -553,8 +557,8 @@ export default async function ProductPage({ params }: Props) {
 
       {blogPosts.length > 0 ? (
         <section className="mt-20">
-          <p className="label-brand">In onze stijlgids</p>
-          <h2 className="mt-2 text-display-md">Lees hoe je dit draagt</h2>
+          <p className="label-brand">{t("pdp.blog.eyebrow")}</p>
+          <h2 className="mt-2 text-display-md">{t("pdp.blog.title")}</h2>
           <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
             {blogPosts.map((b) => (
               <Link key={b.slug} href={`/blog/${b.slug}`} className="group block">
@@ -563,7 +567,7 @@ export default async function ProductPage({ params }: Props) {
                     <Image src={b.heroImage} alt={b.title} fill sizes="(max-width: 640px) 100vw, 30vw" className="object-cover transition-transform duration-500 ease-brand group-hover:scale-[1.04]" />
                   ) : null}
                 </div>
-                <p className="mt-2 label-brand !text-[0.62rem]">{b.occasion || "Stijlgids"}</p>
+                <p className="mt-2 label-brand !text-[0.62rem]">{b.occasion || t("pdp.blog.defaultLabel")}</p>
                 <h3 className="mt-0.5 font-sans text-sm leading-snug text-ink group-hover:underline">{b.title}</h3>
               </Link>
             ))}
