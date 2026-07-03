@@ -433,10 +433,17 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
   const set: Record<string, unknown> = { paymentStatus, updatedAt: sql`now()` };
   if (orderStatus) set.status = orderStatus;
   if (paymentStatus === "paid" || paymentStatus === "authorized") set.paidAt = sql`now()`;
+  // Gate op een ECHTE statusovergang: een dubbele webhook (order staat al op deze
+  // status) matcht geen rij → de side-effects hieronder (voorraad-hold vrijgeven,
+  // voucher heractiveren) draaien niet nog eens. Cruciaal: anders kon een dubbele
+  // 'failed'-webhook een voucher die order B intussen verzilverde weer 'active' maken.
+  const whereClause = orderStatus
+    ? and(eq(orders.molliePaymentId, molliePaymentId), sql`${orders.status} is distinct from ${orderStatus}`)
+    : eq(orders.molliePaymentId, molliePaymentId);
   const updated = await db
     .update(orders)
     .set(set)
-    .where(eq(orders.molliePaymentId, molliePaymentId))
+    .where(whereClause)
     .returning({ id: orders.id, voucherCode: orders.voucherCode });
   // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven ÉN een
   // ingezette single-use voucher (welkomstkorting/spaarpunten-bon) weer activeren. Dit
