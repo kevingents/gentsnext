@@ -34,9 +34,13 @@ export async function createReview(
   if (!handle) return { ok: false, error: "Onbekend product." };
   if (!(rating >= 1 && rating <= 5)) return { ok: false, error: "Geef een score van 1 tot 5 sterren." };
 
-  const body = String(input.body || "").trim().slice(0, 4000);
-  const title = String(input.title || "").trim().slice(0, 120);
-  const authorName = String(input.authorName || "").trim().slice(0, 80) || "GENTS-klant";
+  // Strip HTML/markup server-side: reviewtekst mag nergens als markup renderen
+  // (o.a. in het JSON-LD-schema van de PDP). De JsonLd-helper escapet óók, maar
+  // we bewaren de data schoon (defense-in-depth).
+  const strip = (s: unknown) => String(s || "").replace(/<[^>]*>/g, "").replace(/[<>]/g, "").trim();
+  const body = strip(input.body).slice(0, 4000);
+  const title = strip(input.title).slice(0, 120);
+  const authorName = strip(input.authorName).slice(0, 80) || "GENTS-klant";
   const email = String(input.email || "").trim().slice(0, 160);
   const fit = FITS.has(String(input.fit)) ? String(input.fit) : "";
 

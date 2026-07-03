@@ -43,6 +43,7 @@ export async function refundMolliePayment(
   paymentId: string,
   amountCents: number,
   description = "Retour",
+  idempotencyKey?: string,
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   if (!mollieConfigured()) return { ok: false, error: "Mollie niet geconfigureerd." };
   if (!paymentId || amountCents <= 0) return { ok: false, error: "Ongeldig refund-bedrag." };
@@ -51,10 +52,14 @@ export async function refundMolliePayment(
     description: description.slice(0, 140),
   };
   if (usesAccessToken() && testmode()) body.testmode = true;
+  // Idempotency-Key: een dubbele/parallelle refund-poging met dezelfde sleutel
+  // levert Mollie-zijdig dezelfde refund op i.p.v. een tweede terugstorting.
+  const headers: Record<string, string> = { authorization: `Bearer ${apiKey()}`, "content-type": "application/json" };
+  if (idempotencyKey) headers["idempotency-key"] = idempotencyKey.slice(0, 40);
   try {
     const r = await fetch(`https://api.mollie.com/v2/payments/${encodeURIComponent(paymentId)}/refunds`, {
       method: "POST",
-      headers: { authorization: `Bearer ${apiKey()}`, "content-type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
     const d = (await r.json().catch(() => null)) as { id?: string; detail?: string } | null;
