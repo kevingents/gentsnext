@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
+import { validateGiftcard, redeemGiftcard, releaseGiftcard, activateGiftcardInStore, deactivateGiftcardInStore } from "@/lib/giftcards";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,6 +11,8 @@ export const runtime = "nodejs";
  *   { action:'validate', code, amountCents }        → saldo-check (valid/balance/applyCents)
  *   { action:'redeem',  code, ref, amountCents }     → idempotent afboeken op ref (= sale-id/clientRef)
  *   { action:'release', code, ref }                  → een eerder afgeboekt bedrag terug (annulering), idempotent
+ *   { action:'activate', code, amountCents, ref }    → FYSIEKE bon verkopen/activeren aan de kassa (idempotent per ref)
+ *   { action:'deactivate', code, ref }               → geactiveerde bon terugdraaien (bon-verkoop geannuleerd)
  *
  * redeemGiftcard is atomair (conditionele UPDATE, saldo nooit negatief) én idempotent
  * per (code, ref) via de giftcard-transacties → een dubbele/retry-POST boekt niet dubbel af.
@@ -47,6 +49,17 @@ export async function POST(req: Request) {
       if (!ref) return NextResponse.json({ ok: false, error: "ref (sale-id) vereist." }, { status: 400 });
       await releaseGiftcard(code, ref);
       return NextResponse.json({ ok: true });
+    }
+    if (action === "activate") {
+      const ref = String(b?.ref || "").trim();
+      const r = await activateGiftcardInStore(code, amountCents, ref);
+      return NextResponse.json(r, { status: r.ok ? 200 : 400 });
+    }
+    if (action === "deactivate") {
+      const ref = String(b?.ref || "").trim();
+      if (!ref) return NextResponse.json({ ok: false, error: "ref (sale-id) vereist." }, { status: 400 });
+      const r = await deactivateGiftcardInStore(code, ref);
+      return NextResponse.json(r, { status: r.ok ? 200 : 400 });
     }
     return NextResponse.json({ ok: false, error: "Onbekende action." }, { status: 400 });
   } catch (e) {

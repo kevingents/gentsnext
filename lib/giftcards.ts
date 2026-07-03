@@ -309,6 +309,95 @@ export async function redeemGiftcardInStore(rawCode: string, amountCents: number
   };
 }
 
+export type ActivateResult =
+  | { ok: true; code: string; balanceCents: number; wasCreated?: boolean; alreadyActive?: boolean }
+  | { ok: false; code: string; error: string };
+
+/**
+ * Activeer/geef een FYSIEKE cadeaubon uit aan de kassa: scan de boncode + hang een bedrag
+ * eraan. De bon komt in dezelfde `giftcards`-tabel als de online-bonnen → daarna overal
+ * inwisselbaar (kassa + web) via validate/redeem, zónder extra werk.
+ *
+ * Idempotent per `ref` (= sale-clientRef). Atomair (neon-http kent geen transacties):
+ *  - Nieuwe code → maak de bon in ÉÉN statement actief mét saldo én een 'activate'-transactie.
+ *    De unieke `code`-index serialiseert twee gelijktijdige eerste-activaties (één wint).
+ *  - Code bestond al mét een 'activate'-tx op DEZE ref → idempotent ok (retry/dubbele sync).
+ *  - Code bestond al zónder deze ref → WEIGEREN (dezelfde fysieke bon niet 2× verkopen).
+ */
+export async function activateGiftcardInStore(rawCode: string, amountCents: number, ref: string): Promise<ActivateResult> {
+  const code = norm(rawCode);
+  const amount = Math.round(Number(amountCents) || 0);
+  if (!code || code.length < 6) return { ok: false, code, error: "Ongeldige of te korte boncode." };
+  if (!ref) return { ok: false, code, error: "Geen referentie voor de activatie." };
+  const { giftcardConfig: cfg } = await getSettings();
+  if (amount < cfg.minCents || amount > cfg.maxCents) {
+    return { ok: false, code, error: `Kies een bedrag tussen € ${(cfg.minCents / 100).toFixed(2)} en € ${(cfg.maxCents / 100).toFixed(2)}.` };
+  }
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + cfg.validityMonths * 30 * 86400000).toISOString();
+  // Nieuwe code → bon + saldo + activate-tx in één atomair statement (geen tussenstap-gat).
+  const ins = await db.execute(sql`
+    with ins as (
+      insert into giftcards (code, initial_cents, balance_cents, status, issued_at, expires_at)
+      values (${code}, ${amount}, ${amount}, 'active', now(), ${expiresAt})
+      on conflict (code) do nothing
+      returning id
+    ),
+    tx as (
+      insert into giftcard_transactions (giftcard_id, order_number, reason, delta_cents)
+      select id, ${ref}, 'activate', ${amount} from ins
+      on conflict (giftcard_id, order_number, reason) do nothing
+      returning giftcard_id
+    )
+    select id from ins
+  `);
+  if (ins.rows?.length) return { ok: true, code, balanceCents: amount, wasCreated: true };
+
+  // Code bestond al: idempotente retry van dezelfde sale, of een poging 'm 2× te verkopen.
+  const g = await getGiftcardByCode(code);
+  if (!g) return { ok: false, code, error: "Kon de cadeaubon niet activeren." };
+  const mine = await db
+    .select({ id: giftcardTransactions.id })
+    .from(giftcardTransactions)
+    .where(and(eq(giftcardTransactions.giftcardId, g.id), eq(giftcardTransactions.orderNumber, ref), eq(giftcardTransactions.reason, "activate")))
+    .limit(1);
+  if (mine.length) return { ok: true, code, balanceCents: g.balanceCents, alreadyActive: true };
+  return { ok: false, code, error: "Deze cadeaubon is al geactiveerd." };
+}
+
+/**
+ * Draai een aan-de-kassa geactiveerde bon terug (annulering van de bon-verkoop): saldo 0 +
+ * status 'cancelled'. Idempotent per `ref`. WEIGERT als de bon al (deels) is ingewisseld —
+ * dan heeft de klant er al mee betaald en moet een mens het afhandelen (geen geld-lek).
+ */
+export async function deactivateGiftcardInStore(rawCode: string, ref: string): Promise<{ ok: boolean; error?: string; refundedCents: number }> {
+  const code = norm(rawCode);
+  if (!code || !ref) return { ok: false, error: "Ongeldige invoer.", refundedCents: 0 };
+  const db = getDb();
+  const g = await getGiftcardByCode(code);
+  if (!g) return { ok: false, error: "Onbekende cadeaubon.", refundedCents: 0 };
+  const spent = await db
+    .select({ id: giftcardTransactions.id })
+    .from(giftcardTransactions)
+    .where(and(eq(giftcardTransactions.giftcardId, g.id), eq(giftcardTransactions.reason, "redeem")))
+    .limit(1);
+  if (spent.length) return { ok: false, error: "Cadeaubon is al (deels) gebruikt — handmatig afhandelen.", refundedCents: 0 };
+  // Claim-first + atomair: één deactivate-tx per ref (unieke index), saldo 0 + cancelled.
+  const res = await db.execute(sql`
+    with claim as (
+      insert into giftcard_transactions (giftcard_id, order_number, reason, delta_cents)
+      select id, ${ref}, 'deactivate', -balance_cents from giftcards where id = ${g.id}
+      on conflict (giftcard_id, order_number, reason) do nothing
+      returning giftcard_id
+    )
+    update giftcards g set balance_cents = 0, status = 'cancelled', updated_at = now()
+    from claim c where g.id = c.giftcard_id
+    returning g.id
+  `);
+  const done = (res.rows?.length ?? 0) > 0;
+  return { ok: true, refundedCents: done ? g.balanceCents : 0 };
+}
+
 /** Cadeaubonnen gekocht door of gericht aan deze klant (voor 'Mijn GENTS'). */
 export async function getGiftcardsForCustomer(customerId: string, email: string): Promise<Giftcard[]> {
   const db = getDb();
