@@ -12,6 +12,7 @@ import { createMolliePayment, isKnownMethod } from "@/lib/mollie";
 import { createWorldlineCheckout } from "@/lib/worldline";
 import { activePaymentProvider, paymentConfigured } from "@/lib/payments";
 import { getSiteUrl } from "@/lib/site-url";
+import { getSessionCustomer } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -51,9 +52,12 @@ export async function POST(req: Request) {
   const payMethod = isKnownMethod(body?.method) ? String(body.method) : undefined;
   const voucherCode = String(body?.voucherCode || "").trim();
   const giftcardCode = String(body?.giftcardCode || "").trim();
+  // Ingelogde klant → order meteen aan het account koppelen (punten, zichtbaar in
+  // "mijn bestellingen", juiste bedankt-CTA). Gast blijft mogelijk (customerId null).
+  const sessionCustomer = await getSessionCustomer();
   let order;
   try {
-    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore);
+    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore, "", sessionCustomer?.id ?? null);
   } catch (e) {
     // Voorraad-gate weigert → geef de niet-leverbare SKU's terug zodat de checkout
     // ze kan markeren en de klant ze in één klik kan verwijderen.
