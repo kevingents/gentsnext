@@ -122,7 +122,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         {/* Grid */}
         <div>
           <div className="mb-6 hidden items-center justify-between lg:flex">
-            <span className="font-sans text-sm text-muted">{total} artikelen</span>
+            <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
             <SortSelect value={sel.sort} />
           </div>
           <div className="mb-6 lg:hidden">
@@ -133,7 +133,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
             <div className="py-16 text-center font-sans text-ink-soft">
               <p>{t("collection.empty.title")}</p>
               <Link href={`/collections/${handle}`} className="mt-3 inline-block text-sm text-ink underline underline-offset-4">
-                Wis alle filters
+                {t("collection.empty.clearFilters")}
               </Link>
             </div>
           ) : (
@@ -145,18 +145,18 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           )}
 
           {totalPages > 1 ? (
-            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
+            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label={t("collection.pagination.aria")}>
               {sel.page > 1 ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
-                  Vorige
+                  {t("collection.pagination.previous")}
                 </Link>
               ) : null}
               <span className="text-muted">
-                Pagina {sel.page} van {totalPages}
+                {t("collection.pagination.pageLabel")} {sel.page} {t("collection.pagination.of")} {totalPages}
               </span>
               {sel.page < totalPages ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
-                  Volgende
+                  {t("collection.pagination.next")}
                 </Link>
               ) : null}
             </nav>

@@ -110,7 +110,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
         <div>
           <div className="mb-6 hidden items-center justify-between lg:flex">
-            <span className="font-sans text-sm text-muted">{total} artikelen</span>
+            <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
             <SortSelect value={sel.sort} />
           </div>
           <div className="mb-6 lg:hidden">
@@ -121,7 +121,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             <div className="py-16 text-center font-sans text-ink-soft">
               <p>{t("cat.empty.title")}</p>
               <Link href={`/categorie/${slug}`} className="mt-3 inline-block text-sm text-ink underline underline-offset-4">
-                Wis alle filters
+                {t("cat.empty.clearFilters")}
               </Link>
             </div>
           ) : (
@@ -133,18 +133,18 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           )}
 
           {totalPages > 1 ? (
-            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
+            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label={t("cat.pagination.aria")}>
               {sel.page > 1 ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
-                  Vorige
+                  {t("cat.pagination.previous")}
                 </Link>
               ) : null}
               <span className="text-muted">
-                Pagina {sel.page} van {totalPages}
+                {t("cat.pagination.pageLabel")} {sel.page} {t("cat.pagination.of")} {totalPages}
               </span>
               {sel.page < totalPages ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
-                  Volgende
+                  {t("cat.pagination.next")}
                 </Link>
               ) : null}
             </nav>

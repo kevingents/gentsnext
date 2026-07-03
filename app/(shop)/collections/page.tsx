@@ -5,6 +5,7 @@ import { listCollections } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
+import { ArrowRightIcon } from "@/components/icons";
 import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export default async function CollectionsPage() {
                 className="flex items-center justify-between border border-line bg-canvas px-5 py-4 font-sans text-sm transition-colors hover:border-ink"
               >
                 <span>{c.title}</span>
-                <span aria-hidden className="text-muted">→</span>
+                <ArrowRightIcon className="h-4 w-4 text-muted" />
               </Link>
             </li>
           ))}

@@ -24,7 +24,9 @@ import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return { alternates: await localeAlternates("/"), openGraph: { url: getSiteUrl() } };
+  // NB: Next merget openGraph NIET diep — dit object VERVANGT de root-layout-openGraph
+  // volledig, dus type/siteName moeten hier expliciet mee (anders vallen ze weg).
+  return { alternates: await localeAlternates("/"), openGraph: { type: "website", siteName: "GENTS", title: "GENTS — Suits You", url: getSiteUrl() } };
 }
 
 /** Gelegenheden — kern van de GENTS-positionering ("gelegenheid > doelgroep"). */

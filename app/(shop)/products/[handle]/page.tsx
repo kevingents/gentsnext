@@ -371,7 +371,7 @@ export default async function ProductPage({ params }: Props) {
     ...(specs.length
       ? [
           {
-            title: "Specificaties",
+            title: t("pdp.accordion.specs"),
             content: (
               <dl className="divide-y divide-line border-y border-line">
                 {specs.map((spec) => (
@@ -386,7 +386,7 @@ export default async function ProductPage({ params }: Props) {
         ]
       : []),
     {
-      title: "Retour & maatadvies",
+      title: t("pdp.accordion.returns"),
       content: (
         <div className="font-sans text-sm leading-relaxed text-ink-soft">
           <p>{t("pdp.returns.freeNote")}</p>
@@ -401,7 +401,7 @@ export default async function ProductPage({ params }: Props) {
       ),
     },
     {
-      title: "Veelgestelde vragen",
+      title: t("pdp.accordion.faq"),
       content: (
         <dl className="font-sans text-sm">
           {faqFor(hoofdgroep).map((f) => (
@@ -529,9 +529,7 @@ export default async function ProductPage({ params }: Props) {
         <section id="shop-de-look" className="mt-20 scroll-mt-24">
           <p className="label-brand">{t("pdp.shopLook.eyebrow")}</p>
           <h2 className="mt-2 text-display-md">{t("pdp.shopLook.title")}</h2>
-          <p className="mt-2 max-w-prose font-sans text-ink-soft">
-            Gestyled op ons model. Klik op een onderdeel om het te shoppen — of shop de hele outfit in één keer.
-          </p>
+          <p className="mt-2 max-w-prose font-sans text-ink-soft">{t("pdp.look_instruction")}</p>
           <div className="mt-8">
             <ShopTheLook look={resolvedModelLook} aspectClass="aspect-[2/3]" buy={lookBuy} />
           </div>

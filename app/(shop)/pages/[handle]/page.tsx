@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreLocator, type LocatorStore } from "@/components/stores/store-locator";
 import { StorePage } from "@/components/stores/store-page";
