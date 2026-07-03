@@ -16,20 +16,25 @@ import { getAllLooks } from "@/lib/looks";
 import { CATEGORIES } from "@/lib/categories";
 import { Reveal } from "@/components/reveal";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
+import { ArrowRightIcon } from "@/components/icons";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return { alternates: await localeAlternates("/") };
+  // NB: Next merget openGraph NIET diep — dit object VERVANGT de root-layout-openGraph
+  // volledig, dus type/siteName moeten hier expliciet mee (anders vallen ze weg).
+  return { alternates: await localeAlternates("/"), openGraph: { type: "website", siteName: "GENTS", title: "GENTS — Suits You", url: getSiteUrl() } };
 }
 
 /** Gelegenheden — kern van de GENTS-positionering ("gelegenheid > doelgroep"). */
 const OCCASIONS = [
-  { label: "Bruiloft", img: "/brand/brand-impression-wedding.jpg", href: "/collections", keyword: "trouw" },
-  { label: "Zakelijk", img: "/brand/brand-impression-interview.jpg", href: "/collections", keyword: "pak" },
-  { label: "Gala & Black Tie", img: "/brand/brand-impression-gala.jpg", href: "/collections", keyword: "smoking" },
-  { label: "Uitvaart", img: "/brand/brand-impression-funeral.jpg", href: "/collections", keyword: "" },
+  { key: "home.occasion_wedding", label: "Bruiloft", img: "/brand/brand-impression-wedding.jpg", href: "/collections", keyword: "trouw" },
+  { key: "home.occasion_business", label: "Zakelijk", img: "/brand/brand-impression-interview.jpg", href: "/collections", keyword: "pak" },
+  { key: "home.occasion_gala", label: "Gala & Black Tie", img: "/brand/brand-impression-gala.jpg", href: "/collections", keyword: "smoking" },
+  { key: "home.occasion_funeral", label: "Uitvaart", img: "/brand/brand-impression-funeral.jpg", href: "/collections", keyword: "" },
 ];
 
 function findCollection(
@@ -66,6 +71,8 @@ export default async function Home() {
     getSiteSettings(),
     getAllLooks().catch(() => []),
   ]);
+  const locale = await getLocale();
+  const t = await getT(locale);
   const featured = CATEGORIES.slice(0, 8);
   const heroLook = looks[0] ?? null;
   const trending = await trendingPromise;
@@ -113,8 +120,8 @@ export default async function Home() {
       <section className="mx-auto max-w-page px-gutter py-16">
         <header className="mb-8 flex items-end justify-between">
           <div>
-            <p className="label-brand">Voor elke gelegenheid</p>
-            <h2 className="mt-2 text-display-md">Waar kleed je je voor?</h2>
+            <p className="label-brand">{t("home.occasions.eyebrow")}</p>
+            <h2 className="mt-2 text-display-md">{t("home.occasions.title")}</h2>
           </div>
         </header>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -126,14 +133,14 @@ export default async function Home() {
               >
                 <Image
                   src={o.img}
-                  alt={o.label}
+                  alt={t(o.key)}
                   fill
                   sizes="(max-width: 1024px) 50vw, 25vw"
                   className="object-cover transition duration-500 ease-brand group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-ink/65 to-transparent" />
                 <span className="absolute bottom-4 left-4 font-display text-xl font-light text-canvas">
-                  {o.label}
+                  {t(o.key)}
                 </span>
               </Link>
             </Reveal>
@@ -145,8 +152,8 @@ export default async function Home() {
       {trending.length >= 4 ? (
         <section className="mx-auto max-w-page px-gutter py-16">
           <header className="mb-8">
-            <p className="label-brand">Trending</p>
-            <h2 className="mt-2 text-display-md">Populair nu</h2>
+            <p className="label-brand">{t("home.trending.eyebrow")}</p>
+            <h2 className="mt-2 text-display-md">{t("home.trending.title")}</h2>
           </header>
           <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
             {trending.map((p) => (
@@ -161,11 +168,11 @@ export default async function Home() {
         <section className="mx-auto max-w-page px-gutter py-16">
           <header className="mb-8 flex items-end justify-between">
             <div>
-              <p className="label-brand">Pakken</p>
-              <h2 className="mt-2 text-display-md">Nieuw binnen</h2>
+              <p className="label-brand">{t("home.packs.eyebrow")}</p>
+              <h2 className="mt-2 text-display-md">{t("home.packs.title")}</h2>
             </div>
             <Link href="/collections/pakken" className="hidden font-sans text-sm text-ink underline underline-offset-4 sm:inline">
-              Alle pakken bekijken
+              {t("home.packs.link")}
             </Link>
           </header>
           <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
@@ -189,19 +196,15 @@ export default async function Home() {
             />
           </div>
           <div>
-            <p className="label-brand">Op jouw maat</p>
-            <h2 className="mt-2 text-display-md">Stel je eigen pak samen</h2>
-            <p className="mt-4 max-w-md font-sans text-ink-soft">
-              Kies je colbert en pantalon los — in de maat die jóú past, met of
-              zonder gilet. Wij helpen je met onze maatadvies-tool aan de juiste
-              maat per onderdeel.
-            </p>
+            <p className="label-brand">{t("home.customSuit.eyebrow")}</p>
+            <h2 className="mt-2 text-display-md">{t("home.customSuit.title")}</h2>
+            <p className="mt-4 max-w-md font-sans text-ink-soft">{t("home.customSuit.description")}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/pak-samenstellen" className="btn-primary">
-                Begin met samenstellen
+                {t("home.customSuit.startButton")}
               </Link>
               <Link href="/maatadvies" className="btn-ghost">
-                Vind mijn maat
+                {t("home.customSuit.sizeGuideButton")}
               </Link>
             </div>
           </div>
@@ -213,11 +216,11 @@ export default async function Home() {
         <section className="mx-auto max-w-page px-gutter py-16">
           <header className="mb-8 flex items-end justify-between">
             <div>
-              <p className="label-brand">Overhemden</p>
-              <h2 className="mt-2 text-display-md">De basis van elke outfit</h2>
+              <p className="label-brand">{t("home.shirts.eyebrow")}</p>
+              <h2 className="mt-2 text-display-md">{t("home.shirts.title")}</h2>
             </div>
             <Link href="/collections/overhemden" className="hidden font-sans text-sm text-ink underline underline-offset-4 sm:inline">
-              Alle overhemden
+              {t("home.shirts.link")}
             </Link>
           </header>
           <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
@@ -239,16 +242,11 @@ export default async function Home() {
         />
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/30" />
         <div className="relative mx-auto max-w-page px-gutter py-16">
-          <p className="label-brand !text-canvas/70">De GENTS-gids</p>
-          <h2 className="mt-2 max-w-xl text-display-md !text-canvas">
-            Twijfel je over de juiste dresscode?
-          </h2>
-          <p className="mt-4 max-w-lg font-sans text-canvas/85">
-            Black tie, white tie, smart casual of jacquet — onze stylisten leggen
-            elke dresscode uit, zodat je nooit hoeft te twijfelen wat je aantrekt.
-          </p>
+          <p className="label-brand !text-canvas/70">{t("home.etiquette.eyebrow")}</p>
+          <h2 className="mt-2 max-w-xl text-display-md !text-canvas">{t("home.etiquette.title")}</h2>
+          <p className="mt-4 max-w-lg font-sans text-canvas/85">{t("home.etiquette.description")}</p>
           <Link href="/pages/etiquette" className="btn-primary mt-7 !bg-canvas !text-ink hover:!bg-surface">
-            Bekijk de dresscode-gids
+            {t("home.etiquette.link")}
           </Link>
         </div>
       </section>
@@ -257,8 +255,8 @@ export default async function Home() {
       {featured.length > 0 ? (
         <section className="mx-auto max-w-page px-gutter py-16">
           <header className="mb-8">
-            <p className="label-brand">Het assortiment</p>
-            <h2 className="mt-2 text-display-md">Shop op categorie</h2>
+            <p className="label-brand">{t("home.categories.eyebrow")}</p>
+            <h2 className="mt-2 text-display-md">{t("home.categories.title")}</h2>
           </header>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {featured.map((c) => (
@@ -268,13 +266,13 @@ export default async function Home() {
                 className="flex items-center justify-between border border-line bg-canvas px-5 py-4 font-sans text-sm transition-colors hover:border-ink"
               >
                 <span>{c.label}</span>
-                <span aria-hidden className="text-muted">→</span>
+                <ArrowRightIcon className="h-4 w-4 text-muted" />
               </Link>
             ))}
           </div>
           <div className="mt-8">
             <Link href="/collections" className="font-sans text-sm text-ink underline underline-offset-4">
-              Alle collecties bekijken
+              {t("home.categories.link")}
             </Link>
           </div>
         </section>
@@ -289,13 +287,10 @@ export default async function Home() {
             <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
           </div>
           <div>
-            <p className="label-brand">Shop the look</p>
-            <h2 className="mt-2 text-display-md">Compleet gekleed, in één klik</h2>
-            <p className="mt-3 max-w-md font-sans text-ink-soft">
-              Onze stylisten stellen complete outfits samen per gelegenheid. Klik op
-              de look en shop alle items tegelijk.
-            </p>
-            <Link href="/looks" className="btn-primary mt-6 inline-flex">Bekijk de looks</Link>
+            <p className="label-brand">{t("home.look.eyebrow")}</p>
+            <h2 className="mt-2 text-display-md">{t("home.look.title")}</h2>
+            <p className="mt-3 max-w-md font-sans text-ink-soft">{t("home.look.description")}</p>
+            <Link href="/looks" className="btn-primary mt-6 inline-flex">{t("home.look.link")}</Link>
           </div>
         </div>
       </section>

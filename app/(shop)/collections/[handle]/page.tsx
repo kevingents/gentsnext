@@ -9,6 +9,8 @@ import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTaste
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
@@ -43,6 +45,8 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const { handle } = await params;
   const sp = await searchParams;
   const sel = parsePlpParams(sp);
+  const locale = await getLocale();
+  const t = await getT(locale);
   const collection = await getCollectionByHandle(handle);
   if (!collection) notFound();
 
@@ -94,12 +98,12 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     <div className="mx-auto max-w-page px-gutter py-10">
       <JsonLd data={breadcrumbJsonLd} />
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+        <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
         <span className="text-ink">{collection.title}</span>
       </nav>
       <div className="mt-6 border-b border-line pb-6">
-        <p className="label-brand">Collectie</p>
+        <p className="label-brand">{t("collection.header.eyebrow")}</p>
         <h1 className="mt-2 text-display-md">{collection.title}</h1>
         {collection.descriptionHtml ? (
           <div
@@ -118,7 +122,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         {/* Grid */}
         <div>
           <div className="mb-6 hidden items-center justify-between lg:flex">
-            <span className="font-sans text-sm text-muted">{total} artikelen</span>
+            <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
             <SortSelect value={sel.sort} />
           </div>
           <div className="mb-6 lg:hidden">
@@ -127,9 +131,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
 
           {items.length === 0 ? (
             <div className="py-16 text-center font-sans text-ink-soft">
-              <p>Geen artikelen gevonden met deze filters.</p>
+              <p>{t("collection.empty.title")}</p>
               <Link href={`/collections/${handle}`} className="mt-3 inline-block text-sm text-ink underline underline-offset-4">
-                Wis alle filters
+                {t("collection.empty.clearFilters")}
               </Link>
             </div>
           ) : (
@@ -141,18 +145,18 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           )}
 
           {totalPages > 1 ? (
-            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
+            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label={t("collection.pagination.aria")}>
               {sel.page > 1 ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
-                  Vorige
+                  {t("collection.pagination.previous")}
                 </Link>
               ) : null}
               <span className="text-muted">
-                Pagina {sel.page} van {totalPages}
+                {t("collection.pagination.pageLabel")} {sel.page} {t("collection.pagination.of")} {totalPages}
               </span>
               {sel.page < totalPages ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
-                  Volgende
+                  {t("collection.pagination.next")}
                 </Link>
               ) : null}
             </nav>

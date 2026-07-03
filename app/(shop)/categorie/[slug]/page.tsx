@@ -10,6 +10,8 @@ import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
@@ -41,6 +43,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const sp = await searchParams;
   const sel = parsePlpParams(sp);
+  const locale = await getLocale();
+  const t = await getT(locale);
   const cat = categoryBySlug(slug);
   if (!cat) notFound();
 
@@ -90,12 +94,12 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     <div className="mx-auto max-w-page px-gutter py-10">
       <JsonLd data={breadcrumbJsonLd} />
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+        <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
         <span className="text-ink">{cat.label}</span>
       </nav>
       <div className="mt-6 border-b border-line pb-6">
-        <p className="label-brand">Categorie</p>
+        <p className="label-brand">{t("cat.header.eyebrow")}</p>
         <h1 className="mt-2 text-display-md">{cat.label}</h1>
       </div>
 
@@ -106,7 +110,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
         <div>
           <div className="mb-6 hidden items-center justify-between lg:flex">
-            <span className="font-sans text-sm text-muted">{total} artikelen</span>
+            <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
             <SortSelect value={sel.sort} />
           </div>
           <div className="mb-6 lg:hidden">
@@ -115,9 +119,9 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
           {items.length === 0 ? (
             <div className="py-16 text-center font-sans text-ink-soft">
-              <p>Geen artikelen gevonden met deze filters.</p>
+              <p>{t("cat.empty.title")}</p>
               <Link href={`/categorie/${slug}`} className="mt-3 inline-block text-sm text-ink underline underline-offset-4">
-                Wis alle filters
+                {t("cat.empty.clearFilters")}
               </Link>
             </div>
           ) : (
@@ -129,18 +133,18 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           )}
 
           {totalPages > 1 ? (
-            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label="Paginering">
+            <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label={t("cat.pagination.aria")}>
               {sel.page > 1 ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
-                  Vorige
+                  {t("cat.pagination.previous")}
                 </Link>
               ) : null}
               <span className="text-muted">
-                Pagina {sel.page} van {totalPages}
+                {t("cat.pagination.pageLabel")} {sel.page} {t("cat.pagination.of")} {totalPages}
               </span>
               {sel.page < totalPages ? (
                 <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
-                  Volgende
+                  {t("cat.pagination.next")}
                 </Link>
               ) : null}
             </nav>

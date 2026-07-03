@@ -4,6 +4,9 @@ import Link from "next/link";
 import { listCollections } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { ArrowRightIcon } from "@/components/icons";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,8 @@ const FEATURED: { slug: string; img: string }[] = [
 ];
 
 export default async function CollectionsPage() {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const collections = await listCollections();
   const featured = FEATURED.map((f) => {
     const cat = CATEGORIES.find((c) => c.slug === f.slug);
@@ -32,8 +37,8 @@ export default async function CollectionsPage() {
     <div>
       {/* Categorie-tegels */}
       <section className="mx-auto max-w-page px-gutter py-12">
-        <p className="label-brand">Het assortiment</p>
-        <h1 className="mt-2 text-display-md">Shop op categorie</h1>
+        <p className="label-brand">{t("collections.categories.eyebrow")}</p>
+        <h1 className="mt-2 text-display-md">{t("collections.title")}</h1>
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {featured.map((c) => (
             <Link
@@ -57,8 +62,8 @@ export default async function CollectionsPage() {
 
       {/* Themacollecties */}
       <section className="mx-auto max-w-page px-gutter pb-16">
-        <p className="label-brand">Themacollecties</p>
-        <h2 className="mt-2 text-display-md">Gecureerde edits</h2>
+        <p className="label-brand">{t("collections.themed.eyebrow")}</p>
+        <h2 className="mt-2 text-display-md">{t("collections.themed.title")}</h2>
         <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {collections.map((c) => (
             <li key={c.id}>
@@ -67,7 +72,7 @@ export default async function CollectionsPage() {
                 className="flex items-center justify-between border border-line bg-canvas px-5 py-4 font-sans text-sm transition-colors hover:border-ink"
               >
                 <span>{c.title}</span>
-                <span aria-hidden className="text-muted">→</span>
+                <ArrowRightIcon className="h-4 w-4 text-muted" />
               </Link>
             </li>
           ))}
