@@ -77,11 +77,13 @@ export async function listCollections() {
     .orderBy(asc(collections.position), asc(collections.title));
 }
 
-export async function getCollectionByHandle(handle: string) {
+// React.cache: een collectie-PLP haalt dit 2× per request op (page + generateMetadata);
+// dedup binnen de request scheelt een dubbele query.
+export const getCollectionByHandle = cache(async (handle: string) => {
   const db = getDb();
   const rows = await db.select().from(collections).where(eq(collections.handle, handle)).limit(1);
   return rows[0] ?? null;
-}
+});
 
 // Categorieën waar de PLP-kaart met de MODELFOTO leidt (apparel, gedragen oogt
 // editorial). Accessoires/schoenen blijven op de packshot — die tonen we 'heel'.

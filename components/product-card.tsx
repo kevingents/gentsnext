@@ -36,16 +36,21 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
             Geen afbeelding
           </div>
         )}
-        {/* Modelfoto (of sfeerbeeld) faded in bij hover — toont het kledingstuk gedragen. */}
+        {/* Modelfoto (of sfeerbeeld) faded in bij hover — toont het kledingstuk gedragen.
+            Alleen op hover-capable devices renderen: op touch (het gros van het verkeer)
+            is er geen hover, dus dat tweede beeld hoeft niet gedownload te worden. De
+            display:none-wrapper houdt 'm buiten Next's lazy-loader (geen fetch). */}
         {product.hoverImageUrl ? (
-          <Image
-            src={product.hoverImageUrl}
-            alt=""
-            aria-hidden
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="absolute inset-0 object-cover opacity-0 transition-opacity duration-500 ease-brand group-hover:opacity-100"
-          />
+          <span aria-hidden className="absolute inset-0 hidden [@media(hover:hover)]:block">
+            <Image
+              src={product.hoverImageUrl}
+              alt=""
+              aria-hidden
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="object-cover opacity-0 transition-opacity duration-500 ease-brand group-hover:opacity-100"
+            />
+          </span>
         ) : null}
       </div>
       <div className="flex flex-col gap-0.5">
