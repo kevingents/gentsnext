@@ -15,6 +15,8 @@ import { getMigratedPage } from "@/lib/migrated-pages";
 import { getStorePage } from "@/lib/content-pages";
 import { PageBody } from "@/components/page-body";
 import { getLanding } from "@/lib/landings";
+import { getLocalizedLanding } from "@/lib/landings-i18n";
+import { getLocale } from "@/lib/locale-server";
 import { localeAlternates } from "@/lib/seo";
 import { getHighlights, getCollectionByHandle, getCollectionProducts } from "@/lib/catalog";
 
@@ -145,7 +147,7 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
 
   // 3. Statische storytelling-landing.
   const landing = getLanding(handle);
-  if (landing) return <LandingPage landing={landing} />;
+  if (landing) return <LandingPage landing={await getLocalizedLanding(landing, await getLocale())} />;
 
   // 4. Overgenomen content-pagina (migrated).
   const mp = getMigratedPage(handle);
