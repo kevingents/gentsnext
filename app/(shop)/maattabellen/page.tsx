@@ -5,6 +5,8 @@ import { localeAlternates } from "@/lib/seo";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSiteUrl } from "@/lib/site-url";
 import { SIZE_GUIDES, MEASURE_INFO, type Measure } from "@/lib/size-chart-hub";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,9 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const ALL_MEASURES: Measure[] = ["chest", "waist", "collar", "inseam"];
 
-export default function MaattabellenHubPage() {
+export default async function MaattabellenHubPage() {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const siteUrl = getSiteUrl();
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -46,20 +50,18 @@ export default function MaattabellenHubPage() {
       <JsonLd data={breadcrumbJsonLd} />
       <JsonLd data={itemListJsonLd} />
 
-      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+      <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb")}>
+        <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
-        <span className="text-ink">Maattabellen</span>
+        <span className="text-ink">{t("maattabellen.title")}</span>
       </nav>
 
       <header className="mt-6 max-w-2xl">
-        <p className="label-brand">Maatinformatie</p>
-        <h1 className="mt-2 text-display-lg">Maattabellen</h1>
+        <p className="label-brand">{t("maattabellen.eyebrow")}</p>
+        <h1 className="mt-2 text-display-lg">{t("maattabellen.title")}</h1>
         <p className="mt-4 font-sans text-ink-soft">
-          De juiste maat begint bij de juiste tabel. Hieronder vind je per categorie de
-          officiële GENTS-maatvoering — lichaamsmaten in centimeters per maat. Liever
-          stap voor stap geholpen worden?{" "}
-          <Link href="/maatadvies" className="text-ink underline underline-offset-4">Doe het maatadvies</Link>.
+          {t("maattabellen.intro")}{" "}
+          <Link href="/maatadvies" className="text-ink underline underline-offset-4">{t("maattabellen.intro.linkAdvice")}</Link>.
         </p>
       </header>
 
@@ -76,7 +78,7 @@ export default function MaattabellenHubPage() {
               <p className="mt-1 font-sans text-sm text-ink-soft">{g.cardDescription}</p>
             </div>
             <span className="mt-4 font-sans text-sm text-ink underline underline-offset-4 group-hover:no-underline">
-              Bekijk maattabel →
+              {t("maattabellen.card.view")} →
             </span>
           </Link>
         ))}
@@ -84,10 +86,9 @@ export default function MaattabellenHubPage() {
 
       {/* zo meet je jezelf op */}
       <section className="mt-14 border-t border-line pt-10">
-        <h2 className="text-display-md">Zo meet je jezelf op</h2>
+        <h2 className="text-display-md">{t("maattabellen.measure.title")}</h2>
         <p className="mt-2 max-w-xl font-sans text-ink-soft">
-          Pak een zacht meetlint en meet over je ondergoed of een dun shirt. Houd het
-          lint recht en niet te strak — zo komen je maten overeen met de tabellen.
+          {t("maattabellen.measure.intro")}
         </p>
         <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
           {ALL_MEASURES.map((m) => (
@@ -100,11 +101,11 @@ export default function MaattabellenHubPage() {
       </section>
 
       <div className="mt-12 rounded-lg border border-line bg-surface px-6 py-6 text-center">
-        <p className="font-display text-lg text-ink">Twijfel je nog over je maat?</p>
+        <p className="font-display text-lg text-ink">{t("maattabellen.cta.title")}</p>
         <p className="mt-1 font-sans text-sm text-ink-soft">
-          Ons maatadvies vertaalt je lichaamsmaten naar de juiste maat per onderdeel — of kom langs in de winkel.
+          {t("maattabellen.cta.body")}
         </p>
-        <Link href="/maatadvies" className="btn-primary mt-4 inline-block">Vind mijn maat</Link>
+        <Link href="/maatadvies" className="btn-primary mt-4 inline-block">{t("nav.sizeAdvisor")}</Link>
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { RetourFlow } from "@/components/returns/retour-flow";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { getSessionCustomer } from "@/lib/account";
 import { getReturnableOrder } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
@@ -20,6 +22,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RetournerenPage({ searchParams }: { searchParams: Promise<{ order?: string }> }) {
   const { order } = await searchParams;
+  const locale = await getLocale();
+  const t = await getT(locale);
   const orderNr = String(order || "").trim();
 
   // Ingelogd + bestelnummer → direct de retourbare regels (sessie = bewijs, geen e-mail nodig).
@@ -44,12 +48,10 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
       <div className="mx-auto max-w-2xl">
-        <p className="label-brand">Service</p>
-        <h1 className="mt-2 text-display-md">Retourneren</h1>
+        <p className="label-brand">{t("footer.service")}</p>
+        <h1 className="mt-2 text-display-md">{t("retourneren.title")}</h1>
         <p className="mt-3 font-sans text-ink-soft">
-          Niet helemaal goed? Je hebt 14 dagen bedenktijd. Kies <strong>tegoed/omruilen</strong> en je retour is
-          <strong> gratis</strong>. Bij geld terug rekenen we de retourkosten (gelijk aan de heenzending, € 4,99).
-          Inleveren kan met een DHL-retourlabel of in een GENTS-winkel.
+          {t("retourneren.intro.part1")} <strong>{t("retourneren.intro.credit")}</strong> {t("retourneren.intro.part2")}<strong> {t("retourneren.intro.free")}</strong>. {t("retourneren.intro.part3")}
         </p>
         <div className="mt-8">
           <RetourFlow initialOrder={orderNr} prefill={prefill} stores={getStores().map((s) => s.title)} />

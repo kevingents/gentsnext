@@ -180,6 +180,17 @@ export function pickTranslation(store: Store, ns: string, key: string, fallback:
   return store[`${ns}:${key}`]?.v ?? fallback;
 }
 
+/**
+ * Als pickTranslation, maar alléén als de vertaling nog bij de HUIDIGE bron hoort
+ * (hash-match). Voor portal-bewerkbare content (hero/campagnes): een marketeer die de
+ * NL-tekst wijzigt mag geen stale vertaling van de vórige campagne tonen — dan liever
+ * de verse NL-bron tot de nachtelijke cron de nieuwe tekst vertaald heeft.
+ */
+export function pickFreshTranslation(store: Store, ns: string, key: string, source: string): string {
+  const cur = store[`${ns}:${key}`];
+  return cur && cur.h === hash(source) && cur.v ? cur.v : source;
+}
+
 /* ─────────────────────────── Catalogus (producten) ─────────────────────── */
 
 /**

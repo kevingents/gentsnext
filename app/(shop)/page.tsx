@@ -9,7 +9,7 @@ import { VideoHero } from "@/components/home/video-hero";
 import { JsonLd } from "@/components/json-ld";
 import { getStores } from "@/lib/stores";
 import { getSiteUrl } from "@/lib/site-url";
-import { getSiteSettings } from "@/lib/site-settings";
+import { getLocalizedSiteSettings } from "@/lib/site-settings-i18n";
 import { listCollections, getHighlights, getProductsByHandles } from "@/lib/catalog";
 import { getTrendingHandles } from "@/lib/analytics";
 import { getAllLooks } from "@/lib/looks";
@@ -50,6 +50,7 @@ function findCollection(
 }
 
 export default async function Home() {
+  const locale = await getLocale();
   // "Populair nu" (analytics, met fallback) start concurrent met de rest — het is een
   // eigen 2-staps-keten die niet op de andere reads hoeft te wachten.
   const trendingPromise: Promise<Awaited<ReturnType<typeof getProductsByHandles>>> = (async () => {
@@ -68,10 +69,9 @@ export default async function Home() {
     listCollections().catch(() => []),
     getHighlights("Pakken", 4).catch(() => []),
     getHighlights("Overhemden", 4).catch(() => []),
-    getSiteSettings(),
+    getLocalizedSiteSettings(locale),
     getAllLooks().catch(() => []),
   ]);
-  const locale = await getLocale();
   const t = await getT(locale);
   const featured = CATEGORIES.slice(0, 8);
   const heroLook = looks[0] ?? null;

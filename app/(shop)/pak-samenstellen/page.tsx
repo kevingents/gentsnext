@@ -3,6 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { listSuits } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,8 @@ export const metadata: Metadata = {
 };
 
 export default async function PakSamenstellenPage() {
+  const locale = await getLocale();
+  const t = await getT(locale);
   let suits: Awaited<ReturnType<typeof listSuits>> = [];
   try {
     suits = await listSuits();
@@ -24,18 +28,16 @@ export default async function PakSamenstellenPage() {
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
       <div className="max-w-2xl">
-        <p className="label-brand">Op jouw maat</p>
-        <h1 className="mt-2 text-display-lg">Stel je pak samen</h1>
+        <p className="label-brand">{t("suit_builder.label")}</p>
+        <h1 className="mt-2 text-display-lg">{t("suit_builder.title")}</h1>
         <p className="mt-4 font-sans text-ink-soft">
-          Kies een pak en bepaal zelf de uitvoering: 2-delig met colbert en
-          pantalon, of 3-delig met gilet. Je kiest één maat — wij voegen de
-          bijpassende onderdelen toe. De prijs is de som van de onderdelen.
+          {t("suit_builder.intro")}
         </p>
       </div>
 
       {suits.length === 0 ? (
         <p className="mt-12 font-sans text-ink-soft">
-          Er zijn op dit moment geen samenstelbare pakken beschikbaar.
+          {t("suit_builder.no_suits")}
         </p>
       ) : (
         <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
@@ -52,12 +54,12 @@ export default async function PakSamenstellenPage() {
                   />
                 ) : null}
                 <span className="absolute left-2 top-2 bg-canvas/90 px-2 py-0.5 font-sans text-[0.65rem] uppercase tracking-wide">
-                  {s.threePiece ? "2- of 3-delig" : "2-delig"}
+                  {s.threePiece ? t("suit_builder.two_or_three_piece") : t("suit_builder.two_piece")}
                 </span>
               </div>
               <div>
                 <h2 className="font-sans text-sm text-ink">{s.title}</h2>
-                <p className="font-sans text-sm text-ink-soft">vanaf {formatEuro(s.fromCents)}</p>
+                <p className="font-sans text-sm text-ink-soft">{t("suit_builder.from")} {formatEuro(s.fromCents)}</p>
               </div>
             </Link>
           ))}

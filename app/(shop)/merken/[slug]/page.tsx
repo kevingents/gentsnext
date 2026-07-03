@@ -8,6 +8,8 @@ import { brandBySlug } from "@/lib/brands";
 import { getProductsByBrand } from "@/lib/catalog";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function BrandPage({ params }: Props) {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const { slug } = await params;
   const brand = brandBySlug(slug);
   if (!brand) notFound();
@@ -55,23 +59,23 @@ export default async function BrandPage({ params }: Props) {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-ink/75 via-ink/15 to-transparent" />
         <div className="absolute inset-0 mx-auto flex max-w-page flex-col items-start justify-end px-gutter pb-12">
-          <p className="label-brand !text-canvas/80">Merk</p>
+          <p className="label-brand !text-canvas/80">{t("brands.label")}</p>
           <h1 className="mt-2 text-display-xl font-light text-canvas">{brand.name}</h1>
         </div>
       </section>
 
       <div className="mx-auto max-w-page px-gutter py-10">
-        <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-          <Link href="/" className="hover:text-ink">Home</Link>
+        <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb")}>
+          <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
           {" / "}
           <span className="text-ink">{brand.name}</span>
         </nav>
 
         <p className="mt-6 max-w-2xl font-sans text-ink-soft">{brand.intro}</p>
-        <p className="mt-2 font-sans text-sm text-muted">{products.length}+ artikelen</p>
+        <p className="mt-2 font-sans text-sm text-muted">{t("brands.items_count", { n: products.length })}</p>
 
         {products.length === 0 ? (
-          <p className="mt-12 font-sans text-ink-soft">Op dit moment geen producten beschikbaar.</p>
+          <p className="mt-12 font-sans text-ink-soft">{t("common.no_products")}</p>
         ) : (
           <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
             {products.map((p) => (
