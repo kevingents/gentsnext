@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/components/i18n/locale-provider";
 
 export type Address = {
   id: string; label: string; firstName?: string; lastName?: string;
@@ -12,6 +13,7 @@ const EMPTY: Address = { id: "", label: "Thuis", firstName: "", lastName: "", st
 
 /** Adresboek met toevoegen/bewerken/verwijderen + standaard kiezen (AVG: eigen adressen). */
 export function AddressBook({ addresses }: { addresses: Address[] }) {
+  const t = useT();
   const router = useRouter();
   const [editing, setEditing] = useState<null | "new" | string>(null);
   const [form, setForm] = useState<Address>({ ...EMPTY });
@@ -26,11 +28,11 @@ export function AddressBook({ addresses }: { addresses: Address[] }) {
     try {
       const res = await fetch("/api/account/addresses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const d = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-      if (!res.ok || !d?.ok) { setErr(d?.error || "Mislukt."); return false; }
+      if (!res.ok || !d?.ok) { setErr(d?.error || t("account.addresses.error.failed")); return false; }
       router.refresh();
       return true;
     } catch {
-      setErr("Netwerkfout.");
+      setErr(t("account.addresses.error.network"));
       return false;
     } finally {
       setBusy(false);
@@ -45,33 +47,33 @@ export function AddressBook({ addresses }: { addresses: Address[] }) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <p className="font-sans text-sm text-ink-soft">{addresses.length ? `${addresses.length} ${addresses.length === 1 ? "adres" : "adressen"}` : "Nog geen adressen"}</p>
+        <p className="font-sans text-sm text-ink-soft">{addresses.length ? (addresses.length === 1 ? t("account.addresses.count.one", { n: addresses.length }) : t("account.addresses.count.other", { n: addresses.length })) : t("account.addresses.empty")}</p>
         {editing === null ? (
-          <button type="button" onClick={() => { setForm({ ...EMPTY }); setEditing("new"); setErr(""); }} className="btn-ghost">Adres toevoegen</button>
+          <button type="button" onClick={() => { setForm({ ...EMPTY, label: t("account.addresses.defaultLabel") }); setEditing("new"); setErr(""); }} className="btn-ghost">{t("account.addresses.add")}</button>
         ) : null}
       </div>
 
       {editing !== null ? (
         <div className="mt-4 border border-line p-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Label (bv. Thuis)" v={form.label} on={(v) => set("label", v)} />
+            <Field label={t("account.addresses.field.label")} v={form.label} on={(v) => set("label", v)} />
             <span className="hidden sm:block" />
-            <Field label="Voornaam" v={form.firstName ?? ""} on={(v) => set("firstName", v)} />
-            <Field label="Achternaam" v={form.lastName ?? ""} on={(v) => set("lastName", v)} />
-            <Field label="Straat" v={form.street} on={(v) => set("street", v)} />
-            <Field label="Huisnummer" v={form.houseNumber} on={(v) => set("houseNumber", v)} />
-            <Field label="Postcode" v={form.postalCode} on={(v) => set("postalCode", v)} />
-            <Field label="Plaats" v={form.city} on={(v) => set("city", v)} />
-            <Field label="Land" v={form.country} on={(v) => set("country", v)} />
+            <Field label={t("checkout.firstname")} v={form.firstName ?? ""} on={(v) => set("firstName", v)} />
+            <Field label={t("checkout.lastname")} v={form.lastName ?? ""} on={(v) => set("lastName", v)} />
+            <Field label={t("checkout.street")} v={form.street} on={(v) => set("street", v)} />
+            <Field label={t("checkout.housenumber")} v={form.houseNumber} on={(v) => set("houseNumber", v)} />
+            <Field label={t("checkout.postalcode")} v={form.postalCode} on={(v) => set("postalCode", v)} />
+            <Field label={t("checkout.city")} v={form.city} on={(v) => set("city", v)} />
+            <Field label={t("checkout.country")} v={form.country} on={(v) => set("country", v)} />
           </div>
           <label className="mt-3 flex items-center gap-2 font-sans text-sm">
             <input type="checkbox" checked={form.isDefault} onChange={(e) => set("isDefault", e.target.checked)} />
-            Als standaardadres instellen
+            {t("account.addresses.setDefault")}
           </label>
           {err ? <p className="mt-2 font-sans text-sm text-danger">{err}</p> : null}
           <div className="mt-4 flex gap-2">
-            <button type="button" onClick={save} disabled={busy} className="btn-primary">{busy ? "Opslaan…" : "Opslaan"}</button>
-            <button type="button" onClick={() => { setEditing(null); setErr(""); }} className="btn-ghost">Annuleren</button>
+            <button type="button" onClick={save} disabled={busy} className="btn-primary">{busy ? t("common.saving") : t("common.save")}</button>
+            <button type="button" onClick={() => { setEditing(null); setErr(""); }} className="btn-ghost">{t("common.cancel")}</button>
           </div>
         </div>
       ) : null}
@@ -82,7 +84,7 @@ export function AddressBook({ addresses }: { addresses: Address[] }) {
             <li key={a.id} className="border border-line p-5">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{a.label}</p>
-                {a.isDefault ? <span className="bg-surface px-2 py-0.5 font-sans text-[0.6rem] uppercase tracking-wide">Standaard</span> : null}
+                {a.isDefault ? <span className="bg-surface px-2 py-0.5 font-sans text-[0.6rem] uppercase tracking-wide">{t("account.addresses.default")}</span> : null}
               </div>
               <p className="mt-2 font-sans text-sm text-ink-soft">
                 {[a.firstName, a.lastName].filter(Boolean).join(" ")}
@@ -92,9 +94,9 @@ export function AddressBook({ addresses }: { addresses: Address[] }) {
                 {a.country}
               </p>
               <div className="mt-3 flex flex-wrap gap-3 font-sans text-xs">
-                <button type="button" onClick={() => { setForm({ ...EMPTY, ...a }); setEditing(a.id); setErr(""); }} className="text-ink underline underline-offset-4">Bewerken</button>
-                {!a.isDefault ? <button type="button" onClick={() => post({ action: "default", id: a.id })} className="text-ink underline underline-offset-4">Als standaard</button> : null}
-                <button type="button" onClick={() => { if (window.confirm("Dit adres verwijderen?")) void post({ action: "delete", id: a.id }); }} className="text-danger underline underline-offset-4">Verwijderen</button>
+                <button type="button" onClick={() => { setForm({ ...EMPTY, ...a }); setEditing(a.id); setErr(""); }} className="text-ink underline underline-offset-4">{t("common.edit")}</button>
+                {!a.isDefault ? <button type="button" onClick={() => post({ action: "default", id: a.id })} className="text-ink underline underline-offset-4">{t("account.addresses.makeDefault")}</button> : null}
+                <button type="button" onClick={() => { if (window.confirm(t("account.addresses.confirmDelete"))) void post({ action: "delete", id: a.id }); }} className="text-danger underline underline-offset-4">{t("common.delete")}</button>
               </div>
             </li>
           ))}

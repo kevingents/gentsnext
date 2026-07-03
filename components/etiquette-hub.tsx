@@ -3,17 +3,18 @@ import Link from "next/link";
 import { ETIQUETTE } from "@/lib/etiquette-hub";
 import { VISUAL } from "@/lib/visuals";
 import { getLocale } from "@/lib/locale-server";
-import { t } from "@/lib/messages";
+import { getT } from "@/lib/t-server";
 
 export async function EtiquetteHub() {
   const locale = await getLocale();
+  const t = await getT(locale);
   return (
     <>
       {/* Hero */}
       <section className="relative h-[50vh] min-h-[380px] w-full overflow-hidden bg-ink">
         <Image
           src={VISUAL.formal}
-          alt={t("etiquette.hub.title", locale)}
+          alt={t("etiquette.hub.title")}
           fill
           priority
           sizes="100vw"
@@ -21,9 +22,9 @@ export async function EtiquetteHub() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-ink/75 via-ink/15 to-transparent" />
         <div className="absolute inset-0 mx-auto flex max-w-page flex-col items-start justify-end px-gutter pb-12">
-          <p className="label-brand !text-canvas/80">{t("etiquette.hub.eyebrow", locale)}</p>
+          <p className="label-brand !text-canvas/80">{t("etiquette.hub.eyebrow")}</p>
           <h1 className="mt-2 max-w-3xl text-display-xl font-light text-canvas">
-            {t("etiquette.hub.title", locale)}
+            {t("etiquette.hub.title")}
           </h1>
         </div>
       </section>
@@ -31,7 +32,7 @@ export async function EtiquetteHub() {
       {/* Intro */}
       <section className="mx-auto max-w-3xl px-gutter py-12 text-center">
         <p className="font-sans text-lg leading-relaxed text-ink-soft">
-          {t("etiquette.hub.intro", locale)}
+          {t("etiquette.hub.intro")}
         </p>
       </section>
 
@@ -57,7 +58,7 @@ export async function EtiquetteHub() {
                 <h2 className="font-display text-lg">{e.title}</h2>
                 <p className="mt-2 font-sans text-sm leading-relaxed text-ink-soft">{e.description}</p>
                 <span className="mt-auto pt-4 font-sans text-sm text-ink underline underline-offset-4">
-                  {t("etiquette.hub.readMore", locale)} →
+                  {t("etiquette.hub.readMore")} →
                 </span>
               </div>
             </Link>
@@ -68,16 +69,16 @@ export async function EtiquetteHub() {
       {/* CTA */}
       <section className="bg-ink text-canvas">
         <div className="mx-auto max-w-page px-gutter py-14 text-center">
-          <h2 className="text-display-md !text-canvas">{t("help.title", locale)}</h2>
+          <h2 className="text-display-md !text-canvas">{t("help.title")}</h2>
           <p className="mx-auto mt-3 max-w-xl font-sans text-canvas/80">
-            {t("etiquette.hub.ctaBody", locale)}
+            {t("etiquette.hub.ctaBody")}
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/pages/winkels" className="btn-primary !bg-canvas !text-ink hover:!bg-surface">
-              {t("landing.klantenservice.findStore", locale)}
+              {t("landing.klantenservice.findStore")}
             </Link>
             <Link href="/collections/gala" className="btn-ghost !border-canvas !text-canvas hover:!bg-canvas hover:!text-ink">
-              {t("etiquette.hub.shopGala", locale)}
+              {t("etiquette.hub.shopGala")}
             </Link>
           </div>
         </div>

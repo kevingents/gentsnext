@@ -103,7 +103,7 @@ export async function translateStrings(
 
 /* ───────────────────────── UI + content KV-store ───────────────────────── */
 
-type StoreVal = { h: number; v: string };
+type StoreVal = { h: number; v: string; m?: boolean }; // m = handmatig (beheer-UI) — cron blijft eraf
 type Store = Record<string, StoreVal>; // sleutel = "<ns>:<key>"
 
 const storeId = (locale: Locale) => `translations:${locale}`;
@@ -138,6 +138,7 @@ export async function ensureEntries(
   const store = await getTranslationStore(locale);
   const todo = entries.filter((e) => {
     const cur = store[`${e.ns}:${e.key}`];
+    if (cur?.m) return false; // handmatig bewerkt in de beheer-UI → cron blijft eraf
     return !cur || cur.h !== hash(e.source);
   });
   let translated = 0;
@@ -188,7 +189,42 @@ export function pickTranslation(store: Store, ns: string, key: string, fallback:
  */
 export function pickFreshTranslation(store: Store, ns: string, key: string, source: string): string {
   const cur = store[`${ns}:${key}`];
+  // Handmatige override wint altijd (beheer-UI); anders alleen een hash-verse vertaling.
+  if (cur?.m && cur.v) return cur.v;
   return cur && cur.h === hash(source) && cur.v ? cur.v : source;
+}
+
+/* ─────────────────── Beheer (portal → Vertalingen) ─────────────────── */
+
+export type TranslationRow = { ns: string; key: string; source: string; value: string; manual: boolean; fresh: boolean };
+
+/** Store + bron-hash naast elkaar voor de beheer-UI (fresh = vertaling hoort bij de huidige bron). */
+export function toTranslationRow(store: Store, ns: string, key: string, source: string): TranslationRow {
+  const cur = store[`${ns}:${key}`];
+  return {
+    ns,
+    key,
+    source,
+    value: cur?.v || "",
+    manual: Boolean(cur?.m),
+    fresh: Boolean(cur && cur.h === hash(source)),
+  };
+}
+
+/** Handmatige vertaling opslaan (beheer-UI). m:true → de cron overschrijft 'm nooit meer. */
+export async function saveManualTranslation(locale: Locale, ns: string, key: string, source: string, value: string): Promise<void> {
+  const store = await getTranslationStore(locale);
+  store[`${ns}:${key}`] = { h: hash(source), v: value, m: true };
+  await saveTranslationStore(locale, store);
+}
+
+/** Override terugzetten naar automatisch: entry weg → de eerstvolgende cron vertaalt opnieuw. */
+export async function resetTranslation(locale: Locale, ns: string, key: string): Promise<void> {
+  const store = await getTranslationStore(locale);
+  if (store[`${ns}:${key}`]) {
+    delete store[`${ns}:${key}`];
+    await saveTranslationStore(locale, store);
+  }
 }
 
 /* ─────────────────────────── Catalogus (producten) ─────────────────────── */

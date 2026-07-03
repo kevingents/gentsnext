@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckIcon } from "@/components/icons";
+import { useT } from "@/components/i18n/locale-provider";
 import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
 import { AddressBook } from "@/components/account/address-book";
@@ -50,17 +51,18 @@ type Data = {
   returns: ReturnRow[]; returnWindowDays: number; newInSize: ProductCardData[]; recommended: ProductCardData[];
 };
 
+// label = i18n-key; vertaald bij render via useT.
 const TABS = [
-  { key: "overzicht", label: "Overzicht" },
-  { key: "bestellingen", label: "Bestellingen" },
-  { key: "retouren", label: "Retouren" },
-  { key: "punten", label: "Spaarpunten" },
-  { key: "vouchers", label: "Tegoed" },
-  { key: "maten", label: "Mijn maten" },
-  { key: "gegevens", label: "Gegevens" },
-  { key: "adressen", label: "Adresboek" },
-  { key: "vragen", label: "Mijn vragen" },
-  { key: "privacy", label: "Privacy" },
+  { key: "overzicht", label: "account.tabs.overview" },
+  { key: "bestellingen", label: "account.tabs.orders" },
+  { key: "retouren", label: "account.tabs.returns" },
+  { key: "punten", label: "account.tabs.points" },
+  { key: "vouchers", label: "account.tabs.credit" },
+  { key: "maten", label: "account.tabs.sizes" },
+  { key: "gegevens", label: "account.tabs.details" },
+  { key: "adressen", label: "account.tabs.addresses" },
+  { key: "vragen", label: "account.tabs.questions" },
+  { key: "privacy", label: "account.tabs.privacy" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -80,6 +82,7 @@ const RET_STATUS_NL = RETURN_STATUS_NL;
 const NEXT_TIER = 500; // punten voor de volgende beloning
 
 export function ProfileClient({ customer, data, walletEnabled = false }: { customer: Customer; data: Data; walletEnabled?: boolean }) {
+  const t = useT();
   const [tab, setTab] = useState<TabKey>("overzicht");
   const name = customer.firstName || customer.email.split("@")[0];
 
@@ -87,39 +90,39 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
     <div className="mx-auto max-w-page px-gutter py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="label-brand">Mijn GENTS</p>
-          <h1 className="mt-2 text-display-md">Hallo {name}</h1>
+          <p className="label-brand">{t("login.eyebrow")}</p>
+          <h1 className="mt-2 text-display-md">{t("account.hello", { name })}</h1>
         </div>
         <div className="flex items-center gap-4">
           {customer.isAdmin ? (
             <>
-              <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">Statistieken</a>
-              <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">Orders</a>
-              <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">Klanten</a>
-              <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">Rapportages</a>
-              <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">Reviews</a>
-              <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">Instellingen</a>
+              <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.statistics")}</a>
+              <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.orders")}</a>
+              <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.customers")}</a>
+              <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reports")}</a>
+              <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reviews")}</a>
+              <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.settings")}</a>
             </>
           ) : null}
           <form action="/api/account/logout" method="post">
-            <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">Uitloggen</button>
+            <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">{t("account.logout")}</button>
           </form>
         </div>
       </div>
 
       {/* Tabs */}
-      <nav className="mt-8 flex flex-wrap gap-1 border-b border-line" aria-label="Accountonderdelen">
-        {TABS.map((t) => (
+      <nav className="mt-8 flex flex-wrap gap-1 border-b border-line" aria-label={t("account.tabs.ariaLabel")}>
+        {TABS.map((tb) => (
           <button
-            key={t.key}
+            key={tb.key}
             type="button"
-            onClick={() => setTab(t.key)}
-            aria-current={tab === t.key}
+            onClick={() => setTab(tb.key)}
+            aria-current={tab === tb.key}
             className={`-mb-px border-b-2 px-4 py-2.5 font-sans text-sm transition-colors ${
-              tab === t.key ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
+              tab === tb.key ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
             }`}
           >
-            {t.label}
+            {t(tb.label)}
           </button>
         ))}
       </nav>
@@ -142,34 +145,35 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
 
 /* ── Overzicht ────────────────────────────────────────────────────────────── */
 function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; onTab: (t: TabKey) => void }) {
+  const t = useT();
   const totalOrders = data.onlineOrders.length + data.storeBuys.length;
   const toNext = Math.max(0, NEXT_TIER - data.pointsBalance);
   const pct = Math.min(100, Math.round((data.pointsBalance / NEXT_TIER) * 100));
   return (
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Spaarpunten" value={String(data.pointsAvailable)} sub={data.pointsPending > 0 ? `+${data.pointsPending} in behandeling` : toNext > 0 ? `Nog ${toNext} tot je volgende beloning` : "Beloning beschikbaar!"} onClick={() => onTab("punten")} />
-        <Stat label="Actieve vouchers" value={String(data.activeVouchers.length)} sub="Bekijk je tegoeden" onClick={() => onTab("vouchers")} />
-        <Stat label="Aankopen" value={String(totalOrders)} sub="Online + in de winkel" onClick={() => onTab("bestellingen")} />
+        <Stat label={t("account.tabs.points")} value={String(data.pointsAvailable)} sub={data.pointsPending > 0 ? t("account.overview.pointsPending", { n: data.pointsPending }) : toNext > 0 ? t("account.overview.pointsToNext", { n: toNext }) : t("account.overview.rewardAvailable")} onClick={() => onTab("punten")} />
+        <Stat label={t("account.overview.activeVouchers")} value={String(data.activeVouchers.length)} sub={t("account.overview.viewCredit")} onClick={() => onTab("vouchers")} />
+        <Stat label={t("account.overview.purchases")} value={String(totalOrders)} sub={t("account.overview.onlinePlusStore")} onClick={() => onTab("bestellingen")} />
       </div>
 
       <div>
-        <p className="label-brand mb-3">Ga snel naar</p>
+        <p className="label-brand mb-3">{t("account.overview.quickNav")}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <QuickTile title="Mijn bestellingen" sub="Bekijk je orders + status" onClick={() => onTab("bestellingen")} />
-          <QuickTile title="Retourneren" sub={data.returns.length ? `${data.returns.length} retour(en) · bekijk status` : "Iets terugsturen of ruilen"} onClick={() => onTab("retouren")} />
-          <QuickTile title="Mijn tegoed" sub="Vouchers & cadeaubonnen" onClick={() => onTab("vouchers")} />
-          <QuickTile title="Mijn maten" sub="Sneller shoppen + beter advies" onClick={() => onTab("maten")} />
-          <QuickTile title="Adresboek" sub="Bezorgadressen beheren" onClick={() => onTab("adressen")} />
-          <QuickTile title="Mijn vragen" sub="Contact & klantenservice" onClick={() => onTab("vragen")} />
+          <QuickTile title={t("account.quick.orders.title")} sub={t("account.quick.orders.sub")} onClick={() => onTab("bestellingen")} />
+          <QuickTile title={t("retourneren.title")} sub={data.returns.length ? t("account.quick.returns.count", { n: data.returns.length }) : t("account.quick.returns.sub")} onClick={() => onTab("retouren")} />
+          <QuickTile title={t("account.quick.credit.title")} sub={t("account.quick.credit.sub")} onClick={() => onTab("vouchers")} />
+          <QuickTile title={t("account.tabs.sizes")} sub={t("account.quick.sizes.sub")} onClick={() => onTab("maten")} />
+          <QuickTile title={t("account.tabs.addresses")} sub={t("account.quick.addresses.sub")} onClick={() => onTab("adressen")} />
+          <QuickTile title={t("account.tabs.questions")} sub={t("account.quick.questions.sub")} onClick={() => onTab("vragen")} />
         </div>
       </div>
 
       {data.newInSize.length ? (
         <div>
           <div className="mb-3 flex items-baseline justify-between gap-3">
-            <p className="label-brand">Nieuw in jouw maat</p>
-            <a href="/collections/nieuwe-collectie-gents" className="font-sans text-xs text-ink-soft underline underline-offset-2 hover:text-ink">Alle nieuwe arrivals</a>
+            <p className="label-brand">{t("account.overview.newInSize")}</p>
+            <a href="/collections/nieuwe-collectie-gents" className="font-sans text-xs text-ink-soft underline underline-offset-2 hover:text-ink">{t("account.overview.allNewArrivals")}</a>
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
             {data.newInSize.map((p) => <ProductCard key={p.id} product={p} />)}
@@ -179,8 +183,8 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
 
       {data.recommended.length ? (
         <div>
-          <p className="label-brand mb-1">Past bij je eerdere bestellingen</p>
-          <p className="mb-3 font-sans text-xs text-ink-soft">Geselecteerd op de kleuren en stijl die je eerder koos — in jouw maat, op voorraad.</p>
+          <p className="label-brand mb-1">{t("account.overview.recommendedTitle")}</p>
+          <p className="mb-3 font-sans text-xs text-ink-soft">{t("account.overview.recommendedSub")}</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
             {data.recommended.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
@@ -189,7 +193,7 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
 
       <div className="border border-line p-5">
         <div className="flex items-center justify-between">
-          <p className="font-sans text-sm">Voortgang naar je volgende beloning</p>
+          <p className="font-sans text-sm">{t("account.overview.progressTitle")}</p>
           <p className="font-sans text-sm text-muted">{data.pointsBalance} / {NEXT_TIER}</p>
         </div>
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
@@ -199,8 +203,8 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
 
       {!customer.sizeProfile?.colbert && !customer.sizeProfile?.overhemd ? (
         <button type="button" onClick={() => onTab("maten")} className="block w-full border border-dashed border-line p-5 text-left hover:border-ink">
-          <p className="font-display text-lg font-light">Stel je maatprofiel in</p>
-          <p className="mt-1 font-sans text-sm text-ink-soft">Bewaar je colbert-, broek- en overhemdmaat — dan shop je voortaan sneller en krijg je beter advies.</p>
+          <p className="font-display text-lg font-light">{t("account.overview.sizeCtaTitle")}</p>
+          <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.overview.sizeCtaBody")}</p>
         </button>
       ) : null}
 
@@ -232,21 +236,22 @@ function QuickTile({ title, sub, onClick }: { title: string; sub: string; onClic
 }
 
 function RecentActivity({ data }: { data: Data }) {
+  const t = useT();
   const items = [
-    ...data.onlineOrders.map((o) => ({ when: o.createdAt, kind: "Online", label: `Bestelling ${o.orderNumber}`, total: o.totalCents })),
-    ...data.storeBuys.map((s) => ({ when: s.purchasedAt, kind: "Winkel", label: s.storeName || "Winkelaankoop", total: s.totalCents })),
+    ...data.onlineOrders.map((o) => ({ when: o.createdAt, kind: "Online", label: t("account.orderNumber", { n: o.orderNumber }), total: o.totalCents })),
+    ...data.storeBuys.map((s) => ({ when: s.purchasedAt, kind: "Winkel", label: s.storeName || t("account.activity.storePurchase"), total: s.totalCents })),
   ]
     .sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime())
     .slice(0, 5);
   if (!items.length) return null;
   return (
     <div>
-      <p className="label-brand mb-3">Recente activiteit</p>
+      <p className="label-brand mb-3">{t("account.activity.title")}</p>
       <ul className="divide-y divide-line border-y border-line">
         {items.map((i, idx) => (
           <li key={idx} className="flex items-center justify-between py-3 font-sans text-sm">
             <span className="flex items-center gap-3">
-              <span className={`inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-wide ${i.kind === "Winkel" ? "bg-ink text-canvas" : "border border-line"}`}>{i.kind}</span>
+              <span className={`inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-wide ${i.kind === "Winkel" ? "bg-ink text-canvas" : "border border-line"}`}>{i.kind === "Winkel" ? t("account.activity.store") : t("account.activity.online")}</span>
               <span>{i.label}</span>
             </span>
             <span className="text-ink-soft">{nlDate(i.when)} · {formatEuro(i.total)}</span>
@@ -259,26 +264,27 @@ function RecentActivity({ data }: { data: Data }) {
 
 /* ── Bestellingen (online + winkel) ───────────────────────────────────────── */
 function Bestellingen({ data }: { data: Data }) {
+  const t = useT();
   if (!data.onlineOrders.length && !data.storeBuys.length) {
-    return <Empty title="Nog geen aankopen" body="Zodra je online of in de winkel iets koopt, verschijnt het hier — inclusief je winkelaankopen." />;
+    return <Empty title={t("account.orders.emptyTitle")} body={t("account.orders.emptyBody")} />;
   }
   return (
     <div className="space-y-8">
       {data.onlineOrders.length ? (
         <section>
-          <p className="label-brand mb-3">Online bestellingen</p>
+          <p className="label-brand mb-3">{t("account.orders.onlineTitle")}</p>
           <ul className="space-y-3">
             {data.onlineOrders.map((o) => (
               <li key={o.id} className="border border-line p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">Bestelling {o.orderNumber}</span>
+                  <span className="font-medium">{t("account.orderNumber", { n: o.orderNumber })}</span>
                   <span className="font-sans text-sm text-muted">{nlDate(o.createdAt)}</span>
                 </div>
                 <p className="mt-1 font-sans text-xs text-ink-soft">{STATUS_NL[o.status] || o.status} · {formatEuro(o.totalCents)}</p>
                 {o.lines.length ? (
                   <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
                     {o.lines.map((l, i) => (
-                      <li key={i}>{l.quantity}× {l.title}{l.size ? ` — maat ${l.size}` : ""}</li>
+                      <li key={i}>{l.quantity}× {l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>
                     ))}
                   </ul>
                 ) : null}
@@ -291,22 +297,22 @@ function Bestellingen({ data }: { data: Data }) {
 
       {data.storeBuys.length ? (
         <section>
-          <p className="label-brand mb-3">Aankopen in de winkel</p>
+          <p className="label-brand mb-3">{t("account.orders.storeTitle")}</p>
           <ul className="space-y-3">
             {data.storeBuys.map((s) => (
               <li key={s.id} className="border border-line p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-2 font-medium">
-                    <span className="inline-block bg-ink px-2 py-0.5 text-[0.6rem] uppercase tracking-wide text-canvas">Winkel</span>
-                    {s.storeName || "Winkelaankoop"}
+                    <span className="inline-block bg-ink px-2 py-0.5 text-[0.6rem] uppercase tracking-wide text-canvas">{t("account.activity.store")}</span>
+                    {s.storeName || t("account.activity.storePurchase")}
                   </span>
                   <span className="font-sans text-sm text-muted">{nlDate(s.purchasedAt)}</span>
                 </div>
-                <p className="mt-1 font-sans text-xs text-ink-soft">{formatEuro(s.totalCents)}{s.pointsEarned ? ` · +${s.pointsEarned} punten` : ""}</p>
+                <p className="mt-1 font-sans text-xs text-ink-soft">{formatEuro(s.totalCents)}{s.pointsEarned ? ` · ${t("puntenClaim.success.points", { points: s.pointsEarned })}` : ""}</p>
                 {s.lines?.length ? (
                   <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
                     {s.lines.map((l, i) => (
-                      <li key={i}>{l.qty ? `${l.qty}× ` : ""}{l.title}{l.size ? ` — maat ${l.size}` : ""}</li>
+                      <li key={i}>{l.qty ? `${l.qty}× ` : ""}{l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>
                     ))}
                   </ul>
                 ) : null}
@@ -320,6 +326,7 @@ function Bestellingen({ data }: { data: Data }) {
 }
 
 function OrderReturnFooter({ order, returns, windowDays }: { order: Order; returns: ReturnRow[]; windowDays: number }) {
+  const t = useT();
   const ret = returns.find((r) => r.orderNumber === order.orderNumber);
   const eligible = ["paid", "shipped", "delivered", "ready_pickup"].includes(order.status);
   const withinWindow = Date.now() - new Date(order.createdAt).getTime() <= windowDays * 86400000;
@@ -328,12 +335,12 @@ function OrderReturnFooter({ order, returns, windowDays }: { order: Order; retur
     <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs">
       {ret ? (
         <span className="text-ink-soft">
-          Retour {RET_STATUS_NL[ret.status] || ret.status}
-          {ret.refundType === "credit" && ret.creditCode ? ` · tegoed ${ret.creditCode}` : ""}
-          {ret.refundType === "money" && ret.refundedCents ? ` · ${formatEuro(ret.refundedCents)} terugbetaald` : ""}
+          {t("account.returns.prefix")} {RET_STATUS_NL[ret.status] || ret.status}
+          {ret.refundType === "credit" && ret.creditCode ? ` · ${t("account.returns.creditCode", { code: ret.creditCode })}` : ""}
+          {ret.refundType === "money" && ret.refundedCents ? ` · ${t("account.returns.refunded", { amount: formatEuro(ret.refundedCents) })}` : ""}
         </span>
       ) : (
-        <a href={`/retourneren?order=${encodeURIComponent(order.orderNumber)}`} className="underline underline-offset-2 hover:opacity-70">Retourneren</a>
+        <a href={`/retourneren?order=${encodeURIComponent(order.orderNumber)}`} className="underline underline-offset-2 hover:opacity-70">{t("retourneren.title")}</a>
       )}
     </div>
   );
@@ -341,39 +348,40 @@ function OrderReturnFooter({ order, returns, windowDays }: { order: Order; retur
 
 /* ── Retouren ─────────────────────────────────────────────────────────────── */
 function Retouren({ data }: { data: Data }) {
+  const t = useT();
   if (!data.returns.length) {
     return (
       <div className="space-y-5">
-        <Empty title="Nog geen retouren" body="Iets terugsturen of ruilen? Kies tegoed/omruilen en je retour is gratis. Start hieronder of vanaf je bestelling." />
-        <a href="/retourneren" className="btn-primary inline-block">Retour starten</a>
+        <Empty title={t("account.returns.emptyTitle")} body={t("account.returns.emptyBody")} />
+        <a href="/retourneren" className="btn-primary inline-block">{t("account.returns.start")}</a>
       </div>
     );
   }
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="label-brand">Mijn retouren</p>
-        <a href="/retourneren" className="font-sans text-sm underline underline-offset-2 hover:opacity-70">Nieuwe retour</a>
+        <p className="label-brand">{t("account.returns.title")}</p>
+        <a href="/retourneren" className="font-sans text-sm underline underline-offset-2 hover:opacity-70">{t("account.returns.new")}</a>
       </div>
       <ul className="space-y-3">
         {data.returns.map((r) => (
           <li key={r.id} className="border border-line p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium">Retour · bestelling {r.orderNumber}</span>
+              <span className="font-medium">{t("account.returns.orderTitle", { n: r.orderNumber })}</span>
               <span className="inline-block border border-line px-2 py-0.5 text-[0.6rem] uppercase tracking-wide">{RET_STATUS_NL[r.status] || r.status}</span>
             </div>
-            <p className="mt-1 font-sans text-xs text-ink-soft">{r.method === "dhl" ? "Per DHL" : "In de winkel"} · {r.refundType === "credit" ? "tegoed" : "geld terug"} · {nlDate(r.createdAt)}</p>
+            <p className="mt-1 font-sans text-xs text-ink-soft">{r.method === "dhl" ? t("account.returns.methodDhl") : t("account.returns.methodStore")} · {r.refundType === "credit" ? t("account.returns.refundCredit") : t("account.returns.refundMoney")} · {nlDate(r.createdAt)}</p>
             {r.lines.length ? (
               <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
-                {r.lines.map((l, i) => <li key={i}>{l.qty}× {l.title}{l.size ? ` — maat ${l.size}` : ""}</li>)}
+                {r.lines.map((l, i) => <li key={i}>{l.qty}× {l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>)}
               </ul>
             ) : null}
             {(r.dhlLabelUrl || r.dhlTracking || r.creditCode || (r.status === "completed" && r.refundType === "money")) && (
               <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs text-ink-soft">
-                {r.dhlLabelUrl ? <a href={r.dhlLabelUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:opacity-70">Retourlabel</a> : null}
-                {r.dhlTracking ? <span>Track &amp; trace: {r.dhlTracking}</span> : null}
-                {r.creditCode ? <span className="text-ink">Tegoed: {r.creditCode}</span> : null}
-                {r.status === "completed" && r.refundType === "money" ? <span>{formatEuro(r.refundedCents)} terugbetaald</span> : null}
+                {r.dhlLabelUrl ? <a href={r.dhlLabelUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:opacity-70">{t("account.returns.returnLabel")}</a> : null}
+                {r.dhlTracking ? <span>{t("account.returns.tracking", { code: r.dhlTracking })}</span> : null}
+                {r.creditCode ? <span className="text-ink">{t("account.returns.creditLabel", { code: r.creditCode })}</span> : null}
+                {r.status === "completed" && r.refundType === "money" ? <span>{t("account.returns.refunded", { amount: formatEuro(r.refundedCents) })}</span> : null}
               </div>
             )}
           </li>
@@ -386,6 +394,7 @@ function Retouren({ data }: { data: Data }) {
 /* ── Spaarpunten ──────────────────────────────────────────────────────────── */
 /** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). 500 punten = € 25. */
 function RedeemPoints({ available }: { available: number }) {
+  const t = useT();
   const STEP = 500;
   const STEP_CENTS = 2500; // 500 punten = € 25 (server is bron van waarheid)
   const maxSteps = Math.floor(available / STEP);
@@ -408,12 +417,12 @@ function RedeemPoints({ available }: { available: number }) {
       });
       const d = await res.json();
       if (!res.ok || !d.ok) {
-        setError(d.error || "Inwisselen mislukte.");
+        setError(d.error || t("account.redeem.failed"));
         return;
       }
       setResult({ code: d.code, valueCents: d.valueCents });
     } catch {
-      setError("Er ging iets mis. Probeer het opnieuw.");
+      setError(t("puntenClaim.error.retry"));
     } finally {
       setLoading(false);
     }
@@ -422,14 +431,14 @@ function RedeemPoints({ available }: { available: number }) {
   if (result) {
     return (
       <div className="border border-ink p-6">
-        <p className="label-brand">Gelukt</p>
+        <p className="label-brand">{t("account.redeem.successTitle")}</p>
         <p className="mt-2 font-sans text-sm text-ink-soft">
-          Je tegoedbon van {formatEuro(result.valueCents)} staat klaar. Gebruik de code bij het afrekenen:
+          {t("account.redeem.successBody", { amount: formatEuro(result.valueCents) })}
         </p>
         <div className="mt-3 flex items-center gap-3">
           <code className="bg-surface px-3 py-2 font-sans text-base tracking-wider">{result.code}</code>
           <button onClick={() => window.location.reload()} className="font-sans text-sm underline">
-            Saldo vernieuwen
+            {t("account.redeem.refresh")}
           </button>
         </div>
       </div>
@@ -438,9 +447,9 @@ function RedeemPoints({ available }: { available: number }) {
 
   return (
     <div className="border border-line p-6">
-      <p className="label-brand">Verzilver punten</p>
+      <p className="label-brand">{t("account.redeem.title")}</p>
       <p className="mt-2 font-sans text-sm text-ink-soft">
-        {STEP} punten = {formatEuro(STEP_CENTS)} tegoedbon. Kies hoeveel je inwisselt:
+        {t("account.redeem.intro", { points: STEP, amount: formatEuro(STEP_CENTS) })}
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <select
@@ -451,7 +460,7 @@ function RedeemPoints({ available }: { available: number }) {
         >
           {Array.from({ length: maxSteps }, (_, i) => i + 1).map((n) => (
             <option key={n} value={n}>
-              {n * STEP} punten → {formatEuro(n * STEP_CENTS)}
+              {t("account.redeem.option", { points: n * STEP, amount: formatEuro(n * STEP_CENTS) })}
             </option>
           ))}
         </select>
@@ -460,7 +469,7 @@ function RedeemPoints({ available }: { available: number }) {
           disabled={loading}
           className="bg-ink px-5 py-2 font-sans text-sm text-white transition hover:opacity-90 disabled:opacity-50"
         >
-          {loading ? "Bezig…" : `Verzilver ${points} punten`}
+          {loading ? t("common.processing") : t("account.redeem.submit", { points })}
         </button>
       </div>
       {error && <p className="mt-2 font-sans text-sm text-danger">{error}</p>}
@@ -469,19 +478,20 @@ function RedeemPoints({ available }: { available: number }) {
 }
 
 function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean }) {
+  const t = useT();
   return (
     <div className="space-y-6">
       <div className="border border-line p-6">
-        <p className="label-brand">Je saldo</p>
-        <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">punten beschikbaar</span></p>
+        <p className="label-brand">{t("account.points.balanceTitle")}</p>
+        <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
         {data.pointsPending > 0 && (
-          <p className="mt-1 font-sans text-sm text-ink-soft">+{data.pointsPending} punten in behandeling — beschikbaar na de retourperiode.</p>
+          <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
         )}
-        <p className="mt-2 font-sans text-sm text-ink-soft">Je spaart 1 punt per bestede euro — online én in de winkel. Punten verzilver je voor kortingen en exclusieve acties.</p>
+        <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.points.explainer")}</p>
         {walletEnabled && (
           <div className="mt-5">
             <AppleWalletButton />
-            <p className="mt-2 font-sans text-xs text-muted">Zet je spaarpas in Apple Wallet — laat 'm scannen aan de kassa om te sparen en in te wisselen.</p>
+            <p className="mt-2 font-sans text-xs text-muted">{t("account.points.walletHint")}</p>
           </div>
         )}
       </div>
@@ -490,13 +500,13 @@ function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean })
         <ul className="divide-y divide-line border-y border-line">
           {data.loyalty.map((e) => (
             <li key={e.id} className="flex items-center justify-between py-3 font-sans text-sm">
-              <span>{e.reason || "Mutatie"} <span className="text-muted">· {nlDate(e.createdAt)}</span></span>
+              <span>{e.reason || t("account.points.mutation")} <span className="text-muted">· {nlDate(e.createdAt)}</span></span>
               <span className={e.points >= 0 ? "text-success" : "text-danger"}>{e.points >= 0 ? "+" : ""}{e.points}</span>
             </li>
           ))}
         </ul>
       ) : (
-        <Empty title="Nog geen punten" body="Je eerste aankoop levert direct spaarpunten op." />
+        <Empty title={t("account.points.emptyTitle")} body={t("account.points.emptyBody")} />
       )}
     </div>
   );
@@ -504,29 +514,30 @@ function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean })
 
 /* ── Vouchers ─────────────────────────────────────────────────────────────── */
 function Vouchers({ data }: { data: Data }) {
+  const t = useT();
   const hasGiftcards = data.giftcards.length > 0;
   const hasVouchers = data.vouchers.length > 0;
   if (!hasGiftcards && !hasVouchers) {
-    return <Empty title="Geen tegoed" body="Cadeaubonnen, tegoedbonnen en acties verschijnen hier zodra je ze ontvangt." />;
+    return <Empty title={t("account.credit.emptyTitle")} body={t("account.credit.emptyBody")} />;
   }
   return (
     <div className="space-y-8">
       {hasGiftcards ? (
         <div>
-          <p className="font-sans text-sm font-medium text-ink">Cadeaubonnen</p>
+          <p className="font-sans text-sm font-medium text-ink">{t("account.credit.giftcards")}</p>
           <ul className="mt-3 grid gap-4 sm:grid-cols-2">
             {data.giftcards.map((g) => {
               const expired = Boolean(g.expiresAt && new Date(g.expiresAt).getTime() < Date.now());
               const depleted = g.balanceCents <= 0;
               return (
                 <li key={g.id} className={`border p-5 ${depleted || expired ? "border-line opacity-60" : "border-ink"}`}>
-                  <p className="font-sans text-xs uppercase tracking-wide text-muted">Saldo</p>
+                  <p className="font-sans text-xs uppercase tracking-wide text-muted">{t("account.credit.balance")}</p>
                   <p className="font-display text-2xl font-light">{formatEuro(g.balanceCents)}</p>
-                  <p className="mt-0.5 font-sans text-xs text-muted">van {formatEuro(g.initialCents)}</p>
+                  <p className="mt-0.5 font-sans text-xs text-muted">{t("account.credit.ofInitial", { amount: formatEuro(g.initialCents) })}</p>
                   <div className="mt-3 flex items-center justify-between">
                     <code className="bg-surface px-2 py-1 font-sans text-sm tracking-wider">{g.code}</code>
                     <span className="font-sans text-xs text-muted">
-                      {depleted ? "Gebruikt" : expired ? "Verlopen" : g.expiresAt ? `Geldig t/m ${nlDate(g.expiresAt)}` : ""}
+                      {depleted ? t("account.credit.used") : expired ? t("account.credit.expired") : g.expiresAt ? t("account.credit.validUntil", { date: nlDate(g.expiresAt) }) : ""}
                     </span>
                   </div>
                 </li>
@@ -538,19 +549,19 @@ function Vouchers({ data }: { data: Data }) {
 
       {hasVouchers ? (
         <div>
-          {hasGiftcards ? <p className="font-sans text-sm font-medium text-ink">Vouchers</p> : null}
+          {hasGiftcards ? <p className="font-sans text-sm font-medium text-ink">{t("account.credit.vouchers")}</p> : null}
           <ul className={`grid gap-4 sm:grid-cols-2 ${hasGiftcards ? "mt-3" : ""}`}>
             {data.vouchers.map((v) => {
               const expired = v.status !== "active" || (v.expiresAt && new Date(v.expiresAt).getTime() < Date.now());
-              const value = v.kind === "percent" ? `${v.percentOff}% korting` : formatEuro(v.valueCents);
+              const value = v.kind === "percent" ? t("account.credit.percentOff", { pct: v.percentOff }) : formatEuro(v.valueCents);
               return (
                 <li key={v.id} className={`border p-5 ${expired ? "border-line opacity-60" : "border-ink"}`}>
                   <p className="font-display text-2xl font-light">{value}</p>
-                  <p className="mt-1 font-sans text-sm text-ink-soft">{v.description || "Tegoedbon"}</p>
+                  <p className="mt-1 font-sans text-sm text-ink-soft">{v.description || t("account.credit.voucherFallback")}</p>
                   <div className="mt-3 flex items-center justify-between">
                     <code className="bg-surface px-2 py-1 font-sans text-sm tracking-wider">{v.code}</code>
                     <span className="font-sans text-xs text-muted">
-                      {expired ? "Verlopen" : v.expiresAt ? `Geldig t/m ${nlDate(v.expiresAt)}` : "Geen einddatum"}
+                      {expired ? t("account.credit.expired") : v.expiresAt ? t("account.credit.validUntil", { date: nlDate(v.expiresAt) }) : t("account.credit.noExpiry")}
                     </span>
                   </div>
                 </li>
@@ -564,17 +575,19 @@ function Vouchers({ data }: { data: Data }) {
 }
 
 /* ── Mijn maten ───────────────────────────────────────────────────────────── */
+// label/placeholder = i18n-keys; vertaald bij render via useT.
 const SIZE_FIELDS: { key: string; label: string; placeholder: string }[] = [
-  { key: "colbert", label: "Colbertmaat", placeholder: "bv. 50" },
-  { key: "broek", label: "Broekmaat", placeholder: "bv. 33" },
-  { key: "overhemd", label: "Overhemd / boord", placeholder: "bv. 41" },
-  { key: "schoen", label: "Schoenmaat", placeholder: "bv. 43" },
-  { key: "pasvorm", label: "Pasvoorkeur", placeholder: "modern / slim" },
-  { key: "lengte", label: "Lengte (cm)", placeholder: "bv. 184" },
-  { key: "gewicht", label: "Gewicht (kg)", placeholder: "bv. 82" },
+  { key: "colbert", label: "account.sizes.jacket", placeholder: "account.sizes.jacketPh" },
+  { key: "broek", label: "account.sizes.trousers", placeholder: "account.sizes.trousersPh" },
+  { key: "overhemd", label: "account.sizes.shirt", placeholder: "account.sizes.shirtPh" },
+  { key: "schoen", label: "account.sizes.shoes", placeholder: "account.sizes.shoesPh" },
+  { key: "pasvorm", label: "account.sizes.fit", placeholder: "account.sizes.fitPh" },
+  { key: "lengte", label: "sizeAdvisor.height", placeholder: "account.sizes.heightPh" },
+  { key: "gewicht", label: "sizeAdvisor.weight", placeholder: "account.sizes.weightPh" },
 ];
 
 function Maten({ customer }: { customer: Customer }) {
+  const t = useT();
   const [size, setSize] = useState<Record<string, string>>(customer.sizeProfile || {});
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
 
@@ -593,25 +606,24 @@ function Maten({ customer }: { customer: Customer }) {
   return (
     <form onSubmit={save} className="max-w-2xl">
       <p className="font-sans text-sm text-ink-soft">
-        Bewaar je maten en we selecteren ze voortaan automatisch op productpagina&apos;s
-        en tonen overal een knop <span className="text-ink">&ldquo;Shop in jouw maat&rdquo;</span>.
-        We gebruiken ze alleen hiervoor en voor je maatadvies — nooit voor iets anders.
+        {t("account.sizes.intro1")} <span className="text-ink">&ldquo;{t("plp.filters.shopMySize")}&rdquo;</span>.{" "}
+        {t("account.sizes.intro2")}
       </p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {SIZE_FIELDS.map((f) => (
           <label key={f.key} className="block">
-            <span className="font-sans text-sm">{f.label}</span>
+            <span className="font-sans text-sm">{t(f.label)}</span>
             <input
               type="text"
               value={size[f.key] || ""}
-              placeholder={f.placeholder}
+              placeholder={t(f.placeholder)}
               onChange={(e) => setSize((p) => ({ ...p, [f.key]: e.target.value }))}
               className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
             />
           </label>
         ))}
         <label className="block sm:col-span-2">
-          <span className="font-sans text-sm">Notities (bv. voorkeuren, lichaamsbouw)</span>
+          <span className="font-sans text-sm">{t("account.sizes.notes")}</span>
           <textarea
             rows={3}
             value={size.notities || ""}
@@ -621,7 +633,7 @@ function Maten({ customer }: { customer: Customer }) {
         </label>
       </div>
       <button type="submit" disabled={state === "busy"} className="btn-primary mt-5">
-        {state === "busy" ? "Opslaan…" : state === "done" ? "Opgeslagen" : "Maten opslaan"}
+        {state === "busy" ? t("account.form.saving") : state === "done" ? t("account.form.saved") : t("account.sizes.save")}
       </button>
     </form>
   );
@@ -629,6 +641,7 @@ function Maten({ customer }: { customer: Customer }) {
 
 /* ── Privacy (AVG: inzage & verwijdering) ─────────────────────────────────── */
 function Privacy() {
+  const t = useT();
   const [confirm, setConfirm] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "error">("idle");
 
@@ -653,23 +666,20 @@ function Privacy() {
   return (
     <div className="max-w-2xl space-y-10">
       <section>
-        <h2 className="font-display text-xl">Mijn gegevens downloaden</h2>
+        <h2 className="font-display text-xl">{t("account.privacy.downloadTitle")}</h2>
         <p className="mt-2 font-sans text-sm text-ink-soft">
-          Een kopie van alles wat we van je bewaren — profiel, bestellingen, adresboek,
-          tegoed en spaarpunten — als JSON-bestand.
+          {t("account.privacy.downloadBody")}
         </p>
-        <a href="/api/account/export-me" className="btn-ghost mt-4 inline-block">Download mijn gegevens</a>
+        <a href="/api/account/export-me" className="btn-ghost mt-4 inline-block">{t("account.privacy.downloadCta")}</a>
       </section>
 
       <section className="border border-danger/30 bg-danger/5 p-5">
-        <h2 className="font-display text-xl text-ink">Account verwijderen</h2>
+        <h2 className="font-display text-xl text-ink">{t("account.privacy.deleteTitle")}</h2>
         <p className="mt-2 font-sans text-sm text-ink-soft">
-          Je persoonsgegevens (naam, e-mail, telefoon, maten, adressen) worden gewist en je wordt
-          uitgelogd. Je bestelhistorie bewaren we geanonimiseerd, omdat de wet ons verplicht de
-          administratie te bewaren. Dit kan niet ongedaan worden gemaakt.
+          {t("account.privacy.deleteBody")}
         </p>
         <label className="mt-4 block">
-          <span className="font-sans text-sm">Typ <span className="font-semibold">VERWIJDER</span> om te bevestigen</span>
+          <span className="font-sans text-sm">{t("account.privacy.confirmPrefix")} <span className="font-semibold">VERWIJDER</span> {t("account.privacy.confirmSuffix")}</span>
           <input
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
@@ -682,10 +692,10 @@ function Privacy() {
           disabled={confirm !== "VERWIJDER" || state === "busy"}
           className="btn-primary mt-4 !bg-danger disabled:opacity-50"
         >
-          {state === "busy" ? "Bezig…" : "Account definitief verwijderen"}
+          {state === "busy" ? t("common.processing") : t("account.privacy.deleteCta")}
         </button>
         {state === "error" ? (
-          <p className="mt-2 font-sans text-sm text-danger">Verwijderen lukte niet — probeer het later opnieuw.</p>
+          <p className="mt-2 font-sans text-sm text-danger">{t("account.privacy.deleteError")}</p>
         ) : null}
       </section>
     </div>
@@ -694,6 +704,7 @@ function Privacy() {
 
 /* ── Gegevens ─────────────────────────────────────────────────────────────── */
 function Gegevens({ customer }: { customer: Customer }) {
+  const t = useT();
   const [form, setForm] = useState({
     firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone,
     marketingOptIn: customer.marketingOptIn,
@@ -716,28 +727,28 @@ function Gegevens({ customer }: { customer: Customer }) {
     <form onSubmit={save} className="max-w-xl space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="font-sans text-sm">Voornaam</span>
+          <span className="font-sans text-sm">{t("checkout.firstname")}</span>
           <input type="text" value={form.firstName} onChange={(e) => setForm((p) => ({ ...p, firstName: e.target.value }))} className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm">Achternaam</span>
+          <span className="font-sans text-sm">{t("checkout.lastname")}</span>
           <input type="text" value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm">Telefoon</span>
+          <span className="font-sans text-sm">{t("forms.contact.phone")}</span>
           <input type="tel" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none" />
         </label>
         <label className="block">
-          <span className="font-sans text-sm">E-mailadres</span>
+          <span className="font-sans text-sm">{t("forms.contact.email")}</span>
           <input type="email" value={customer.email} disabled className="mt-1 w-full border border-line bg-surface px-3 py-2.5 font-sans text-sm text-muted" />
         </label>
       </div>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={form.marketingOptIn} onChange={(e) => setForm((p) => ({ ...p, marketingOptIn: e.target.checked }))} />
-        <span className="font-sans text-sm">Ja, hou me op de hoogte van nieuwe collecties en acties</span>
+        <span className="font-sans text-sm">{t("account.details.marketingOptIn")}</span>
       </label>
       <button type="submit" disabled={state === "busy"} className="btn-primary">
-        {state === "busy" ? "Opslaan…" : state === "done" ? <>Opgeslagen <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" /></> : "Gegevens opslaan"}
+        {state === "busy" ? t("account.form.saving") : state === "done" ? <>{t("account.form.saved")} <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" /></> : t("account.details.save")}
       </button>
     </form>
   );
