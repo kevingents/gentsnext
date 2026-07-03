@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { purchaseGiftcard, attachGiftcardPayment } from "@/lib/giftcards";
 import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
 import { getSessionCustomer } from "@/lib/account";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const origin = new URL(req.url).origin;
+  const origin = getSiteUrl(); // canonieke site-URL, niet de client-Host (webhook-kaping)
   try {
     const payment = await createMolliePayment({
       amountCents: result.amountCents,

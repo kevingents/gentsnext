@@ -12,6 +12,7 @@ import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
 import { recordPosOrder } from "@/lib/pos-orders-store";
 import { getOrderByNumber } from "@/lib/orders";
 import { sendConceptOrderMail } from "@/lib/email";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
   // Winkel-attributie vastleggen (best-effort; mag de bestelling niet blokkeren).
   await recordPosOrder({ orderNumber: order.orderNumber, storeName, staff: body?.staff }).catch(() => {});
 
-  const origin = new URL(req.url).origin;
+  const origin = getSiteUrl(); // canonieke site-URL, niet de client-Host (webhook-kaping)
   const confirmUrl = `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`;
 
   // Aan de kassa afgerekend (contant/pin) → geen betaallink; betaald markeren +
