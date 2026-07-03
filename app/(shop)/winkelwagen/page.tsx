@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckIcon } from "@/components/icons";
 import { useCart } from "@/components/cart/cart-context";
+import { useT } from "@/components/i18n/locale-provider";
 import { formatEuro } from "@/lib/pricing";
 import { BrandedState } from "@/components/brand-state";
 
 export default function WinkelwagenPage() {
   const cart = useCart();
+  const t = useT();
   // Instelbare gratis-verzending-drempel (i.p.v. hardcoded); checkout blijft autoritatief.
   const [freeShipCents, setFreeShipCents] = useState(7500);
   useEffect(() => {
@@ -24,13 +26,13 @@ export default function WinkelwagenPage() {
   if (cart.lines.length === 0) {
     return (
       <BrandedState
-        eyebrow="Winkelwagen"
-        title="Je winkelwagen is leeg"
-        intro="Ontdek onze pakken, overhemden en accessoires — of laat je inspireren door de looks."
+        eyebrow={t("cart.header.eyebrow")}
+        title={t("cart.empty_title")}
+        intro={t("cart.empty_intro")}
       >
         <div className="flex flex-wrap justify-center gap-3">
-          <Link href="/collections/pakken" className="btn-primary">Begin met shoppen</Link>
-          <Link href="/looks" className="btn-ghost">Bekijk de looks</Link>
+          <Link href="/collections/pakken" className="btn-primary">{t("cart.empty.shopButton")}</Link>
+          <Link href="/looks" className="btn-ghost">{t("cart.empty.looksButton")}</Link>
         </div>
       </BrandedState>
     );
@@ -38,7 +40,7 @@ export default function WinkelwagenPage() {
 
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
-      <h1 className="text-display-md">Winkelwagen</h1>
+      <h1 className="text-display-md">{t("cart.header.eyebrow")}</h1>
       <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Regels */}
         <ul className="divide-y divide-line border-y border-line">
@@ -62,23 +64,23 @@ export default function WinkelwagenPage() {
                       {line.title}
                     </Link>
                     <p className="mt-0.5 font-sans text-xs text-muted">
-                      {[line.color, line.size && `maat ${line.size}`].filter(Boolean).join(" · ")}
+                      {[line.color, line.size && `${t("common.size")} ${line.size}`].filter(Boolean).join(" · ")}
                     </p>
                   </div>
                   <p className="shrink-0 font-sans text-sm">{formatEuro(line.priceCents * line.qty)}</p>
                 </div>
                 <div className="mt-auto flex items-center gap-4 pt-3">
                   <div className="flex items-center border border-line">
-                    <button type="button" onClick={() => cart.setQty(line.id, line.qty - 1)} aria-label="Minder" className="px-3 py-1.5 hover:bg-surface">
+                    <button type="button" onClick={() => cart.setQty(line.id, line.qty - 1)} aria-label={t("cart.line.decrementAriaLabel")} className="px-3 py-1.5 hover:bg-surface">
                       −
                     </button>
                     <span className="min-w-[2rem] text-center font-sans text-sm">{line.qty}</span>
-                    <button type="button" onClick={() => cart.setQty(line.id, line.qty + 1)} aria-label="Meer" className="px-3 py-1.5 hover:bg-surface">
+                    <button type="button" onClick={() => cart.setQty(line.id, line.qty + 1)} aria-label={t("cart.line.incrementAriaLabel")} className="px-3 py-1.5 hover:bg-surface">
                       +
                     </button>
                   </div>
                   <button type="button" onClick={() => cart.remove(line.id)} className="font-sans text-xs text-muted underline hover:text-ink">
-                    Verwijder
+                    {t("cart.line.remove")}
                   </button>
                 </div>
               </div>
@@ -89,36 +91,36 @@ export default function WinkelwagenPage() {
         {/* Samenvatting */}
         <aside className="lg:sticky lg:top-24 lg:h-fit">
           <div className="border border-line p-5">
-            <p className="label-brand">Overzicht</p>
+            <p className="label-brand">{t("cart.summary.eyebrow")}</p>
             <div className="mt-4 flex items-center justify-between font-sans text-sm">
-              <span className="text-muted">Artikelen ({cart.count})</span>
+              <span className="text-muted">{t("cart.summary.items")} ({cart.count})</span>
               <span>{formatEuro(cart.subtotalCents)}</span>
             </div>
             <div className="mt-2 flex items-center justify-between font-sans text-sm">
-              <span className="text-muted">Verzending</span>
-              <span>{cart.subtotalCents >= freeShipCents ? "Gratis" : "Berekend bij afrekenen"}</span>
+              <span className="text-muted">{t("cart.summary.shipping")}</span>
+              <span>{cart.subtotalCents >= freeShipCents ? t("cart.summary.freeShipping") : t("cart.summary.shippingCalculated")}</span>
             </div>
             {cart.subtotalCents > 0 && cart.subtotalCents < freeShipCents ? (
               <p className="mt-2 font-sans text-xs text-ink-soft">
-                Nog <strong>{formatEuro(freeShipCents - cart.subtotalCents)}</strong> tot gratis verzending.
+                {t("cart.summary.freeShippingHint1")} <strong>{formatEuro(freeShipCents - cart.subtotalCents)}</strong> {t("cart.summary.freeShippingHint2")}
               </p>
             ) : null}
             <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
-              <span className="font-sans text-sm">Subtotaal</span>
+              <span className="font-sans text-sm">{t("cart.summary.subtotal")}</span>
               <span className="font-display text-xl">{formatEuro(cart.subtotalCents)}</span>
             </div>
-            <p className="mt-1 font-sans text-xs text-muted">Verzendkosten worden bij het afrekenen bepaald.</p>
+            <p className="mt-1 font-sans text-xs text-muted">{t("cart.summary.shippingNote")}</p>
             <Link href="/afrekenen" className="btn-primary mt-5 w-full">
-              Afrekenen
+              {t("cart.summary.checkoutButton")}
             </Link>
             <Link href="/collections/pakken" className="btn-ghost mt-2 w-full">
-              Verder winkelen
+              {t("cart.summary.continueButton")}
             </Link>
             <ul className="mt-5 space-y-1.5">
-              {["Gratis retour binnen 14 dagen", "Veilig betalen met iDEAL", "Persoonlijk advies in 19 winkels"].map((t) => (
-                <li key={t} className="flex items-center gap-2 font-sans text-xs text-ink-soft">
+              {["cart.summary.trust.freeReturn", "cart.summary.trust.safePay", "cart.summary.trust.personalAdvice"].map((k) => (
+                <li key={k} className="flex items-center gap-2 font-sans text-xs text-ink-soft">
                   <CheckIcon className="h-3.5 w-3.5 shrink-0 text-success" />
-                  {t}
+                  {t(k)}
                 </li>
               ))}
             </ul>

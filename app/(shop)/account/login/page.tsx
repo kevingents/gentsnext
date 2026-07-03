@@ -4,12 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { VISUAL } from "@/lib/visuals";
+import { useT } from "@/components/i18n/locale-provider";
 
 const USPS = [
-  "Volg je bestellingen, van order tot bezorging",
-  "Bewaar je maten en stijlvoorkeuren",
-  "Reken sneller af — zonder wachtwoord",
-  "Je spaarpunten en tegoed op één plek",
+  "login.usp.orders",
+  "login.usp.sizes",
+  "login.usp.checkout",
+  "login.usp.loyalty",
 ];
 
 function GoldCheck() {
@@ -21,6 +22,7 @@ function GoldCheck() {
 }
 
 export default function LoginPage() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "fail">("idle");
   const [devLink, setDevLink] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export default function LoginPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!/.+@.+\..+/.test(email)) {
-      setMsg("Vul een geldig e-mailadres in.");
+      setMsg(t("common.error.emailInvalid"));
       setState("fail");
       return;
     }
@@ -44,14 +46,14 @@ export default function LoginPage() {
       if (d.ok) {
         setState("sent");
         setDevLink(d.devLink || null);
-        setMsg(d.sent ? "Check je inbox — we hebben je een login-link gestuurd." : "Login-link aangemaakt.");
+        setMsg(d.sent ? t("login.sentInbox") : t("login.linkCreated"));
       } else {
         setState("fail");
-        setMsg(d.error || "Er ging iets mis.");
+        setMsg(d.error || t("common.error"));
       }
     } catch {
       setState("fail");
-      setMsg("Er ging iets mis. Probeer het later opnieuw.");
+      setMsg(t("forms.error.tryLater"));
     }
   }
 
@@ -66,18 +68,18 @@ export default function LoginPage() {
           <Image src="/brand/brand-logo-wit.png" alt="GENTS — Suits You" width={512} height={244} priority className="h-12 w-auto" />
         </div>
         <div className="relative">
-          <h2 className="font-display text-display-md leading-tight text-canvas">Welkom in<br />jouw GENTS.</h2>
-          <p className="mt-3 max-w-sm font-sans text-sm text-canvas/65">Eén account, overal thuis — online én in onze 19 winkels.</p>
+          <h2 className="font-display text-display-md leading-tight text-canvas">{t("login.welcomeTitle1")}<br />{t("login.welcomeTitle2")}</h2>
+          <p className="mt-3 max-w-sm font-sans text-sm text-canvas/65">{t("login.welcomeSub")}</p>
           <ul className="mt-8 space-y-3.5">
             {USPS.map((u) => (
               <li key={u} className="flex items-start gap-3 font-sans text-sm text-canvas/85">
                 <GoldCheck />
-                {u}
+                {t(u)}
               </li>
             ))}
           </ul>
         </div>
-        <p className="relative font-sans text-xs uppercase tracking-wider text-canvas/35">Herenmode met karakter</p>
+        <p className="relative font-sans text-xs uppercase tracking-wider text-canvas/35">{t("login.tagline")}</p>
       </div>
 
       {/* Formulier */}
@@ -88,16 +90,16 @@ export default function LoginPage() {
             <Image src="/brand/brand-logo-zwart.png" alt="GENTS — Suits You" width={512} height={244} className="h-10 w-auto" />
           </div>
 
-          <p className="label-brand">Mijn GENTS</p>
-          <h1 className="mt-2 text-display-md">Inloggen of registreren</h1>
+          <p className="label-brand">{t("login.eyebrow")}</p>
+          <h1 className="mt-2 text-display-md">{t("login.title")}</h1>
           <p className="mt-3 font-sans text-sm text-ink-soft">
-            Vul je e-mailadres in. Je ontvangt een veilige login-link — geen wachtwoord nodig. Nieuw? Dan maken we direct een account voor je aan.
+            {t("login.intro")}
           </p>
 
           {state === "sent" ? (
             <div className="mt-8 border-l-2 border-gold bg-surface p-6">
               <p className="font-display text-lg font-light">{msg}</p>
-              <p className="mt-2 font-sans text-xs text-muted">Geen mail ontvangen? Kijk in je spam of probeer het zo opnieuw.</p>
+              <p className="mt-2 font-sans text-xs text-muted">{t("login.noMailHint")}</p>
               {devLink ? (
                 <p className="mt-4 font-sans text-sm">
                   <span className="text-muted">Dev-modus (geen e-mail gekoppeld) — </span>
@@ -108,26 +110,26 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={submit} noValidate className="mt-8 space-y-4">
               <label className="block">
-                <span className="font-sans text-sm">E-mailadres</span>
+                <span className="font-sans text-sm">{t("checkout.email")}</span>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="jij@voorbeeld.nl"
+                  placeholder={t("login.emailPlaceholder")}
                   className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
                 />
               </label>
               {msg && state === "fail" ? <p className="font-sans text-sm text-danger">{msg}</p> : null}
               <button type="submit" disabled={state === "busy"} className="btn-primary w-full">
-                {state === "busy" ? "Bezig…" : "Stuur login-link"}
+                {state === "busy" ? t("common.processing") : t("login.submit")}
               </button>
             </form>
           )}
 
           <p className="mt-6 font-sans text-xs text-muted">
-            Door in te loggen ga je akkoord met onze{" "}
-            <Link href="/pages/algemene-voorwaarden" className="underline">voorwaarden</Link> en{" "}
-            <Link href="/pages/privacyverklaring" className="underline">privacyverklaring</Link>.
+            {t("login.terms.prefix")}{" "}
+            <Link href="/pages/algemene-voorwaarden" className="underline">{t("login.terms.terms")}</Link> {t("login.terms.and")}{" "}
+            <Link href="/pages/privacyverklaring" className="underline">{t("login.terms.privacy")}</Link>.
           </p>
         </div>
       </div>

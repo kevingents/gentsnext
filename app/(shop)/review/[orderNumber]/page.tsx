@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrderForViewer } from "@/lib/orders";
 import { getSessionCustomer } from "@/lib/account";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { WriteReview } from "@/components/reviews/review-form";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +17,11 @@ type Props = {
 
 export default async function ReviewOrderPage({ params, searchParams }: Props) {
   const { orderNumber } = await params;
-  const { t } = await searchParams;
+  const { t: token } = await searchParams;
+  const locale = await getLocale();
+  const t = await getT(locale);
   const customer = await getSessionCustomer();
-  const data = await getOrderForViewer(orderNumber, { token: t, customerId: customer?.id });
+  const data = await getOrderForViewer(orderNumber, { token, customerId: customer?.id });
   if (!data) notFound();
   const { order, lines } = data;
 
@@ -27,10 +31,10 @@ export default async function ReviewOrderPage({ params, searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-2xl px-gutter py-16">
-      <p className="label-brand">Bestelling {order.orderNumber}</p>
-      <h1 className="mt-2 text-display-md">Hoe bevalt je aankoop?</h1>
+      <p className="label-brand">{t("review.order")} {order.orderNumber}</p>
+      <h1 className="mt-2 text-display-md">{t("review.title")}</h1>
       <p className="mt-3 font-sans text-ink-soft">
-        Je review helpt andere klanten de juiste keuze en maat te vinden. Het kost een minuutje — bedankt!
+        {t("review.intro")}
       </p>
 
       <div className="mt-10 space-y-10">
@@ -40,14 +44,14 @@ export default async function ReviewOrderPage({ params, searchParams }: Props) {
               {l.title}
             </Link>
             <div className="mt-4">
-              <WriteReview handle={l.productHandle} orderNumber={order.orderNumber} token={t} defaultOpen />
+              <WriteReview handle={l.productHandle} orderNumber={order.orderNumber} token={token} defaultOpen />
             </div>
           </div>
         ))}
       </div>
 
       <Link href="/" className="btn-ghost mt-12">
-        Terug naar home
+        {t("review.back_home")}
       </Link>
     </div>
   );

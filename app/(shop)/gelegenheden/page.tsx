@@ -5,6 +5,8 @@ import { JsonLd } from "@/components/json-ld";
 import { getOccasions } from "@/lib/occasions-server";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function GelegenhedenPage() {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const occasions = await getOccasions();
   const siteUrl = getSiteUrl();
 
@@ -32,18 +36,17 @@ export default async function GelegenhedenPage() {
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
       <JsonLd data={jsonLd} />
-      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+      <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb")}>
+        <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
-        <span className="text-ink">Gelegenheden</span>
+        <span className="text-ink">{t("occasions.label")}</span>
       </nav>
 
       <div className="mt-6 max-w-2xl">
-        <p className="label-brand">Gelegenheden</p>
-        <h1 className="mt-2 text-display-lg">Gekleed voor elk moment</h1>
+        <p className="label-brand">{t("occasions.label")}</p>
+        <h1 className="mt-2 text-display-lg">{t("occasions.title")}</h1>
         <p className="mt-4 font-sans text-ink-soft">
-          Of het nu om de mooiste of de moeilijkste dag gaat — wij helpen je onberispelijk
-          voor de dag te komen. Kies je gelegenheid en shop direct de juiste stukken.
+          {t("occasions.intro")}
         </p>
       </div>
 

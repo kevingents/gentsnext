@@ -1,34 +1,38 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandedState } from "@/components/brand-state";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const metadata: Metadata = { title: "Nieuwsbrief bevestigd", robots: { index: false, follow: false } };
 
 type Props = { searchParams: Promise<{ status?: string }> };
 
 export default async function NieuwsbriefBevestigdPage({ searchParams }: Props) {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const { status } = await searchParams;
   const invalid = status === "ongeldig";
 
   if (invalid) {
     return (
       <BrandedState
-        eyebrow="Nieuwsbrief"
-        title="Deze link is verlopen of ongeldig"
-        intro="Schrijf je gerust opnieuw in onderaan de site — dan sturen we je een nieuwe bevestigingslink."
+        eyebrow={t("newsletter.label")}
+        title={t("newsletter.invalid_title")}
+        intro={t("newsletter.invalid_intro")}
       >
-        <Link href="/" className="btn-primary">Terug naar home</Link>
+        <Link href="/" className="btn-primary">{t("common.back_home")}</Link>
       </BrandedState>
     );
   }
 
   return (
     <BrandedState
-      eyebrow="Welkom bij de GENTS Insider"
-      title="Je inschrijving is bevestigd"
-      intro="Je staat erbij. Je ontvangt als eerste onze nieuwe collecties, styling-tips en exclusieve aanbiedingen."
+      eyebrow={t("newsletter.confirmed_eyebrow")}
+      title={t("newsletter.confirmed_title")}
+      intro={t("newsletter.confirmed_intro")}
     >
-      <Link href="/" className="btn-primary">Begin met shoppen</Link>
+      <Link href="/" className="btn-primary">{t("common.browse_now")}</Link>
     </BrandedState>
   );
 }

@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { getLookBySlug, getAllLooks, resolveLook, getLookBuyData, getLookGallery, getLookColorOptions } from "@/lib/looks";
 import { LookDetail } from "@/components/looks/look-detail";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function LookPage({ params }: Props) {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const { slug } = await params;
   const look = await getLookBySlug(slug);
   if (!look) notFound();
@@ -32,8 +36,8 @@ export default async function LookPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
-      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/looks" className="hover:text-ink">Shop the look</Link>
+      <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb")}>
+        <Link href="/looks" className="hover:text-ink">{t("looks.label")}</Link>
         {" / "}
         <span className="text-ink">{look.title}</span>
       </nav>
@@ -44,7 +48,7 @@ export default async function LookPage({ params }: Props) {
 
       {more.length ? (
         <section className="mt-20">
-          <p className="label-brand mb-4">Meer looks</p>
+          <p className="label-brand mb-4">{t("looks.more")}</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {more.map((l) => (
               <Link key={l.slug} href={`/looks/${l.slug}`} className="group block">

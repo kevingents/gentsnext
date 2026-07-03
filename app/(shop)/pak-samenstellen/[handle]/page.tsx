@@ -5,6 +5,8 @@ import { SuitBuilder } from "@/components/pak/suit-builder";
 import { getSuitByColbertHandle, type SuitPieceDetail } from "@/lib/suit-pairing";
 import { estimateDelivery } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,9 @@ export default async function SuitBuilderPage({ params }: Props) {
   const suit = await getSuitByColbertHandle(handle);
   if (!suit) notFound();
 
+  const locale = await getLocale();
+  const t = await getT(locale);
+
   // Bezorgbelofte (server-accuraat) voor het 2-delige basispak — net als de PDP.
   const baseLines = suit.pieces
     .filter((p) => p.role === "colbert" || p.role === "broek")
@@ -52,13 +57,13 @@ export default async function SuitBuilderPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-page px-gutter py-8 pb-20">
-      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
+      <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb")}>
         <Link href="/" className="hover:text-ink">
-          Home
+          {t("common.home")}
         </Link>
         {" / "}
         <Link href="/pak-samenstellen" className="hover:text-ink">
-          Pak samenstellen
+          {t("nav.customizeSuit")}
         </Link>
       </nav>
       <div className="mt-6">

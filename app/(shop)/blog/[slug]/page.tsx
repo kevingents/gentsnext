@@ -8,6 +8,8 @@ import { ProductCard } from "@/components/product-card";
 import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }> };
@@ -32,6 +34,8 @@ function paragraphs(text: string) {
 }
 
 export default async function BlogPostPage({ params }: Props) {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const { slug } = await params;
   const post = await getBlogPost(slug);
   if (!post) notFound();
@@ -55,17 +59,17 @@ export default async function BlogPostPage({ params }: Props) {
   return (
     <article className="mx-auto max-w-3xl px-gutter py-12">
       <JsonLd data={jsonLd} />
-      <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
-        <Link href="/" className="hover:text-ink">Home</Link>
+      <nav className="font-sans text-sm text-muted" aria-label={t("common.breadcrumb")}>
+        <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
-        <Link href="/blog" className="hover:text-ink">Stijlgids</Link>
+        <Link href="/blog" className="hover:text-ink">{t("blog.label")}</Link>
         {" / "}
         <span className="text-ink">{post.title}</span>
       </nav>
 
-      <p className="label-brand mt-6">{post.occasion || "Stijlgids"}</p>
+      <p className="label-brand mt-6">{post.occasion || t("blog.label")}</p>
       <h1 className="mt-2 text-display-md">{post.title}</h1>
-      <p className="mt-2 font-sans text-sm text-muted">Door {post.author}</p>
+      <p className="mt-2 font-sans text-sm text-muted">{t("blog.by_author")} {post.author}</p>
 
       {post.heroImage ? (
         <div className="relative mt-6 aspect-[4/5] max-h-[70vh] overflow-hidden rounded-card bg-surface">
@@ -102,11 +106,11 @@ export default async function BlogPostPage({ params }: Props) {
 
       <div className="mt-14 border-t border-line pt-8">
         <p className="font-sans text-ink-soft">
-          Twijfel je over je maat?{" "}
-          <Link href="/maatadvies" className="text-ink underline underline-offset-4">Gebruik ons maatadvies</Link>{" "}
-          of vraag het onze stylisten in één van de 19 winkels.
+          {t("blog.size_doubt")}{" "}
+          <Link href="/maatadvies" className="text-ink underline underline-offset-4">{t("blog.use_sizing")}</Link>{" "}
+          {t("blog.ask_stylists")}
         </p>
-        <Link href="/blog" className="mt-4 inline-block font-sans text-sm text-ink underline underline-offset-4">← Terug naar de stijlgids</Link>
+        <Link href="/blog" className="mt-4 inline-block font-sans text-sm text-ink underline underline-offset-4">{t("blog.back_to_blog")}</Link>
       </div>
     </article>
   );

@@ -5,6 +5,8 @@ import { getOrderForViewer, getPostPurchase } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";
 import { allocateOrder, type FulfillmentPlan } from "@/lib/fulfillment";
 import { getSessionCustomer } from "@/lib/account";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
 import { TrackPurchase } from "@/components/analytics/track-purchase";
@@ -22,6 +24,9 @@ type Props = {
   searchParams: Promise<{ t?: string }>;
 };
 
+/** Vertaalfunctie zoals getT die teruggeeft (voor helpers buiten de component). */
+type Tr = (key: string, params?: Record<string, string | number>) => string;
+
 /** Telt werkdagen op bij een datum (weekend overslaan) — voor de bezorgschatting. */
 function addBusinessDays(from: Date, days: number): Date {
   const d = new Date(from);
@@ -33,8 +38,8 @@ function addBusinessDays(from: Date, days: number): Date {
   }
   return d;
 }
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+function fmtDate(d: Date, locale: string): string {
+  return d.toLocaleDateString(locale === "nl" ? "nl-NL" : locale, { weekday: "long", day: "numeric", month: "long" });
 }
 
 // Verzonnen picker-namen — deterministisch per filiaal, zodat dezelfde winkel
@@ -47,16 +52,16 @@ function pickerName(branchId: string): string {
 }
 
 /** Stap 2-tekst: noemt direct wie + welke winkel je bestelling inpakt (of split). */
-function sourceSentence(plan: FulfillmentPlan | null) {
-  const tail = <> Zodra je pakket onderweg is, krijg je een verzendmail met track &amp; trace zodat je het kunt volgen.</>;
-  if (!plan?.shipments?.length) return <>We pakken je bestelling met zorg in.{tail}</>;
+function sourceSentence(plan: FulfillmentPlan | null, t: Tr) {
+  const tail = <> {t("order.tracking_note")}</>;
+  if (!plan?.shipments?.length) return <>{t("order.packing_care")}{tail}</>;
   if (plan.splitCount > 1) {
-    const locs = [...new Set(plan.shipments.map((s) => (s.isWarehouse ? "ons magazijn" : s.store.replace(/^GENTS\s+/i, ""))))].join(" en ");
-    return <>Je bestelling komt uit {locs} en wordt in {plan.splitCount} zendingen verstuurd.{tail}</>;
+    const locs = [...new Set(plan.shipments.map((s) => (s.isWarehouse ? t("order.warehouse") : s.store.replace(/^GENTS\s+/i, ""))))].join(` ${t("common.and")} `);
+    return <>{t("order.from_locations")} {locs} {t("order.split_shipments")} {plan.splitCount} {t("order.shipments_label")}{tail}</>;
   }
   const s = plan.shipments[0];
-  if (s.isWarehouse) return <>Ons magazijnteam pakt je bestelling met zorg in.{tail}</>;
-  return <><span className="text-ink">{pickerName(s.branchId)}</span> in onze winkel in <span className="text-ink">{s.store.replace(/^GENTS\s+/i, "")}</span> pakt je bestelling met zorg in.{tail}</>;
+  if (s.isWarehouse) return <>{t("order.warehouse_packing")}{tail}</>;
+  return <><span className="text-ink">{pickerName(s.branchId)}</span> {t("order.picker_in_store")} <span className="text-ink">{s.store.replace(/^GENTS\s+/i, "")}</span> {t("order.picker_packing")}{tail}</>;
 }
 
 /** Eén stap in het "wat er nu gebeurt"-stappenplan (Coolblue-stijl). */
@@ -80,10 +85,12 @@ function Step({ done, title, body }: { done?: boolean; title: string; body: Reac
 
 export default async function OrderPage({ params, searchParams }: Props) {
   const { orderNumber } = await params;
-  const { t } = await searchParams;
+  const { t: token } = await searchParams;
+  const locale = await getLocale();
+  const t = await getT(locale);
   // IDOR-bescherming: alleen tonen met geldig access-token (gast) of als eigenaar.
   const customer = await getSessionCustomer();
-  const data = await getOrderForViewer(orderNumber, { token: t, customerId: customer?.id });
+  const data = await getOrderForViewer(orderNumber, { token, customerId: customer?.id });
   if (!data) notFound();
   const { order, lines } = data;
 
@@ -121,54 +128,53 @@ export default async function OrderPage({ params, searchParams }: Props) {
 
       {paid ? (
         <>
-          <p className="label-brand">Bedankt, {order.firstName || "voor je bestelling"}</p>
-          <h1 className="mt-2 text-display-md">Je bestelling is bevestigd</h1>
+          <p className="label-brand">{order.firstName ? t("order.thanks_name", { name: order.firstName }) : t("order.thanks")}</p>
+          <h1 className="mt-2 text-display-md">{t("order.confirmed_title")}</h1>
           <p className="mt-3 font-sans text-ink-soft">
-            We hebben je betaling ontvangen. Een bevestiging is onderweg naar {order.email}.
+            {t("order.confirmation_sent")} {order.email}.
           </p>
           {/* Stappenplan — wat er nu gebeurt (Coolblue-stijl). */}
           <section className="mt-8 rounded-card border border-line bg-surface/50 p-5">
-            <p className="label-brand">Wat er nu gebeurt</p>
+            <p className="label-brand">{t("order.what_happens_next")}</p>
             <ol className="mt-4 space-y-4">
-              <Step done title="Betaling ontvangen" body={<>Je orderbevestiging met factuur is onderweg naar <span className="text-ink">{order.email}</span>.</>} />
-              <Step title="We maken je bestelling klaar" body={sourceSentence(plan)} />
+              <Step done title={t("order.step_payment_received")} body={<>{t("order.confirmation_details")} <span className="text-ink">{order.email}</span>.</>} />
+              <Step title={t("order.step_prepare")} body={sourceSentence(plan, t)} />
               <Step
-                title={isExpress ? "Snel bezorgd" : "Bezorgd"}
-                body={deliveryDate ? <>Verwachte bezorging rond <span className="text-ink">{fmtDate(deliveryDate)}</span>. Niet thuis? De bezorger probeert het opnieuw of levert bij de buren.</> : "We bezorgen je bestelling zo snel mogelijk."}
+                title={isExpress ? t("order.step_express") : t("order.step_delivered")}
+                body={deliveryDate ? <>{t("order.expected_delivery")} <span className="text-ink">{fmtDate(deliveryDate, locale)}</span>. {t("order.not_home_note")}</> : t("order.delivery_asap")}
               />
             </ol>
           </section>
         </>
       ) : pending ? (
         <>
-          <p className="label-brand">Even geduld</p>
-          <h1 className="mt-2 text-display-md">We bevestigen je betaling</h1>
+          <p className="label-brand">{t("order.pending_eyebrow")}</p>
+          <h1 className="mt-2 text-display-md">{t("order.confirming_title")}</h1>
           <p className="mt-3 font-sans text-ink-soft">
-            Je betaling wordt verwerkt. Je ontvangt ook een bevestiging per e-mail.
+            {t("order.processing_note")}
           </p>
-          <OrderStatusPoller orderNumber={order.orderNumber} token={t} />
+          <OrderStatusPoller orderNumber={order.orderNumber} token={token} />
         </>
       ) : failed ? (
         <>
-          <p className="label-brand">Betaling niet afgerond</p>
-          <h1 className="mt-2 text-display-md">Er is niet betaald</h1>
+          <p className="label-brand">{t("order.payment_failed_eyebrow")}</p>
+          <h1 className="mt-2 text-display-md">{t("order.payment_failed_title")}</h1>
           <p className="mt-3 font-sans text-ink-soft">
-            Je betaling is geannuleerd of verlopen. Je kunt het opnieuw proberen —
-            er is niets afgeschreven.
+            {t("order.payment_failed_note")}
           </p>
           <Link href="/afrekenen" className="btn-primary mt-6">
-            Opnieuw afrekenen
+            {t("order.retry_checkout")}
           </Link>
         </>
       ) : null}
 
       <div className="mt-8 border-y border-line py-5">
-        <p className="font-sans text-sm text-muted">Bestelnummer</p>
+        <p className="font-sans text-sm text-muted">{t("order.order_number")}</p>
         <p className="font-display text-lg">{order.orderNumber}</p>
         {order.companyName ? (
           <p className="mt-2 font-sans text-sm text-ink-soft">
-            Zakelijke bestelling — <span className="text-ink">{order.companyName}</span>
-            {order.vatNumber ? ` · BTW ${order.vatNumber}` : ""}
+            {t("order.business_order")} <span className="text-ink">{order.companyName}</span>
+            {order.vatNumber ? ` · ${t("order.vat")} ${order.vatNumber}` : ""}
           </p>
         ) : null}
       </div>
@@ -181,7 +187,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
               {l.title}
               <span className="text-muted">
                 {" "}
-                {[l.color, l.size && `maat ${l.size}`, `${l.quantity}×`].filter(Boolean).join(" · ")}
+                {[l.color, l.size && t("cart.added.sizeMeta", { size: l.size }), `${l.quantity}×`].filter(Boolean).join(" · ")}
               </span>
             </span>
             <span>{formatEuro(l.unitPriceCents * l.quantity)}</span>
@@ -189,18 +195,18 @@ export default async function OrderPage({ params, searchParams }: Props) {
         ))}
       </ul>
       <dl className="mt-4 space-y-1.5 font-sans text-sm">
-        <div className="flex justify-between"><dt className="text-muted">Subtotaal</dt><dd>{formatEuro(order.subtotalCents)}</dd></div>
-        {order.discountCents > 0 ? (<div className="flex justify-between text-success"><dt>Korting{order.voucherCode ? ` (${order.voucherCode})` : ""}</dt><dd>− {formatEuro(order.discountCents)}</dd></div>) : null}
-        <div className="flex justify-between"><dt className="text-muted">Verzending</dt><dd>{order.shippingCents === 0 ? "Gratis" : formatEuro(order.shippingCents)}</dd></div>
-        {order.giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>Cadeaubon</dt><dd>− {formatEuro(order.giftcardCents)}</dd></div>) : null}
-        <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>{order.giftcardCents > 0 ? "Betaald" : "Totaal"}</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
+        <div className="flex justify-between"><dt className="text-muted">{t("checkout.subtotal")}</dt><dd>{formatEuro(order.subtotalCents)}</dd></div>
+        {order.discountCents > 0 ? (<div className="flex justify-between text-success"><dt>{t("checkout.discount")}{order.voucherCode ? ` (${order.voucherCode})` : ""}</dt><dd>− {formatEuro(order.discountCents)}</dd></div>) : null}
+        <div className="flex justify-between"><dt className="text-muted">{t("checkout.shipping")}</dt><dd>{order.shippingCents === 0 ? t("checkout.free") : formatEuro(order.shippingCents)}</dd></div>
+        {order.giftcardCents > 0 ? (<div className="flex justify-between text-success"><dt>{t("checkout.giftcard_label")}</dt><dd>− {formatEuro(order.giftcardCents)}</dd></div>) : null}
+        <div className="flex justify-between border-t border-line pt-2 font-medium"><dt>{order.giftcardCents > 0 ? t("order.paid_label") : t("checkout.total")}</dt><dd className="font-display text-lg">{formatEuro(order.totalCents)}</dd></div>
       </dl>
 
       {paid && plan && plan.splitCount > 1 ? (
         <section className="mt-10">
-          <p className="label-brand">Je bestelling — {plan.splitCount} zendingen</p>
-          <h2 className="mt-2 font-display text-xl">We versturen je bestelling in meerdere zendingen</h2>
-          <p className="mt-1 font-sans text-sm text-ink-soft">Je artikelen komen uit verschillende locaties en worden los bezorgd — je betaalt niets extra.</p>
+          <p className="label-brand">{t("order.shipments_title_count", { count: plan.splitCount })}</p>
+          <h2 className="mt-2 font-display text-xl">{t("order.multiple_shipments_note")}</h2>
+          <p className="mt-1 font-sans text-sm text-ink-soft">{t("order.shipments_note")}</p>
           <div className="mt-5 space-y-3">
             {plan.shipments.map((s, i) => (
               <div key={i} className="flex items-start gap-4 rounded-card border border-line p-4">
@@ -213,11 +219,11 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-sm font-medium text-ink">
-                    {plan.splitCount > 1 ? `Zending ${i + 1} van ${plan.splitCount} · ` : ""}
-                    {s.isWarehouse ? "Vanuit ons magazijn" : `Onze winkel in ${s.store.replace(/^GENTS\s+/i, "")}`}
+                    {plan.splitCount > 1 ? `${t("order.shipment")} ${i + 1} ${t("order.of_label")} ${plan.splitCount} · ` : ""}
+                    {s.isWarehouse ? t("order.from_warehouse") : `${t("order.from_store")} ${s.store.replace(/^GENTS\s+/i, "")}`}
                   </p>
                   <p className="mt-0.5 font-sans text-sm text-ink-soft">
-                    {s.isWarehouse ? "Ons magazijnteam maakt" : `${pickerName(s.branchId)} maakt`} {s.units === 1 ? "je artikel" : `je ${s.units} artikelen`} met zorg klaar.
+                    {s.isWarehouse ? t("order.warehouse_makes") : `${pickerName(s.branchId)} ${t("order.picker_makes")}`} {s.units === 1 ? t("order.your_item") : t("order.your_items_count", { count: s.units })} {t("order.ready_with_care")}
                   </p>
                   <ul className="mt-1.5 font-sans text-xs text-muted">
                     {s.lines.map((l, j) => (
@@ -230,7 +236,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
             ))}
           </div>
           {!plan.fullyAllocated ? (
-            <p className="mt-3 font-sans text-xs text-muted">Een enkel artikel volgt mogelijk iets later na — we houden je per e-mail op de hoogte.</p>
+            <p className="mt-3 font-sans text-xs text-muted">{t("order.partial_shipment_note")}</p>
           ) : null}
         </section>
       ) : null}
@@ -238,25 +244,25 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {paid ? (
         <div className="mt-8 flex flex-col items-start gap-2 rounded-card bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-sans text-sm text-ink-soft">
-            <span className="font-medium text-ink">Blij met je aankoop?</span> Help andere klanten met een korte review.
+            <span className="font-medium text-ink">{t("order.happy_with_purchase")}</span> {t("order.help_review")}
           </p>
-          <Link href={`/review/${order.orderNumber}${t ? `?t=${t}` : ""}`} className="btn-ghost shrink-0">
-            Schrijf een review
+          <Link href={`/review/${order.orderNumber}${token ? `?t=${token}` : ""}`} className="btn-ghost shrink-0">
+            {t("order.write_review")}
           </Link>
         </div>
       ) : null}
 
       {paid ? (
         <section className="mt-12 border-t border-line pt-8">
-          <p className="label-brand">Zo geniet je er lang van</p>
-          <h2 className="mt-2 font-display text-xl">Verzorgingstips voor je aankoop</h2>
+          <p className="label-brand">{t("order.enjoy_long_title")}</p>
+          <h2 className="mt-2 font-display text-xl">{t("order.care_tips_title")}</h2>
           <ul className="mt-4 space-y-2.5 font-sans text-sm leading-relaxed text-ink-soft">
-            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span>Pak je bestelling uit en <span className="text-ink">hang de kleding meteen uit</span> — vouw- en verzendkreukels hangen er dan vanzelf uit. Een nacht laten hangen helpt; eventueel licht stomen of strijken op lage temperatuur.</span></li>
-            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span><span className="text-ink">Past iets niet helemaal?</span> Met onze <span className="text-ink">vermaakservice</span> in de winkel maken we mouwen, pijpen en taille passend. Liever ruilen of retourneren? Dat kan <span className="text-ink">gratis binnen 14 dagen</span> — ook in de winkel.</span></li>
+            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span>{t("order.unpack_prefix")} <span className="text-ink">{t("order.hang_immediately")}</span> — {t("order.creases_note")}</span></li>
+            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span><span className="text-ink">{t("order.fit_question")}</span> {t("order.with_our")} <span className="text-ink">{t("order.alteration_service")}</span> {t("order.alteration_details")} <span className="text-ink">{t("order.free_return")}</span> — {t("order.return_in_store")}</span></li>
           </ul>
           {extras?.careItems.length ? (
             <>
-              <p className="mt-6 font-sans text-sm font-medium text-ink">Onderhoud van dit artikel</p>
+              <p className="mt-6 font-sans text-sm font-medium text-ink">{t("order.care_title")}</p>
               <div className="mt-3"><CareBlock items={extras.careItems} prose={[]} /></div>
             </>
           ) : null}
@@ -266,17 +272,17 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {paid && !order.customerId ? (
         <section className="mt-10 flex flex-col items-start gap-3 rounded-card bg-surface p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-display text-lg">Maak een account aan en spaar punten</p>
-            <p className="mt-1 font-sans text-sm text-ink-soft">De spaarpunten van deze bestelling worden automatisch bijgeschreven. Volg je bestelling, bewaar je maten en bestel een volgende keer sneller.</p>
+            <p className="font-display text-lg">{t("order.create_account_points_title")}</p>
+            <p className="mt-1 font-sans text-sm text-ink-soft">{t("order.points_auto_note")} {t("order.create_account_note")}</p>
           </div>
-          <Link href="/account/login" className="btn-primary shrink-0">Account aanmaken</Link>
+          <Link href="/account/login" className="btn-primary shrink-0">{t("order.create_account")}</Link>
         </section>
       ) : null}
 
       {paid && extras?.recommendations.length ? (
         <section className="mt-12">
-          <p className="label-brand">Maak je outfit compleet</p>
-          <h2 className="mt-2 font-display text-xl">Hier draag je het bij</h2>
+          <p className="label-brand">{t("order.complete_outfit_label")}</p>
+          <h2 className="mt-2 font-display text-xl">{t("order.wear_with_title")}</h2>
           <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
             {extras.recommendations.map((p) => (
               <ProductCard key={p.id} product={p} />
@@ -288,27 +294,27 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {paid ? (
         <section className="mt-12 grid gap-4 sm:grid-cols-2">
           <div className="rounded-card border border-line p-5">
-            <p className="font-display text-lg">Vragen over je bestelling?</p>
-            <p className="mt-1 font-sans text-sm text-ink-soft">Onze klantenservice en stylisten in 19 winkels helpen je graag verder.</p>
-            <Link href="/winkels" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">Vind een winkel</Link>
+            <p className="font-display text-lg">{t("order.questions_title")}</p>
+            <p className="mt-1 font-sans text-sm text-ink-soft">{t("order.service_note")}</p>
+            <Link href="/winkels" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">{t("order.find_store")}</Link>
           </div>
           <div className="rounded-card border border-line p-5">
-            <p className="font-display text-lg">Volg je bestelling</p>
+            <p className="font-display text-lg">{t("order.track_order_title")}</p>
             <p className="mt-1 font-sans text-sm text-ink-soft">
               {order.customerId
-                ? "Je vindt deze bestelling en de status altijd terug in je account."
-                : "Bewaar deze pagina — hiermee volg je de status van je bestelling."}
+                ? t("order.track_in_account")
+                : t("order.track_via_page")}
             </p>
-            {order.customerId ? <Link href="/account" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">Naar mijn account</Link> : null}
+            {order.customerId ? <Link href="/account" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">{t("order.to_account")}</Link> : null}
           </div>
         </section>
       ) : null}
 
       <div className="mt-12 flex flex-wrap items-center gap-3">
         <Link href="/" className="btn-ghost">
-          Verder winkelen
+          {t("common.continue_shopping")}
         </Link>
-        {paid ? <ReorderButton orderNumber={order.orderNumber} token={t} /> : null}
+        {paid ? <ReorderButton orderNumber={order.orderNumber} token={token} /> : null}
       </div>
     </div>
   );

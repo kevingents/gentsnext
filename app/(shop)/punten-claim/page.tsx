@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * /punten-claim?bon=<saleId>&t=<token> — landingspagina van de QR/CTA op een
@@ -18,6 +19,7 @@ type State =
   | { kind: "error"; message: string };
 
 function LoginForm({ next }: { next: string }) {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -35,9 +37,9 @@ function LoginForm({ next }: { next: string }) {
       });
       const d = await res.json();
       if (d.ok) setSent(true);
-      else setErr(d.error || "Er ging iets mis.");
+      else setErr(d.error || t("common.error"));
     } catch {
-      setErr("Er ging iets mis. Probeer het opnieuw.");
+      setErr(t("puntenClaim.error.retry"));
     } finally {
       setBusy(false);
     }
@@ -46,7 +48,7 @@ function LoginForm({ next }: { next: string }) {
   if (sent) {
     return (
       <p className="text-sm text-neutral-600">
-        We hebben je een inloglink gemaild. Klik die in je mail — daarna staan je punten meteen op je account.
+        {t("puntenClaim.login.sent")}
       </p>
     );
   }
@@ -54,14 +56,14 @@ function LoginForm({ next }: { next: string }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <p className="text-sm text-neutral-600">
-        Maak een account of log in met je e-mail. Je krijgt een inloglink; daarna worden je punten bijgeschreven.
+        {t("puntenClaim.login.intro")}
       </p>
       <input
         type="email"
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="jouw@email.nl"
+        placeholder={t("puntenClaim.login.emailPlaceholder")}
         className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
       />
       {err && <p className="text-sm text-red-600">{err}</p>}
@@ -70,13 +72,14 @@ function LoginForm({ next }: { next: string }) {
         disabled={busy}
         className="w-full rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
       >
-        {busy ? "Bezig…" : "Stuur me een inloglink"}
+        {busy ? t("common.processing") : t("puntenClaim.login.submit")}
       </button>
     </form>
   );
 }
 
 function ClaimInner() {
+  const t = useT();
   const params = useSearchParams();
   const saleId = params.get("bon") || "";
   const token = params.get("t") || "";
@@ -85,7 +88,7 @@ function ClaimInner() {
 
   useEffect(() => {
     if (!saleId || !token) {
-      setState({ kind: "error", message: "Onvolledige bon-link." });
+      setState({ kind: "error", message: t("puntenClaim.error.incompleteLink") });
       return;
     }
     if (fired.current) return; // claim precies één keer (StrictMode/dubbelklik)
@@ -107,10 +110,10 @@ function ClaimInner() {
         if (res.ok && d.ok) {
           setState({ kind: "ok", points: d.points || 0, balance: d.balance || 0, already: !!d.alreadyClaimed });
         } else {
-          setState({ kind: "error", message: d.error || "Verzilveren mislukt." });
+          setState({ kind: "error", message: d.error || t("puntenClaim.error.failed") });
         }
       } catch {
-        if (!cancelled) setState({ kind: "error", message: "Er ging iets mis. Probeer het later opnieuw." });
+        if (!cancelled) setState({ kind: "error", message: t("forms.error.tryLater") });
       }
     })();
     return () => {
@@ -123,9 +126,9 @@ function ClaimInner() {
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-md flex-col justify-center px-6 py-16">
       <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <h1 className="text-lg font-semibold tracking-tight text-neutral-900">Spaarpunten</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-neutral-900">{t("puntenClaim.title")}</h1>
 
-        {state.kind === "loading" && <p className="mt-3 text-sm text-neutral-500">Bezig met verzilveren…</p>}
+        {state.kind === "loading" && <p className="mt-3 text-sm text-neutral-500">{t("puntenClaim.claiming")}</p>}
 
         {state.kind === "login" && (
           <div className="mt-4">
@@ -136,18 +139,18 @@ function ClaimInner() {
         {state.kind === "ok" && (
           <div className="mt-3 space-y-3">
             {state.already ? (
-              <p className="text-sm text-neutral-700">Deze bon is al verzilverd. Je hebt nu {state.balance} punten.</p>
+              <p className="text-sm text-neutral-700">{t("puntenClaim.already", { balance: state.balance })}</p>
             ) : (
               <p className="text-sm text-neutral-700">
-                Gelukt — <strong>+{state.points} punten</strong> bijgeschreven. Je saldo is nu{" "}
-                <strong>{state.balance} punten</strong>.
+                {t("puntenClaim.success.prefix")} <strong>{t("puntenClaim.success.points", { points: state.points })}</strong> {t("puntenClaim.success.credited")}{" "}
+                <strong>{t("puntenClaim.success.balance", { balance: state.balance })}</strong>.
               </p>
             )}
             <Link
               href="/account"
               className="inline-block rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white"
             >
-              Naar mijn account
+              {t("order.to_account")}
             </Link>
           </div>
         )}
@@ -156,7 +159,7 @@ function ClaimInner() {
           <div className="mt-3 space-y-3">
             <p className="text-sm text-red-600">{state.message}</p>
             <Link href="/" className="inline-block text-sm text-neutral-600 underline">
-              Naar de winkel
+              {t("puntenClaim.toShop")}
             </Link>
           </div>
         )}
@@ -166,8 +169,9 @@ function ClaimInner() {
 }
 
 export default function PuntenClaimPage() {
+  const t = useT();
   return (
-    <Suspense fallback={<div className="px-6 py-16 text-center text-sm text-neutral-500">Bezig…</div>}>
+    <Suspense fallback={<div className="px-6 py-16 text-center text-sm text-neutral-500">{t("common.processing")}</div>}>
       <ClaimInner />
     </Suspense>
   );

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
 import { CrossIcon } from "@/components/icons";
 import { searchProducts, suggestCorrection } from "@/lib/catalog";
+import { getLocale } from "@/lib/locale-server";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,8 @@ export const metadata: Metadata = {
 type Props = { searchParams: Promise<{ q?: string; cat?: string; size?: string; exact?: string }> };
 
 export default async function ZoekenPage({ searchParams }: Props) {
+  const locale = await getLocale();
+  const t = await getT(locale);
   const sp = await searchParams;
   const query = String(sp.q || "").trim();
   const cat = String(sp.cat || "").trim();
@@ -80,20 +84,20 @@ export default async function ZoekenPage({ searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
-      <p className="label-brand">Zoeken</p>
+      <p className="label-brand">{t("search.header.eyebrow")}</p>
       <h1 className="mt-2 text-display-md">
-        {query ? `Resultaten voor "${autoCorrected && didYouMean ? didYouMean : query}"` : "Wat zoek je?"}
+        {query ? `${t("search.results_for")} "${autoCorrected && didYouMean ? didYouMean : query}"` : t("search.header.emptyTitle")}
       </h1>
       {autoCorrected && didYouMean ? (
         <p className="mt-2 font-sans text-sm text-muted">
-          In plaats van <em>{query}</em>.{" "}
+          {t("search.correction.prefix")} <em>{query}</em>.{" "}
           <Link href={`/zoeken?q=${encodeURIComponent(query)}&exact=1`} className="text-ink underline underline-offset-4">
-            Toch zoeken op "{query}"
+            {t("search.correction.exactSearch")} "{query}"
           </Link>
         </p>
       ) : didYouMean ? (
         <p className="mt-2 font-sans text-sm">
-          Bedoelde je{" "}
+          {t("search.correction.didYouMean")}{" "}
           <Link href={`/zoeken?q=${encodeURIComponent(didYouMean)}`} className="text-ink underline underline-offset-4">
             {didYouMean}
           </Link>
@@ -105,11 +109,11 @@ export default async function ZoekenPage({ searchParams }: Props) {
         <input
           name="q"
           defaultValue={query}
-          placeholder="Zoek op pak, kleur, maat (bv. overhemd 42) of merk…"
-          aria-label="Zoekterm"
+          placeholder={t("search.input_placeholder")}
+          aria-label={t("search.input.ariaLabel")}
           className="w-full border border-line bg-canvas px-4 py-3 font-sans text-sm focus:border-ink focus:outline-none"
         />
-        <button type="submit" className="btn-primary">Zoeken</button>
+        <button type="submit" className="btn-primary">{t("search.button")}</button>
       </form>
 
       {query ? (
@@ -119,7 +123,7 @@ export default async function ZoekenPage({ searchParams }: Props) {
             <div className="mt-8 space-y-3">
               {cats.length > 1 ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-sans text-xs uppercase tracking-wide text-muted">Categorie</span>
+                  <span className="font-sans text-xs uppercase tracking-wide text-muted">{t("search.facets.category")}</span>
                   {cat ? (
                     <Link href={qParam({ cat: "" })} className="inline-flex items-center gap-1.5 border border-ink bg-ink px-3 py-1 font-sans text-xs text-canvas">{cat} <CrossIcon className="h-2.5 w-2.5" /></Link>
                   ) : null}
@@ -132,7 +136,7 @@ export default async function ZoekenPage({ searchParams }: Props) {
               ) : null}
               {sizes.length > 1 ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-sans text-xs uppercase tracking-wide text-muted">Maat</span>
+                  <span className="font-sans text-xs uppercase tracking-wide text-muted">{t("search.facets.size")}</span>
                   {size ? (
                     <Link href={qParam({ size: "" })} className="inline-flex items-center gap-1.5 border border-ink bg-ink px-3 py-1 font-sans text-xs text-canvas">{size} <CrossIcon className="h-2.5 w-2.5" /></Link>
                   ) : null}
@@ -143,7 +147,7 @@ export default async function ZoekenPage({ searchParams }: Props) {
               ) : null}
             </div>
 
-            <p className="mt-6 font-sans text-sm text-muted">{results.length} artikelen</p>
+            <p className="mt-6 font-sans text-sm text-muted">{results.length} {t("search.results_count")}</p>
             <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
               {results.map((p, i) => (
                 <ProductCard key={p.id} product={p} priority={i < 8} />
@@ -153,7 +157,7 @@ export default async function ZoekenPage({ searchParams }: Props) {
         ) : (
           <div className="mt-10 max-w-xl">
             <p className="font-sans text-ink-soft">
-              Geen artikelen gevonden voor <strong>{query}</strong>. Probeer een andere zoekterm of ontdek onze populaire categorieën.
+              {t("search.no_results_for")} <strong>{query}</strong>. {t("search.try_again")}
             </p>
             <ul className="mt-6 flex flex-wrap gap-2">
               {["pakken", "overhemden", "stropdassen", "smoking", "schoenen"].map((c) => (
