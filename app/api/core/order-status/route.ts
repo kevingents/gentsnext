@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { getOrderByNumber, updateOrderStatus } from "@/lib/orders";
+import { pickStatusForPlan, canReleaseLabel } from "@/lib/split-fulfilment";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +32,19 @@ export async function POST(req: Request) {
     const data = await getOrderByNumber(orderNumber);
     if (!data) {
       return NextResponse.json({ ok: false, error: "Order niet gevonden." }, { status: 404 });
+    }
+    // Completeness-gate (backstop): een multi-winkel-split mag pas op 'shipped' als
+    // álle winkeldelen gereed gemeld zijn (/api/core/order-pick). Anders zou één winkel
+    // de hele order op verzonden zetten → valse verzendmail + het deel van de andere
+    // winkel verdwijnt uit z'n lijst. Beschermt ongeacht de kassa-UI.
+    if (status === "shipped") {
+      const pick = await pickStatusForPlan(orderNumber, data.order.fulfillmentPlan);
+      if (!canReleaseLabel(pick)) {
+        return NextResponse.json(
+          { ok: false, error: `Nog niet alle winkeldelen gereed (${pick.pickedCount}/${pick.storeParts}). Meld elk deel gereed voordat je verzendt.`, pickStatus: pick },
+          { status: 409 },
+        );
+      }
     }
     const ok = await updateOrderStatus(data.order.id, status);
     if (!ok) {
