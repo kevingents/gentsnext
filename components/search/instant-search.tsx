@@ -43,7 +43,9 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
     let active = true;
     setLoading(true);
     const id = setTimeout(() => {
-      fetch(`/api/search-suggest?q=${encodeURIComponent(q)}`)
+      // Lowercase ín de URL: de CDN cachet op de request-URL, dus alleen zó delen
+      // "Pak" en "pak" één edge-cache-entry (de zoek is toch case-insensitief).
+      fetch(`/api/search-suggest?q=${encodeURIComponent(q.trim().toLowerCase())}`)
         .then((r) => (r.ok ? r.json() : { items: [] }))
         .then((d) => {
           if (active) {

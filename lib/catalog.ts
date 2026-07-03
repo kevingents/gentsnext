@@ -648,6 +648,32 @@ function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; u
   };
 }
 
+/**
+ * Populariteits-scores per handle (view=1, add_to_cart=3) over het venster.
+ * Losgetrokken uit de PLP-query zodat 'ie cross-request gecachet kan worden:
+ * de aggregatie over de events-tabel groeit met traffic en draaide voorheen
+ * bij ELKE PLP-hit (aanbevolen/populair is de default-sort). Top-500 volstaat:
+ * daaronder is de score ~0 en beslissen de tie-breakers (voorraad/versheid).
+ */
+async function getPopularityScoresUncached(popDays: number): Promise<{ handle: string; score: number }[]> {
+  const db = getDb();
+  const res = await db.execute<{ handle: string; score: number }>(sql`
+    select handle, sum(case when type='add_to_cart' then 3 when type='product_view' then 1 else 0 end)::int as score
+    from ${events}
+    where handle <> '' and type in ('product_view','add_to_cart') and created_at > now() - (${popDays} || ' days')::interval
+    group by handle
+    order by score desc
+    limit 500
+  `);
+  return res.rows.map((r) => ({ handle: r.handle, score: Number(r.score) || 0 }));
+}
+// Zelfde cache-profiel als _facetsCached: gedeeld door álle bezoekers, 3 min vers.
+const _popularityCached = unstable_cache(
+  (popDays: number) => getPopularityScoresUncached(popDays),
+  ["plp-popularity-v1"],
+  { revalidate: 180 },
+);
+
 export async function getFilteredProducts(
   f: ProductFilters,
   sort: ProductSort,
@@ -661,17 +687,16 @@ export async function getFilteredProducts(
   const offset = (page - 1) * perPage;
 
   const { order, usesPop } = buildPlpOrder(sort, ctx);
-  // Populariteit: één aggregatie over de events (view=1, add_to_cart=3) in het
-  // venster, als CTE gejoined op handle. Alleen voor aanbevolen/populair; de
-  // overige sorts draaien exact de oude, lichte query.
+  // Populariteit: gecachte top-scores (3 min, cross-request) als VALUES-CTE in de
+  // query geïnjecteerd i.p.v. de events-aggregatie per request te draaien. De join
+  // + coalesce(pop.score, 0) blijven identiek; een lege lijst → lege CTE (zelfde
+  // 0-score-gedrag). Alleen voor aanbevolen/populair; overige sorts blijven licht.
   const popDays = Math.max(1, Math.floor(ctx?.popularityDays ?? 30));
+  const popRows = usesPop ? await _popularityCached(popDays) : [];
   const withPop = usesPop
-    ? sql`with pop as (
-        select handle, sum(case when type='add_to_cart' then 3 when type='product_view' then 1 else 0 end)::int as score
-        from ${events}
-        where handle <> '' and type in ('product_view','add_to_cart') and created_at > now() - (${popDays} || ' days')::interval
-        group by handle
-      ) `
+    ? (popRows.length
+        ? sql`with pop(handle, score) as (values ${sql.join(popRows.map((r) => sql`(${r.handle}, ${r.score}::int)`), sql`, `)}) `
+        : sql`with pop(handle, score) as (select ''::text, 0::int where false) `)
     : sql``;
   const popJoin = usesPop ? sql` left join pop on pop.handle = ${products.handle}` : sql``;
 

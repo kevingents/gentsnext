@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Dot } from "@/components/icons";
 import { useT } from "@/components/i18n/locale-provider";
 
 type Item = { sku: string; qty: number };
@@ -34,7 +35,7 @@ export function DeliveryEstimate({ items, className }: { items: Item[]; classNam
 
   return (
     <p className={className ?? "font-sans text-xs text-ink-soft"}>
-      {promise ? <span className="text-success">●</span> : null}{" "}
+      {promise ? <span className="text-success"><Dot className="inline-block h-[7px] w-[7px]" /></span> : null}{" "}
       {promise || t("delivery.sameday")}
     </p>
   );

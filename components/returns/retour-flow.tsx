@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatEuro } from "@/lib/format";
 
 type Line = { orderLineId: string; sku: string; title: string; size: string; color: string; unitPriceCents: number; orderedQty: number; returnableQty: number };
 type Policy = { windowDays: number; dhlReturnCostCents: number; freeOnCredit: boolean };
@@ -10,7 +11,7 @@ type Created = {
   label?: { url: string; base64: string; tracking: string } | null; error?: string;
 };
 
-const euro = (c: number) => "€ " + (c / 100).toFixed(2).replace(".", ",");
+const euro = formatEuro;
 const inputCls = "w-full rounded-lg border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
 
 type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };

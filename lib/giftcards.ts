@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { giftcards, giftcardTransactions } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
+import { formatEuro } from "@/lib/format";
 import { sendGiftcardEmail } from "@/lib/email";
 
 /**
@@ -160,7 +161,7 @@ export async function purchaseGiftcard(
   if (!cfg.enabled) return { ok: false, error: "Cadeaubonnen zijn momenteel niet beschikbaar." };
   const amount = Math.round(Number(input.amountCents));
   if (!Number.isFinite(amount) || amount < cfg.minCents || amount > cfg.maxCents) {
-    return { ok: false, error: `Kies een bedrag tussen € ${(cfg.minCents / 100).toFixed(2)} en € ${(cfg.maxCents / 100).toFixed(2)}.` };
+    return { ok: false, error: `Kies een bedrag tussen ${formatEuro(cfg.minCents)} en ${formatEuro(cfg.maxCents)}.` };
   }
   if (!input.recipientEmail || !/.+@.+\..+/.test(input.recipientEmail)) {
     return { ok: false, error: "Vul een geldig e-mailadres van de ontvanger in." };
@@ -331,7 +332,7 @@ export async function activateGiftcardInStore(rawCode: string, amountCents: numb
   if (!ref) return { ok: false, code, error: "Geen referentie voor de activatie." };
   const { giftcardConfig: cfg } = await getSettings();
   if (amount < cfg.minCents || amount > cfg.maxCents) {
-    return { ok: false, code, error: `Kies een bedrag tussen € ${(cfg.minCents / 100).toFixed(2)} en € ${(cfg.maxCents / 100).toFixed(2)}.` };
+    return { ok: false, code, error: `Kies een bedrag tussen ${formatEuro(cfg.minCents)} en ${formatEuro(cfg.maxCents)}.` };
   }
   const db = getDb();
   const expiresAt = new Date(Date.now() + cfg.validityMonths * 30 * 86400000).toISOString();

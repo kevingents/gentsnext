@@ -14,11 +14,9 @@ import { priceHistory } from "@/db/schema";
  * actief (boetes o.a. G-Star, Tommy Hilfiger).
  */
 
-export function formatEuro(cents: number): string {
-  return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(
-    cents / 100
-  );
-}
+// Verplaatst naar lib/format (pure module, geen db-import — lichter voor client
+// bundles); re-export zodat de bestaande imports via "@/lib/pricing" blijven werken.
+export { formatEuro } from "@/lib/format";
 
 export type TieredDiscountCfg = { enabled: boolean; minItems: number; percentOff: number };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ORDER_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
 
 type Order = {
@@ -9,10 +10,7 @@ type Order = {
   route?: string;
 };
 
-const STATUS_NL: Record<string, string> = {
-  open: "Open", paid: "Betaald", shipped: "Verzonden", ready_pickup: "Klaar om af te halen",
-  delivered: "Bezorgd", refunded: "Terugbetaald", canceled: "Geannuleerd", failed: "Mislukt", expired: "Verlopen", review: "Review",
-};
+const STATUS_NL = ORDER_STATUS_NL; // gedeelde back-office-labels (lib/order-status)
 
 export function OrdersAdmin({ orders }: { orders: Order[] }) {
   const [rows, setRows] = useState(orders);

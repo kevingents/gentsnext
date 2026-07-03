@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { getProductByHandle } from "@/lib/catalog";
+import { formatEuro } from "@/lib/format";
 
 /**
  * Portal-beheerbare productomschrijving-override (los van de gesynchroniseerde
@@ -75,7 +76,7 @@ export async function generateProductCopy(handle: string): Promise<ProductCopyDr
   push("Seizoen", attrs.seizoen);
   if (variants.length) {
     const min = Math.min(...variants.map((v) => v.priceCents));
-    facts.push(`Prijs vanaf: € ${(min / 100).toFixed(2).replace(".", ",")}`);
+    facts.push(`Prijs vanaf: ${formatEuro(min)}`);
   }
 
   const system = `Je schrijft productteksten voor GENTS, dé Nederlandse herenmode-specialist voor formele momenten (premium maar betaalbare luxe, persoonlijk advies in 19 winkels). Toon: stijlvol, zelfverzekerd, warm — niet schreeuwerig. Schrijf in het Nederlands.

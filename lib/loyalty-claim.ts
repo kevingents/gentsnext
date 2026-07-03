@@ -13,6 +13,7 @@ import { customers, loyaltyEvents, vouchers } from "@/db/schema";
 import { getPosSaleCore } from "@/lib/pos-sales-core";
 import { verifyReceiptToken, receiptSecretConfigured } from "@/lib/receipt-token";
 import { getSettings } from "@/lib/settings";
+import { formatEuro } from "@/lib/format";
 
 const POINTS_PER_EURO = 1; // pilot — zelfde regel als de kassa (pointsForAmount)
 
@@ -126,7 +127,7 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     const [ev] = await db.insert(loyaltyEvents).values({
       customerId,
       points: -pts,
-      reason: `Ingewisseld voor tegoedbon ${code} (€ ${(valueCents / 100).toFixed(2)})`,
+      reason: `Ingewisseld voor tegoedbon ${code} (${formatEuro(valueCents)})`,
       refType: "redeem",
       refId: code,
     }).returning({ id: loyaltyEvents.id });
