@@ -31,8 +31,10 @@ export async function POST(req: Request) {
 
   try {
     if (action === "validate") {
+      // validate = query: de operatie slaagt ook als de bon ongeldig is. ok:true +
+      // valid:false, zodat de kassa "onbekende/lege bon" ziet i.p.v. een null-fout.
       const v = await validateGiftcard(code, amountCents);
-      return NextResponse.json({ ok: v.valid, ...v });
+      return NextResponse.json({ ok: true, ...v });
     }
     if (action === "redeem") {
       const ref = String(b?.ref || "").trim();
