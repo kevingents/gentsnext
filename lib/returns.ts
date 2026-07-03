@@ -110,11 +110,19 @@ export async function createReturn(input: CreateReturnInput): Promise<
   if (!base.withinWindow) return { ok: false, error: "De retourtermijn voor deze bestelling is verstreken." };
 
   const byId = new Map(base.lines.map((l) => [l.orderLineId, l]));
-  const picked: { line: ReturnableLine; qty: number }[] = [];
+  // Aggregeer de gevraagde aantallen PER orderregel: een dubbele orderLineId in de
+  // input mag de returnableQty-check niet omzeilen (anders 2× refund-basis).
+  const wantByLine = new Map<string, number>();
   for (const it of input.items || []) {
-    const line = byId.get(String(it.orderLineId));
+    const id = String(it.orderLineId || "");
     const qty = Math.max(0, Math.round(Number(it.qty) || 0));
-    if (!line || qty === 0) continue;
+    if (!id || qty === 0) continue;
+    wantByLine.set(id, (wantByLine.get(id) || 0) + qty);
+  }
+  const picked: { line: ReturnableLine; qty: number }[] = [];
+  for (const [id, qty] of wantByLine) {
+    const line = byId.get(id);
+    if (!line) continue;
     if (qty > line.returnableQty) return { ok: false, error: `Meer geretourneerd dan besteld voor "${line.title}".` };
     picked.push({ line, qty });
   }
@@ -122,15 +130,22 @@ export async function createReturn(input: CreateReturnInput): Promise<
 
   const method: ReturnMethod = input.method === "store" ? "store" : "dhl";
   const refundType: RefundType = input.refundType === "credit" ? "credit" : "money";
-  const itemsCents = picked.reduce((s, p) => s + p.qty * p.line.unitPriceCents, 0);
+
+  const db = getDb();
+  const [order] = await db.select().from(orders).where(eq(orders.id, base.orderId)).limit(1);
+
+  // Refund-basis PRO-RATA: bruto regelwaarde verminderd met het evenredige deel van
+  // de order-korting (voucher/staffel), zodat we nooit meer terugbetalen dan er voor
+  // die stuks betaald is. Verzending zit hier niet in (apart via shippingCostCents).
+  const itemsGross = picked.reduce((s, p) => s + p.qty * p.line.unitPriceCents, 0);
+  const subtotal = order?.subtotalCents ?? itemsGross;
+  const paidGoods = Math.max(0, subtotal - (order?.discountCents ?? 0));
+  const itemsCents = subtotal > 0 ? Math.round((itemsGross * paidGoods) / subtotal) : itemsGross;
 
   const { returnConfig } = await getSettings();
   // Gratis retour bij in-winkel inleveren OF bij store credit/omruilen (instelbaar).
   const free = method === "store" || (refundType === "credit" && returnConfig.freeOnCredit);
   const shippingCostCents = free ? 0 : returnConfig.dhlReturnCostCents;
-
-  const db = getDb();
-  const [order] = await db.select().from(orders).where(eq(orders.id, base.orderId)).limit(1);
 
   const [ret] = await db
     .insert(returns)
@@ -242,17 +257,37 @@ export async function issueStoreCredit(amountCents: number, email: string, custo
  */
 export async function processReturnReceived(returnId: string): Promise<{ ok: boolean; status: string; refundedCents?: number; creditCode?: string; error?: string }> {
   const db = getDb();
+  // Atomaire claim: alleen de eerste call gaat door. Een dubbelklik / parallelle call
+  // krijgt geen rij terug en stopt → geen dubbele Mollie-refund of dubbele tegoedbon.
+  const claim = await db.execute<{ id: string }>(sql`
+    update returns set status = 'processing', updated_at = now()
+    where id = ${returnId} and status not in ('processing', 'completed')
+    returning id`);
   const [ret] = await db.select().from(returns).where(eq(returns.id, returnId)).limit(1);
   if (!ret) return { ok: false, status: "", error: "Retour niet gevonden." };
-  if (ret.status === "completed") return { ok: true, status: "completed", refundedCents: ret.refundedCents, creditCode: ret.creditCode };
-
-  await db.update(returns).set({ status: "received", updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+  if (!claim.rows.length) {
+    return ret.status === "completed"
+      ? { ok: true, status: "completed", refundedCents: ret.refundedCents, creditCode: ret.creditCode }
+      : { ok: false, status: ret.status, error: "Deze retour wordt al verwerkt." };
+  }
 
   const [order] = await db
-    .select({ customerId: orders.customerId, molliePaymentId: orders.molliePaymentId, firstName: orders.firstName })
+    .select({
+      customerId: orders.customerId,
+      molliePaymentId: orders.molliePaymentId,
+      firstName: orders.firstName,
+      subtotalCents: orders.subtotalCents,
+      discountCents: orders.discountCents,
+      giftcardCents: orders.giftcardCents,
+      shippingCents: orders.shippingCents,
+      totalCents: orders.totalCents,
+    })
     .from(orders)
     .where(eq(orders.id, ret.orderId))
     .limit(1);
+
+  // Bij een mislukte verwerking terug naar 'received' zodat het opnieuw kan.
+  const unclaim = () => db.update(returns).set({ status: "received", updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
 
   async function mailRefunded(refundType: RefundType, amountCents: number, code: string) {
     try {
@@ -273,20 +308,43 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
     return { ok: true, status: "completed", refundedCents: ret.itemsCents, creditCode: code };
   }
 
-  // Geld terug: items minus retourkosten (bij DHL-label), via Mollie.
-  const refundCents = Math.max(0, ret.itemsCents - ret.shippingCostCents);
-  if (!order?.molliePaymentId) {
+  // Geld terug — splits de refund-basis: het cadeaubon-deel is nooit met geld betaald
+  // en gaat als store credit terug; het cash-deel (minus retourkosten) via Mollie.
+  const paidGoods = Math.max(0, (order?.subtotalCents ?? ret.itemsCents) - (order?.discountCents ?? 0));
+  const totalBeforeGiftcard = paidGoods + (order?.shippingCents ?? 0);
+  const giftFraction = totalBeforeGiftcard > 0 ? Math.min(1, (order?.giftcardCents ?? 0) / totalBeforeGiftcard) : 0;
+  const creditPortion = Math.round(ret.itemsCents * giftFraction);
+  // Cap het cash-deel op wat er daadwerkelijk geïnd is (Mollie kan nooit méér terugstorten).
+  const cashRefund = Math.min(Math.max(0, ret.itemsCents - creditPortion - ret.shippingCostCents), order?.totalCents ?? Number.MAX_SAFE_INTEGER);
+
+  if (cashRefund > 0 && !order?.molliePaymentId) {
+    await unclaim();
     return { ok: false, status: "received", error: "Geen Mollie-betaling gevonden — handmatig terugbetalen." };
   }
-  const r = await refundMolliePayment(order.molliePaymentId, refundCents, `Retour ${ret.orderNumber}`);
-  if (!r.ok) return { ok: false, status: "received", error: r.error || "Terugbetaling mislukt." };
-  await db.update(returns).set({ status: "completed", refundedCents: refundCents, updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+  // Cash eerst (idempotency-key voorkomt dubbele terugstorting bij een retry); dan tegoed.
+  if (cashRefund > 0) {
+    const r = await refundMolliePayment(order!.molliePaymentId!, cashRefund, `Retour ${ret.orderNumber}`, `return-${ret.id}`);
+    if (!r.ok) { await unclaim(); return { ok: false, status: "received", error: r.error || "Terugbetaling mislukt." }; }
+  }
+  let creditCode = "";
+  try {
+    if (creditPortion > 0) {
+      creditCode = await issueStoreCredit(creditPortion, ret.email, order?.customerId ?? null, `Retour ${ret.orderNumber} (cadeaubon-deel)`);
+    }
+  } catch (e) {
+    // Cash is al terug (idempotent bij retry); tegoedbon mislukte → opnieuw proberen.
+    await unclaim();
+    return { ok: false, status: "received", error: `Tegoedbon-deel mislukt: ${(e as Error).message}` };
+  }
+
+  const refundedCents = cashRefund + creditPortion;
+  await db.update(returns).set({ status: "completed", refundedCents, creditCode, updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
   if (order?.customerId) {
     try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
     catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
   }
-  await mailRefunded("money", refundCents, "");
-  return { ok: true, status: "completed", refundedCents: refundCents };
+  await mailRefunded("money", cashRefund, creditCode);
+  return { ok: true, status: "completed", refundedCents, creditCode };
 }
 
 /**
