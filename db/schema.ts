@@ -477,6 +477,10 @@ export const orders = pgTable(
     uniqueIndex("orders_order_number_unique").on(t.orderNumber),
     uniqueIndex("orders_mollie_payment_unique").on(t.molliePaymentId),
     index("orders_status_idx").on(t.status),
+    // Ingelogde-klant-paden (account-orders, taste-sort, login-claim) + gast-koppeling
+    // op e-mail — voorheen een seq-scan over álle orders.
+    index("orders_customer_id_idx").on(t.customerId),
+    index("orders_email_idx").on(t.email),
   ]
 );
 
