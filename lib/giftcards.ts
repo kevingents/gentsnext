@@ -69,39 +69,44 @@ export async function redeemGiftcard(rawCode: string, orderNumber: string, amoun
   const want = Math.max(0, Math.floor(amountCents));
   if (!code || !orderNumber || want <= 0) return 0;
   const db = getDb();
-  const g = await getGiftcardByCode(code);
-  if (!g) return 0;
-
-  // Al afgeboekt voor deze order? → idempotent terug.
-  const existing = await db
-    .select({ d: giftcardTransactions.deltaCents })
-    .from(giftcardTransactions)
-    .where(
-      and(
-        eq(giftcardTransactions.giftcardId, g.id),
-        eq(giftcardTransactions.orderNumber, orderNumber),
-        eq(giftcardTransactions.reason, "redeem")
-      )
+  // Claim-first, in ÉÉN atomair SQL-statement (neon-http kent geen transacties): schrijf de
+  // 'redeem'-transactie idempotent in — de unieke index (giftcard_id, order_number, 'redeem')
+  // serialiseert twee gelijktijdige same-ref-redeems, precies één wint de INSERT — en boek
+  // alléén voor die winnende claim het saldo conditioneel af (nooit onder 0). De ander (retry
+  // of race) krijgt via de fallback het al-afgeboekte bedrag terug. `least` capt op het saldo
+  // (partiële afboeking als er meer gevraagd wordt dan er op staat).
+  const res = await db.execute(sql`
+    with gc as (
+      select id, balance_cents from giftcards
+      where code = ${code}
+        and status not in ('pending','cancelled')
+        and balance_cents > 0
+        and (expires_at is null or expires_at > now())
+    ),
+    claim as (
+      insert into giftcard_transactions (giftcard_id, order_number, reason, delta_cents)
+      select id, ${orderNumber}, 'redeem', -least(balance_cents, ${want}) from gc
+      on conflict (giftcard_id, order_number, reason) do nothing
+      returning giftcard_id, delta_cents
+    ),
+    upd as (
+      update giftcards g set
+        balance_cents = g.balance_cents + c.delta_cents,
+        status = case when g.balance_cents + c.delta_cents <= 0 then 'depleted' else 'active' end,
+        updated_at = now()
+      from claim c
+      where g.id = c.giftcard_id
+      returning g.id
     )
-    .limit(1);
-  if (existing.length) return Math.abs(existing[0].d);
-
-  const apply = Math.min(g.balanceCents, want);
-  if (apply <= 0) return 0;
-  const updated = await db
-    .update(giftcards)
-    .set({
-      balanceCents: sql`${giftcards.balanceCents} - ${apply}`,
-      status: sql`case when ${giftcards.balanceCents} - ${apply} <= 0 then 'depleted' else 'active' end`,
-      updatedAt: sql`now()`,
-    })
-    .where(and(eq(giftcards.id, g.id), sql`${giftcards.balanceCents} >= ${apply}`))
-    .returning({ id: giftcards.id });
-  if (!updated.length) return 0;
-  await db
-    .insert(giftcardTransactions)
-    .values({ giftcardId: g.id, deltaCents: -apply, reason: "redeem", orderNumber });
-  return apply;
+    select coalesce(
+      (select -delta_cents from claim),
+      (select -delta_cents from giftcard_transactions t
+        where t.giftcard_id = (select id from gc) and t.order_number = ${orderNumber} and t.reason = 'redeem' limit 1),
+      0
+    )::int as applied
+  `);
+  const applied = Number((res.rows?.[0] as { applied?: number } | undefined)?.applied ?? 0);
+  return applied > 0 ? applied : 0;
 }
 
 /** Geeft een eerder voor deze order afgeboekt bedrag terug (mislukte betaling). Idempotent. */
@@ -109,42 +114,31 @@ export async function releaseGiftcard(rawCode: string, orderNumber: string): Pro
   const code = norm(rawCode);
   if (!code || !orderNumber) return;
   const db = getDb();
-  const g = await getGiftcardByCode(code);
-  if (!g) return;
-
-  const spend = await db
-    .select({ d: giftcardTransactions.deltaCents })
-    .from(giftcardTransactions)
-    .where(
-      and(
-        eq(giftcardTransactions.giftcardId, g.id),
-        eq(giftcardTransactions.orderNumber, orderNumber),
-        eq(giftcardTransactions.reason, "redeem")
-      )
+  // Claim-first + atomair (zie redeemGiftcard): schrijf de 'release'-transactie idempotent in
+  // (unieke index serialiseert concurrente releases) en crediteer — alleen voor de winnende
+  // claim — het eerder voor deze ref afgeboekte bedrag terug. Geen redeem-tx / al gereleased →
+  // niets te doen.
+  await db.execute(sql`
+    with red as (
+      select t.giftcard_id, -t.delta_cents as amt
+      from giftcard_transactions t
+      where t.giftcard_id = (select id from giftcards where code = ${code})
+        and t.order_number = ${orderNumber} and t.reason = 'redeem'
+      limit 1
+    ),
+    claim as (
+      insert into giftcard_transactions (giftcard_id, order_number, reason, delta_cents)
+      select giftcard_id, ${orderNumber}, 'release', amt from red where amt > 0
+      on conflict (giftcard_id, order_number, reason) do nothing
+      returning giftcard_id, delta_cents
     )
-    .limit(1);
-  if (!spend.length) return;
-  const released = await db
-    .select({ id: giftcardTransactions.id })
-    .from(giftcardTransactions)
-    .where(
-      and(
-        eq(giftcardTransactions.giftcardId, g.id),
-        eq(giftcardTransactions.orderNumber, orderNumber),
-        eq(giftcardTransactions.reason, "release")
-      )
-    )
-    .limit(1);
-  if (released.length) return;
-
-  const amount = Math.abs(spend[0].d);
-  await db
-    .update(giftcards)
-    .set({ balanceCents: sql`${giftcards.balanceCents} + ${amount}`, status: "active", updatedAt: sql`now()` })
-    .where(eq(giftcards.id, g.id));
-  await db
-    .insert(giftcardTransactions)
-    .values({ giftcardId: g.id, deltaCents: amount, reason: "release", orderNumber });
+    update giftcards g set
+      balance_cents = g.balance_cents + c.delta_cents,
+      status = 'active',
+      updated_at = now()
+    from claim c
+    where g.id = c.giftcard_id
+  `);
 }
 
 /* ── Kopen ── */
@@ -220,7 +214,7 @@ export async function applyGiftcardPaymentStatus(molliePaymentId: string, paymen
         deltaCents: claimed[0].initialCents,
         reason: "issue",
         orderNumber: "",
-      });
+      }).onConflictDoNothing();
     }
     await sendGiftcardEmailOnce(molliePaymentId);
   } else if (paymentStatus === "canceled" || paymentStatus === "expired" || paymentStatus === "failed") {
