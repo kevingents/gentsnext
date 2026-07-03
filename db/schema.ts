@@ -883,6 +883,10 @@ export const giftcardTransactions = pgTable(
   (t) => [
     index("giftcard_tx_card_idx").on(t.giftcardId),
     index("giftcard_tx_order_idx").on(t.orderNumber),
+    // Harde idempotentie-grens: precies één mutatie per (bon, referentie, soort). Onder
+    // neon-http (geen transacties) is dit de enige echte serialisatie — twee gelijktijdige
+    // redeems/releases/activaties met dezelfde ref botsen hier i.p.v. dubbel te boeken.
+    uniqueIndex("giftcard_tx_ref_reason_unique").on(t.giftcardId, t.orderNumber, t.reason),
   ]
 );
 

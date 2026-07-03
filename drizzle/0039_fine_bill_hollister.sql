@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "giftcard_tx_ref_reason_unique" ON "giftcard_transactions" USING btree ("giftcard_id","order_number","reason");
