@@ -12,7 +12,8 @@ const CACHE_HEADERS = { "Cache-Control": "public, s-maxage=300, stale-while-reva
 /** Snel-suggesties voor instant-search in de header. */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  // Lowercase → "Pak" en "pak" delen één cache-entry (de zoek is toch case-insensitief).
+  // NB: de CDN keyt op de request-URL — de cache-ontdubbeling ("Pak" ≡ "pak") gebeurt
+  // dus client-side (instant-search lowercased de query in de URL); dit is defensief.
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
   if (q.length < 2) return NextResponse.json({ items: [] }, { headers: CACHE_HEADERS });
   try {

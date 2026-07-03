@@ -43,15 +43,18 @@ export default async function ZoekenPage({ searchParams }: Props) {
   const effectiveQuery = autoCorrected && didYouMean ? didYouMean : query;
   // Facet actief → in-memory faceteren uit `base` (de kaarten dragen category +
   // availableSizes al, zelfde semantiek als het DB-facet) i.p.v. een TWEEDE volledige
-  // zoekquery per request. Vangnet: base is gecapt op 100 — zit 'ie vol op de cap én
-  // vindt het filter niets, dan kan het vals-leeg zijn → alsnog de DB-facet-query.
+  // zoekquery per request. Vangnet: base is gecapt op 100 — zit 'ie VOL op de cap én
+  // levert het filter minder dan een vol grid (48), dan kunnen er matches op rang 101+
+  // bestaan die de oude DB-facet-query wél vond → alsnog die query (review-fix: alleen
+  // op vals-leeg vangen onderrapporteerde bij smalle facetten op brede zoektermen).
+  // base < 100 = complete set → in-memory is dan per definitie volledig.
   let results: typeof base = [];
   if (query) {
     if (cat || size) {
       const filtered = base
         .filter((r) => (!cat || r.category === cat) && (!size || (r.availableSizes || []).includes(size)))
         .slice(0, 48);
-      results = filtered.length === 0 && base.length >= 100
+      results = filtered.length < 48 && base.length >= 100
         ? await searchProducts(effectiveQuery, 48, { category: cat || undefined, sizeLabels: size ? [size] : undefined })
         : filtered;
     } else {

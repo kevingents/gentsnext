@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import type { Facets } from "@/lib/catalog";
 import { colorSwatch } from "@/lib/colors";
@@ -39,6 +39,17 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
   // de drawer rendert binnen #main en zou zichzelf anders inert maken.
   const drawerRef = useRef<HTMLDivElement>(null);
   useModalA11y(drawerRef, { onClose: () => setOpenMobile(false), active: openMobile, inertMain: true });
+  // Drawer is lg:hidden maar de scroll-lock/inert hangen aan state: groeit het venster
+  // naar desktop terwijl de drawer open staat, dan lijkt de pagina bevroren (onzichtbare
+  // modal houdt #main inert). Sluit 'm dus zodra de viewport ≥ lg wordt.
+  useEffect(() => {
+    if (!openMobile) return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => { if (mq.matches) setOpenMobile(false); };
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [openMobile]);
 
   // "Shop in jouw maat": alleen tonen als de bewaarde maat hier ook echt
   // bestaat (in de facetten van deze categorie).
