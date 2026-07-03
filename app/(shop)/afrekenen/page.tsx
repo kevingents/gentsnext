@@ -376,7 +376,8 @@ function CheckoutForm() {
         return;
       }
       if (data.configured && data.checkoutUrl) {
-        cart.clear();
+        // NIET hier wissen: bij annuleren op de Mollie-pagina moet de winkelwagen nog
+        // klaarstaan (de bevestigingspagina wist 'm via <ClearCart /> pas bij 'paid').
         window.location.href = data.checkoutUrl; // door naar Mollie (iDEAL)
       } else {
         setNotice(`${data.message} Je bestelnummer is ${data.orderNumber}. We nemen contact op zodra betalen mogelijk is.`);

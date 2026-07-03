@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { issueMagicToken, magicLinkThrottled } from "@/lib/account";
 import { getSiteUrl } from "@/lib/site-url";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,14 @@ export const dynamic = "force-dynamic";
  * de flow testbaar is zonder e-mailinfra.
  */
 export async function POST(req: Request) {
+  // Per-IP backstop: de per-e-mail-throttle is te omzeilen door adres-rotatie
+  // (e-mailbombing naar derden + ongelimiteerde nep-klantrijen). Deze IP-limiet
+  // dekt dat af, náást de per-adres-throttle hieronder.
+  const _ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  const _rl = rateLimit("login:" + fingerprint(_ip), 12, 60000);
+  if (!_rl.ok) {
+    return NextResponse.json({ ok: false, error: "Te veel loginpogingen — probeer het zo weer." }, { status: 429, headers: { "retry-after": String(_rl.retryAfterSec) } });
+  }
   let email = "";
   let next = "";
   try {
