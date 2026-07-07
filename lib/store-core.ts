@@ -258,6 +258,61 @@ export async function availableBreakdown(
   return out;
 }
 
+export type BranchAvailability = {
+  branchId: string;
+  store: string;
+  baseline: number;
+  posDelta: number;
+  webReserved: number;
+  safety: number;
+  available: number;
+};
+
+/**
+ * Beschikbaar per artikel, uitgesplitst over ÁLLE filialen tegelijk (één call).
+ * Zelfde formule als availableInStore, maar dan voor elk filiaal dat het artikel
+ * in de SRS-baseline heeft: net = max(0, baseline + posDelta − webReserved − safety).
+ *
+ * Dit is de bron van waarheid voor de voorraad-check aan de kassa (maatboog):
+ * eigen winkel, magazijn én andere winkels komen zo uit dezelfde verse Neon-basis,
+ * i.p.v. een aparte (verouderende) per-filiaal SRS-blob-snapshot. Efficiënt: één
+ * baseline-index + één pos-delta-query + één web-reserverings-scan voor de hele set.
+ */
+export async function availableByBranch(keys: string[]): Promise<Map<string, BranchAvailability[]>> {
+  const clean = [...new Set(keys.map(norm).filter(Boolean))];
+  const out = new Map<string, BranchAvailability[]>();
+  if (!clean.length) return out;
+  const [stock, posByLoc, webByLoc, settings] = await Promise.all([
+    stockForSkus(clean),
+    posDeltaByLocationKey(clean),
+    webReservedAllLocations(),
+    getSettings(),
+  ]);
+  for (const key of clean) {
+    const st = stock.get(key);
+    if (!st) continue; // artikel niet in de Neon-baseline → geen autoritatieve data (val terug op blob)
+    const lk = lower(key);
+    const list: BranchAvailability[] = [];
+    for (const b of st.byBranch) {
+      const loc = lower(b.store);
+      const posDelta = posByLoc.get(loc)?.get(lk) || 0;
+      const webReserved = webByLoc.get(loc)?.get(lk) || 0;
+      const safety = safetyStockFor(b.branchId, settings);
+      list.push({
+        branchId: b.branchId,
+        store: b.store,
+        baseline: b.qty,
+        posDelta,
+        webReserved,
+        safety,
+        available: Math.max(0, b.qty + posDelta - webReserved - safety),
+      });
+    }
+    out.set(key, list);
+  }
+  return out;
+}
+
 /** Recente core-mutaties (nieuwste eerst), optioneel op locatie. */
 export async function listMovements(location?: string, limit = 100) {
   const db = getDb();
