@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getSessionCustomer } from "@/lib/account";
 import { sweepExpiredHolds } from "@/lib/store-reserve";
+import { reconcileReservationCounters } from "@/lib/stock-reconcile";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -17,6 +18,10 @@ export const maxDuration = 60;
  * Vercel stuurt automatisch `Authorization: Bearer <CRON_SECRET>`; een ingelogde
  * beheerder mag 'm ook handmatig openen. De sweep zelf is atomair + best-effort;
  * we tellen vooraf de verlopen holds zodat de cron-log laat zien of er iets vastzat.
+ *
+ * Ná de sweep draait de reservering-reconcile (Fase 0): die herijkt de
+ * anti-oversell-teller op de werkelijke holds en logt de drift (nulmeting vóór we
+ * de kassa door dezelfde gate laten lopen). Zie lib/stock-reconcile.
  */
 function secretOk(req: Request): boolean {
   const secret = process.env.CRON_SECRET || "";
@@ -38,7 +43,20 @@ export async function GET(req: Request) {
     );
     const expired = before.rows[0] ?? { n: 0, q: 0 };
     await sweepExpiredHolds();
-    return NextResponse.json({ ok: true, sweptHolds: expired.n, sweptQty: expired.q });
+    // Fase 0: teller herijken op de werkelijke holds + drift loggen (nulmeting).
+    const reconcile = await reconcileReservationCounters();
+    return NextResponse.json({
+      ok: true,
+      sweptHolds: expired.n,
+      sweptQty: expired.q,
+      reconcile: {
+        checked: reconcile.checkedRows,
+        drifted: reconcile.driftedRows,
+        driftTotal: reconcile.totalDriftAbs,
+        corrected: reconcile.corrected,
+        worst: reconcile.samples.slice(0, 5),
+      },
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "cron-fout" }, { status: 500 });
   }
