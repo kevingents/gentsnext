@@ -258,6 +258,73 @@ export async function availableBreakdown(
   return out;
 }
 
+export type BranchAvailability = {
+  branchId: string;
+  store: string;
+  baseline: number;
+  posDelta: number;
+  webReserved: number;
+  safety: number;
+  available: number;
+};
+
+/**
+ * Beschikbaar per artikel, uitgesplitst over ÁLLE filialen tegelijk (één call).
+ * Zelfde formule als availableInStore, maar dan voor elk filiaal dat het artikel
+ * in de SRS-baseline heeft: net = max(0, baseline + posDelta − webReserved − safety).
+ *
+ * Dit is de bron van waarheid voor de voorraad-check aan de kassa (maatboog):
+ * eigen winkel, magazijn én andere winkels komen zo uit dezelfde verse Neon-basis,
+ * i.p.v. een aparte (verouderende) per-filiaal SRS-blob-snapshot. Efficiënt: één
+ * baseline-index + één pos-delta-query + één web-reserverings-scan voor de hele set.
+ *
+ * Bekende beperking (bewust, low-impact & veilig): we lopen alleen over filialen die
+ * het artikel in de SRS-baseline (qty>0) hebben. Een NIET-eigen filiaal met baseline 0
+ * maar een positieve core-posDelta (bv. een retour/telling in een winkel die dit
+ * artikel niet in de baseline had) wordt zo niet getoond → onder-telling, nooit
+ * over-verkoop, en zelfherstellend bij de eerstvolgende SRS-sync. De EIGEN winkel
+ * vangt dit al apart af in de kassa (article-search own-overlay).
+ */
+export async function availableByBranch(keys: string[]): Promise<Map<string, BranchAvailability[]>> {
+  const clean = [...new Set(keys.map(norm).filter(Boolean))];
+  const out = new Map<string, BranchAvailability[]>();
+  if (!clean.length) return out;
+  const [stock, posByLoc, webByLoc, settings] = await Promise.all([
+    stockForSkus(clean),
+    posDeltaByLocationKey(clean),
+    webReservedAllLocations(),
+    getSettings(),
+  ]);
+  for (const key of clean) {
+    const st = stock.get(key);
+    // stockForSkus levert voor een onbekend artikel de gedeelde EMPTY-sentinel (nooit
+    // undefined) en voor een artikel met alleen 0-voorraadrijen een entry met lege
+    // byBranch. In beide gevallen hebben we GEEN autoritatieve per-filiaal-data → de key
+    // NIET emitteren, zodat storegents netjes terugvalt op de blob-bron (geen lege lijst
+    // die alle filialen op 0 zou zetten).
+    if (!st || !st.byBranch.length) continue;
+    const lk = lower(key);
+    const list: BranchAvailability[] = [];
+    for (const b of st.byBranch) {
+      const loc = lower(b.store);
+      const posDelta = posByLoc.get(loc)?.get(lk) || 0;
+      const webReserved = webByLoc.get(loc)?.get(lk) || 0;
+      const safety = safetyStockFor(b.branchId, settings);
+      list.push({
+        branchId: b.branchId,
+        store: b.store,
+        baseline: b.qty,
+        posDelta,
+        webReserved,
+        safety,
+        available: Math.max(0, b.qty + posDelta - webReserved - safety),
+      });
+    }
+    out.set(key, list);
+  }
+  return out;
+}
+
 /** Recente core-mutaties (nieuwste eerst), optioneel op locatie. */
 export async function listMovements(location?: string, limit = 100) {
   const db = getDb();
