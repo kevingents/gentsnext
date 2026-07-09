@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatEuro } from "@/lib/format";
+import { useT } from "@/components/i18n/locale-provider";
 
 type Line = { orderLineId: string; sku: string; title: string; size: string; color: string; unitPriceCents: number; orderedQty: number; returnableQty: number };
 type Policy = { windowDays: number; dhlReturnCostCents: number; freeOnCredit: boolean };
@@ -17,6 +18,7 @@ const inputCls = "w-full rounded-lg border border-line px-3 py-2.5 text-base tex
 type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };
 
 export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initialOrder?: string; prefill?: Prefill | null; stores?: string[] }) {
+  const t = useT();
   // Ingelogd vanaf de bestelpagina (prefill) → direct naar de artikelkeuze, géén e-mail nodig.
   const authed = Boolean(prefill);
   const [step, setStep] = useState<"lookup" | "select" | "done">(prefill ? "select" : "lookup");
@@ -40,13 +42,13 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
     try {
       const r = await fetch("/api/returns", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "lookup", orderNumber, email }) });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d.error || "Niet gevonden.");
+      if (!r.ok || !d.ok) throw new Error(d.error || t("retourneren.flow.error.notFound"));
       const retLines = (d.lines as Line[]).filter((l) => l.returnableQty > 0);
-      if (!retLines.length) throw new Error("Voor deze bestelling is niets (meer) te retourneren.");
+      if (!retLines.length) throw new Error(t("retourneren.flow.error.nothingReturnable"));
       setLines(retLines); setPolicy(d.policy); setWithinWindow(d.withinWindow);
       setQty(Object.fromEntries(retLines.map((l) => [l.orderLineId, 0])));
       setStep("select");
-    } catch (e) { setErr(e instanceof Error ? e.message : "Er ging iets mis."); } finally { setBusy(false); }
+    } catch (e) { setErr(e instanceof Error ? e.message : t("retourneren.flow.error.generic")); } finally { setBusy(false); }
   }
 
   const selected = lines.filter((l) => (qty[l.orderLineId] || 0) > 0);
@@ -56,27 +58,27 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
 
   async function submit() {
     setErr("");
-    if (method === "store" && stores.length && !pickupStore) { setErr("Kies in welke winkel je het inlevert."); return; }
+    if (method === "store" && stores.length && !pickupStore) { setErr(t("retourneren.flow.error.chooseStore")); return; }
     setBusy(true);
     try {
       const items = selected.map((l) => ({ orderLineId: l.orderLineId, qty: qty[l.orderLineId] }));
       const r = await fetch("/api/returns", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", orderNumber, email, items, method, refundType, reason, pickupStore: method === "store" ? pickupStore : "" }) });
       const d = (await r.json()) as Created;
-      if (!r.ok || !d.ok) throw new Error(d.error || "Aanmaken mislukt.");
+      if (!r.ok || !d.ok) throw new Error(d.error || t("retourneren.flow.error.createFailed"));
       setResult(d); setStep("done");
-    } catch (e) { setErr(e instanceof Error ? e.message : "Er ging iets mis."); } finally { setBusy(false); }
+    } catch (e) { setErr(e instanceof Error ? e.message : t("retourneren.flow.error.generic")); } finally { setBusy(false); }
   }
 
   /* ── Stap 1: opzoeken ───────────────────────────────────────────── */
   if (step === "lookup") {
     return (
       <div className="space-y-4">
-        <p className="font-sans text-ink-soft">Vul je bestelnummer en e-mailadres in om een retour te starten.</p>
+        <p className="font-sans text-ink-soft">{t("retourneren.flow.introLookup")}</p>
         <div className="grid gap-3 sm:max-w-md">
-          <input className={inputCls} placeholder="Bestelnummer (bv. G123ABC)" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
-          <input className={inputCls} placeholder="E-mailadres van de bestelling" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input className={inputCls} placeholder={t("retourneren.flow.orderNumberPlaceholder")} value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
+          <input className={inputCls} placeholder={t("retourneren.flow.emailPlaceholder")} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           {err && <p className="text-sm text-red-600">{err}</p>}
-          <button onClick={lookup} disabled={busy || !orderNumber || !email} className="btn-primary disabled:opacity-50">{busy ? "Zoeken…" : "Bestelling zoeken"}</button>
+          <button onClick={lookup} disabled={busy || !orderNumber || !email} className="btn-primary disabled:opacity-50">{busy ? t("retourneren.flow.searching") : t("retourneren.flow.findOrder")}</button>
         </div>
       </div>
     );
@@ -86,10 +88,10 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
   if (step === "select") {
     return (
       <div className="space-y-5">
-        {!withinWindow && <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">Let op: de retourtermijn ({policy?.windowDays} dagen) lijkt verstreken. Je kunt het wel proberen; we beoordelen het per geval.</div>}
+        {!withinWindow && <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{t("retourneren.flow.windowWarning", { days: policy?.windowDays ?? "" })}</div>}
 
         <section>
-          <p className="label-brand mb-2">Welke artikelen retourneer je?</p>
+          <p className="label-brand mb-2">{t("retourneren.flow.whichItems")}</p>
           <div className="space-y-2">
             {lines.map((l) => (
               <div key={l.orderLineId} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5">
@@ -106,22 +108,22 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
         </section>
 
         <section>
-          <p className="label-brand mb-2">Hoe lever je in?</p>
+          <p className="label-brand mb-2">{t("retourneren.flow.howReturn")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             <button onClick={() => setMethod("dhl")} className={`rounded-xl border px-4 py-3 text-left ${method === "dhl" ? "border-ink bg-ink/5" : "border-line"}`}>
-              <span className="block text-sm font-semibold text-ink">DHL-retourlabel</span>
-              <span className="block text-xs text-ink-soft">We mailen je een retourlabel</span>
+              <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.methodDhl")}</span>
+              <span className="block text-xs text-ink-soft">{t("retourneren.flow.methodDhlSub")}</span>
             </button>
             <button onClick={() => setMethod("store")} className={`rounded-xl border px-4 py-3 text-left ${method === "store" ? "border-ink bg-ink/5" : "border-line"}`}>
-              <span className="block text-sm font-semibold text-ink">In de winkel</span>
-              <span className="block text-xs text-ink-soft">Inleveren in een GENTS-winkel — altijd gratis</span>
+              <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.methodStore")}</span>
+              <span className="block text-xs text-ink-soft">{t("retourneren.flow.methodStoreSub")}</span>
             </button>
           </div>
           {method === "store" && stores.length ? (
             <label className="mt-2 block">
-              <span className="font-sans text-xs text-ink-soft">In welke winkel lever je het in?</span>
+              <span className="font-sans text-xs text-ink-soft">{t("retourneren.flow.whichStore")}</span>
               <select value={pickupStore} onChange={(e) => setPickupStore(e.target.value)} className={`${inputCls} mt-1`}>
-                <option value="">Kies je winkel…</option>
+                <option value="">{t("retourneren.flow.chooseStore")}</option>
                 {stores.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
@@ -129,35 +131,35 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
         </section>
 
         <section>
-          <p className="label-brand mb-2">Wat wil je terug?</p>
+          <p className="label-brand mb-2">{t("retourneren.flow.whatBack")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             <button onClick={() => setRefundType("credit")} className={`rounded-xl border px-4 py-3 text-left ${refundType === "credit" ? "border-ink bg-ink/5" : "border-line"}`}>
-              <span className="block text-sm font-semibold text-ink">Tegoed (omruilen) — gratis retour</span>
-              <span className="block text-xs text-ink-soft">Je krijgt een GENTS-tegoed van {euro(itemsCents)} om iets nieuws te kiezen</span>
+              <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.refundCredit")}</span>
+              <span className="block text-xs text-ink-soft">{t("retourneren.flow.refundCreditSub", { amount: euro(itemsCents) })}</span>
             </button>
             <button onClick={() => setRefundType("money")} className={`rounded-xl border px-4 py-3 text-left ${refundType === "money" ? "border-ink bg-ink/5" : "border-line"}`}>
-              <span className="block text-sm font-semibold text-ink">Geld terug</span>
-              <span className="block text-xs text-ink-soft">Terug op je betaalmethode{!free && policy ? ` (− ${euro(policy.dhlReturnCostCents)} retourkosten)` : ""}</span>
+              <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.refundMoney")}</span>
+              <span className="block text-xs text-ink-soft">{t("retourneren.flow.refundMoneySub")}{!free && policy ? ` ${t("retourneren.flow.refundMoneyCost", { amount: euro(policy.dhlReturnCostCents) })}` : ""}</span>
             </button>
           </div>
         </section>
 
-        <textarea className={inputCls} rows={2} placeholder="Reden van retour (optioneel)" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <textarea className={inputCls} rows={2} placeholder={t("retourneren.flow.reasonPlaceholder")} value={reason} onChange={(e) => setReason(e.target.value)} />
 
         <div className="rounded-xl border border-line bg-surface px-4 py-3 text-sm">
-          <div className="flex justify-between text-ink-soft"><span>Waarde artikelen</span><span>{euro(itemsCents)}</span></div>
-          <div className="flex justify-between text-ink-soft"><span>Retourkosten</span><span>{shipCost === 0 ? "gratis" : `− ${euro(shipCost)}`}</span></div>
-          <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>{refundType === "credit" ? "Tegoed" : "Terug te ontvangen"}</span><span>{euro(refundType === "credit" ? itemsCents : Math.max(0, itemsCents - shipCost))}</span></div>
+          <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.itemsValue")}</span><span>{euro(itemsCents)}</span></div>
+          <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.returnCost")}</span><span>{shipCost === 0 ? t("retourneren.flow.free") : `− ${euro(shipCost)}`}</span></div>
+          <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>{refundType === "credit" ? t("retourneren.flow.creditLabel") : t("retourneren.flow.refundLabel")}</span><span>{euro(refundType === "credit" ? itemsCents : Math.max(0, itemsCents - shipCost))}</span></div>
         </div>
 
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-2">
           {authed ? (
-            <a href="/account" className="btn-ghost">Terug</a>
+            <a href="/account" className="btn-ghost">{t("retourneren.flow.back")}</a>
           ) : (
-            <button onClick={() => setStep("lookup")} className="btn-ghost">Terug</button>
+            <button onClick={() => setStep("lookup")} className="btn-ghost">{t("retourneren.flow.back")}</button>
           )}
-          <button onClick={submit} disabled={busy || !selected.length} className="btn-primary disabled:opacity-50">{busy ? "Bezig…" : "Retour bevestigen"}</button>
+          <button onClick={submit} disabled={busy || !selected.length} className="btn-primary disabled:opacity-50">{busy ? t("retourneren.flow.busy") : t("retourneren.flow.confirm")}</button>
         </div>
       </div>
     );
@@ -167,28 +169,28 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-        Je retour is aangemeld{result?.refundType === "credit" ? " — je tegoed volgt zodra we de artikelen ontvangen hebben." : "."}
+        {t("retourneren.flow.registered")}{result?.refundType === "credit" ? ` ${t("retourneren.flow.registeredCredit")}` : "."}
       </div>
 
       {result?.method === "dhl" && (
         result.label && (result.label.base64 || result.label.url) ? (
           <div className="space-y-2">
-            <p className="text-sm text-ink-soft">Print je DHL-retourlabel en plak het op het pakket:</p>
+            <p className="text-sm text-ink-soft">{t("retourneren.flow.printLabel")}</p>
             {result.label.base64
-              ? <a href={`data:application/pdf;base64,${result.label.base64}`} download={`retourlabel-${orderNumber}.pdf`} className="btn-primary inline-block">Download retourlabel (PDF)</a>
-              : <a href={result.label.url} target="_blank" rel="noopener noreferrer" className="btn-primary inline-block">Open retourlabel</a>}
-            {result.label.tracking && <p className="text-xs text-ink-soft">Track &amp; trace: {result.label.tracking}</p>}
+              ? <a href={`data:application/pdf;base64,${result.label.base64}`} download={`retourlabel-${orderNumber}.pdf`} className="btn-primary inline-block">{t("retourneren.flow.downloadLabel")}</a>
+              : <a href={result.label.url} target="_blank" rel="noopener noreferrer" className="btn-primary inline-block">{t("retourneren.flow.openLabel")}</a>}
+            {result.label.tracking && <p className="text-xs text-ink-soft">{t("retourneren.flow.trackTrace")} {result.label.tracking}</p>}
           </div>
         ) : (
-          <p className="text-sm text-ink-soft">We sturen je het DHL-retourlabel zo per e-mail toe.</p>
+          <p className="text-sm text-ink-soft">{t("retourneren.flow.labelByEmail")}</p>
         )
       )}
 
       {result?.method === "store" && (
-        <p className="text-sm text-ink-soft">Lever de artikelen samen met je bestelnummer in bij <strong className="text-ink">{pickupStore || "een van onze GENTS-winkels"}</strong>. Inleveren is gratis.</p>
+        <p className="text-sm text-ink-soft">{t("retourneren.flow.storeInstruction1")} <strong className="text-ink">{pickupStore || t("retourneren.flow.anyStore")}</strong>. {t("retourneren.flow.storeInstruction2")}</p>
       )}
 
-      <button onClick={() => { setStep("lookup"); setResult(null); setOrderNumber(""); setEmail(""); }} className="btn-ghost">Nieuwe retour</button>
+      <button onClick={() => { setStep("lookup"); setResult(null); setOrderNumber(""); setEmail(""); }} className="btn-ghost">{t("account.returns.new")}</button>
     </div>
   );
 }

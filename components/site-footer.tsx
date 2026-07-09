@@ -5,11 +5,14 @@ import { FooterPayments } from "@/components/footer-payments";
 import { CookieSettingsLink } from "@/components/cookie-settings-link";
 import { getFooter } from "@/lib/footer-server";
 import { getLocale } from "@/lib/locale-server";
-import { t } from "@/lib/messages";
+import { getT } from "@/lib/t-server";
 
 export async function SiteFooter() {
   const { intro, columns } = await getFooter();
   const locale = await getLocale();
+  // getT i.p.v. statische t(): leest óók de cron-vertalingen uit de store,
+  // zodat catalogus-sleutels (newsletterHint, legalDisputes.*) echt vertalen.
+  const t = await getT(locale);
   return (
     <footer className="mt-24 bg-ink text-canvas">
       {/* Nieuwsbrief-blok */}
@@ -18,10 +21,10 @@ export async function SiteFooter() {
           <div>
             <p className="label-brand !text-canvas/60">GENTS Insider</p>
             <h2 className="mt-2 font-display text-2xl font-light text-canvas">
-              {t("footer.newsletterTitle", locale)}
+              {t("footer.newsletterTitle")}
             </h2>
             <p className="mt-1 font-sans text-sm text-canvas/70">
-              {t("footer.newsletterHint", locale)}
+              {t("footer.newsletterHint")}
             </p>
           </div>
           <NewsletterSignup />
@@ -62,10 +65,10 @@ export async function SiteFooter() {
             <CookieSettingsLink className="underline hover:text-canvas/80" />
           </p>
           <p className="font-sans text-xs text-canvas/60">
-            © {new Date().getFullYear()} GENTS — Suits You. Alle prijzen incl. btw. Een geschil los je samen op; lukt dat niet, dan kun je terecht bij de{" "}
-            <a href="https://www.sgc.nl" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">Geschillencommissie Thuiswinkel</a>{" "}
-            of het{" "}
-            <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">EU ODR-platform</a>.
+            © {new Date().getFullYear()} GENTS — Suits You. {t("footer.legalDisputes.intro")}{" "}
+            <a href="https://www.sgc.nl" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">{t("footer.legalDisputes.sgc")}</a>{" "}
+            {t("footer.legalDisputes.or")}{" "}
+            <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="underline hover:text-canvas/80">{t("footer.legalDisputes.odr")}</a>.
           </p>
         </div>
       </div>

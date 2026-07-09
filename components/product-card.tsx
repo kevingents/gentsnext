@@ -1,7 +1,10 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import type { ProductCardData } from "@/lib/catalog";
 import { formatEuro } from "@/lib/pricing";
+import { useT } from "@/components/i18n/locale-provider";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { ProductCardBadge } from "@/components/product-card-badge";
 
@@ -9,15 +12,16 @@ import { ProductCardBadge } from "@/components/product-card-badge";
 const FIT_CONTAIN = new Set(["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"]);
 
 export function ProductCard({ product, priority = false }: { product: ProductCardData; priority?: boolean }) {
+  const t = useT();
   const contain = FIT_CONTAIN.has(product.category || "");
   return (
     <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
       {product.hasSale ? (
         <ProductCardBadge label="Sale" tone="sale" />
       ) : product.lowStock ? (
-        <ProductCardBadge label="Laatste exemplaren" tone="sale" />
+        <ProductCardBadge label={t("plp.badge.lastItems")} tone="sale" />
       ) : product.isNew ? (
-        <ProductCardBadge label="Nieuw" tone="new" />
+        <ProductCardBadge label={t("plp.badge.new")} tone="new" />
       ) : null}
       <WishlistButton handle={product.handle} />
       <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
@@ -33,7 +37,7 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">
-            Geen afbeelding
+            {t("product.noImage")}
           </div>
         )}
         {/* Modelfoto (of sfeerbeeld) faded in bij hover — toont het kledingstuk gedragen.
@@ -59,14 +63,14 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
         ) : null}
         <h3 className="font-sans text-sm text-ink">{product.title}</h3>
         <p className="font-sans text-sm text-ink-soft">
-          {product.hasPriceRange ? "vanaf " : ""}
+          {product.hasPriceRange ? `${t("product.from")} ` : ""}
           <span className={product.compareAtCents ? "text-danger" : ""}>{formatEuro(product.minPriceCents)}</span>
           {product.compareAtCents ? (
             <span className="ml-2 text-xs text-muted line-through">{formatEuro(product.compareAtCents)}</span>
           ) : null}
         </p>
         {product.colorCount && product.colorCount > 1 ? (
-          <p className="font-sans text-xs text-muted">In {product.colorCount} kleuren</p>
+          <p className="font-sans text-xs text-muted">{t("product.colorCount", { n: product.colorCount })}</p>
         ) : null}
       </div>
     </Link>

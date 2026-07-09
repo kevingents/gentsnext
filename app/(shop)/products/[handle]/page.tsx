@@ -52,24 +52,25 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ handle: string }> };
 
-const SPEC_LABELS: [key: string, label: string][] = [
-  ["merk", "Merk"],
-  ["materiaal", "Materiaal"],
-  ["samenstelling_materiaal", "Samenstelling"],
-  ["pasvorm", "Pasvorm"],
-  ["sluiting", "Sluiting"],
-  ["boord", "Boord"],
-  ["manchet", "Manchet"],
-  ["zakken", "Zakken"],
-  ["seizoen", "Seizoen"],
+// [attribuut-sleutel, message-key] — labels lopen via t() mee met de locale.
+const SPEC_LABELS: [key: string, msgKey: string][] = [
+  ["merk", "pdp.specs.brand"],
+  ["materiaal", "pdp.specs.material"],
+  ["samenstelling_materiaal", "pdp.specs.composition"],
+  ["pasvorm", "pdp.specs.fit"],
+  ["sluiting", "pdp.specs.closure"],
+  ["boord", "pdp.specs.collar"],
+  ["manchet", "pdp.specs.cuff"],
+  ["zakken", "pdp.specs.pockets"],
+  ["seizoen", "pdp.specs.season"],
   // Geen rauwe 'wasvoorschrift' hier — dat staat schoon (SVG-iconen) onder Onderhoud.
 ];
 
-const TRUST = [
-  "Gratis retour binnen 14 dagen — ook in de winkel",
-  "Vermaakservice in onze winkels",
-  "Persoonlijk advies in 19 winkels",
-  "Veilig betalen met iDEAL",
+const TRUST_KEYS = [
+  "pdp.trust_return",
+  "pdp.trust_alteration",
+  "pdp.trust_advice",
+  "pdp.trust_payment",
 ];
 
 function stripHtml(html: string): string {
@@ -164,8 +165,8 @@ export default async function ProductPage({ params }: Props) {
     }
   }
 
-  const specs = SPEC_LABELS.map(([key, label]) => ({
-    label,
+  const specs = SPEC_LABELS.map(([key, msgKey]) => ({
+    label: t(msgKey),
     value: stripSymbols(String(attrs[key] ?? "")), // emoji's/symbolen weg uit SRS-waarden
   })).filter((s) => s.value);
 
@@ -491,12 +492,12 @@ export default async function ProductPage({ params }: Props) {
           <SocialProof stats={viewStats} />
 
           <ul className="mt-8 space-y-1.5">
-            {TRUST.map((t) => (
-              <li key={t} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
+            {TRUST_KEYS.map((key) => (
+              <li key={key} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
                 <svg aria-hidden className="h-4 w-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-                {t}
+                {t(key)}
               </li>
             ))}
           </ul>

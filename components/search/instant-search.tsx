@@ -92,7 +92,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
               name="q"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Zoek op pak, kleur, merk of categorie…"
+              placeholder={t("search.input.placeholder")}
               aria-label={t("search.input.ariaLabel")}
               className="flex-1 bg-transparent py-2 font-sans text-base focus:outline-none"
             />
@@ -103,7 +103,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
 
           {q.trim().length < 2 ? (
             <div className="py-6">
-              <p className="label-brand">Populair</p>
+              <p className="label-brand">{t("search.suggest.popular")}</p>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {POPULAIR.map((c) => (
                   <li key={c}>
@@ -119,7 +119,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
               </ul>
             </div>
           ) : items.length === 0 && !loading ? (
-            <p className="py-6 font-sans text-sm text-muted">Geen artikelen gevonden voor "{q}".</p>
+            <p className="py-6 font-sans text-sm text-muted">{t("search.empty.title")} "{q}".</p>
           ) : (
             <>
               <ul className="divide-y divide-line">
@@ -140,12 +140,12 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
                         {p.vendor ? <p className="font-sans text-[0.65rem] uppercase tracking-wide text-muted">{p.vendor}</p> : null}
                         <p className="truncate font-sans text-sm">{p.title}</p>
                         <p className="font-sans text-xs text-ink-soft">
-                          {p.hasPriceRange ? "vanaf " : ""}
+                          {p.hasPriceRange ? `${t("product.from")} ` : ""}
                           {formatEuro(p.minPriceCents)}
                         </p>
                         {p.availableSizes && p.availableSizes.length ? (
                           <p className="mt-0.5 truncate font-sans text-[0.65rem] text-muted">
-                            Maten: {p.availableSizes.slice(0, 8).join(" · ")}
+                            {t("search.suggest.sizes")} {p.availableSizes.slice(0, 8).join(" · ")}
                           </p>
                         ) : null}
                       </div>
@@ -159,7 +159,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
                   onClick={onClose}
                   className="mt-4 block border-t border-line py-3 text-center font-sans text-sm text-ink underline underline-offset-4"
                 >
-                  Toon alle resultaten →
+                  {t("search.showAllResults")} →
                 </Link>
               ) : null}
             </>
