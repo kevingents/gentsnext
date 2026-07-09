@@ -23,6 +23,23 @@ export default function WinkelwagenPage() {
     return () => { active = false; };
   }, []);
 
+  // Nog niet gehydrateerd uit localStorage → neutraal skelet i.p.v. eerst de
+  // lege-staat flitsen en dan de gevulde wagen (voelt als dataverlies).
+  if (!cart.hydrated) {
+    return (
+      <div className="mx-auto max-w-page px-gutter py-12" aria-busy="true">
+        <div className="h-9 w-56 animate-pulse rounded-card bg-surface" />
+        <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="space-y-5">
+            <div className="h-28 animate-pulse rounded-card bg-surface" />
+            <div className="h-28 animate-pulse rounded-card bg-surface" />
+          </div>
+          <div className="h-64 animate-pulse rounded-card bg-surface" />
+        </div>
+      </div>
+    );
+  }
+
   if (cart.lines.length === 0) {
     return (
       <BrandedState

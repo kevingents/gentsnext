@@ -29,6 +29,9 @@ type CartState = {
   isOpen: boolean;
   count: number;
   subtotalCents: number;
+  /** true zodra localStorage is ingelezen — daarvóór is `lines` nog leeg en zegt
+      "winkelwagen is leeg" niets (voorkomt de lege-staat-flits bij verversen). */
+  hydrated: boolean;
   added: AddedNotice | null;
   toast: CartToast | null;
   add: (line: Omit<CartLine, "id">, opts?: { quiet?: boolean }) => void;
@@ -134,6 +137,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     isOpen,
     count,
     subtotalCents,
+    hydrated,
     added,
     toast,
     add,

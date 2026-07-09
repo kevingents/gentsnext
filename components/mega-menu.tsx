@@ -119,7 +119,8 @@ export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setMobileOpen(true)} aria-label={t("nav.openMenuAriaLabel")} className="p-1">
+      {/* Min. 44×44px tikvlak; -ml-2 houdt de balkjes optisch op de gutter. */}
+      <button type="button" onClick={() => setMobileOpen(true)} aria-label={t("nav.openMenuAriaLabel")} className="-ml-2 flex h-11 w-11 flex-col items-center justify-center">
         <span className="block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />

@@ -13,7 +13,9 @@ type Created = {
 };
 
 const euro = formatEuro;
-const inputCls = "w-full rounded-lg border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
+// Huisstijl-tokens (rounded-card/danger/success) — geen rauwe paletkleuren, zodat
+// de retourflow visueel aansluit op checkout en PDP.
+const inputCls = "w-full rounded-card border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
 
 type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };
 
@@ -77,7 +79,7 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
         <div className="grid gap-3 sm:max-w-md">
           <input className={inputCls} placeholder={t("retourneren.flow.orderNumberPlaceholder")} value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
           <input className={inputCls} placeholder={t("retourneren.flow.emailPlaceholder")} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          {err && <p className="text-sm text-red-600">{err}</p>}
+          {err && <p className="text-sm text-danger">{err}</p>}
           <button onClick={lookup} disabled={busy || !orderNumber || !email} className="btn-primary disabled:opacity-50">{busy ? t("retourneren.flow.searching") : t("retourneren.flow.findOrder")}</button>
         </div>
       </div>
@@ -88,18 +90,18 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
   if (step === "select") {
     return (
       <div className="space-y-5">
-        {!withinWindow && <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{t("retourneren.flow.windowWarning", { days: policy?.windowDays ?? "" })}</div>}
+        {!withinWindow && <div className="rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink-soft">{t("retourneren.flow.windowWarning", { days: policy?.windowDays ?? "" })}</div>}
 
         <section>
           <p className="label-brand mb-2">{t("retourneren.flow.whichItems")}</p>
           <div className="space-y-2">
             {lines.map((l) => (
-              <div key={l.orderLineId} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5">
+              <div key={l.orderLineId} className="flex items-center gap-3 rounded-card border border-line bg-surface px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{l.title}</p>
                   <p className="text-xs text-ink-soft">{[l.color, l.size].filter(Boolean).join(" · ")} · {euro(l.unitPriceCents)}</p>
                 </div>
-                <select value={qty[l.orderLineId] || 0} onChange={(e) => setQty((p) => ({ ...p, [l.orderLineId]: Number(e.target.value) }))} className="rounded-lg border border-line px-2 py-1.5 text-base text-ink">
+                <select value={qty[l.orderLineId] || 0} onChange={(e) => setQty((p) => ({ ...p, [l.orderLineId]: Number(e.target.value) }))} className="rounded-card border border-line px-2 py-1.5 text-base text-ink">
                   {Array.from({ length: l.returnableQty + 1 }, (_, i) => <option key={i} value={i}>{i}</option>)}
                 </select>
               </div>
@@ -110,11 +112,11 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
         <section>
           <p className="label-brand mb-2">{t("retourneren.flow.howReturn")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <button onClick={() => setMethod("dhl")} className={`rounded-xl border px-4 py-3 text-left ${method === "dhl" ? "border-ink bg-ink/5" : "border-line"}`}>
+            <button onClick={() => setMethod("dhl")} className={`rounded-card border px-4 py-3 text-left ${method === "dhl" ? "border-ink bg-ink/5" : "border-line"}`}>
               <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.methodDhl")}</span>
               <span className="block text-xs text-ink-soft">{t("retourneren.flow.methodDhlSub")}</span>
             </button>
-            <button onClick={() => setMethod("store")} className={`rounded-xl border px-4 py-3 text-left ${method === "store" ? "border-ink bg-ink/5" : "border-line"}`}>
+            <button onClick={() => setMethod("store")} className={`rounded-card border px-4 py-3 text-left ${method === "store" ? "border-ink bg-ink/5" : "border-line"}`}>
               <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.methodStore")}</span>
               <span className="block text-xs text-ink-soft">{t("retourneren.flow.methodStoreSub")}</span>
             </button>
@@ -133,11 +135,11 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
         <section>
           <p className="label-brand mb-2">{t("retourneren.flow.whatBack")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <button onClick={() => setRefundType("credit")} className={`rounded-xl border px-4 py-3 text-left ${refundType === "credit" ? "border-ink bg-ink/5" : "border-line"}`}>
+            <button onClick={() => setRefundType("credit")} className={`rounded-card border px-4 py-3 text-left ${refundType === "credit" ? "border-ink bg-ink/5" : "border-line"}`}>
               <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.refundCredit")}</span>
               <span className="block text-xs text-ink-soft">{t("retourneren.flow.refundCreditSub", { amount: euro(itemsCents) })}</span>
             </button>
-            <button onClick={() => setRefundType("money")} className={`rounded-xl border px-4 py-3 text-left ${refundType === "money" ? "border-ink bg-ink/5" : "border-line"}`}>
+            <button onClick={() => setRefundType("money")} className={`rounded-card border px-4 py-3 text-left ${refundType === "money" ? "border-ink bg-ink/5" : "border-line"}`}>
               <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.refundMoney")}</span>
               <span className="block text-xs text-ink-soft">{t("retourneren.flow.refundMoneySub")}{!free && policy ? ` ${t("retourneren.flow.refundMoneyCost", { amount: euro(policy.dhlReturnCostCents) })}` : ""}</span>
             </button>
@@ -146,13 +148,13 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
 
         <textarea className={inputCls} rows={2} placeholder={t("retourneren.flow.reasonPlaceholder")} value={reason} onChange={(e) => setReason(e.target.value)} />
 
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 text-sm">
+        <div className="rounded-card border border-line bg-surface px-4 py-3 text-sm">
           <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.itemsValue")}</span><span>{euro(itemsCents)}</span></div>
           <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.returnCost")}</span><span>{shipCost === 0 ? t("retourneren.flow.free") : `− ${euro(shipCost)}`}</span></div>
           <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>{refundType === "credit" ? t("retourneren.flow.creditLabel") : t("retourneren.flow.refundLabel")}</span><span>{euro(refundType === "credit" ? itemsCents : Math.max(0, itemsCents - shipCost))}</span></div>
         </div>
 
-        {err && <p className="text-sm text-red-600">{err}</p>}
+        {err && <p className="text-sm text-danger">{err}</p>}
         <div className="flex gap-2">
           {authed ? (
             <a href="/account" className="btn-ghost">{t("retourneren.flow.back")}</a>
@@ -168,7 +170,7 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
   /* ── Stap 3: bevestiging ────────────────────────────────────────── */
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+      <div className="rounded-card border border-success/40 bg-success/5 px-4 py-3 text-sm text-success">
         {t("retourneren.flow.registered")}{result?.refundType === "credit" ? ` ${t("retourneren.flow.registeredCredit")}` : "."}
       </div>
 

@@ -22,11 +22,12 @@ export function CartButton() {
   }, [cart.count]);
 
   return (
+    // 44×44px tikvlak; -mx-2 compenseert in de layout (icoon blijft 22px).
     <button
       type="button"
       onClick={cart.open}
       aria-label={t("cart.button.arialabelDynamic", { count: cart.count })}
-      className="relative text-ink-soft transition-colors hover:text-ink"
+      className="relative -mx-2 flex h-11 w-11 items-center justify-center text-ink-soft transition-colors hover:text-ink"
     >
       <svg
         width="22"
@@ -44,7 +45,7 @@ export function CartButton() {
       {cart.count > 0 ? (
         <span
           key={cart.count}
-          className="absolute -right-2 -top-1.5 inline-flex h-[1.05rem] min-w-[1.05rem] animate-[popIn_.35s_ease-out] items-center justify-center rounded-full bg-ink px-1 font-sans text-[0.6rem] font-medium text-canvas"
+          className="absolute right-0.5 top-1 inline-flex h-[1.05rem] min-w-[1.05rem] animate-[popIn_.35s_ease-out] items-center justify-center rounded-full bg-ink px-1 font-sans text-[0.6rem] font-medium text-canvas"
         >
           {cart.count}
         </span>

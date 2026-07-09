@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { VISUAL } from "@/lib/visuals";
 import { useT } from "@/components/i18n/locale-provider";
 
@@ -22,7 +23,21 @@ function GoldCheck() {
 }
 
 export default function LoginPage() {
+  // useSearchParams vereist een Suspense-grens in een client-page.
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const t = useT();
+  const params = useSearchParams();
+  // ?next= meesturen zodat de magic-link de klant terugbrengt (bv. naar /afrekenen);
+  // alleen interne paden — de server valideert dit óók (geen open redirect).
+  const rawNext = params.get("next") || "";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "fail">("idle");
   const [devLink, setDevLink] = useState<string | null>(null);
@@ -40,7 +55,7 @@ export default function LoginPage() {
       const r = await fetch("/api/account/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, next }),
       });
       const d = await r.json();
       if (d.ok) {

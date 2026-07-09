@@ -26,7 +26,8 @@ export function LanguageSwitcher({ current }: { current: Locale }) {
         // De zichtbare code (bv. "DE") moet in de toegankelijke naam zitten (WCAG 2.5.3),
         // dus begint de aria-label ermee i.p.v. alleen "Taal wijzigen".
         aria-label={`${current.toUpperCase()} — taal wijzigen`}
-        className="flex items-center gap-1 font-sans text-xs uppercase tracking-wide text-ink-soft transition-colors hover:text-ink"
+        // h-11 = 44px tikvlak, in lijn met de andere header-knoppen.
+        className="-mx-1 flex h-11 items-center gap-1 px-1 font-sans text-xs uppercase tracking-wide text-ink-soft transition-colors hover:text-ink"
       >
         {current}
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>

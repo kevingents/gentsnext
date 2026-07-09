@@ -296,7 +296,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <div className="rounded-card border border-line p-5">
             <p className="font-display text-lg">{t("order.questions_title")}</p>
             <p className="mt-1 font-sans text-sm text-ink-soft">{t("order.service_note")}</p>
-            <Link href="/winkels" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">{t("order.find_store")}</Link>
+            <Link href="/pages/winkels" className="mt-3 inline-block font-sans text-sm text-ink underline underline-offset-4">{t("order.find_store")}</Link>
           </div>
           <div className="rounded-card border border-line p-5">
             <p className="font-display text-lg">{t("order.track_order_title")}</p>

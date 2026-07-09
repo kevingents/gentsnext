@@ -175,7 +175,8 @@ export function CartDrawer() {
               </div>
             ) : null}
 
-            {/* Regels */}
+            {/* Regels + suggesties samen in het scrollgebied: alleen kop en voettekst
+                blijven vast, zodat de artikelen op kleine schermen ruimte houden. */}
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <ul className="space-y-5">
                 {groups.map((g, gi) => (
@@ -200,14 +201,15 @@ export function CartDrawer() {
                   </li>
                 ))}
               </ul>
-            </div>
 
-            {/* Vaak samen gekocht */}
-            <CartSuggestions
-              hoofdgroepen={[...new Set(cart.lines.map((l) => l.hoofdgroep).filter(Boolean) as string[])]}
-              excludeHandles={[...new Set(cart.lines.map((l) => l.productHandle))]}
-              onNavigate={cart.close}
-            />
+              {/* Vaak samen gekocht */}
+              <CartSuggestions
+                hoofdgroepen={[...new Set(cart.lines.map((l) => l.hoofdgroep).filter(Boolean) as string[])]}
+                excludeHandles={[...new Set(cart.lines.map((l) => l.productHandle))]}
+                onNavigate={cart.close}
+                className="mt-5 border-t border-line pt-4"
+              />
+            </div>
 
             {/* Voettekst */}
             <div className="border-t border-line px-5 py-4">

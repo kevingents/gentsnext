@@ -9,6 +9,7 @@ import { useCart } from "@/components/cart/cart-context";
 import { track } from "@/lib/track-client";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { useT } from "@/components/i18n/locale-provider";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 
 /**
  * Interactieve modelfoto met GENUMMERDE hotspots → elk cijfer wijst het artikel
@@ -33,6 +34,10 @@ export function ShopTheLook({
   const [added, setAdded] = useState<Record<number, boolean>>({});
   const [sizeDrawer, setSizeDrawer] = useState<number | null>(null);
   const cardRefs = useRef<(HTMLLIElement | null)[]>([]);
+  // Modal-a11y voor de maat-drawer (scroll-lock, focus-trap, Esc, focus-terugkeer);
+  // geen inertMain want de drawer rendert bínnen #main (geen portal).
+  const drawerPanelRef = useRef<HTMLDivElement>(null);
+  useModalA11y(drawerPanelRef, { onClose: () => setSizeDrawer(null), active: sizeDrawer !== null });
 
   const items = look.products.filter((h) => h.product);
 
@@ -187,7 +192,7 @@ export function ShopTheLook({
       {sizeDrawer !== null && dh?.product && dData ? (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t("looks.shopTheLook.sizeDrawerTitle")}>
           <div className="absolute inset-0 bg-ink/40" onClick={() => setSizeDrawer(null)} />
-          <div className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer">
+          <div ref={drawerPanelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
             <div className="mb-4 flex items-center justify-between">
               <p className="label-brand">{t("looks.shopTheLook.sizeDrawerTitle")}</p>
               <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">{t("look.drawer.close")}</button>

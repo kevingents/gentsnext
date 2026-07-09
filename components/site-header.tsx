@@ -47,7 +47,10 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
           />
         </Link>
 
-        <div className="flex items-center gap-5 lg:flex-1 lg:justify-end">
+        {/* Icoon-knoppen hebben een 44×44px tikvlak met -mx-2-compensatie; gap-4
+            i.p.v. gap-5 houdt de zichtbare spatiëring gelijk zonder overlappende
+            tikvlakken. */}
+        <div className="flex items-center gap-4 lg:flex-1 lg:justify-end">
           <Link
             href="/pak-samenstellen"
             className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
@@ -62,7 +65,7 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
           </Link>
           <LanguageSwitcher current={locale} />
           <SearchTrigger />
-          <Link href="/account" aria-label="Mijn account" className="text-ink-soft transition-colors hover:text-ink">
+          <Link href="/account" aria-label="Mijn account" className="-mx-2 flex h-11 w-11 items-center justify-center text-ink-soft transition-colors hover:text-ink">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
               <circle cx="12" cy="8" r="4" />
               <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />

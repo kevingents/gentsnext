@@ -353,7 +353,7 @@ export default async function ProductPage({ params }: Props) {
     ...(descriptionHtml
       ? [
           {
-            title: "Productomschrijving",
+            title: t("pdp.accordion.description"),
             content: (
               <div
                 className="max-w-none font-sans text-sm leading-relaxed text-ink-soft [&_a]:underline [&_h3]:mt-3 [&_h3]:font-medium [&_h3]:text-ink"
@@ -364,10 +364,10 @@ export default async function ProductPage({ params }: Props) {
         ]
       : []),
     ...(composition.length || materiaal
-      ? [{ title: "Materiaal", content: <MaterialBlock composition={composition} fallback={materiaal} /> }]
+      ? [{ title: t("pdp.material"), content: <MaterialBlock composition={composition} fallback={materiaal} /> }]
       : []),
     ...(careItems.length || careProseLines.length
-      ? [{ title: "Onderhoud", content: <CareBlock items={careItems} prose={careProseLines} /> }]
+      ? [{ title: t("pdp.accordion.care"), content: <CareBlock items={careItems} prose={careProseLines} /> }]
       : []),
     ...(specs.length
       ? [
@@ -392,11 +392,11 @@ export default async function ProductPage({ params }: Props) {
         <div className="font-sans text-sm leading-relaxed text-ink-soft">
           <p>{t("pdp.returns.freeNote")}</p>
           <p className="mt-2">
-            Twijfel je over je maat? Gebruik ons{" "}
+            {t("pdp.accordion.deliveryContent2")}{" "}
             <Link href="/maatadvies" className="text-ink underline underline-offset-4">
-              maatadvies
+              {t("pdp.accordion.deliveryLink")}
             </Link>{" "}
-            of vraag het in de winkel.
+            {t("pdp.accordion.deliveryContent3")}
           </p>
         </div>
       ),
