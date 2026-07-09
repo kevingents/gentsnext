@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useT } from "@/components/i18n/locale-provider";
+import { useLocale, useT } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
+
+// Zelfde locale→Intl-tag-mapping als DELIVERY_STRINGS.intl in lib/fulfillment.ts
+// (dat bestand is server-side; hier de client-kopie voor de fallback-datum).
+const INTL_TAG: Record<Locale, string> = { nl: "nl-NL", en: "en-GB", de: "de-DE", fr: "fr-FR", es: "es-ES" };
 
 /**
  * Levertijd-indicatie op de PDP. De headline komt bij voorkeur server-side uit
@@ -12,7 +17,7 @@ type TFn = (key: string, params?: Record<string, string | number>) => string;
  * server-belofte valt 'ie terug op een client-schatting. De aftelteller is
  * altijd client-side, zodat hij klopt met de tijd van de bezoeker.
  */
-function nextDeliveryLabel(now: Date, t: TFn): string {
+function nextDeliveryLabel(now: Date, t: TFn, intlTag: string): string {
   const beforeCutoff = now.getHours() < 16;
   const shipDayOffset = beforeCutoff ? 0 : 1;
   const ship = new Date(now);
@@ -28,7 +33,7 @@ function nextDeliveryLabel(now: Date, t: TFn): string {
   dCmp.setHours(0, 0, 0, 0);
   const days = Math.round((dCmp.getTime() - today.getTime()) / 86400000);
 
-  const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" }).format(deliver);
+  const fmt = new Intl.DateTimeFormat(intlTag, { weekday: "long", day: "numeric", month: "long" }).format(deliver);
   if (days === 1) return t("delivery.tomorrowDated", { date: fmt });
   if (days === 2) return t("delivery.dayAfterDated", { date: fmt });
   return t("delivery.onDateDated", { date: fmt });
@@ -66,6 +71,7 @@ export function DeliveryPromise({
   cutoffHour?: number;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -74,7 +80,7 @@ export function DeliveryPromise({
   }, []);
 
   // Eerste render (SSR/hydration): toon in elk geval de server-belofte.
-  const headline = promise || (now ? nextDeliveryLabel(now, t) : null);
+  const headline = promise || (now ? nextDeliveryLabel(now, t, INTL_TAG[locale]) : null);
   if (!headline) return null;
 
   const countdown = now ? countdownLabel(now, cutoffHour, t) : null;

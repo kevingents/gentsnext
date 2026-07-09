@@ -111,14 +111,14 @@ export function CartDrawer() {
   const multiSize = [...sizesByHandle.values()].some((s) => s.size >= 2);
 
   return (
-    <div className="fixed inset-0 z-[60]" role="dialog" aria-label="Winkelwagen" aria-modal="true">
+    <div className="fixed inset-0 z-[60]" role="dialog" aria-label={t("cart.arialabel")} aria-modal="true">
       <div className="absolute inset-0 animate-[fadeIn_.25s_ease] bg-ink/40" onClick={cart.close} />
       <div ref={panelRef} className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col bg-canvas shadow-drawer animate-[slideInRight_.32s_cubic-bezier(.16,1,.3,1)]">
         {/* Kop */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <p className="font-display text-lg">{t("cart.title")} ({cart.count})</p>
-          <button type="button" onClick={cart.close} aria-label="Sluiten" className="font-sans text-sm underline">
-            Sluiten
+          <button type="button" onClick={cart.close} aria-label={t("common.close")} className="font-sans text-sm underline">
+            {t("common.close")}
           </button>
         </div>
 
@@ -131,14 +131,14 @@ export function CartDrawer() {
             </svg>
             <p className="font-display text-xl font-light">{t("cart.empty")}</p>
             <p className="font-sans text-sm text-muted">
-              Ontdek onze pakken, overhemden en accessoires — of bekijk je{" "}
+              {t("cart.drawer.emptyIntro")}{" "}
               <Link href="/favorieten" onClick={cart.close} className="text-ink underline underline-offset-4">
-                favorieten
+                {t("cart.drawer.emptyIntroFavorites")}
               </Link>
               .
             </p>
             <Link href="/collections/pakken" onClick={cart.close} className="btn-primary mt-2">
-              Begin met shoppen
+              {t("cart.empty.shopButton")}
             </Link>
           </div>
         ) : (
@@ -147,12 +147,12 @@ export function CartDrawer() {
             <div className="border-b border-line px-5 py-3">
               {remaining > 0 ? (
                 <p className="font-sans text-xs text-ink-soft">
-                  Nog <strong>{formatEuro(remaining)}</strong> tot gratis verzending
+                  {t("cart.shipping.remaining")} <strong>{formatEuro(remaining)}</strong> {t("cart.shipping.untilFree")}
                 </p>
               ) : (
                 <p className="flex items-center gap-1.5 font-sans text-xs text-success">
                   <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                  Je komt in aanmerking voor gratis verzending
+                  {t("cart.freeShipping")}
                 </p>
               )}
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
@@ -168,9 +168,9 @@ export function CartDrawer() {
               <div className="flex items-start gap-2 border-b border-line bg-surface px-5 py-2.5">
                 <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 <p className="font-sans text-xs text-ink-soft">
-                  Je hebt meerdere maten van hetzelfde artikel.{" "}
-                  <Link href="/maatadvies" onClick={cart.close} className="font-medium text-ink underline underline-offset-2">Ons maatadvies</Link>{" "}
-                  helpt je de juiste te kiezen — zo voorkom je retour.
+                  {t("cart.warning.multiSize")}{" "}
+                  <Link href="/maatadvies" onClick={cart.close} className="font-medium text-ink underline underline-offset-2">{t("cart.warning.sizeAdviceLink")}</Link>{" "}
+                  {t("cart.warning.multiSizeHelp")}
                 </p>
               </div>
             ) : null}
@@ -182,13 +182,13 @@ export function CartDrawer() {
                   <li key={g.groupId ?? g.lines[0].id} className={g.groupId ? "border border-line p-3" : ""}>
                     {g.groupId ? (
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="label-brand">{g.groupLabel ?? "Pak"}</p>
+                        <p className="label-brand">{g.groupLabel ?? t("cart.group.fallback")}</p>
                         <button
                           type="button"
                           onClick={() => cart.removeGroup(g.groupId!)}
                           className="font-sans text-xs text-muted underline hover:text-ink"
                         >
-                          Verwijder pak
+                          {t("cart.action.removeGroup")}
                         </button>
                       </div>
                     ) : null}
@@ -215,10 +215,10 @@ export function CartDrawer() {
                 <span className="font-sans text-sm text-muted">{t("cart.subtotal")}</span>
                 <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
               </div>
-              <p className="mt-1 font-sans text-xs text-muted">Incl. btw, excl. verzendkosten</p>
+              <p className="mt-1 font-sans text-xs text-muted">{t("cart.taxnote")}</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button type="button" onClick={cart.close} className="btn-ghost w-full !px-2 text-sm">
-                  Doorgaan met winkelen
+                  {t("cart.action.continueShopping")}
                 </button>
                 <Link href="/afrekenen" onClick={cart.close} className="btn-primary w-full text-center !px-2 text-sm">
                   {t("cart.checkout")}
@@ -234,6 +234,7 @@ export function CartDrawer() {
 
 function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
   const cart = useCart();
+  const t = useT();
   return (
     <li className="flex gap-3">
       <Link href={`/products/${line.productHandle}`} onClick={cart.close} className="shrink-0">
@@ -247,7 +248,7 @@ function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
             {line.roleLabel ? <p className="font-sans text-[0.65rem] uppercase tracking-wide text-muted">{line.roleLabel}</p> : null}
             <p className="truncate font-sans text-sm text-ink">{line.title}</p>
             <p className="font-sans text-xs text-muted">
-              {[line.color, line.size && `maat ${line.size}`].filter(Boolean).join(" · ")}
+              {[line.color, line.size && t("cart.added.sizeMeta", { size: line.size })].filter(Boolean).join(" · ")}
             </p>
           </div>
           <p className="shrink-0 font-sans text-sm">{formatEuro(line.priceCents * line.qty)}</p>
@@ -257,7 +258,7 @@ function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
             <button
               type="button"
               onClick={() => cart.setQty(line.id, line.qty - 1)}
-              aria-label="Minder"
+              aria-label={t("cart.line.decrementAriaLabel")}
               className="px-2.5 py-1 font-sans text-sm hover:bg-surface"
             >
               −
@@ -266,7 +267,7 @@ function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
             <button
               type="button"
               onClick={() => cart.setQty(line.id, line.qty + 1)}
-              aria-label="Meer"
+              aria-label={t("cart.line.incrementAriaLabel")}
               className="px-2.5 py-1 font-sans text-sm hover:bg-surface"
             >
               +
@@ -278,7 +279,7 @@ function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
               onClick={() => cart.remove(line.id)}
               className="font-sans text-xs text-muted underline hover:text-ink"
             >
-              Verwijder
+              {t("cart.line.remove")}
             </button>
           ) : null}
         </div>

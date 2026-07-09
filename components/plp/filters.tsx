@@ -17,13 +17,16 @@ type Props = {
   mySize?: { row: string; raw: string } | null;
 };
 
-function priceBrackets(maxEuro: number): { label: string; min?: number; max?: number }[] {
+function priceBrackets(
+  maxEuro: number,
+  t: (key: string, params?: Record<string, string | number>) => string
+): { label: string; min?: number; max?: number }[] {
   const b = [
-    { label: "tot € 50", max: 50 },
+    { label: t("plp.price.upTo", { amount: 50 }), max: 50 },
     { label: "€ 50 – 100", min: 50, max: 100 },
     { label: "€ 100 – 200", min: 100, max: 200 },
     { label: "€ 200 – 350", min: 200, max: 350 },
-    { label: "vanaf € 350", min: 350 },
+    { label: t("plp.price.from", { amount: 350 }), min: 350 },
   ];
   return b.filter((x) => (x.min ?? 0) <= maxEuro);
 }
@@ -238,7 +241,7 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
       {/* Prijs */}
       <FilterGroup title={t("plp.filters.price")}>
         <div className="flex flex-wrap gap-2">
-          {priceBrackets(maxEuro).map((b) => {
+          {priceBrackets(maxEuro, t).map((b) => {
             const active = (selection.priceMin ?? 0) === (b.min ?? 0) && (selection.priceMax ?? 0) === (b.max ?? 0);
             return (
               <button
