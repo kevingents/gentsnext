@@ -34,7 +34,9 @@ export function AddedToCartToast() {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-4" role="status" aria-live="polite">
       <button type="button" aria-label={t("common.close")} onClick={cart.dismissAdded} className="absolute inset-0 cursor-default animate-[fadeIn_.2s_ease] bg-ink/30" />
-      <div className="relative w-full max-w-md animate-[fadeIn_.2s_ease] rounded-card border border-line bg-canvas p-5 shadow-drawer">
+      {/* max-h + interne scroll: op korte viewports (iPhone SE-klasse) mogen de
+          Afrekenen/Bekijk-knoppen nooit buiten beeld geknipt worden. */}
+      <div className="relative max-h-[85dvh] w-full max-w-md animate-[fadeIn_.2s_ease] overflow-y-auto rounded-card border border-line bg-canvas p-5 shadow-drawer">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <svg viewBox="0 0 24 24" className="h-5 w-5 text-success" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

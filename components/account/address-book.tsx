@@ -78,6 +78,13 @@ export function AddressBook({ addresses }: { addresses: Address[] }) {
         </div>
       ) : null}
 
+      {/* Verwijderen/standaard-maken gebeurt op de kaarten (zonder open bewerkpaneel):
+          de fout moet dan óók buiten het paneel zichtbaar zijn — anders faalt de
+          actie stil (bv. verlopen sessie) en lijkt er niets te gebeuren. */}
+      {err && editing === null ? (
+        <p role="alert" className="mt-3 font-sans text-sm text-danger">{err}</p>
+      ) : null}
+
       {addresses.length ? (
         <ul className="mt-4 grid gap-4 sm:grid-cols-2">
           {addresses.map((a) => (

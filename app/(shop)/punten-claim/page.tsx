@@ -47,7 +47,7 @@ function LoginForm({ next }: { next: string }) {
 
   if (sent) {
     return (
-      <p className="text-sm text-neutral-600">
+      <p className="font-sans text-sm text-ink-soft">
         {t("puntenClaim.login.sent")}
       </p>
     );
@@ -55,7 +55,7 @@ function LoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <p className="text-sm text-neutral-600">
+      <p className="font-sans text-sm text-ink-soft">
         {t("puntenClaim.login.intro")}
       </p>
       <input
@@ -64,14 +64,10 @@ function LoginForm({ next }: { next: string }) {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder={t("puntenClaim.login.emailPlaceholder")}
-        className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        className="w-full rounded-card border border-line bg-canvas px-3 py-2.5 font-sans text-sm outline-none focus:border-ink"
       />
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-      >
+      {err && <p className="font-sans text-sm text-danger">{err}</p>}
+      <button type="submit" disabled={busy} className="btn-primary w-full disabled:opacity-60">
         {busy ? t("common.processing") : t("puntenClaim.login.submit")}
       </button>
     </form>
@@ -124,11 +120,14 @@ function ClaimInner() {
   const next = `/punten-claim?bon=${encodeURIComponent(saleId)}&t=${encodeURIComponent(token)}`;
 
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-md flex-col justify-center px-6 py-16">
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <h1 className="text-lg font-semibold tracking-tight text-neutral-900">{t("puntenClaim.title")}</h1>
+    // Huisstijl (ink/line/canvas + display-kop) i.p.v. generiek neutral-Tailwind —
+    // deze landingspagina moet als GENTS aanvoelen, niet als een andere site.
+    <div className="mx-auto flex min-h-[60vh] max-w-md flex-col justify-center px-gutter py-16">
+      <div className="rounded-card border border-line bg-canvas p-6">
+        <p className="label-brand">{t("account.tabs.points")}</p>
+        <h1 className="mt-2 font-display text-2xl font-light text-ink">{t("puntenClaim.title")}</h1>
 
-        {state.kind === "loading" && <p className="mt-3 text-sm text-neutral-500">{t("puntenClaim.claiming")}</p>}
+        {state.kind === "loading" && <p className="mt-3 font-sans text-sm text-muted">{t("puntenClaim.claiming")}</p>}
 
         {state.kind === "login" && (
           <div className="mt-4">
@@ -139,17 +138,14 @@ function ClaimInner() {
         {state.kind === "ok" && (
           <div className="mt-3 space-y-3">
             {state.already ? (
-              <p className="text-sm text-neutral-700">{t("puntenClaim.already", { balance: state.balance })}</p>
+              <p className="font-sans text-sm text-ink-soft">{t("puntenClaim.already", { balance: state.balance })}</p>
             ) : (
-              <p className="text-sm text-neutral-700">
-                {t("puntenClaim.success.prefix")} <strong>{t("puntenClaim.success.points", { points: state.points })}</strong> {t("puntenClaim.success.credited")}{" "}
-                <strong>{t("puntenClaim.success.balance", { balance: state.balance })}</strong>.
+              <p className="font-sans text-sm text-ink-soft">
+                {t("puntenClaim.success.prefix")} <strong className="text-ink">{t("puntenClaim.success.points", { points: state.points })}</strong> {t("puntenClaim.success.credited")}{" "}
+                <strong className="text-ink">{t("puntenClaim.success.balance", { balance: state.balance })}</strong>.
               </p>
             )}
-            <Link
-              href="/account"
-              className="inline-block rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white"
-            >
+            <Link href="/account" className="btn-primary inline-block">
               {t("order.to_account")}
             </Link>
           </div>
@@ -157,8 +153,8 @@ function ClaimInner() {
 
         {state.kind === "error" && (
           <div className="mt-3 space-y-3">
-            <p className="text-sm text-red-600">{state.message}</p>
-            <Link href="/" className="inline-block text-sm text-neutral-600 underline">
+            <p className="font-sans text-sm text-danger">{state.message}</p>
+            <Link href="/" className="inline-block font-sans text-sm text-ink-soft underline underline-offset-4 hover:text-ink">
               {t("puntenClaim.toShop")}
             </Link>
           </div>
@@ -171,7 +167,7 @@ function ClaimInner() {
 export default function PuntenClaimPage() {
   const t = useT();
   return (
-    <Suspense fallback={<div className="px-6 py-16 text-center text-sm text-neutral-500">{t("common.processing")}</div>}>
+    <Suspense fallback={<div className="px-gutter py-16 text-center font-sans text-sm text-muted">{t("common.processing")}</div>}>
       <ClaimInner />
     </Suspense>
   );

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useCart } from "@/components/cart/cart-context";
 import { useT } from "@/components/i18n/locale-provider";
@@ -89,7 +89,11 @@ function CheckoutForm() {
   const [newsletter, setNewsletter] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Veld-niveau fout (naam van het veld) — markeert + focust het ontbrekende adresveld.
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  // Mobiel: inklapbaar besteloverzicht bóven het formulier (op lg staat het ernaast).
+  const [summaryOpen, setSummaryOpen] = useState(false);
   // SKU's die de voorraad-gate weigerde — markeren + in één klik verwijderbaar.
   const [unavailableSkus, setUnavailableSkus] = useState<string[]>([]);
   // Stappen-checkout: gegevens → betalen (één sectie per scherm, past op elke resolutie).
@@ -126,7 +130,7 @@ function CheckoutForm() {
   type StoreAvail = { name: string; city: string; allOk: boolean; okCount: number; total: number; missingSkus: string[] };
   const [pickupAvail, setPickupAvail] = useState<Record<string, StoreAvail>>({});
   const [pickupAvailLoading, setPickupAvailLoading] = useState(false);
-  const pickupSig = cart.lines.map((l) => `${l.sku}:${l.qty}`).join("|");
+  const cartSig = cart.lines.map((l) => `${l.sku}:${l.qty}`).join("|");
   useEffect(() => {
     if (!pickupMode || cart.lines.length === 0) { setPickupAvail({}); return; }
     let active = true;
@@ -147,7 +151,7 @@ function CheckoutForm() {
       .finally(() => { if (active) setPickupAvailLoading(false); });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickupMode, pickupSig]);
+  }, [pickupMode, cartSig]);
   const storesByAvail = useMemo(() => {
     const rank = (n: string) => {
       const a = pickupAvail[n];
@@ -195,6 +199,36 @@ function CheckoutForm() {
   const [codeInput, setCodeInput] = useState("");
   const [codeErr, setCodeErr] = useState("");
   const [codeBusy, setCodeBusy] = useState(false);
+
+  // Voucher hoort bij de actuele winkelwagen: wijzigt de inhoud, dan hervalideren
+  // we de code server-side — anders kan het getoonde totaal afwijken van wat de
+  // server straks echt rekent (bv. minimum-bedrag vervalt na verwijderen artikel).
+  const voucherRef = useRef(voucher);
+  voucherRef.current = voucher;
+  useEffect(() => {
+    const v = voucherRef.current;
+    if (!v || cart.lines.length === 0) return;
+    let active = true;
+    fetch("/api/redeem-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: v.code, subtotalCents: cart.subtotalCents, amountCents: cart.subtotalCents }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!active) return;
+        if (d.type === "voucher") {
+          setVoucher((cur) => (cur && cur.code === d.code ? { code: d.code, discountCents: d.discountCents, label: d.label } : cur));
+        } else {
+          setVoucher(null);
+          setCodeErr(t("checkout.voucher_removed"));
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+    // Bewust alléén op cart-wijziging; voucherRef voorkomt een her-valideer-lus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartSig]);
 
   type PrefillAddr = { id: string; label: string; firstName: string; lastName: string; street: string; houseNumber: string; postalCode: string; city: string };
   type Prefill = { loggedIn: boolean; email?: string; firstName?: string; lastName?: string; phone?: string; defaultAddressId?: string | null; addresses?: PrefillAddr[] };
@@ -304,6 +338,20 @@ function CheckoutForm() {
     }
   }
 
+  // Nog niet gehydrateerd uit localStorage → neutraal skelet i.p.v. eerst de
+  // lege-staat flitsen en dan de gevulde checkout (jarring, lijkt op dataverlies).
+  if (!cart.hydrated) {
+    return (
+      <div className="mx-auto max-w-page px-gutter py-4" aria-busy="true">
+        <div className="h-9 w-48 animate-pulse rounded-card bg-surface" />
+        <div className="mt-5 grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="h-72 animate-pulse rounded-card bg-surface" />
+          <div className="h-72 animate-pulse rounded-card bg-surface" />
+        </div>
+      </div>
+    );
+  }
+
   if (cart.lines.length === 0 && !notice) {
     return (
       <BrandedState eyebrow={t("cart.checkout")} title={t("cart.empty_title")} intro={t("cart.empty_cta")}>
@@ -315,11 +363,23 @@ function CheckoutForm() {
   // Stap 1 → 2: valideer gegevens & bezorging vóór we naar betalen gaan.
   function goToPayment() {
     setError("");
+    setFieldError(null);
+    // Veld-fout: markeer + focus het veld zolang het nog op het scherm staat
+    // (op stap 2 zijn de adresvelden niet meer zichtbaar).
+    const fieldFail = (name: string, msg: string) => {
+      setFieldError(name);
+      setError(msg);
+      document.getElementById(`checkout-field-${name}`)?.focus();
+    };
     if (pickupMode) {
       if (!pickupStore) { setError(t("checkout.error_pickup_store")); return; }
     } else {
-      if (!POSTCODE_RE.test(form.postalCode || "")) { setError(t("checkout.error_postcode")); return; }
-      if (!HOUSENR_RE.test((form.houseNumber || "").trim())) { setError(t("checkout.error_housenumber")); return; }
+      if (!POSTCODE_RE.test(form.postalCode || "")) { fieldFail("postalCode", t("checkout.error_postcode")); return; }
+      if (!HOUSENR_RE.test((form.houseNumber || "").trim())) { fieldFail("houseNumber", t("checkout.error_housenumber")); return; }
+      // Straat/plaats kunnen leeg blijven als de postcode-API het adres niet kent
+      // (bv. nieuwbouw) — de server weigert lege adresvelden, dus hier al blokkeren.
+      if (!(form.street || "").trim()) { fieldFail("street", t("checkout.error_address_fields")); return; }
+      if (!(form.city || "").trim()) { fieldFail("city", t("checkout.error_address_fields")); return; }
     }
     if (!(form.firstName || "").trim() || !(form.lastName || "").trim() || !/.+@.+\..+/.test(form.email || "")) {
       setError(t("checkout.error_name_email")); return;
@@ -551,14 +611,20 @@ function CheckoutForm() {
               <label key={f.name} className={f.col === 2 ? "col-span-2 block" : "block"}>
                 <span className="font-sans text-sm text-ink">{t(f.label)}</span>
                 <input
+                  id={`checkout-field-${f.name}`}
                   type={f.type ?? "text"}
                   inputMode={f.inputMode}
                   autoComplete={f.autoComplete}
                   placeholder={f.placeholder}
                   value={form[f.name] || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, [f.name]: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm((p) => ({ ...p, [f.name]: v }));
+                    if (fieldError === f.name) setFieldError(null);
+                  }}
                   required={!f.optional}
-                  className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+                  aria-invalid={fieldError === f.name || undefined}
+                  className={`mt-1 w-full border bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none ${fieldError === f.name ? "border-danger" : "border-line"}`}
                 />
               </label>
             ))}
@@ -648,10 +714,26 @@ function CheckoutForm() {
           )}
         </form>
 
-        {/* Overzicht */}
-        <aside className="lg:sticky lg:top-20 lg:h-fit">
-          <div className="border border-line p-4">
-            <p className="label-brand mb-3">{t("checkout.order_summary")}</p>
+        {/* Overzicht — op mobiel als inklapbaar blok bóven het formulier, zodat de
+            bezorgkeuze en het kortingscode-veld vóór de betaalknop zichtbaar zijn. */}
+        <aside className="order-first lg:order-none lg:sticky lg:top-20 lg:h-fit">
+          <button
+            type="button"
+            onClick={() => setSummaryOpen((v) => !v)}
+            aria-expanded={summaryOpen}
+            className="flex w-full items-center justify-between border border-line px-4 py-3 lg:hidden"
+          >
+            <span className="label-brand">{t("checkout.order_summary")}</span>
+            <span className="flex items-center gap-2">
+              <span className="font-display text-base">{formatEuro(payableCents)}</span>
+              <svg viewBox="0 0 12 12" aria-hidden className={`h-3 w-3 text-muted transition-transform ${summaryOpen ? "rotate-180" : ""}`}>
+                <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
+          <div className={`border border-line p-4 ${summaryOpen ? "border-t-0" : "hidden"} lg:block lg:border-t`}>
+            {/* Kop dubbelt op mobiel met de toggle-knop → alleen op desktop tonen. */}
+            <p className="label-brand mb-3 hidden lg:block">{t("checkout.order_summary")}</p>
             <ul className="hidden space-y-3 lg:block">
               {cart.lines.map((l) => {
                 const unavailable = unavailableSet.has(l.sku.toLowerCase());

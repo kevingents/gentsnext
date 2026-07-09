@@ -165,6 +165,16 @@ export function BuyBox({
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // …maar weer verbergen zodra de footer in beeld komt: de vaste balk dekt anders
+  // permanent de onderste ~90px van elke PDP af (juridische links, betaaliconen).
+  const [footerVisible, setFooterVisible] = useState(false);
+  useEffect(() => {
+    const footer = document.querySelector("footer");
+    if (!footer || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setFooterVisible(e.isIntersecting));
+    io.observe(footer);
+    return () => io.disconnect();
+  }, []);
 
   const selectedSize = useMemo(
     () => active?.sizes.find((s) => s.size === size) ?? null,
@@ -180,7 +190,7 @@ export function BuyBox({
     return set.size;
   }, [active, selectedSize]);
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
-  const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? "vanaf " : "") + formatEuro(priceCents);
+  const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? `${t("product.from")} ` : "") + formatEuro(priceCents);
   // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
   // referentieprijs écht hoger is dan de getoonde prijs — anders zou bij een
   // duurdere maat een doorgestreepte lagere prijs een prijsVERHOGING suggereren.
@@ -425,8 +435,9 @@ export function BuyBox({
         <ClickAndCollect branches={selectedSize.branches} />
       ) : null}
 
-      {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is. */}
-      {stickyOn && !allSoldOut ? (
+      {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is
+          én de footer nog niet in beeld is (anders blijft de onderkant bedekt). */}
+      {stickyOn && !footerVisible && !allSoldOut ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-page items-center gap-3">
             <div className="min-w-0 flex-1">

@@ -1354,4 +1354,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "retourneren.flow.storeInstruction1": "Lever de artikelen samen met je bestelnummer in bij",
   "retourneren.flow.storeInstruction2": "Inleveren is gratis.",
   "retourneren.flow.anyStore": "een van onze GENTS-winkels",
+  // — UX-fix-batch (checkout-validatie, voucher-hervalidatie, account-opslaan) —
+  "checkout.error_address_fields": "Vul je straat en plaats in — verschijnen ze niet automatisch bij je postcode en huisnummer, vul ze dan handmatig in.",
+  "checkout.voucher_removed": "Je kortingscode is niet meer geldig voor de gewijzigde winkelwagen en is verwijderd.",
+  "account.form.saveError": "Opslaan is niet gelukt — probeer het opnieuw.",
 };

@@ -25,10 +25,10 @@ export function AfrekenenButton({ token }: { token: string }) {
 
   return (
     <div className="mt-6">
-      <button onClick={pay} disabled={busy} className="w-full rounded-lg bg-neutral-900 py-3 text-sm font-semibold text-white disabled:opacity-50">
+      <button onClick={pay} disabled={busy} className="btn-primary w-full disabled:opacity-50">
         {busy ? "Bezig…" : "Nu online afrekenen"}
       </button>
-      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+      {err && <p className="mt-2 font-sans text-sm text-danger">{err}</p>}
     </div>
   );
 }

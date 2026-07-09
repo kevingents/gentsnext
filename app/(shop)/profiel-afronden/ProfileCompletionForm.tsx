@@ -16,7 +16,8 @@ export function ProfileCompletionForm({ token, email }: { token: string; email: 
   const [done, setDone] = useState<{ points: number; already: boolean } | null>(null);
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const input = "w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-neutral-900";
+  // Huisstijl-tokens (line/ink/canvas) i.p.v. generiek neutral-Tailwind.
+  const input = "w-full rounded-card border border-line bg-canvas px-3 py-2.5 font-sans text-sm outline-none focus:border-ink";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,30 +42,30 @@ export function ProfileCompletionForm({ token, email }: { token: string; email: 
 
   if (done) {
     return (
-      <div className="mt-8 rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-        <p className="text-lg font-semibold text-emerald-800">{done.already ? t("profielAfronden.done.updatedTitle") : t("profielAfronden.done.successTitle")}</p>
-        <p className="mt-1 text-sm text-emerald-700">{done.already ? t("profielAfronden.done.updatedBody") : t("profielAfronden.done.successBody")}</p>
+      <div className="mt-8 rounded-card border border-success/40 bg-success/5 p-6 text-center">
+        <p className="font-display text-lg font-light text-ink">{done.already ? t("profielAfronden.done.updatedTitle") : t("profielAfronden.done.successTitle")}</p>
+        <p className="mt-1 font-sans text-sm text-ink-soft">{done.already ? t("profielAfronden.done.updatedBody") : t("profielAfronden.done.successBody")}</p>
       </div>
     );
   }
 
   return (
     <form onSubmit={submit} className="mt-8 space-y-4">
-      {email && <p className="text-sm text-neutral-500">{t("profielAfronden.form.for", { email })}</p>}
+      {email && <p className="font-sans text-sm text-muted">{t("profielAfronden.form.for", { email })}</p>}
       <div className="grid grid-cols-2 gap-3">
         <input className={input} placeholder={t("checkout.firstname")} value={f.firstName} onChange={set("firstName")} required />
         <input className={input} placeholder={t("checkout.lastname")} value={f.lastName} onChange={set("lastName")} />
       </div>
       <input className={input} placeholder={t("checkout.phone_optional")} value={f.phone} onChange={set("phone")} />
-      <p className="pt-2 text-sm font-medium text-neutral-800">{t("profielAfronden.form.sizesLabel")}</p>
+      <p className="label-brand pt-2">{t("profielAfronden.form.sizesLabel")}</p>
       <div className="grid grid-cols-2 gap-3">
         <input className={input} placeholder={t("profielAfronden.form.jacketPlaceholder")} value={f.colbert} onChange={set("colbert")} />
         <input className={input} placeholder={t("profielAfronden.form.trousersPlaceholder")} value={f.broek} onChange={set("broek")} />
         <input className={input} placeholder={t("profielAfronden.form.shirtPlaceholder")} value={f.overhemd} onChange={set("overhemd")} />
         <input className={input} placeholder={t("profielAfronden.form.shoePlaceholder")} value={f.schoen} onChange={set("schoen")} />
       </div>
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      <button type="submit" disabled={busy} className="w-full rounded-lg bg-neutral-900 py-3 text-sm font-semibold text-white disabled:opacity-50">
+      {err && <p className="font-sans text-sm text-danger">{err}</p>}
+      <button type="submit" disabled={busy} className="btn-primary w-full disabled:opacity-50">
         {busy ? t("common.processing") : t("profielAfronden.form.submit")}
       </button>
     </form>

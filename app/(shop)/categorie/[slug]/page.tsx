@@ -105,7 +105,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-24 lg:h-fit">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} />
         </aside>
 
         <div>

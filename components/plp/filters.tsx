@@ -3,11 +3,12 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import type { Facets } from "@/lib/catalog";
+import type { Facets, ProductSort } from "@/lib/catalog";
 import { colorSwatch } from "@/lib/colors";
 import { buildPlpQuery, type PlpSelection } from "@/lib/plp-params";
 import { useT } from "@/components/i18n/locale-provider";
 import { useModalA11y } from "@/components/hooks/use-modal-a11y";
+import { SortSelect } from "@/components/plp/sort-select";
 
 type Props = {
   facets: Facets;
@@ -15,6 +16,9 @@ type Props = {
   total: number;
   /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
   mySize?: { row: string; raw: string } | null;
+  /** Actieve sortering — de sticky pil belooft "Filter & sorteer", dus de mobiele
+      drawer moet óók een sorteer-keuze bevatten. */
+  sort?: ProductSort;
 };
 
 function priceBrackets(
@@ -31,7 +35,7 @@ function priceBrackets(
   return b.filter((x) => (x.min ?? 0) <= maxEuro);
 }
 
-export function PlpFilters({ facets, selection, total, mySize }: Props) {
+export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -306,6 +310,13 @@ export function PlpFilters({ facets, selection, total, mySize }: Props) {
                     {t("common.close")}
                   </button>
                 </div>
+                {/* Sorteren hoort in de drawer: de sticky pil heet "Filter & sorteer",
+                    en diep in de lijst is de sorteer-select bovenaan de PLP onbereikbaar. */}
+                {sort ? (
+                  <div className="mb-4 border-b border-line pb-4">
+                    <SortSelect value={sort} />
+                  </div>
+                ) : null}
                 {body}
                 <button type="button" onClick={() => setOpenMobile(false)} className="btn-primary mt-6 w-full">
                   {t("plp.filters.showCountBtn")} {total} {t("plp.filters.itemPlural")}

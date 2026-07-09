@@ -110,15 +110,19 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
         </div>
       </div>
 
-      {/* Tabs */}
-      <nav className="mt-8 flex flex-wrap gap-1 border-b border-line" aria-label={t("account.tabs.ariaLabel")}>
+      {/* Tabs — op mobiel één horizontaal scrollbare rij (gewrapte rijen breken de
+          actieve-tab-onderstreping); pas op lg mag er gewrapt worden. */}
+      <nav
+        className="mt-8 flex snap-x gap-1 overflow-x-auto whitespace-nowrap border-b border-line lg:flex-wrap lg:overflow-x-visible lg:whitespace-normal"
+        aria-label={t("account.tabs.ariaLabel")}
+      >
         {TABS.map((tb) => (
           <button
             key={tb.key}
             type="button"
             onClick={() => setTab(tb.key)}
             aria-current={tab === tb.key}
-            className={`-mb-px border-b-2 px-4 py-2.5 font-sans text-sm transition-colors ${
+            className={`-mb-px shrink-0 snap-start border-b-2 px-4 py-2.5 font-sans text-sm transition-colors ${
               tab === tb.key ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
             }`}
           >
@@ -589,18 +593,28 @@ const SIZE_FIELDS: { key: string; label: string; placeholder: string }[] = [
 function Maten({ customer }: { customer: Customer }) {
   const t = useT();
   const [size, setSize] = useState<Record<string, string>>(customer.sizeProfile || {});
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setState("busy");
-    await fetch("/api/account/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ section: "size", sizeProfile: size }),
-    });
-    setState("done");
-    setTimeout(() => setState("idle"), 2500);
+    // res.ok checken (4xx zoals een verlopen sessie mag geen "Opgeslagen" tonen)
+    // en netwerkfouten opvangen — anders blijft de knop eeuwig op "Opslaan…".
+    try {
+      const res = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "size", sizeProfile: size }),
+      });
+      if (!res.ok) {
+        setState("error");
+        return;
+      }
+      setState("done");
+      setTimeout(() => setState("idle"), 2500);
+    } catch {
+      setState("error");
+    }
   }
 
   return (
@@ -635,6 +649,9 @@ function Maten({ customer }: { customer: Customer }) {
       <button type="submit" disabled={state === "busy"} className="btn-primary mt-5">
         {state === "busy" ? t("account.form.saving") : state === "done" ? t("account.form.saved") : t("account.sizes.save")}
       </button>
+      {state === "error" ? (
+        <p role="alert" className="mt-2 font-sans text-sm text-danger">{t("account.form.saveError")}</p>
+      ) : null}
     </form>
   );
 }
@@ -709,18 +726,27 @@ function Gegevens({ customer }: { customer: Customer }) {
     firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone,
     marketingOptIn: customer.marketingOptIn,
   });
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setState("busy");
-    await fetch("/api/account/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setState("done");
-    setTimeout(() => setState("idle"), 2500);
+    // res.ok checken + netwerkfouten opvangen — geen vals "Opgeslagen" bij 4xx/5xx.
+    try {
+      const res = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        setState("error");
+        return;
+      }
+      setState("done");
+      setTimeout(() => setState("idle"), 2500);
+    } catch {
+      setState("error");
+    }
   }
 
   return (
@@ -750,6 +776,9 @@ function Gegevens({ customer }: { customer: Customer }) {
       <button type="submit" disabled={state === "busy"} className="btn-primary">
         {state === "busy" ? t("account.form.saving") : state === "done" ? <>{t("account.form.saved")} <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" /></> : t("account.details.save")}
       </button>
+      {state === "error" ? (
+        <p role="alert" className="font-sans text-sm text-danger">{t("account.form.saveError")}</p>
+      ) : null}
     </form>
   );
 }

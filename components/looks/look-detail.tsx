@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import type { ResolvedLook, LookBuyData, LookGalleryImage, LookColorOption } from "@/lib/looks";
 import { useCart } from "@/components/cart/cart-context";
 import { track } from "@/lib/track-client";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { useT } from "@/components/i18n/locale-provider";
+import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 
 type LightboxState = { images: { url: string; alt: string }[]; index: number } | null;
 
@@ -50,6 +51,14 @@ export function LookDetail({
   const [sizeDrawer, setSizeDrawer] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<LightboxState>(null);
 
+  // Modal-a11y (scroll-lock, focus-trap, Esc, focus-terugkeer) voor de maat-drawer
+  // en de lightbox — zonder lock scrolt de pagina op mobiel onder de overlay door.
+  // Geen inertMain: deze overlays renderen bínnen #main (geen portal).
+  const drawerPanelRef = useRef<HTMLDivElement>(null);
+  useModalA11y(drawerPanelRef, { onClose: () => setSizeDrawer(null), active: sizeDrawer !== null });
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  useModalA11y(lightboxRef, { onClose: () => setLightbox(null), active: lightbox !== null });
+
   const items = look.products.filter((h) => h.product);
 
   // Hero + galerij samen voor de lightbox-navigatie.
@@ -73,8 +82,8 @@ export function LookDetail({
   );
   useEffect(() => {
     if (!lightbox) return;
+    // Escape wordt al door useModalA11y afgehandeld; hier alleen de pijltjes.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
       if (e.key === "ArrowRight") step(1);
       if (e.key === "ArrowLeft") step(-1);
     };
@@ -252,7 +261,7 @@ export function LookDetail({
       {sizeDrawer !== null && dh?.product && dData ? (
         <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={t("looks.detail.sizeDrawerTitle")}>
           <div className="absolute inset-0 bg-ink/40" onClick={() => setSizeDrawer(null)} />
-          <div className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer">
+          <div ref={drawerPanelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
             <div className="mb-4 flex items-center justify-between">
               <p className="label-brand">{t("looks.detail.sizeDrawerTitle")}</p>
               <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">{t("look.drawer.close")}</button>
@@ -296,7 +305,7 @@ export function LookDetail({
 
       {/* ── Lightbox (volledige grootte) ──────────────────────────── */}
       {lightbox ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4" role="dialog" aria-modal="true" aria-label={t("looks.detail.lightboxTitle")}>
+        <div ref={lightboxRef} tabIndex={-1} className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-4 focus:outline-none" role="dialog" aria-modal="true" aria-label={t("looks.detail.lightboxTitle")}>
           <button type="button" onClick={close} aria-label={t("look.drawer.close")} className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-canvas/10 text-canvas hover:bg-canvas/20">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" /></svg>
           </button>
