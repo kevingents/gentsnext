@@ -214,14 +214,19 @@ function CheckoutForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: v.code, subtotalCents: cart.subtotalCents, amountCents: cart.subtotalCents }),
     })
-      .then((r) => r.json())
-      .then((d) => {
+      .then(async (r) => ({ ok: r.ok, d: await r.json() }))
+      .then(({ ok, d }) => {
         if (!active) return;
+        // Alleen bij een ECHT ongeldig-antwoord strippen: een niet-ok respons (bv. de
+        // gedeelde rate-limit op /api/redeem-code) mag een geldige voucher nooit stil
+        // weghalen — dan houden we 'm aan.
+        if (!ok) return;
         if (d.type === "voucher") {
           setVoucher((cur) => (cur && cur.code === d.code ? { code: d.code, discountCents: d.discountCents, label: d.label } : cur));
         } else {
           setVoucher(null);
           setCodeErr(t("checkout.voucher_removed"));
+          setSummaryOpen(true); // melding ook op mobiel zichtbaar (samenvatting is daar ingeklapt)
         }
       })
       .catch(() => {});
