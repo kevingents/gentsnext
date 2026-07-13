@@ -10,7 +10,9 @@ import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
 import { StudentsLanding } from "@/components/landings/students-landing";
 import { KlantenserviceLanding } from "@/components/landings/klantenservice-landing";
 import { HerroepingLanding } from "@/components/landings/herroeping-landing";
-import { getStores, getStoreByPageHandle, openStatus } from "@/lib/stores";
+import { getStores, getStoreByPageHandle, openStatus, type Store } from "@/lib/stores";
+import { JsonLd } from "@/components/json-ld";
+import { getSiteUrl } from "@/lib/site-url";
 import { getMigratedPage } from "@/lib/migrated-pages";
 import { getStorePage } from "@/lib/content-pages";
 import { PageBody } from "@/components/page-body";
@@ -44,6 +46,49 @@ async function getCollectionProductsSafe(handle: string, limit: number) {
 
 function fallbackTitle(handle: string): string {
   return KNOWN_TITLES[handle] || handle.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+/* ── LocalBusiness-schema per winkel (lokale SEO + AI-antwoorden) ──────────
+   Elke vestiging krijgt een volwaardig ClothingStore-blok met adres, telefoon
+   en openingstijden — dit is wat Google (local pack) en answer engines
+   ("herenmodezaak in Delft") citeren. NL-dagen → schema.org-dagen. */
+const SCHEMA_DAY: Record<string, string> = {
+  maandag: "Monday",
+  dinsdag: "Tuesday",
+  woensdag: "Wednesday",
+  donderdag: "Thursday",
+  vrijdag: "Friday",
+  zaterdag: "Saturday",
+  zondag: "Sunday",
+};
+
+function storeJsonLd(store: Store): Record<string, unknown> {
+  const siteUrl = getSiteUrl();
+  const hours = Object.entries(store.hours || {})
+    .filter(([day, range]) => SCHEMA_DAY[day] && String(range || "").includes("-"))
+    .map(([day, range]) => {
+      const [opens, closes] = String(range).split("-").map((s) => s.trim());
+      return { "@type": "OpeningHoursSpecification", dayOfWeek: SCHEMA_DAY[day], opens, closes };
+    });
+  return {
+    "@type": "ClothingStore",
+    "@id": `${siteUrl}/pages/${store.pageHandle}`,
+    name: `GENTS ${store.city}`,
+    url: `${siteUrl}/pages/${store.pageHandle}`,
+    image: `${siteUrl}/brand/brand-logo-zwart.png`,
+    telephone: store.phone || undefined,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: store.address,
+      addressLocality: store.city,
+      // Antwerpen is onze enige Belgische vestiging; de winkeldata heeft (nog)
+      // geen landveld, dus hier bewust op stad.
+      addressCountry: store.city.toLowerCase() === "antwerpen" ? "BE" : "NL",
+    },
+    hasMap: store.mapsUrl || undefined,
+    openingHoursSpecification: hours.length ? hours : undefined,
+    parentOrganization: { "@type": "Organization", name: "GENTS Herenmode", url: siteUrl },
+  };
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
@@ -117,6 +162,20 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
     });
     return (
       <div className="mx-auto max-w-page px-gutter py-12">
+        {/* Alle vestigingen als ItemList van ClothingStores — één bron voor
+            local-SEO en answer engines op het overzicht. */}
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: "GENTS winkels",
+            itemListElement: getStores().map((s, i) => ({
+              "@type": "ListItem",
+              position: i + 1,
+              item: storeJsonLd(s),
+            })),
+          }}
+        />
         <p className="label-brand">Bezoek ons</p>
         <h1 className="mt-2 text-display-lg">Onze winkels</h1>
         <p className="mt-4 max-w-2xl font-sans text-ink-soft">
@@ -131,9 +190,15 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
     );
   }
 
-  // 2. Individuele winkelpagina
+  // 2. Individuele winkelpagina — mét volwaardig LocalBusiness-schema.
   const store = getStoreByPageHandle(handle);
-  if (store) return <StorePage store={store} />;
+  if (store)
+    return (
+      <>
+        <JsonLd data={{ "@context": "https://schema.org", ...storeJsonLd(store) }} />
+        <StorePage store={store} />
+      </>
+    );
 
   // 2b. Eigen content-pagina (portal-beheerd, content:pages) — wint van Sanity/migrated.
   const storePage = await getStorePage(handle);
