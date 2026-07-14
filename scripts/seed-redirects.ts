@@ -30,6 +30,18 @@ const PATTERNS: Redirect[] = [
   // = oneindige lus. De redirect-matcher slaat /account* nu sowieso over (PROTECTED_PREFIXES).
 ];
 
+/**
+ * Regels die een bestaande bestemming WÉL mogen overschrijven. De oude
+ * Shopify-trouwafspraak-URL's wezen als noodoplossing naar de PLP/home omdat de
+ * nieuwe site nog geen boekingspagina had; nu /afspraak bestaat, moeten die
+ * regels bijgewerkt worden — de gewone merge (bestaand = leidend) zou de
+ * verouderde regel juist laten staan.
+ */
+const FIXES: Redirect[] = [
+  { source: "/pages/trouw-afspraak", target: "/afspraak", status: 301, active: true },
+  { source: "/pages/trouwafspraak-maken", target: "/afspraak", status: 301, active: true },
+];
+
 function splitCsvLine(line: string): string[] {
   const res: string[] = []; let cur = ""; let q = false;
   for (let i = 0; i < line.length; i++) {
@@ -78,9 +90,16 @@ async function main() {
     const key = normPath(r.source);
     if (!bySource.has(key)) { bySource.set(key, { ...r, source: key }); added++; }
   }
+  // FIXES overschrijven bewust een eventueel bestaande (verouderde) regel.
+  let fixed = 0;
+  for (const r of FIXES) {
+    const key = normPath(r.source);
+    const cur = bySource.get(key);
+    if (!cur || cur.target !== r.target || !cur.active) { bySource.set(key, { ...r, source: key }); fixed++; }
+  }
   const list = [...bySource.values()];
   await db.insert(appSettings).values({ id: ID, data: { list }, updatedAt: sql`now()` })
     .onConflictDoUpdate({ target: appSettings.id, set: { data: { list }, updatedAt: sql`now()` } });
-  console.log(`Redirects: ${existing.length} bestaand · ${fromCsv.length} uit CSV · +${added} toegevoegd → ${list.length} totaal.`);
+  console.log(`Redirects: ${existing.length} bestaand · ${fromCsv.length} uit CSV · +${added} toegevoegd · ${fixed} bijgewerkt (fixes) → ${list.length} totaal.`);
 }
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

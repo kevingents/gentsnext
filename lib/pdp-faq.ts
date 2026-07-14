@@ -4,7 +4,7 @@ export type PdpFaq = { q: string; a: string };
 const COMMON: PdpFaq[] = [
   { q: "Hoe werkt retourneren?", a: "Je kunt je bestelling gratis retourneren binnen 14 dagen — online of in één van onze 19 winkels. Bij retournering ontvang je het volledige bedrag terug." },
   { q: "Wanneer is mijn bestelling in huis?", a: "Vóór 16:00 besteld is doorgaans de volgende werkdag in huis. Op werkdagen verzenden we dagelijks; bestellingen in het weekend gaan op maandag de deur uit." },
-  { q: "Kan ik in een winkel terecht voor pasadvies?", a: "Zeker. Onze stylisten staan in al onze 19 winkels voor je klaar — vrijblijvend en zonder afspraak. Voor pakken en bruiloften adviseren we een afspraak via /pages/trouw-afspraak." },
+  { q: "Kan ik in een winkel terecht voor pasadvies?", a: "Zeker. Onze stylisten staan in al onze 19 winkels voor je klaar — vrijblijvend en zonder afspraak. Voor pakken en bruiloften adviseren we een afspraak via /afspraak." },
 ];
 
 const BY_HG: Record<string, PdpFaq[]> = {

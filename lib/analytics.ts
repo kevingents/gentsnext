@@ -21,6 +21,8 @@ export type IncomingEvent = {
 const ALLOWED = new Set([
   "pageview", "product_view", "search", "search_no_results", "filter",
   "add_to_cart", "cart_view", "checkout_start", "purchase", "stock_notify", "wishlist_add",
+  // Klantafspraken: server-side gelogd bij een geslaagde boeking (type+winkel in props).
+  "afspraak_geboekt",
 ]);
 
 export async function recordEvents(list: IncomingEvent[]): Promise<number> {

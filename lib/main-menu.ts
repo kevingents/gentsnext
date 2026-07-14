@@ -58,7 +58,7 @@ export const MAIN_MENU: MenuItem[] = [
         links: [
           { label: "Trouwpakken", href: "/collections/trouwen" },
           { label: "Trouwaccessoires", href: "/collections/trouw-accessoires" },
-          { label: "Afspraak maken", href: "/pages/trouw-afspraak" },
+          { label: "Afspraak maken", href: "/afspraak" },
         ],
       },
       {
