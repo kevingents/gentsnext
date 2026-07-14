@@ -28,7 +28,7 @@ const FALLBACK: Occasion[] = [
     ctaHref: "/collections/trouwen",
     links: [
       { label: "Trouwaccessoires", href: "/collections/trouw-accessoires" },
-      { label: "Afspraak maken", href: "/pages/trouw-afspraak" },
+      { label: "Afspraak maken", href: "/afspraak" },
     ],
   },
   {

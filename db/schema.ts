@@ -5,6 +5,7 @@ import {
   integer,
   boolean,
   timestamp,
+  date,
   jsonb,
   primaryKey,
   index,
@@ -1258,6 +1259,43 @@ export const inboundReceiptCounts = pgTable(
     uniqueIndex("inbound_counts_shipment_key_unique").on(t.shipmentId, t.stockKey),
     index("inbound_counts_shipment_idx").on(t.shipmentId),
   ],
+);
+
+/**
+ * Klantafspraken (trouwconsult voorop) — de klant vraagt online een afspraak in
+ * een winkel aan; de winkel (kassa/portal) leest en beheert ze via de core-API.
+ * Bewust een DAGDEEL i.p.v. een exact tijdslot: de winkel belt/mailt zelf het
+ * definitieve tijdstip (MVP zonder agenda-koppeling), dus geen
+ * dubbele-boeking-logica nodig.
+ */
+export const appointments = pgTable(
+  "appointments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 'trouwconsult' | 'pasafspraak' | 'personal-shopping' */
+    type: text("type").notNull().default("trouwconsult"),
+    /** Winkelnaam zoals in content/stores.json ("GENTS Amsterdam") — de brug naar kassa/portal. */
+    store: text("store").notNull(),
+    preferredDate: date("preferred_date").notNull(),
+    /** 'ochtend' | 'middag' | 'avond' | 'geen-voorkeur' */
+    dagdeel: text("dagdeel").notNull().default("geen-voorkeur"),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone").notNull().default(""),
+    /** Vrije wensen van de klant: trouwdatum, gezelschap, kleurwensen, … */
+    wensen: text("wensen").notNull().default(""),
+    /** Taal van de aanvraag — voor eventuele vervolgcommunicatie in de juiste taal. */
+    locale: text("locale").notNull().default("nl"),
+    /** 'nieuw' | 'bevestigd' | 'afgerond' | 'no-show' | 'geannuleerd' */
+    status: text("status").notNull().default("nieuw"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // De kassa vraagt per winkel een datumvenster op — dit is dé leesquery.
+    index("appointments_store_date_idx").on(t.store, t.preferredDate),
+    index("appointments_status_idx").on(t.status),
+  ]
 );
 
 /**

@@ -22,6 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${siteUrl}/blog`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${siteUrl}/looks`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${siteUrl}/gelegenheden`, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${siteUrl}/afspraak`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${siteUrl}/maatadvies`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${siteUrl}/maattabellen`, changeFrequency: "monthly", priority: 0.6 },
     // Canonieke categorie-PLP's (de volledige listings) — statisch, dus altijd mee.

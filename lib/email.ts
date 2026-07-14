@@ -478,3 +478,85 @@ export async function sendReturnRefunded(r: ReturnRefundedEmail): Promise<boolea
     <tr><td style="padding:8px 28px 28px"><p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin:0">Bekijk je retouren in <a href="${site}/account" style="color:#0A0A0A">Mijn GENTS</a>.</p></td></tr>`;
   return sendEmail(r.email, `Je GENTS-retour voor ${r.orderNumber} is terugbetaald`, shell(inner));
 }
+
+/* ── Klantafspraken (/afspraak) ── */
+
+const esc = (s: string) => String(s || "").replace(/</g, "&lt;");
+
+type AppointmentEmail = {
+  to: string;
+  /** Vertaalde teksten (getT(locale) in de route) — de mail volgt de taal van de aanvraag. */
+  subject: string;
+  heading: string;
+  body: string;
+  rows: { label: string; value: string }[];
+  outro: string;
+};
+
+/** Bevestiging van een afspraakaanvraag naar de klant — huisstijl-shell, teksten
+ *  komen vertaald binnen zodat een /en- of /de-klant de mail in zijn taal krijgt. */
+export async function sendAppointmentConfirmation(a: AppointmentEmail): Promise<boolean> {
+  const detailRows = a.rows
+    .map(
+      (r) => `<tr>
+        <td style="padding:6px 12px 6px 0;border-bottom:1px solid #E6E4DF;font:13px Arial,sans-serif;color:#8B8B8B;white-space:nowrap">${esc(r.label)}</td>
+        <td style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${esc(r.value)}</td>
+      </tr>`,
+    )
+    .join("");
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${esc(a.heading)}</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${esc(a.body)}</p>
+    </td></tr>
+    <tr><td style="padding:8px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${detailRows}</table></td></tr>
+    <tr><td style="padding:16px 28px 28px">
+      <p style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">${esc(a.outro)}</p>
+    </td></tr>`;
+  return sendEmail(a.to, a.subject, shell(inner));
+}
+
+type AppointmentStoreNotify = {
+  to: string;
+  store: string;
+  typeLabel: string;
+  preferredDate: string;
+  dagdeel: string;
+  name: string;
+  phone: string;
+  wensen: string;
+  customerEmail: string;
+};
+
+/** Notificatie naar de winkel: nieuwe afspraakaanvraag (intern → NL). De klant
+ *  staat als reply-to zodat de winkel direct kan reageren om het tijdstip af te stemmen. */
+export async function sendAppointmentStoreNotify(n: AppointmentStoreNotify): Promise<boolean> {
+  if (!emailConfigured() || !n.to) return false;
+  const lines = [
+    `Type: ${n.typeLabel}`,
+    `Winkel: ${n.store}`,
+    `Gewenste datum: ${n.preferredDate}`,
+    `Dagdeel: ${n.dagdeel}`,
+    `Naam: ${n.name}`,
+    n.phone ? `Telefoon: ${n.phone}` : "",
+    n.wensen ? `Wensen: ${n.wensen}` : "",
+    "",
+    "Neem contact op met de klant om het exacte tijdstip te bevestigen.",
+  ].filter(Boolean);
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM,
+      to: [n.to],
+      reply_to: n.customerEmail,
+      subject: `Nieuwe afspraakaanvraag — ${n.typeLabel} — ${n.preferredDate}`,
+      text: lines.join("\n"),
+    }),
+  });
+  if (!res.ok) {
+    console.error("[email] afspraak-winkelnotificatie Resend-fout:", res.status, (await res.text()).slice(0, 200));
+    return false;
+  }
+  return true;
+}

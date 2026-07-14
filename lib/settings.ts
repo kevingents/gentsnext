@@ -110,6 +110,13 @@ export type Settings = {
    * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
    */
   merchandisingPins: Record<string, string[]>;
+  /**
+   * Notificatie-mailadres per winkel (sleutel = winkelnaam of stad, lowercase,
+   * bv. "amsterdam" of "gents amsterdam"). Gebruikt voor o.a. de
+   * afspraak-notificatie naar de winkel. In de tool beheerbaar (settings-store);
+   * env CONTACT_EMAIL_WEDDING/GENERAL is alleen fallback.
+   */
+  storeEmails: Record<string, string>;
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -175,6 +182,7 @@ export const DEFAULT_SETTINGS: Settings = {
     alternativeAfterDays: num(process.env.GENTS_STOCK_ALT_DAYS, 14),
   },
   merchandisingPins: {},
+  storeEmails: {},
 };
 
 let _cache: Settings | null = null;
@@ -199,6 +207,7 @@ export async function getSettings(): Promise<Settings> {
       returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
+      storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

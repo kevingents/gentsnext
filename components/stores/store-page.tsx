@@ -47,7 +47,8 @@ export async function StorePage({ store }: { store: Store }) {
             <a href={mapsLinkUrl(store)} target="_blank" rel="noopener noreferrer" className="btn-primary">
               {t("stores.page.planRoute", locale)}
             </a>
-            <Link href="/pages/trouw-afspraak" className="btn-ghost">
+            {/* Naar de eigen boekingspagina, met deze winkel voorgeselecteerd. */}
+            <Link href={`/afspraak?winkel=${encodeURIComponent(store.title)}`} className="btn-ghost">
               {t("stores.page.makeAppointment", locale)}
             </Link>
           </div>

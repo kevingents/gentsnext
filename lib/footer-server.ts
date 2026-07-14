@@ -40,6 +40,7 @@ const DEFAULT_COLS: FooterCol[] = [
     links: [
       { label: "Klantenservice", href: "/pages/service" },
       { label: "Maatadvies", href: "/maatadvies" },
+      { label: "Afspraak maken", href: "/afspraak" },
       { label: "Bezorging & levertijd", href: "/pages/bezorgkosten-levertijden" },
       { label: "Retourneren", href: "/pages/retourneren" },
       { label: "Onze winkels", href: "/pages/winkels" },
