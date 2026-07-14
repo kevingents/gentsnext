@@ -32,7 +32,11 @@ const lower = (v: unknown) => norm(v).toLowerCase();
 
 /** Voorraad-sleutel van een regel: barcode > sku > artikelnummer (lowercase). */
 export function stockKey(line: Pick<MovementLine, "barcode" | "sku" | "articleNumber"> = {}): string {
-  return lower(line.barcode) || lower(line.sku) || lower(line.articleNumber);
+  const key = lower(line.barcode) || lower(line.sku) || lower(line.articleNumber);
+  // Dienst-regels (vermaakservice, sku VERMAAK-<code>) zijn geen voorraad — zonder
+  // deze uitsluiting zou elke kassa-verkoop/annulering/retour van een dienst een
+  // fantoom-mutatie op een niet-bestaande sleutel in store_stock_movements schrijven.
+  return key.startsWith("vermaak-") ? "" : key;
 }
 
 export type RecordInput = {
