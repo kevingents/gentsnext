@@ -74,9 +74,12 @@ export async function POST(req: Request) {
     console.error("[afspraak] analytics-fout:", e);
   }
 
-  const name = String(body.name || "").trim();
-  const email = String(body.email || "").trim();
-  const wensen = String(body.wensen || "").trim();
+  // Zelfde lengte-caps als createAppointment op de DB-velden: de mails mogen geen
+  // ongelimiteerde body-invoer meekrijgen (een directe API-call met megabytes
+  // "wensen" zou anders integraal in klant- én winkelmail belanden).
+  const name = String(body.name || "").trim().slice(0, 120);
+  const email = String(body.email || "").trim().slice(0, 200);
+  const wensen = String(body.wensen || "").trim().slice(0, 2000);
 
   // Bevestigingsmail naar de klant — teksten via getT(locale), zodat een /en- of
   // /de-boeking de mail in de eigen taal krijgt (nachtcron vertaalt de keys).
@@ -116,7 +119,7 @@ export async function POST(req: Request) {
         preferredDate: fmtDate(result.preferredDate, DEFAULT_LOCALE),
         dagdeel: tNl(DAGDEEL_KEY[result.dagdeel]),
         name,
-        phone: String(body.phone || "").trim(),
+        phone: String(body.phone || "").trim().slice(0, 40),
         wensen,
         customerEmail: email,
       });

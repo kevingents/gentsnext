@@ -37,6 +37,18 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
   }
+  // Winkel-notificatie-adressen (o.a. afspraak-meldingen): beheerbaar via de
+  // portal-studio i.p.v. env — zonder deze whitelist-entry was storeEmails
+  // nergens te schrijven en viel elke winkelmelding terug op het centrale adres.
+  if (b.storeEmails && typeof b.storeEmails === "object" && !Array.isArray(b.storeEmails)) {
+    const map: Record<string, string> = {};
+    for (const [k, v] of Object.entries(b.storeEmails as Record<string, unknown>)) {
+      const key = String(k).trim().toLowerCase().slice(0, 60);
+      const mail = String(v ?? "").trim().slice(0, 120);
+      if (key && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) map[key] = mail;
+    }
+    out.storeEmails = map;
+  }
   if (b.routeOverstockFirst && typeof b.routeOverstockFirst === "object") {
     const r = b.routeOverstockFirst as Record<string, unknown>;
     out.routeOverstockFirst = {
