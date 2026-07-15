@@ -182,3 +182,107 @@ export async function getMolliePayment(id: string): Promise<MolliePayment> {
   }
   return parsePayment(await res.json());
 }
+
+/**
+ * Betaling op een FYSIEKE Mollie-terminal (point-of-sale). Gebruikt dezelfde
+ * Payments-API als de webshop, maar met `method:"pointofsale"` + `terminalId`:
+ * Mollie pusht de betaling naar het pin-apparaat en wij POLLEN de status
+ * (open/pending → paid|failed|canceled|expired). Bewust GEEN redirectUrl (er is
+ * geen browser-redirect aan de kassa) en GEEN webhookUrl (we pollen actief; een
+ * webhook zou aan de kassa toch niet de afronding kunnen sturen).
+ *
+ * GELD-VEILIGHEID: de Idempotency-Key (= clientRef van de checkout-poging) zorgt
+ * dat een RETRY na een netwerkfout NOOIT een tweede betaling aanmaakt — Mollie
+ * geeft dezelfde betaling terug. Eén checkout-poging = max één Mollie-betaling.
+ */
+export async function createMollieTerminalPayment(input: {
+  amountCents: number;
+  description: string;
+  terminalId: string;
+  metadata: Record<string, unknown>;
+  idempotencyKey: string;
+}): Promise<MolliePayment> {
+  if (!input.terminalId) throw new Error("terminalId ontbreekt — geen Mollie-terminal geconfigureerd.");
+  const body: Record<string, unknown> = {
+    amount: { currency: "EUR", value: centsToValue(input.amountCents) },
+    description: input.description,
+    method: "pointofsale",
+    terminalId: input.terminalId,
+    metadata: input.metadata,
+  };
+  // Access-token vereist een profileId + expliciete testmode (net als createMolliePayment).
+  if (usesAccessToken()) {
+    if (process.env.MOLLIE_PROFILE_ID) body.profileId = process.env.MOLLIE_PROFILE_ID;
+    body.testmode = testmode();
+  }
+
+  const res = await fetch(`${API}/payments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey()}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": input.idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`Mollie createTerminalPayment ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+  return parsePayment(await res.json());
+}
+
+/**
+ * Annuleer een lopende Mollie-terminalbetaling (DELETE /payments/{id}). Alleen
+ * zinvol zolang de status open/pending is (isCancelable) — Mollie weigert het
+ * anders. Cruciaal voor de "Stop betalen"-knop: we annuleren server-side zodat
+ * een latere capture voorkomen wordt en een afgebroken poging nooit alsnog geld
+ * afschrijft.
+ */
+export async function cancelMolliePayment(
+  id: string,
+): Promise<{ ok: boolean; status?: string; error?: string }> {
+  if (!mollieConfigured()) return { ok: false, error: "Mollie niet geconfigureerd." };
+  if (!id) return { ok: false, error: "Geen paymentId." };
+  const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
+  try {
+    const res = await fetch(`${API}/payments/${encodeURIComponent(id)}${qs}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey()}` },
+    });
+    // 200 = geannuleerd, 422 = niet (meer) annuleerbaar (bv. al betaald/verlopen):
+    // dat laatste is voor de kassa geen harde fout — de poll-guard vangt het af.
+    const d = (await res.json().catch(() => null)) as { status?: string; detail?: string } | null;
+    if (!res.ok) return { ok: false, status: d?.status, error: d?.detail || `Mollie ${res.status}` };
+    return { ok: true, status: d?.status };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export type MollieTerminal = { id: string; status: string; description: string; brand?: string; serialNumber?: string };
+
+/**
+ * Beschikbare fysieke terminals van het Mollie-account (GET /terminals) — zodat de
+ * terminalId opzoekbaar is in de config-UI. Faalt zacht → lege lijst.
+ */
+export async function listMollieTerminals(): Promise<MollieTerminal[]> {
+  if (!mollieConfigured()) return [];
+  const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
+  try {
+    const res = await fetch(`${API}/terminals${qs}`, {
+      headers: { Authorization: `Bearer ${apiKey()}` },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const terminals = json?._embedded?.terminals ?? [];
+    return terminals.map((t: any) => ({
+      id: String(t.id),
+      status: String(t.status || ""),
+      description: String(t.description || t.id),
+      brand: t.brand ? String(t.brand) : undefined,
+      serialNumber: t.serialNumber ? String(t.serialNumber) : undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
