@@ -4,6 +4,7 @@ import {
   createMollieTerminalPayment,
   getMolliePayment,
   cancelMolliePayment,
+  refundMolliePayment,
   listMollieTerminals,
   mollieConfigured,
 } from "@/lib/mollie";
@@ -23,12 +24,19 @@ export const runtime = "nodejs";
  *                   → { ok, paymentId, status }
  *   action:"status" { paymentId } → { ok, status, paid, amountCents }
  *   action:"cancel" { paymentId } → { ok, status }
+ *   action:"refund" { paymentId, amountCents, refundRef } → { ok, refundId }
+ *                   (retour → geld terug op de ORIGINELE kaartbetaling)
  * GET  → { ok, terminals:[...] }  (voor de config-UI: terminalId opzoeken)
  *
  * GELD-VEILIGHEID:
  *  - start gebruikt Idempotency-Key = clientRef → een retry maakt NOOIT een 2e
  *    betaling (Mollie geeft dezelfde betaling terug).
  *  - status is puur read-only (pollt de Mollie-status); boekt zelf niets.
+ *  - refund gebruikt Idempotency-Key = refundRef → een retry na netwerkfout
+ *    stort NOOIT een tweede keer terug (Mollie geeft dezelfde refund terug). Het
+ *    bedrag wordt op de ORIGINELE paymentId terugbetaald; Mollie weigert een
+ *    over-refund zelf, en de storegents-proxy toetst het bedrag óók server-side
+ *    tegen de originele verkoop.
  *  - GEEN geheimen of PAN in de response — alleen id/status/bedrag.
  */
 
@@ -39,6 +47,7 @@ type StartBody = {
   terminalId?: string;
   clientRef?: string;
   paymentId?: string;
+  refundRef?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -113,6 +122,24 @@ export async function POST(req: Request) {
       // betaling (al betaald/verlopen) wordt door de poll-guard afgevangen. We geven de
       // ruwe uitkomst terug zodat de kassa het weet, maar breken de flow niet.
       return NextResponse.json({ ok: r.ok, status: r.status ?? null, error: r.ok ? undefined : r.error });
+    }
+
+    if (action === "refund") {
+      const paymentId = String(body?.paymentId || "").trim();
+      const amountCents = Math.round(Number(body?.amountCents) || 0);
+      const refundRef = String(body?.refundRef || "").trim();
+      if (!paymentId) return bad("paymentId vereist.");
+      if (amountCents <= 0) return bad("Ongeldig retourbedrag.");
+      // refundRef VERPLICHT: die is de Mollie-Idempotency-Key. Zonder een stabiele
+      // sleutel zou een retry een tweede terugstorting kunnen maken — dat mag nooit.
+      if (!refundRef) return bad("refundRef vereist (idempotentie).");
+      // De storegents-proxy heeft de paymentId server-side uit de originele verkoop
+      // gehaald en het bedrag al tegen die verkoop begrensd; hier storten we terug op
+      // die originele betaling. Mollie weigert zelf een over-refund. refundRef = de
+      // Idempotency-Key → dezelfde retour-poging levert dezelfde refund op (geen dubbel).
+      const r = await refundMolliePayment(paymentId, amountCents, "Retour kassa", refundRef);
+      if (!r.ok) return bad(r.error || "Terugbetaling mislukt.", 400);
+      return NextResponse.json({ ok: true, refundId: r.id });
     }
 
     return bad("Onbekende action.");
