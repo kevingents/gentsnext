@@ -1,6 +1,7 @@
 import { getDb } from "@/db";
 import { supportTickets } from "@/db/schema";
 import { emailConfigured } from "@/lib/email";
+import { submitWebshopTicket } from "@/lib/helpdesk";
 
 /**
  * AI-klantenservice. Beantwoordt veelvoorkomende vragen direct op basis van een
@@ -119,7 +120,12 @@ export async function handleSupportQuestion(question: string, email: string): Pr
     ? ai!.answer
     : "Goede vraag — dit pak ik even persoonlijk op. Laat je e-mailadres achter, dan reageert een collega binnen één werkdag.";
 
-  // Ticket loggen.
+  // Analytics/audit-log (NIET de bron voor klant-tickets — die staan sinds de
+  // naad-unificatie in de gedeelde helpdesk-store van storegents, gelezen door
+  // zowel de agent-inbox als het klant-account). Deze Neon-tabel bewaart de
+  // volledige AI-deflectiefunnel — óók de vragen die de AI wél beantwoordde —
+  // zodat we het deflectiepercentage kunnen meten. Voor de geëscaleerde vragen
+  // is het tevens een laatste vangnet mocht zowel de intake als de mail falen.
   try {
     const db = getDb();
     await db.insert(supportTickets).values({
@@ -133,15 +139,41 @@ export async function handleSupportQuestion(question: string, email: string): Pr
     /* logging mag niet breken */
   }
 
-  // Escalatie → support-mailbox.
+  // Escalatie → gedeelde helpdesk-store (agent-inbox + klant-account).
   if (!confident) {
-    await escalate(q, email);
+    await escalate(q, email, ai?.answer || "");
   }
 
   return { answer, escalated: !confident };
 }
 
-async function escalate(question: string, email: string): Promise<void> {
+/** Kort, herkenbaar onderwerp voor de agent-inbox — afgeleid van de vraag. */
+function deriveSubject(question: string): string {
+  const first = question.replace(/\s+/g, " ").trim();
+  if (!first) return "Vraag via de website";
+  const snippet = first.slice(0, 80);
+  return `Vraag via de website: ${snippet}${first.length > 80 ? "…" : ""}`;
+}
+
+async function escalate(question: string, email: string, aiAnswer: string): Promise<void> {
+  // Primair: schrijf naar de GEDEELDE helpdesk-store (storegents) zodat agent én
+  // klant-account de vraag zien. requester.email = de ECHTE klant (join-sleutel),
+  // niet RESEND_FROM zoals in de oude, mis-geattribueerde mail-escalatie.
+  const ticket = await submitWebshopTicket({
+    email,
+    subject: deriveSubject(question),
+    question,
+    aiAnswer, // landt als interne notitie bij de agent, nooit als klant-antwoord
+  });
+  if (ticket) return;
+
+  // Fallback (intake onbereikbaar/niet geconfigureerd): verlies de vraag niet —
+  // mail met de JUISTE klant-identiteit (reply_to = klant). Dit is een vangnet,
+  // niet meer de bron van waarheid.
+  await escalateByEmailFallback(question, email);
+}
+
+async function escalateByEmailFallback(question: string, email: string): Promise<void> {
   const to = process.env.CONTACT_EMAIL_SERVICE || process.env.CONTACT_EMAIL_GENERAL || process.env.CONTACT_EMAIL_B2B;
   if (emailConfigured() && to) {
     try {
@@ -152,7 +184,7 @@ async function escalate(question: string, email: string): Promise<void> {
           from: process.env.RESEND_FROM,
           to: [to],
           reply_to: email || undefined,
-          subject: "Support-vraag (AI kon niet beantwoorden)",
+          subject: "Support-vraag (AI kon niet beantwoorden — intake onbereikbaar)",
           text: `Klant: ${email || "onbekend"}\n\nVraag:\n${question}`,
         }),
       });
