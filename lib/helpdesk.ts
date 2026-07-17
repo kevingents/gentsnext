@@ -86,6 +86,31 @@ export async function submitWebshopTicket(input: WebshopTicketInput): Promise<{ 
   }
 }
 
+export type FollowLookup = { email: string; ticket: CustomerTicket };
+
+/**
+ * Zoekt één ticket op REF voor de publieke volg-link (/vraag/<ref>?t=<token>).
+ * SERVER-SIDE only: retourneert het geredigeerde ticket + het requester-e-mail
+ * (nodig om de volg-token te verifiëren met lib/ticket-follow — dat e-mailadres
+ * verlaat de server nooit richting de browser). null als niet gevonden of niet
+ * geconfigureerd.
+ */
+export async function fetchTicketForFollow(ref: string): Promise<FollowLookup | null> {
+  if (!SECRET || !ref) return null;
+  try {
+    const res = await fetch(`${BASE}/api/customer-ticket-follow?ref=${encodeURIComponent(ref)}`, {
+      headers: { "x-portal-secret": SECRET },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!data?.success || !data.email || !data.ticket) return null;
+    return { email: String(data.email), ticket: data.ticket as CustomerTicket };
+  } catch {
+    return null;
+  }
+}
+
 /** Klant voegt een reactie toe aan z'n eigen ticket. */
 export async function replyToCustomerTicket(email: string, ref: string, text: string): Promise<boolean> {
   if (!SECRET || !email || !ref || !text) return false;
