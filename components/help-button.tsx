@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useT } from "@/components/i18n/locale-provider";
+import { OrderStatusVerify } from "@/components/support/order-status-verify";
 
 /**
  * Hulp-widget rechtsonder met een AI-assistent: geeft direct antwoord op basis
- * van de kennisbank, of escaleert naar een medewerker (via /api/support).
- * Daaronder snelle links naar service/maatadvies/winkels.
+ * van de kennisbank (en voor ingelogde klanten: hun echte orderstatus), of
+ * escaleert naar een medewerker (via /api/support). Bij een orderstatus-vraag
+ * van een gast verschijnt een klein verificatieformulier (ordernummer +
+ * postcode). Daaronder snelle links naar service/maatadvies/winkels.
  */
 export function HelpButton() {
   const t = useT();
@@ -16,6 +19,7 @@ export function HelpButton() {
   const [email, setEmail] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [escalated, setEscalated] = useState(false);
+  const [needsVerify, setNeedsVerify] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function ask(e: React.FormEvent) {
@@ -23,6 +27,7 @@ export function HelpButton() {
     if (!q.trim()) return;
     setBusy(true);
     setAnswer(null);
+    setNeedsVerify(false);
     try {
       const r = await fetch("/api/support", {
         method: "POST",
@@ -32,6 +37,7 @@ export function HelpButton() {
       const d = await r.json();
       setAnswer(d.answer || "");
       setEscalated(Boolean(d.escalated));
+      setNeedsVerify(Boolean(d.needsOrderVerification));
     } catch {
       setAnswer(t("help.errorCall"));
     } finally {
@@ -42,7 +48,7 @@ export function HelpButton() {
   return (
     <div className="fixed bottom-20 right-4 z-30 flex flex-col items-end lg:bottom-6 lg:right-6">
       {open ? (
-        <div className="mb-3 w-80 border border-line bg-canvas p-4 shadow-pop">
+        <div className="mb-3 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto border border-line bg-canvas p-4 shadow-pop">
           <p className="label-brand mb-2">{t("help.title")}</p>
           <form onSubmit={ask}>
             <textarea
@@ -70,6 +76,8 @@ export function HelpButton() {
               {escalated ? <p className="mt-1 font-sans text-xs text-muted">{t("help.escalated")}</p> : null}
             </div>
           ) : null}
+
+          {needsVerify ? <OrderStatusVerify defaultEmail={email} /> : null}
 
           <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 font-sans text-xs">
             <li><Link href="/pages/service" onClick={() => setOpen(false)} className="text-ink hover:underline">{t("help.link.service")}</Link></li>

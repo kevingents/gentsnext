@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { useT } from "@/components/i18n/locale-provider";
+import { OrderStatusVerify } from "@/components/support/order-status-verify";
 
 /**
- * Directe AI-vraag op de servicepagina: geeft meteen antwoord uit de kennisbank,
- * of escaleert naar een medewerker (via /api/support) met e-mailterugkoppeling.
+ * Directe AI-vraag op de servicepagina: geeft meteen antwoord uit de kennisbank
+ * (en voor ingelogde klanten: hun echte orderstatus), of escaleert naar een
+ * medewerker (via /api/support) met e-mailterugkoppeling. Bij een
+ * orderstatus-vraag van een gast verschijnt het verificatieformulier.
  */
 export function ServiceAsk() {
   const t = useT();
@@ -13,6 +16,7 @@ export function ServiceAsk() {
   const [email, setEmail] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [escalated, setEscalated] = useState(false);
+  const [needsVerify, setNeedsVerify] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function ask(e: React.FormEvent) {
@@ -21,6 +25,7 @@ export function ServiceAsk() {
     setBusy(true);
     setAnswer(null);
     setEscalated(false);
+    setNeedsVerify(false);
     try {
       const r = await fetch("/api/support", {
         method: "POST",
@@ -30,6 +35,7 @@ export function ServiceAsk() {
       const d = await r.json();
       setAnswer(d.answer || "We hebben je vraag ontvangen.");
       setEscalated(Boolean(d.escalated));
+      setNeedsVerify(Boolean(d.needsOrderVerification));
     } catch {
       setAnswer("Er ging iets mis. Mail ons gerust rechtstreeks.");
     } finally {
@@ -70,6 +76,8 @@ export function ServiceAsk() {
           ) : null}
         </div>
       ) : null}
+
+      {needsVerify ? <OrderStatusVerify defaultEmail={email} /> : null}
     </form>
   );
 }
