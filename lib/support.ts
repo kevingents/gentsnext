@@ -2,6 +2,7 @@ import { getDb } from "@/db";
 import { supportTickets } from "@/db/schema";
 import { emailConfigured } from "@/lib/email";
 import { submitWebshopTicket } from "@/lib/helpdesk";
+import { formatOrderStatusContext, lookupOrderStatusForEmail } from "@/lib/support-orderdata";
 
 /**
  * AI-klantenservice. Beantwoordt veelvoorkomende vragen direct op basis van een
@@ -44,14 +45,25 @@ CONTACT:
 - Telefoon 085 115 50 42, of via de winkels. Voor zakelijke kleding en studentenverenigingen zijn er aparte pagina's.
 `;
 
-const SYSTEM = `Je bent de digitale klantenservice van GENTS Herenmode. Beantwoord de vraag van de klant kort, vriendelijk en correct in het Nederlands, UITSLUITEND op basis van de onderstaande kennisbank. Verzin niets. Kun je de vraag niet betrouwbaar beantwoorden met de kennisbank (bv. over een specifieke bestelling, retourstatus, klacht, of iets dat er niet in staat), zet dan "confident" op false. Antwoord ALLEEN met JSON: {"answer": "...", "confident": true|false}.
+/** Systeemprompt; met (geverifieerde) bestelgegevens erbij mag de AI ALLEEN die feiten noemen. */
+function buildSystem(orderContext: string): string {
+  const orderBlock = orderContext
+    ? `
+
+BESTELGEGEVENS (geverifieerd via de ingelogde sessie van deze klant — dit zijn de echte, actuele statussen):
+${orderContext}
+
+Voor vragen over bestelstatus, bezorging, retouren of terugbetalingen gebruik je UITSLUITEND deze bestelgegevens. Noem NOOIT een status, datum, bedrag of link die er niet letterlijk in staat — niets verzinnen of gokken. Staat het gevraagde er niet in, zet dan "confident" op false.`
+    : "";
+  return `Je bent de digitale klantenservice van GENTS Herenmode. Beantwoord de vraag van de klant kort, vriendelijk en correct in het Nederlands, UITSLUITEND op basis van de onderstaande kennisbank${orderContext ? " en de meegeleverde bestelgegevens" : ""}. Verzin niets. Kun je de vraag niet betrouwbaar beantwoorden (bv. over een specifieke bestelling waarvan je geen gegevens hebt, een klacht, of iets dat nergens in staat), zet dan "confident" op false. Antwoord ALLEEN met JSON: {"answer": "...", "confident": true|false}.
 
 KENNISBANK:
-${KNOWLEDGE}`;
+${KNOWLEDGE}${orderBlock}`;
+}
 
 type AiResult = { answer: string; confident: boolean };
 
-async function askClaude(question: string): Promise<AiResult | null> {
+async function askClaude(question: string, system: string): Promise<AiResult | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   try {
@@ -61,7 +73,7 @@ async function askClaude(question: string): Promise<AiResult | null> {
       body: JSON.stringify({
         model: process.env.SUPPORT_MODEL || "claude-haiku-4-5-20251001",
         max_tokens: 400,
-        system: SYSTEM,
+        system,
         messages: [{ role: "user", content: question }],
       }),
     });
@@ -74,7 +86,7 @@ async function askClaude(question: string): Promise<AiResult | null> {
   }
 }
 
-async function askOpenAI(question: string): Promise<AiResult | null> {
+async function askOpenAI(question: string, system: string): Promise<AiResult | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   try {
@@ -85,7 +97,7 @@ async function askOpenAI(question: string): Promise<AiResult | null> {
         model: process.env.SUPPORT_MODEL || "gpt-4o-mini",
         temperature: 0.2,
         response_format: { type: "json_object" },
-        messages: [{ role: "system", content: SYSTEM }, { role: "user", content: question }],
+        messages: [{ role: "system", content: system }, { role: "user", content: question }],
       }),
     });
     if (!res.ok) return null;
@@ -108,43 +120,129 @@ function parseAi(text: string): AiResult | null {
   return null;
 }
 
-export type SupportResponse = { answer: string; escalated: boolean };
+export type SupportResponse = {
+  answer: string;
+  escalated: boolean;
+  /** Gast met een orderstatus-vraag: de widget toont het verificatieformulier
+   *  (ordernummer + postcode) i.p.v. dat de AI gokt. */
+  needsOrderVerification?: boolean;
+};
 
-export async function handleSupportQuestion(question: string, email: string): Promise<SupportResponse> {
+/**
+ * Herkent een orderstatus-intentie ("waar is mijn bestelling / retour / geld
+ * terug?") op eenvoudige NL-trefwoorden. Bewust ruim: een vals-positief kost
+ * alleen een extra (onschuldig) verificatieformulier onder het antwoord.
+ */
+export function isOrderStatusQuestion(question: string): boolean {
+  const q = question.toLowerCase();
+  const topic = /(bestelling|order|pakket(je)?|bezorg|lever(ing|tijd)?|verzend|verzonden|onderweg|track|retour|terugbetal|teruggestort|refund|geld\s*terug)/;
+  if (!topic.test(q)) return false;
+  // Persoonlijke status-vraag, geen algemene beleidsvraag ("wat zijn de verzendkosten?").
+  const personal = /(waar (is|blijft)|wanneer (komt|krijg|ontvang|is)|status|is (mijn|m'n)|mijn (bestelling|order|pakket|retour|geld)|m'n (bestelling|order|pakket|retour|geld)|al (verzonden|onderweg|binnen|ontvangen|terug)|nog niet (ontvangen|binnen|aangekomen)|ontvangen\?)/;
+  return personal.test(q);
+}
+
+/** Deterministisch antwoord uit de echte data — vangnet als er geen AI-sleutel is. */
+function directOrderAnswer(context: string): string {
+  return `Dit is de actuele status van je recente bestelling(en):\n\n${context}\n\nStaat je vraag hier niet bij? Laat je e-mailadres achter, dan zoekt een collega het voor je uit.`;
+}
+
+/** Analytics/audit-insert in Neon (deflectie-funnel) — mag nooit de flow breken. */
+async function logSupportEvent(entry: { email: string; question: string; aiAnswer: string; confident: boolean; status: "answered" | "escalated" }): Promise<void> {
+  try {
+    const db = getDb();
+    await db.insert(supportTickets).values({
+      email: entry.email.trim().toLowerCase(),
+      question: entry.question,
+      aiAnswer: entry.aiAnswer,
+      confident: entry.confident,
+      status: entry.status,
+    });
+  } catch {
+    /* logging mag niet breken */
+  }
+}
+
+export async function handleSupportQuestion(
+  question: string,
+  email: string,
+  opts: { sessionEmail?: string; forceEscalate?: boolean } = {}
+): Promise<SupportResponse> {
   const q = question.trim().slice(0, 1000);
   if (!q) return { answer: "Stel gerust je vraag.", escalated: false };
 
-  const ai = (await askClaude(q)) || (await askOpenAI(q));
-  const confident = Boolean(ai?.confident && ai.answer);
-  const answer = confident
+  // Expliciete escalatie (widget-knop "laat een collega meekijken", bv. na een
+  // niet-gevonden order-opzoek): geen AI-rondje, direct naar de helpdesk-store.
+  if (opts.forceEscalate) {
+    if (!/.+@.+\..+/.test(email.trim())) {
+      return { answer: "Laat je e-mailadres achter, dan pakt een collega dit persoonlijk op.", escalated: false };
+    }
+    await logSupportEvent({ email, question: q, aiAnswer: "", confident: false, status: "escalated" });
+    await escalate(q, email, "");
+    return {
+      answer: "We hebben je vraag doorgezet — een collega mailt je binnen één werkdag.",
+      escalated: true,
+    };
+  }
+
+  // Orderstatus-intentie: alléén het GEVERIFIEERDE sessie-e-mailadres telt als
+  // identiteit — nooit het vrij ingetikte e-mailveld (anders lekt orderdata naar
+  // iedereen die andermans adres intikt).
+  const orderIntent = isOrderStatusQuestion(q);
+  const sessionEmail = (opts.sessionEmail || "").trim().toLowerCase();
+  let orderContext = "";
+  if (orderIntent && sessionEmail) {
+    try {
+      orderContext = formatOrderStatusContext(await lookupOrderStatusForEmail(sessionEmail));
+    } catch {
+      orderContext = ""; // data-storing → behandelen als gast (verificatieformulier)
+    }
+  }
+
+  const system = buildSystem(orderContext);
+  const ai = (await askClaude(q, system)) || (await askOpenAI(q, system));
+  let confident = Boolean(ai?.confident && ai.answer);
+  let answer = confident
     ? ai!.answer
     : "Goede vraag — dit pak ik even persoonlijk op. Laat je e-mailadres achter, dan reageert een collega binnen één werkdag.";
+
+  // Ingelogd + orderdata maar geen (bruikbare) AI: antwoord deterministisch met
+  // de echte statussen i.p.v. escaleren — de data ís het antwoord.
+  if (orderIntent && orderContext && !confident) {
+    answer = directOrderAnswer(orderContext);
+    confident = true;
+  }
+
+  // Gast (of ingelogd zonder gevonden orders) met een orderstatus-vraag: NIET
+  // escaleren en NIET laten gokken — de widget toont het geverifieerde
+  // opzoekformulier (ordernummer + postcode). Een eventueel confident
+  // kennisbank-antwoord (bv. algemene levertijden) mag wél mee.
+  const needsOrderVerification = orderIntent && !orderContext;
+  if (needsOrderVerification && !confident) {
+    answer = "Ik zoek het graag voor je op. Vul hieronder je ordernummer en postcode in, dan zie je direct de actuele status van je bestelling.";
+  }
 
   // Analytics/audit-log (NIET de bron voor klant-tickets — die staan sinds de
   // naad-unificatie in de gedeelde helpdesk-store van storegents, gelezen door
   // zowel de agent-inbox als het klant-account). Deze Neon-tabel bewaart de
   // volledige AI-deflectiefunnel — óók de vragen die de AI wél beantwoordde —
-  // zodat we het deflectiepercentage kunnen meten. Voor de geëscaleerde vragen
-  // is het tevens een laatste vangnet mocht zowel de intake als de mail falen.
-  try {
-    const db = getDb();
-    await db.insert(supportTickets).values({
-      email: email.trim().toLowerCase(),
-      question: q,
-      aiAnswer: confident ? ai!.answer : "",
-      confident,
-      status: confident ? "answered" : "escalated",
-    });
-  } catch {
-    /* logging mag niet breken */
-  }
+  // zodat we het deflectiepercentage kunnen meten. Orderstatus-vragen krijgen
+  // een herkenbare "[orderstatus]"-vlag (categorie) voor de deflectie-rapportage.
+  const escalated = !confident && !needsOrderVerification;
+  await logSupportEvent({
+    email: sessionEmail || email,
+    question: orderIntent ? `[orderstatus] ${q}` : q,
+    aiAnswer: confident ? answer : needsOrderVerification ? "(verificatieformulier getoond)" : "",
+    confident,
+    status: escalated ? "escalated" : "answered",
+  });
 
   // Escalatie → gedeelde helpdesk-store (agent-inbox + klant-account).
-  if (!confident) {
+  if (escalated) {
     await escalate(q, email, ai?.answer || "");
   }
 
-  return { answer, escalated: !confident };
+  return { answer, escalated, ...(needsOrderVerification ? { needsOrderVerification: true } : {}) };
 }
 
 /** Kort, herkenbaar onderwerp voor de agent-inbox — afgeleid van de vraag. */
