@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getReturnableOrder, createReturn, type ReturnMethod, type RefundType } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
+import { getStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,7 +28,9 @@ export async function POST(req: Request) {
     const res = await getReturnableOrder(orderNumber, email);
     if (!res.ok) return NextResponse.json(res, { status: 404 });
     const { returnConfig } = await getSettings();
-    return NextResponse.json({ ...res, policy: returnConfig });
+    /* stores: voor flows die namens de klant een inleverwinkel kiezen (o.a. de
+       helpdesk-agent) — de klant-flow krijgt de lijst al via de pagina-props. */
+    return NextResponse.json({ ...res, policy: returnConfig, stores: getStores().map((s) => s.title) });
   }
 
   if (action === "create") {

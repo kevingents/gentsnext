@@ -102,7 +102,7 @@ export type CreateReturnInput = {
 };
 
 export async function createReturn(input: CreateReturnInput): Promise<
-  | { ok: true; id: string; status: string; itemsCents: number; shippingCostCents: number; refundType: RefundType; method: ReturnMethod; label: { url: string; base64: string; tracking: string } | null; labelPending: boolean }
+  | { ok: true; id: string; status: string; itemsCents: number; shippingCostCents: number; refundType: RefundType; method: ReturnMethod; label: { url: string; base64: string; tracking: string } | null; labelPending: boolean; mailSent: boolean }
   | { ok: false; error: string }
 > {
   const base = await getReturnableOrder(input.orderNumber, input.email);
@@ -177,6 +177,46 @@ export async function createReturn(input: CreateReturnInput): Promise<
     })),
   );
 
+  // RACE-GUARD (neon-http kent geen transacties): twee gelijktijdige creates —
+  // klant op /retourneren én een agent vanuit het helpdesk-ticket — passeren
+  // beide de returnableQty-check hierboven. Daarom ná het wegschrijven, maar
+  // VÓÓR label en klantmail, een hercontrole over álle niet-geannuleerde
+  // retouren van deze order: is een orderregel nu overtekend, dan wint de
+  // OUDSTE aanmelding en trekt de nieuwste zichzelf terug. Beide racende
+  // schrijvers berekenen dezelfde winnaar (createdAt, dan id), dus er blijft
+  // er precies één staan — en er ontstaan nooit twee labels of twee mails.
+  {
+    const all = await db
+      .select({ returnId: returnLines.returnId, orderLineId: returnLines.orderLineId, qty: returnLines.qty, createdAt: returns.createdAt })
+      .from(returnLines)
+      .innerJoin(returns, eq(returnLines.returnId, returns.id))
+      .where(and(eq(returns.orderId, base.orderId), sql`${returns.status} <> 'cancelled'`));
+    const orderedByLine = new Map(base.lines.map((l) => [l.orderLineId, l.orderedQty]));
+    const totals = new Map<string, number>();
+    for (const r of all) { const lid = r.orderLineId || ""; if (lid) totals.set(lid, (totals.get(lid) || 0) + r.qty); }
+    /* Alleen overtekende regels waar ÓNZE retour aan meedoet tellen — een
+       al bestaande overtekening op andermans regel (data-corruptie uit het
+       verleden) mag deze verse retour niet laten terugtrekken. */
+    const ourLines = new Set(picked.map((p) => p.line.orderLineId));
+    const overshotLines = [...totals.entries()]
+      .filter(([id, tot]) => ourLines.has(id) && tot > (orderedByLine.get(id) ?? Infinity))
+      .map(([id]) => id);
+    if (overshotLines.length) {
+      const involved = new Map<string, string>(); // returnId → createdAt-sleutel
+      for (const r of all) {
+        if (!overshotLines.includes(r.orderLineId || "")) continue;
+        const key = `${r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt)}|${r.returnId}`;
+        involved.set(r.returnId, key);
+      }
+      const winner = [...involved.entries()].sort((a, b) => (a[1] < b[1] ? -1 : 1))[0]?.[0];
+      if (winner !== ret.id) {
+        await db.delete(returnLines).where(eq(returnLines.returnId, ret.id));
+        await db.delete(returns).where(eq(returns.id, ret.id));
+        return { ok: false, error: "Deze artikelen zijn zojuist al (deels) voor retour aangemeld — mogelijk door de klant zelf. Ververs de lijst en probeer opnieuw met de resterende aantallen." };
+      }
+    }
+  }
+
   // DHL-retourlabel (env-gated). Lukt het niet → retour blijft 'requested', label volgt.
   let label: { url: string; base64: string; tracking: string } | null = null;
   let labelPending = method === "dhl";
@@ -201,9 +241,12 @@ export async function createReturn(input: CreateReturnInput): Promise<
     }
   }
 
-  // Bevestigingsmail naar de klant (env-gated; faalt stil zodat de retour blijft staan).
+  // Bevestigingsmail naar de klant (env-gated; faalt stil zodat de retour blijft
+  // staan). mailSent gaat mee in de response zodat een agent-flow eerlijk kan
+  // melden of de klant de mail (met het label) echt heeft gekregen.
+  let mailSent = false;
   try {
-    await sendReturnRegistered({
+    mailSent = await sendReturnRegistered({
       email: input.email.trim().toLowerCase(),
       firstName: order?.firstName || "",
       orderNumber: base.orderNumber,
@@ -220,7 +263,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
     console.error("[returns] bevestigingsmail mislukt:", (e as Error).message);
   }
 
-  return { ok: true, id: ret.id, status: labelPending ? "requested" : method === "dhl" ? "label_created" : "requested", itemsCents, shippingCostCents, refundType, method, label, labelPending };
+  return { ok: true, id: ret.id, status: labelPending ? "requested" : method === "dhl" ? "label_created" : "requested", itemsCents, shippingCostCents, refundType, method, label, labelPending, mailSent };
 }
 
 /** Geef store credit uit als een (direct bruikbare) cadeaubon. */
