@@ -5,6 +5,8 @@ const nextConfig = {
   // in de serverless functie (public/ wordt anders niet in de lambda opgenomen).
   outputFileTracingIncludes: {
     '/api/wallet/apple': ['./public/brand/brand-logo-vierkant.png', './public/brand/brand-logo-zwart.png'],
+    // De PassKit-webservice bouwt de pas óók (verse ophaal na een push).
+    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/brand-logo-vierkant.png', './public/brand/brand-logo-zwart.png'],
   },
   images: {
     // Modern AVIF eerst (kleiner, betere kwaliteit), WebP als fallback.

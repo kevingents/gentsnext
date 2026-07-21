@@ -757,6 +757,27 @@ export const loyaltyEvents = pgTable(
 );
 
 /**
+ * Apple-Wallet pas-registraties (PassKit web service). Een iPhone die de
+ * spaarpas toevoegt registreert zich hier met z'n pushToken; als het saldo
+ * verandert sturen we een APNs-push naar die devices zodat de pas zichzelf
+ * ververst. serialNumber = customerId (= de pas-serial). PK op (device, serial)
+ * zodat één device zich niet dubbel registreert voor dezelfde pas.
+ */
+export const walletAppleRegistrations = pgTable(
+  "wallet_apple_registrations",
+  {
+    deviceLibraryIdentifier: text("device_library_identifier").notNull(),
+    serialNumber: text("serial_number").notNull(),
+    pushToken: text("push_token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceLibraryIdentifier, t.serialNumber] }),
+    index("wallet_apple_reg_serial_idx").on(t.serialNumber),
+  ]
+);
+
+/**
  * Winkelaankopen (omnichannel) — uit SRS/POS. Gekoppeld aan een klant via
  * srsCustomerId of e-mail, zodat de klant ze in zijn profiel terugziet.
  */

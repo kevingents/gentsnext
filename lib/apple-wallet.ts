@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
@@ -35,6 +36,44 @@ export function walletConfigured(): boolean {
       process.env.APPLE_WALLET_SIGNER_KEY &&
       process.env.APPLE_WALLET_WWDR,
   );
+}
+
+/** Publieke basis-URL van de site (voor de PassKit web-service-URL in de pas). */
+function siteBaseUrl(): string {
+  const raw =
+    process.env.PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    process.env.GENTSNEXT_BASE_URL ||
+    "https://www.gents.nl";
+  return raw.replace(/\/+$/, "");
+}
+
+/** PassKit web-service-basis; Apple hangt hier zelf /v1/… achter. */
+export function walletWebServiceUrl(): string {
+  return `${siteBaseUrl()}/api/wallet/apple`;
+}
+
+/**
+ * Per-pas authenticatietoken (PassKit `Authorization: ApplePass <token>`).
+ * Afgeleid via HMAC(signerKey, customerId): stabiel per klant, geen extra
+ * secret/tabel nodig, en niet te vervalsen zonder de private key. De signerKey
+ * is altijd aanwezig zodra `walletConfigured()`.
+ */
+export function passAuthToken(customerId: string): string {
+  const secret = b64Pem("APPLE_WALLET_SIGNER_KEY") || "unconfigured";
+  return createHmac("sha256", secret).update(String(customerId)).digest("hex");
+}
+
+/** Constant-tijd-verificatie van een aangeboden pas-token. */
+export function verifyPassAuth(customerId: string, token: string): boolean {
+  const expected = passAuthToken(customerId);
+  const got = String(token || "");
+  if (got.length !== expected.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 // Merk-afbeeldingen (uit public/brand) worden bij de route meegebundeld via
@@ -94,6 +133,10 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       backgroundColor: "rgb(244, 242, 237)",
       foregroundColor: "rgb(17, 17, 17)",
       labelColor: "rgb(122, 118, 112)",
+      // Web-service: hiermee kan iOS de pas zelf verversen (pull + APNs-push
+      // bij een saldowijziging). Beide velden zijn verplicht om 'm te activeren.
+      webServiceURL: walletWebServiceUrl(),
+      authenticationToken: passAuthToken(input.customerId),
     },
   );
 
