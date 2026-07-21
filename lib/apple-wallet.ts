@@ -1,7 +1,10 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
+import { b64Pem, walletConfigured, walletWebServiceUrl, passAuthToken } from "@/lib/apple-wallet-config";
+
+// Her-export zodat bestaande imports `from "@/lib/apple-wallet"` blijven werken.
+export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
 
 /**
  * Apple Wallet — GENTS spaarpas (.pkpass, storeCard).
@@ -19,62 +22,6 @@ import { PKPass } from "passkit-generator";
  *   APPLE_WALLET_SIGNER_KEY_PASSPHRASE   (optioneel) wachtwoord van de key
  *   APPLE_WALLET_WWDR              base64 van het Apple WWDR-tussencertificaat (PEM)
  */
-
-function b64Pem(key: string): string {
-  const v = process.env[key] || "";
-  if (!v) return "";
-  // Zowel kant-en-klare PEM als base64-PEM ondersteunen (handig lokaal vs Vercel).
-  return v.includes("-----BEGIN") ? v : Buffer.from(v, "base64").toString("utf8");
-}
-
-/** Is de Apple-Wallet-ondertekening geconfigureerd (alle secrets aanwezig)? */
-export function walletConfigured(): boolean {
-  return Boolean(
-    process.env.APPLE_PASS_TYPE_ID &&
-      process.env.APPLE_TEAM_ID &&
-      process.env.APPLE_WALLET_SIGNER_CERT &&
-      process.env.APPLE_WALLET_SIGNER_KEY &&
-      process.env.APPLE_WALLET_WWDR,
-  );
-}
-
-/** Publieke basis-URL van de site (voor de PassKit web-service-URL in de pas). */
-function siteBaseUrl(): string {
-  const raw =
-    process.env.PUBLIC_SITE_URL ||
-    process.env.SITE_URL ||
-    process.env.GENTSNEXT_BASE_URL ||
-    "https://www.gents.nl";
-  return raw.replace(/\/+$/, "");
-}
-
-/** PassKit web-service-basis; Apple hangt hier zelf /v1/… achter. */
-export function walletWebServiceUrl(): string {
-  return `${siteBaseUrl()}/api/wallet/apple`;
-}
-
-/**
- * Per-pas authenticatietoken (PassKit `Authorization: ApplePass <token>`).
- * Afgeleid via HMAC(signerKey, customerId): stabiel per klant, geen extra
- * secret/tabel nodig, en niet te vervalsen zonder de private key. De signerKey
- * is altijd aanwezig zodra `walletConfigured()`.
- */
-export function passAuthToken(customerId: string): string {
-  const secret = b64Pem("APPLE_WALLET_SIGNER_KEY") || "unconfigured";
-  return createHmac("sha256", secret).update(String(customerId)).digest("hex");
-}
-
-/** Constant-tijd-verificatie van een aangeboden pas-token. */
-export function verifyPassAuth(customerId: string, token: string): boolean {
-  const expected = passAuthToken(customerId);
-  const got = String(token || "");
-  if (got.length !== expected.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
-  } catch {
-    return false;
-  }
-}
 
 // Merk-afbeeldingen (uit public/brand) worden bij de route meegebundeld via
 // next.config `outputFileTracingIncludes`. Eén keer inlezen + cachen.

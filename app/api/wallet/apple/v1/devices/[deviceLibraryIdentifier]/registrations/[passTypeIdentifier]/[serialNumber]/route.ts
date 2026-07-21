@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletAppleRegistrations } from "@/db/schema";
-import { verifyPassAuth } from "@/lib/apple-wallet";
+import { verifyPassAuth, walletConfigured } from "@/lib/apple-wallet-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +23,9 @@ function authOk(req: Request, serial: string): boolean {
 }
 
 export async function POST(req: Request, { params }: Params) {
+  // Fail-closed: staat de wallet niet aan, dan geen (onauthenticeerde) writes op
+  // de registratietabel — anders is dit een open schrijf-endpoint.
+  if (!walletConfigured()) return new Response(null, { status: 503 });
   const { deviceLibraryIdentifier, serialNumber } = await params;
   if (!authOk(req, serialNumber)) return new Response(null, { status: 401 });
 
@@ -37,6 +40,9 @@ export async function POST(req: Request, { params }: Params) {
 
   try {
     const db = getDb();
+    // Bestaat er al een registratie (voor de 201-vs-200-statuscode)? Daarna een
+    // atomaire upsert: twee gelijktijdige registraties van hetzelfde device
+    // (neon-http = geen transactie) mogen niet op de composite-PK crashen.
     const existing = await db
       .select({ t: walletAppleRegistrations.pushToken })
       .from(walletAppleRegistrations)
@@ -47,21 +53,14 @@ export async function POST(req: Request, { params }: Params) {
         ),
       )
       .limit(1);
-    if (existing.length) {
-      // Al geregistreerd (evt. nieuw pushToken) → bijwerken, 200.
-      await db
-        .update(walletAppleRegistrations)
-        .set({ pushToken })
-        .where(
-          and(
-            eq(walletAppleRegistrations.deviceLibraryIdentifier, deviceLibraryIdentifier),
-            eq(walletAppleRegistrations.serialNumber, serialNumber),
-          ),
-        );
-      return new Response(null, { status: 200 });
-    }
-    await db.insert(walletAppleRegistrations).values({ deviceLibraryIdentifier, serialNumber, pushToken });
-    return new Response(null, { status: 201 });
+    await db
+      .insert(walletAppleRegistrations)
+      .values({ deviceLibraryIdentifier, serialNumber, pushToken })
+      .onConflictDoUpdate({
+        target: [walletAppleRegistrations.deviceLibraryIdentifier, walletAppleRegistrations.serialNumber],
+        set: { pushToken },
+      });
+    return new Response(null, { status: existing.length ? 200 : 201 });
   } catch (e) {
     console.error("[wallet/v1/register]", (e as Error).message);
     return new Response(null, { status: 500 });

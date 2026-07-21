@@ -1,6 +1,14 @@
-import { eq, inArray, max } from "drizzle-orm";
+import { eq, inArray, max, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletAppleRegistrations, loyaltyEvents } from "@/db/schema";
+
+/**
+ * "Gewijzigd op" van een pas = het moment waarop het BESTEEDBARE saldo laatst
+ * veranderde. Dat is per event `coalesce(vests_at, created_at)` (een event met
+ * toekomstige vesting telt pas mee zodra vests_at is gepasseerd), gefilterd op
+ * ≤ now zodat nog-niet-geveste punten de pas niet als gewijzigd melden.
+ */
+const effectiveTs = sql<Date>`coalesce(${loyaltyEvents.vestsAt}, ${loyaltyEvents.createdAt})`;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,11 +37,11 @@ export async function GET(req: Request, { params }: Params) {
     const serials = regs.map((r) => r.serialNumber);
     if (!serials.length) return new Response(null, { status: 204 });
 
-    // Nieuwste event-tijd per klant (= pas-serial).
+    // Nieuwste besteedbaar-saldo-wijziging per klant (= pas-serial).
     const rows = await db
-      .select({ customerId: loyaltyEvents.customerId, updated: max(loyaltyEvents.createdAt) })
+      .select({ customerId: loyaltyEvents.customerId, updated: max(effectiveTs) })
       .from(loyaltyEvents)
-      .where(inArray(loyaltyEvents.customerId, serials))
+      .where(sql`${inArray(loyaltyEvents.customerId, serials)} and ${effectiveTs} <= now()`)
       .groupBy(loyaltyEvents.customerId);
 
     let lastUpdated = sinceMs;

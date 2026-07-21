@@ -2,7 +2,7 @@ import { connect } from "node:http2";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletAppleRegistrations } from "@/db/schema";
-import { walletConfigured } from "@/lib/apple-wallet";
+import { walletConfigured } from "@/lib/apple-wallet-config";
 
 /**
  * APNs-push voor de Apple-Wallet spaarpas. Bij een saldowijziging sturen we een
@@ -23,7 +23,8 @@ function b64Pem(key: string): string {
 }
 
 const APNS_HOST = "https://api.push.apple.com";
-const PUSH_TIMEOUT_MS = 8000;
+const PUSH_TIMEOUT_MS = 5000; // per device-request
+const OVERALL_TIMEOUT_MS = 6000; // harde bovengrens voor de hele push-ronde
 
 /**
  * Stuur een pas-update-push voor één pas-serial (= customerId). Retourneert het
@@ -63,36 +64,45 @@ export async function pushPassUpdate(serialNumber: string): Promise<number> {
     // Een verbindingsfout mag de losse requests niet laten hangen.
     client.on("error", (e) => console.warn("[wallet/push] APNs-verbinding:", e.message));
 
-    await Promise.all(
-      regs.map(
-        (r) =>
-          new Promise<void>((resolve) => {
-            try {
-              const req = client!.request({
-                ":method": "POST",
-                ":path": `/3/device/${r.pushToken}`,
-                "apns-topic": topic,
-                "apns-push-type": "background",
-                "content-type": "application/json",
-              });
-              let status = 0;
-              req.on("response", (h) => { status = Number(h[":status"]) || 0; });
-              req.setTimeout(PUSH_TIMEOUT_MS, () => req.close());
-              req.on("end", () => {
-                if (status === 200) ok += 1;
-                // 410 Gone = device heeft de pas verwijderd → registratie opruimen.
-                else if (status === 410) stale.push(r.pushToken);
-                resolve();
-              });
-              req.on("error", () => resolve());
-              req.write(JSON.stringify({}));
-              req.end();
-            } catch {
-              resolve();
-            }
-          }),
-      ),
-    );
+    const pushOne = (r: { pushToken: string }) =>
+      new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => { if (!settled) { settled = true; resolve(); } };
+        try {
+          const req = client!.request({
+            ":method": "POST",
+            ":path": `/3/device/${r.pushToken}`,
+            "apns-topic": topic,
+            "apns-push-type": "background",
+            "apns-priority": "5",
+            "content-type": "application/json",
+          });
+          let status = 0;
+          req.on("response", (h) => { status = Number(h[":status"]) || 0; });
+          // KRITIEK: de response-body MOET gedraind worden, anders vuurt 'end'
+          // nooit (elke non-200 heeft een body, incl. 410) en hangt de promise.
+          req.on("data", () => {});
+          req.setTimeout(PUSH_TIMEOUT_MS, () => { try { req.close(); } catch { /* al dicht */ } done(); });
+          req.on("end", () => {
+            if (status === 200) ok += 1;
+            else if (status === 410) stale.push(r.pushToken); // device heeft de pas verwijderd
+            done();
+          });
+          // Vangnet: 'close' vuurt ook bij req.close()/reset → altijd settelen.
+          req.on("close", done);
+          req.on("error", done);
+          req.end(JSON.stringify({}));
+        } catch {
+          done();
+        }
+      });
+
+    // Harde bovengrens over de HELE ronde — geen enkele APNs-hapering mag de
+    // loyalty-mutatie laten wachten. Wat niet binnen is, telt gewoon niet mee.
+    await Promise.race([
+      Promise.all(regs.map(pushOne)),
+      new Promise<void>((r) => setTimeout(r, OVERALL_TIMEOUT_MS)),
+    ]);
   } catch (e) {
     console.warn("[wallet/push] APNs push faalde:", (e as Error).message);
   } finally {

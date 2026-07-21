@@ -1,8 +1,12 @@
-import { eq, max } from "drizzle-orm";
+import { eq, max, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, loyaltyEvents } from "@/db/schema";
 import { redeemableBalance } from "@/lib/loyalty-claim";
-import { walletConfigured, buildLoyaltyPass, verifyPassAuth } from "@/lib/apple-wallet";
+import { buildLoyaltyPass } from "@/lib/apple-wallet";
+import { walletConfigured, verifyPassAuth } from "@/lib/apple-wallet-config";
+
+/** Zie de serials-route: besteedbaar-saldo-wijziging = coalesce(vests_at, created_at). */
+const effectiveTs = sql<Date>`coalesce(${loyaltyEvents.vestsAt}, ${loyaltyEvents.createdAt})`;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,11 +42,13 @@ export async function GET(req: Request, { params }: Params) {
       .limit(1);
     if (!cust) return new Response(null, { status: 404 });
 
-    // Last-Modified = nieuwste loyalty-event (val terug op account-aanmaak).
+    // Last-Modified = nieuwste besteedbaar-saldo-wijziging (vesting-bewust; val
+    // terug op account-aanmaak). Zo levert de pass-endpoint na een vesting geen
+    // 304 met het oude, te lage saldo.
     const [ev] = await db
-      .select({ updated: max(loyaltyEvents.createdAt) })
+      .select({ updated: max(effectiveTs) })
       .from(loyaltyEvents)
-      .where(eq(loyaltyEvents.customerId, serialNumber));
+      .where(sql`${eq(loyaltyEvents.customerId, serialNumber)} and ${effectiveTs} <= now()`);
     const lastModMs = ev?.updated ? new Date(ev.updated as unknown as string).getTime() : new Date(cust.createdAt).getTime();
 
     const ims = req.headers.get("if-modified-since");
