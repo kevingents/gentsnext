@@ -119,6 +119,9 @@ export async function redeemProfileCompletionBonus(
     profileCompletionBonusClaimed: true,
     profileCompletionTokenHash: null,
   }).where(eq(customers.id, c.id));
+  // Apple-Wallet pas verversen (best-effort). Dynamische import zodat de
+  // passkit-afhankelijkheid niet in de graph van deze brede kernmodule belandt.
+  try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(c.id); } catch { /* best-effort */ }
   return { ok: true, points: PROFILE_BONUS_POINTS, customerId: c.id };
 }
 

@@ -288,6 +288,13 @@
       "when": 1784017828909,
       "tag": "0040_military_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784657044510,
+      "tag": "0041_wallet_apple_registrations",
+      "breakpoints": true
     }
   ]
 }

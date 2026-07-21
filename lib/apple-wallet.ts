@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
+import { b64Pem, walletConfigured, walletWebServiceUrl, passAuthToken } from "@/lib/apple-wallet-config";
+
+// Her-export zodat bestaande imports `from "@/lib/apple-wallet"` blijven werken.
+export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
 
 /**
  * Apple Wallet — GENTS spaarpas (.pkpass, storeCard).
@@ -18,24 +22,6 @@ import { PKPass } from "passkit-generator";
  *   APPLE_WALLET_SIGNER_KEY_PASSPHRASE   (optioneel) wachtwoord van de key
  *   APPLE_WALLET_WWDR              base64 van het Apple WWDR-tussencertificaat (PEM)
  */
-
-function b64Pem(key: string): string {
-  const v = process.env[key] || "";
-  if (!v) return "";
-  // Zowel kant-en-klare PEM als base64-PEM ondersteunen (handig lokaal vs Vercel).
-  return v.includes("-----BEGIN") ? v : Buffer.from(v, "base64").toString("utf8");
-}
-
-/** Is de Apple-Wallet-ondertekening geconfigureerd (alle secrets aanwezig)? */
-export function walletConfigured(): boolean {
-  return Boolean(
-    process.env.APPLE_PASS_TYPE_ID &&
-      process.env.APPLE_TEAM_ID &&
-      process.env.APPLE_WALLET_SIGNER_CERT &&
-      process.env.APPLE_WALLET_SIGNER_KEY &&
-      process.env.APPLE_WALLET_WWDR,
-  );
-}
 
 // Merk-afbeeldingen (uit public/brand) worden bij de route meegebundeld via
 // next.config `outputFileTracingIncludes`. Eén keer inlezen + cachen.
@@ -94,6 +80,10 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       backgroundColor: "rgb(244, 242, 237)",
       foregroundColor: "rgb(17, 17, 17)",
       labelColor: "rgb(122, 118, 112)",
+      // Web-service: hiermee kan iOS de pas zelf verversen (pull + APNs-push
+      // bij een saldowijziging). Beide velden zijn verplicht om 'm te activeren.
+      webServiceURL: walletWebServiceUrl(),
+      authenticationToken: passAuthToken(input.customerId),
     },
   );
 

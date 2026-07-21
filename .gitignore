@@ -32,3 +32,6 @@ Thumbs.db
 
 # Sanity
 .sanity/
+
+# Lokale Claude Code-config (machine-specifiek)
+.claude/
