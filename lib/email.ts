@@ -51,13 +51,10 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
     )
     .join("");
 
-  return `<!doctype html><html lang="nl"><body style="margin:0;background:#F6F5F2;padding:24px">
+  return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E6E4DF">
-        <tr><td style="padding:28px 28px 0">
-          <div style="font:300 26px Arial,sans-serif;letter-spacing:6px;color:#0A0A0A">GENTS</div>
-          <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#8B8B8B;margin-top:4px">— SUITS YOU —</div>
-        </td></tr>
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#fff;border:1px solid #E6E4DF">
+        ${brandHeaderRow()}
         <tr><td style="padding:24px 28px 8px">
           <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Bedankt voor je bestelling, ${order.firstName || ""}</h1>
           <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">
@@ -114,7 +111,7 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
           </p>
         </td></tr>
       </table>
-      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS — Suits You · Alle prijzen incl. btw</div>
+      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam · Alle prijzen incl. btw</div>
     </td></tr></table>
   </body></html>`;
 }
@@ -146,13 +143,10 @@ function giftcardHtml(g: GiftcardEmail): string {
        </td></tr>`
     : "";
 
-  return `<!doctype html><html lang="nl"><body style="margin:0;background:#F6F5F2;padding:24px">
+  return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E6E4DF">
-        <tr><td style="padding:28px 28px 0">
-          <div style="font:300 26px Arial,sans-serif;letter-spacing:6px;color:#0A0A0A">GENTS</div>
-          <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#8B8B8B;margin-top:4px">— SUITS YOU —</div>
-        </td></tr>
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#fff;border:1px solid #E6E4DF">
+        ${brandHeaderRow()}
         <tr><td style="padding:24px 28px 8px">
           <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${greeting}</h1>
           <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:8px 0 0">${fromLine}</p>
@@ -178,7 +172,7 @@ function giftcardHtml(g: GiftcardEmail): string {
           <a href="${site}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 22px;text-decoration:none">Begin met shoppen</a>
         </td></tr>
       </table>
-      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS — Suits You · Alle prijzen incl. btw</div>
+      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam · Alle prijzen incl. btw</div>
     </td></tr></table>
   </body></html>`;
 }
@@ -207,19 +201,64 @@ export async function sendGiftcardEmail(g: GiftcardEmail): Promise<boolean> {
 
 /* ── Gedeelde wrapper + generieke verzender (voor lifecycle-mails) ── */
 
+/** Zwarte merk-header met het officiële witte logo (zelfde asset als de
+ *  site-footer; de slogan zit al ín het logo — niets aan toevoegen). */
+function brandHeaderRow(): string {
+  const site = getSiteUrl();
+  return `<tr><td style="padding:0">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111111">
+      <tr><td align="center" style="padding:26px 28px">
+        <img src="${site}/brand/brand-logo-wit.png" width="150" alt="GENTS — Suits You"
+          style="display:block;width:150px;max-width:60%;height:auto;margin:0 auto" />
+      </td></tr>
+    </table>
+  </td></tr>`;
+}
+
+/** Gebrande footer binnen de kaart: snelkoppelingen + tagline. */
+function brandFooterRow(): string {
+  const site = getSiteUrl();
+  const link = (href: string, label: string) =>
+    `<a href="${site}${href}" style="color:#111111;text-decoration:none;font:12px Arial,sans-serif">${label}</a>`;
+  return `<tr><td style="padding:8px 28px 26px">
+    <div style="border-top:1px solid #E6E4DF;padding-top:18px">
+      <div style="font:12px Arial,sans-serif;color:#111111">
+        ${link("/account", "Mijn account")} &nbsp;·&nbsp; ${link("/winkels", "Winkels")} &nbsp;·&nbsp; ${link("/retourneren", "Retourneren")} &nbsp;·&nbsp; ${link("/klantenservice", "Klantenservice")}
+      </div>
+      <div style="font:11px Arial,sans-serif;color:#B2AEA8;margin-top:12px">Persoonlijk advies in 19 winkels · gratis retour binnen 14 dagen · alle prijzen incl. btw</div>
+    </div>
+  </td></tr>`;
+}
+
 function shell(inner: string): string {
-  return `<!doctype html><html lang="nl"><body style="margin:0;background:#F6F5F2;padding:24px">
+  return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E6E4DF">
-        <tr><td style="padding:28px 28px 0">
-          <div style="font:300 26px Arial,sans-serif;letter-spacing:6px;color:#0A0A0A">GENTS</div>
-          <div style="font:11px Arial,sans-serif;letter-spacing:3px;color:#8B8B8B;margin-top:4px">— SUITS YOU —</div>
-        </td></tr>
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#fff;border:1px solid #E6E4DF">
+        ${brandHeaderRow()}
         ${inner}
+        ${brandFooterRow()}
       </table>
-      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS — Suits You · Alle prijzen incl. btw</div>
+      <div style="font:11px Arial,sans-serif;color:#9a958d;margin-top:14px">GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam</div>
     </td></tr></table>
   </body></html>`;
+}
+
+/**
+ * Gebrande e-mail (voor losse mails buiten de lifecycle-set, bv. de inlog-link).
+ * `bodyHtml` is vrije HTML in de contentzone; optionele knop + voetnoot.
+ */
+export function brandedEmailHtml(opts: { heading: string; bodyHtml: string; cta?: { label: string; href: string }; footnote?: string }): string {
+  const inner = `
+    <tr><td style="padding:26px 28px 6px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#111111;margin:0">${opts.heading}</h1>
+    </td></tr>
+    <tr><td style="padding:6px 28px;font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.65">${opts.bodyHtml}</td></tr>
+    ${opts.cta ? `<tr><td style="padding:14px 28px 6px">
+      <a href="${opts.cta.href}" style="display:inline-block;background:#111111;color:#ffffff;font:14px Arial,sans-serif;padding:13px 26px;text-decoration:none;letter-spacing:.5px">${opts.cta.label}</a>
+    </td></tr>` : ""}
+    ${opts.footnote ? `<tr><td style="padding:10px 28px 6px;font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.5">${opts.footnote}</td></tr>` : ""}
+  `;
+  return shell(inner);
 }
 
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {

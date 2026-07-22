@@ -4,9 +4,10 @@ const nextConfig = {
   // De Apple-Wallet-route leest de merk-PNG's van schijf; bundel die expliciet mee
   // in de serverless functie (public/ wordt anders niet in de lambda opgenomen).
   outputFileTracingIncludes: {
-    '/api/wallet/apple': ['./public/brand/brand-logo-vierkant.png', './public/brand/brand-logo-zwart.png'],
+    // Zwarte pas → witte merk-assets meebundelen (public/ zit anders niet in de lambda).
+    '/api/wallet/apple': ['./public/brand/wallet-icon-wit.png', './public/brand/brand-logo-wit.png'],
     // De PassKit-webservice bouwt de pas óók (verse ophaal na een push).
-    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/brand-logo-vierkant.png', './public/brand/brand-logo-zwart.png'],
+    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/wallet-icon-wit.png', './public/brand/brand-logo-wit.png'],
   },
   images: {
     // Modern AVIF eerst (kleiner, betere kwaliteit), WebP als fallback.
