@@ -15,7 +15,10 @@ export async function SiteHeader() {
   const [locale, menu] = await Promise.all([getLocale(), getMenu()]);
   return (
     <>
-      <AnnouncementBar />
+      {/* Checkout = afleidingsvrij: geen campagne-balk met exit-link. */}
+      <HideOnCheckout>
+        <AnnouncementBar />
+      </HideOnCheckout>
       <SiteHeaderInner locale={locale} menu={menu} />
     </>
   );
@@ -28,7 +31,10 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
       <div className="relative mx-auto flex max-w-page items-center justify-between gap-4 px-gutter py-4">
         <div className="flex items-center gap-4 lg:flex-1">
           <div className="lg:hidden">
-            <MegaMenuMobile items={menu} />
+            {/* Op de checkout geen menu — logo (naar home) is de enige uitgang. */}
+            <HideOnCheckout>
+              <MegaMenuMobile items={menu} />
+            </HideOnCheckout>
           </div>
         </div>
 
@@ -51,34 +57,37 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
             i.p.v. gap-5 houdt de zichtbare spatiëring gelijk zonder overlappende
             tikvlakken. */}
         <div className="flex items-center gap-4 lg:flex-1 lg:justify-end">
-          <Link
-            href="/pak-samenstellen"
-            className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
-          >
-            Pak samenstellen
-          </Link>
-          <Link
-            href="/pages/winkels"
-            className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
-          >
-            Winkels
-          </Link>
-          {/* Mobiel bewust minimaal (à la MR MARVIS): hamburger · logo · zoeken ·
-              tas. Taal, account en favorieten staan daar in de menu-drawer. */}
-          <div className="hidden lg:block">
-            <LanguageSwitcher current={locale} />
-          </div>
-          <SearchTrigger />
-          <Link href="/account" aria-label="Mijn account" className="-mx-2 hidden h-11 w-11 items-center justify-center text-ink-soft transition-colors hover:text-ink lg:flex">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />
-            </svg>
-          </Link>
-          <div className="hidden lg:block">
-            <WishlistLink />
-          </div>
-          <CartButton />
+          {/* Op de checkout géén utilities (zoeken/account/tas/menu) — focus. */}
+          <HideOnCheckout>
+            <Link
+              href="/pak-samenstellen"
+              className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
+            >
+              Pak samenstellen
+            </Link>
+            <Link
+              href="/pages/winkels"
+              className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
+            >
+              Winkels
+            </Link>
+            {/* Mobiel bewust minimaal (à la MR MARVIS): hamburger · logo · zoeken ·
+                tas. Taal, account en favorieten staan daar in de menu-drawer. */}
+            <div className="hidden lg:block">
+              <LanguageSwitcher current={locale} />
+            </div>
+            <SearchTrigger />
+            <Link href="/account" aria-label="Mijn account" className="-mx-2 hidden h-11 w-11 items-center justify-center text-ink-soft transition-colors hover:text-ink lg:flex">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />
+              </svg>
+            </Link>
+            <div className="hidden lg:block">
+              <WishlistLink />
+            </div>
+            <CartButton />
+          </HideOnCheckout>
         </div>
       </div>
 

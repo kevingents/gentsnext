@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { useT } from "@/components/i18n/locale-provider";
 import { OrderStatusVerify } from "@/components/support/order-status-verify";
 
@@ -14,6 +15,10 @@ import { OrderStatusVerify } from "@/components/support/order-status-verify";
  */
 export function HelpButton() {
   const t = useT();
+  const pathname = usePathname();
+  // Checkout: laag hangen (bottom-4) — op bottom-20 zweeft de knop midden door
+  // de invulvelden en het pad naar de betaalknop.
+  const onCheckout = /(^|\/)afrekenen(\/|$)/.test(pathname || "");
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
@@ -46,7 +51,7 @@ export function HelpButton() {
   }
 
   return (
-    <div className="fixed bottom-20 right-4 z-30 flex flex-col items-end lg:bottom-6 lg:right-6">
+    <div className={`fixed right-4 z-30 flex flex-col items-end lg:bottom-6 lg:right-6 ${onCheckout ? "bottom-4" : "bottom-20"}`}>
       {open ? (
         <div className="mb-3 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto border border-line bg-canvas p-4 shadow-pop">
           <p className="label-brand mb-2">{t("help.title")}</p>

@@ -41,6 +41,17 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [openMobile, setOpenMobile] = useState(false);
+  // De zwevende pil pas tonen als de top-filterbalk uit beeld is gescrold —
+  // bovenaan de pagina stonden anders twee bedieningslagen tegelijk.
+  const topBarRef = useRef<HTMLDivElement>(null);
+  const [pillOn, setPillOn] = useState(false);
+  useEffect(() => {
+    const el = topBarRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setPillOn(!e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   // Modal-a11y voor de mobiele drawer: focus-trap, Escape-sluit, scroll-lock,
   // focus-restore + #main inert. Portal naar body is verplicht bij inertMain —
   // de drawer rendert binnen #main en zou zichzelf anders inert maken.
@@ -139,7 +150,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                   title={`${c.label} (${c.count})`}
                   // Selectie via ring + vetgedrukt label — niet alléén randkleur (duidelijk
                   // voor kleurenblinde gebruikers).
-                  className={`flex items-center gap-2 border px-2.5 py-1.5 font-sans text-xs transition-colors ${
+                  className={`flex min-h-11 items-center gap-2 border px-2.5 py-1.5 font-sans text-xs transition-colors lg:min-h-0 ${
                     active ? "border-ink ring-1 ring-ink font-medium" : "border-line hover:border-muted"
                   }`}
                 >
@@ -170,7 +181,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                   onClick={() => apply({ sizes: toggle(selection.sizes, s.value) })}
                   aria-pressed={active}
                   title={`${s.label} (${s.count})`}
-                  className={`min-w-[3rem] border px-2 py-1.5 text-center font-sans text-xs transition-colors ${
+                  className={`min-h-11 min-w-[3rem] border px-2 py-1.5 text-center font-sans text-xs transition-colors lg:min-h-0 ${
                     active ? "border-ink bg-ink text-canvas" : "border-line hover:border-muted"
                   }`}
                 >
@@ -255,7 +266,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                   apply(active ? { priceMin: undefined, priceMax: undefined } : { priceMin: b.min, priceMax: b.max })
                 }
                 aria-pressed={active}
-                className={`border px-2.5 py-1.5 font-sans text-xs transition-colors ${
+                className={`min-h-11 border px-2.5 py-1.5 font-sans text-xs transition-colors lg:min-h-0 ${
                   active ? "border-ink bg-ink text-canvas" : "border-line hover:border-muted"
                 }`}
               >
@@ -280,24 +291,27 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
 
   return (
     <>
-      {/* Mobiel: filterknop bovenaan + sticky-CTA terwijl je scrollt */}
-      <div className="mb-4 flex items-center justify-between lg:hidden">
+      {/* Mobiel: filterknop bovenaan; de zwevende pil verschijnt pas zodra deze
+          balk uit beeld scrolt (anders twee bedieningslagen tegelijk). */}
+      <div ref={topBarRef} className="mb-4 flex items-center justify-between lg:hidden">
         <button
           type="button"
           onClick={() => setOpenMobile(true)}
-          className="btn-ghost !px-4 !py-2"
+          className="btn-ghost !px-4 !py-2.5"
         >
-          {t("plp.filters.mobileButton")} {activeCount > 0 ? `(${activeCount})` : ""}
+          {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `(${activeCount})` : ""}
         </button>
         <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
       </div>
-      <button
-        type="button"
-        onClick={() => setOpenMobile(true)}
-        className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop lg:hidden"
-      >
-        {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `· ${activeCount}` : ""}
-      </button>
+      {pillOn ? (
+        <button
+          type="button"
+          onClick={() => setOpenMobile(true)}
+          className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop lg:hidden"
+        >
+          {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `· ${activeCount}` : ""}
+        </button>
+      ) : null}
 
       {openMobile && typeof document !== "undefined"
         ? createPortal(
@@ -306,7 +320,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
               <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
                 <div className="mb-4 flex items-center justify-between">
                   <p className="label-brand">{t("plp.filters.mobileDrawerTitle")}</p>
-                  <button type="button" onClick={() => setOpenMobile(false)} className="font-sans text-sm underline">
+                  <button type="button" onClick={() => setOpenMobile(false)} className="-mr-2 flex h-11 items-center px-2 font-sans text-sm underline">
                     {t("common.close")}
                   </button>
                 </div>
@@ -318,9 +332,13 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                   </div>
                 ) : null}
                 {body}
-                <button type="button" onClick={() => setOpenMobile(false)} className="btn-primary mt-6 w-full">
-                  {t("plp.filters.showCountBtn")} {total} {t("plp.filters.itemPlural")}
-                </button>
+                {/* Sticky in de scrollzone: de live teller ("Toon N artikelen")
+                    blijft zo altijd in beeld, hoe diep je ook in de facetten zit. */}
+                <div className="sticky bottom-0 -mx-5 mt-6 border-t border-line bg-canvas px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                  <button type="button" onClick={() => setOpenMobile(false)} className="btn-primary w-full">
+                    {t("plp.filters.showCountBtn")} {total} {t("plp.filters.itemPlural")}
+                  </button>
+                </div>
               </div>
             </div>,
             document.body
@@ -383,7 +401,8 @@ function CheckList({
   return (
     <div className="space-y-1.5">
       {visible.map((it) => (
-        <label key={it.value} className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+        // Mobiel (drawer) 44px-rijen; desktop-sidebar blijft compact via lg:.
+        <label key={it.value} className="flex min-h-11 cursor-pointer items-center gap-2 font-sans text-sm lg:min-h-0">
           <input
             type="checkbox"
             checked={selected.includes(it.value)}

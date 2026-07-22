@@ -98,9 +98,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         {" / "}
         <span className="text-ink">{cat.label}</span>
       </nav>
-      <div className="mt-6 border-b border-line pb-6">
-        <p className="label-brand">{t("cat.header.eyebrow")}</p>
-        <h1 className="mt-2 text-display-md">{cat.label}</h1>
+      {/* Mobiel compacter: eyebrow weg en minder witruimte — het eerste product
+          stond anders pas op een halve viewport. */}
+      <div className="mt-4 border-b border-line pb-4 sm:mt-6 sm:pb-6">
+        <p className="label-brand hidden sm:block">{t("cat.header.eyebrow")}</p>
+        <h1 className="text-display-md sm:mt-2">{cat.label}</h1>
       </div>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -109,11 +111,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         </aside>
 
         <div>
+          {/* Mobiel geen losse sorteer-rij: sorteren zit in de filter-drawer
+              (knop + zwevende pil). Drie bedieningslagen was te druk. */}
           <div className="mb-6 hidden items-center justify-between lg:flex">
             <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
-            <SortSelect value={sel.sort} />
-          </div>
-          <div className="mb-6 lg:hidden">
             <SortSelect value={sel.sort} />
           </div>
 
@@ -135,7 +136,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           {totalPages > 1 ? (
             <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label={t("cat.pagination.aria")}>
               {sel.page > 1 ? (
-                <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
+                <Link className="btn-ghost !px-4 !py-3" href={pageHref(sel.page - 1)}>
                   {t("cat.pagination.previous")}
                 </Link>
               ) : null}
@@ -143,7 +144,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 {t("cat.pagination.pageLabel")} {sel.page} {t("cat.pagination.of")} {totalPages}
               </span>
               {sel.page < totalPages ? (
-                <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
+                <Link className="btn-ghost !px-4 !py-3" href={pageHref(sel.page + 1)}>
                   {t("cat.pagination.next")}
                 </Link>
               ) : null}

@@ -117,7 +117,7 @@ export function CartDrawer() {
         {/* Kop */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <p className="font-display text-lg">{t("cart.title")} ({cart.count})</p>
-          <button type="button" onClick={cart.close} aria-label={t("common.close")} className="font-sans text-sm underline">
+          <button type="button" onClick={cart.close} aria-label={t("common.close")} className="-mr-2 flex h-11 items-center px-2 font-sans text-sm underline">
             {t("common.close")}
           </button>
         </div>
@@ -143,41 +143,44 @@ export function CartDrawer() {
           </div>
         ) : (
           <>
-            {/* Gratis verzending-balk + levertijdcue */}
+            {/* Gratis verzending-balk + levertijdcue — compact: de voortgangsbalk
+                verdwijnt zodra gratis verzending binnen is (100% zegt niets meer). */}
             <div className="border-b border-line px-5 py-3">
               {remaining > 0 ? (
-                <p className="font-sans text-xs text-ink-soft">
-                  {t("cart.shipping.remaining")} <strong>{formatEuro(remaining)}</strong> {t("cart.shipping.untilFree")}
-                </p>
+                <>
+                  <p className="font-sans text-xs text-ink-soft">
+                    {t("cart.shipping.remaining")} <strong>{formatEuro(remaining)}</strong> {t("cart.shipping.untilFree")}
+                  </p>
+                  <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
+                    <div className="h-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                </>
               ) : (
                 <p className="flex items-center gap-1.5 font-sans text-xs text-success">
                   <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                   {t("cart.freeShipping")}
                 </p>
               )}
-              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface">
-                <div className="h-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
-              </div>
               <DeliveryEstimate
                 items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
-                className="mt-2 font-sans text-[0.65rem] text-muted"
+                className="mt-2 font-sans text-xs text-muted"
               />
             </div>
 
-            {multiSize ? (
-              <div className="flex items-start gap-2 border-b border-line bg-surface px-5 py-2.5">
-                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <p className="font-sans text-xs text-ink-soft">
-                  {t("cart.warning.multiSize")}{" "}
-                  <Link href="/maatadvies" onClick={cart.close} className="font-medium text-ink underline underline-offset-2">{t("cart.warning.sizeAdviceLink")}</Link>{" "}
-                  {t("cart.warning.multiSizeHelp")}
-                </p>
-              </div>
-            ) : null}
-
-            {/* Regels + suggesties samen in het scrollgebied: alleen kop en voettekst
-                blijven vast, zodat de artikelen op kleine schermen ruimte houden. */}
+            {/* Regels + suggesties (en de multi-maat-tip) samen in het scrollgebied:
+                alleen kop en voettekst blijven vast, zodat de artikelen op kleine
+                schermen ruimte houden. */}
             <div className="flex-1 overflow-y-auto px-5 py-4">
+              {multiSize ? (
+                <div className="mb-4 flex items-start gap-2 rounded-card border border-line bg-surface px-3 py-2.5">
+                  <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <p className="font-sans text-xs text-ink-soft">
+                    {t("cart.warning.multiSize")}{" "}
+                    <Link href="/maatadvies" onClick={cart.close} className="font-medium text-ink underline underline-offset-2">{t("cart.warning.sizeAdviceLink")}</Link>{" "}
+                    {t("cart.warning.multiSizeHelp")}
+                  </p>
+                </div>
+              ) : null}
               <ul className="space-y-5">
                 {groups.map((g, gi) => (
                   <li key={g.groupId ?? g.lines[0].id} className={g.groupId ? "border border-line p-3" : ""}>
@@ -195,7 +198,7 @@ export function CartDrawer() {
                     ) : null}
                     <ul className={g.groupId ? "space-y-3" : ""}>
                       {g.lines.map((line) => (
-                        <CartLineRow key={line.id} line={line} grouped={Boolean(g.groupId)} />
+                        <CartLineRow key={line.id} line={line} />
                       ))}
                     </ul>
                   </li>
@@ -211,21 +214,20 @@ export function CartDrawer() {
               />
             </div>
 
-            {/* Voettekst */}
-            <div className="border-t border-line px-5 py-4">
+            {/* Voettekst — één volle Afrekenen-knop (doorwinkelen is een tekstlink;
+                die halveerde de primaire CTA) + safe-area voor iPhone-thuisbalk. */}
+            <div className="border-t border-line px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <div className="flex items-center justify-between">
                 <span className="font-sans text-sm text-muted">{t("cart.subtotal")}</span>
                 <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
               </div>
               <p className="mt-1 font-sans text-xs text-muted">{t("cart.taxnote")}</p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button type="button" onClick={cart.close} className="btn-ghost w-full !px-2 text-sm">
-                  {t("cart.action.continueShopping")}
-                </button>
-                <Link href="/afrekenen" onClick={cart.close} className="btn-primary w-full text-center !px-2 text-sm">
-                  {t("cart.checkout")}
-                </Link>
-              </div>
+              <Link href="/afrekenen" onClick={cart.close} className="btn-primary mt-3 block w-full text-center">
+                {t("cart.checkout")}
+              </Link>
+              <button type="button" onClick={cart.close} className="mt-1 flex min-h-11 w-full items-center justify-center font-sans text-sm text-ink-soft underline underline-offset-4 hover:text-ink">
+                {t("cart.action.continueShopping")}
+              </button>
             </div>
           </>
         )}
@@ -234,7 +236,7 @@ export function CartDrawer() {
   );
 }
 
-function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
+function CartLineRow({ line }: { line: CartLine }) {
   const cart = useCart();
   const t = useT();
   return (
@@ -248,20 +250,26 @@ function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             {line.roleLabel ? <p className="font-sans text-[0.65rem] uppercase tracking-wide text-muted">{line.roleLabel}</p> : null}
-            <p className="truncate font-sans text-sm text-ink">{line.title}</p>
+            {/* Titel klikbaar naar de PDP — consistent met de thumbnail. */}
+            <Link href={`/products/${line.productHandle}`} onClick={cart.close} className="block truncate font-sans text-sm text-ink hover:underline">
+              {line.title}
+            </Link>
             <p className="font-sans text-xs text-muted">
               {[line.color, line.size && t("cart.added.sizeMeta", { size: line.size })].filter(Boolean).join(" · ")}
             </p>
           </div>
           <p className="shrink-0 font-sans text-sm">{formatEuro(line.priceCents * line.qty)}</p>
         </div>
-        <div className="mt-2 flex items-center gap-3">
+        <div className="mt-1.5 flex items-center gap-3">
+          {/* 44px-tikvlakken; − staat uit op aantal 1 zodat een mis-tik de regel
+              niet stilletjes verwijdert (weghalen = de expliciete Verwijder-knop). */}
           <div className="flex items-center border border-line">
             <button
               type="button"
               onClick={() => cart.setQty(line.id, line.qty - 1)}
+              disabled={line.qty <= 1}
               aria-label={t("cart.line.decrementAriaLabel")}
-              className="px-2.5 py-1 font-sans text-sm hover:bg-surface"
+              className="flex h-11 min-w-11 items-center justify-center px-2 font-sans text-sm hover:bg-surface disabled:opacity-30 disabled:hover:bg-transparent"
             >
               −
             </button>
@@ -270,20 +278,20 @@ function CartLineRow({ line, grouped }: { line: CartLine; grouped: boolean }) {
               type="button"
               onClick={() => cart.setQty(line.id, line.qty + 1)}
               aria-label={t("cart.line.incrementAriaLabel")}
-              className="px-2.5 py-1 font-sans text-sm hover:bg-surface"
+              className="flex h-11 min-w-11 items-center justify-center px-2 font-sans text-sm hover:bg-surface"
             >
               +
             </button>
           </div>
-          {!grouped ? (
-            <button
-              type="button"
-              onClick={() => cart.remove(line.id)}
-              className="font-sans text-xs text-muted underline hover:text-ink"
-            >
-              {t("cart.line.remove")}
-            </button>
-          ) : null}
+          {/* Óók bij groep-regels: nu − op aantal 1 uit staat, is dit de enige
+              manier om één onderdeel uit een pak-set te halen. */}
+          <button
+            type="button"
+            onClick={() => cart.remove(line.id)}
+            className="flex min-h-11 items-center font-sans text-xs text-muted underline hover:text-ink"
+          >
+            {t("cart.line.remove")}
+          </button>
         </div>
       </div>
     </li>

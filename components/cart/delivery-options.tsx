@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import { useT } from "@/components/i18n/locale-provider";
 
@@ -31,6 +31,12 @@ export function DeliveryOptions({
   const t = useT();
   const [est, setEst] = useState<Estimate | null>(null);
   const key = items.map((i) => `${i.sku}:${i.qty}`).join(",");
+  // Verse waarde in de fetch-callback: de closure hing aan het mount-moment,
+  // waardoor een laat antwoord een inmiddels gekozen "express" stil terugzette.
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   useEffect(() => {
     if (!items.length) return;
@@ -44,9 +50,10 @@ export function DeliveryOptions({
       .then((d) => {
         if (active && d?.estimate) {
           setEst(d.estimate);
-          // Reset naar standaard als express niet (meer) sneller is.
+          // Reset naar standaard als express niet (meer) bestaat; respecteer de
+          // actuele keuze via valueRef (niet de mount-closure).
           const exp = d.estimate.express;
-          if (value === "express" && exp) onChange("express", exp.surchargeCents);
+          if (valueRef.current === "express" && exp) onChange("express", exp.surchargeCents);
           else onChange("standard", 0);
         }
       })

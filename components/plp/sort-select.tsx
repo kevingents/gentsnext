@@ -32,7 +32,8 @@ export function SortSelect({ value }: { value: ProductSort }) {
       >
         {(Object.keys(SORT_LABELS) as ProductSort[]).map((k) => (
           <option key={k} value={k}>
-            {SORT_LABELS[k]}
+            {/* Via t(): SORT_LABELS was hardcoded NL en lekte door op /en /de. */}
+            {t(`plp.sort.${k}`)}
           </option>
         ))}
       </select>

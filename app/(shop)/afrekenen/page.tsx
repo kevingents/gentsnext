@@ -7,7 +7,6 @@ import { useSearchParams } from "next/navigation";
 import { useCart } from "@/components/cart/cart-context";
 import { useT } from "@/components/i18n/locale-provider";
 import { DeliveryOptions } from "@/components/cart/delivery-options";
-import { FooterPayments } from "@/components/footer-payments";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
@@ -47,24 +46,30 @@ function Steps({ step }: { step: "gegevens" | "betalen" }) {
     { label: t("checkout.step_payment"), active: step === "betalen" },
     { label: t("checkout.step_confirmation") },
   ];
+  const activeLabel = steps.find((s) => s.active)?.label;
   return (
-    <ol className="mt-3 flex items-center">
-      {steps.map((s, i) => (
-        <li key={s.label} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
-          <span className="flex shrink-0 items-center gap-2">
-            <span className={`flex h-6 w-6 items-center justify-center rounded-full font-sans text-xs ${s.done ? "bg-ink text-canvas" : s.active ? "border-2 border-ink font-medium text-ink" : "border border-line text-muted"}`}>
-              {s.done ? (
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12l5 5 9-9" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              ) : (
-                i + 1
-              )}
+    <div className="mt-3">
+      <ol className="flex items-center">
+        {steps.map((s, i) => (
+          <li key={s.label} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className={`flex h-6 w-6 items-center justify-center rounded-full font-sans text-xs ${s.done ? "bg-ink text-canvas" : s.active ? "border-2 border-ink font-medium text-ink" : "border border-line text-muted"}`}>
+                {s.done ? (
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12l5 5 9-9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                ) : (
+                  i + 1
+                )}
+              </span>
+              <span className={`hidden font-sans text-xs sm:inline ${s.active ? "font-medium text-ink" : s.done ? "text-ink-soft" : "text-muted"}`}>{s.label}</span>
             </span>
-            <span className={`hidden font-sans text-xs sm:inline ${s.active ? "font-medium text-ink" : s.done ? "text-ink-soft" : "text-muted"}`}>{s.label}</span>
-          </span>
-          {i < steps.length - 1 ? <span aria-hidden className={`mx-2 h-px flex-1 ${s.done ? "bg-ink" : "bg-line"}`} /> : null}
-        </li>
-      ))}
-    </ol>
+            {i < steps.length - 1 ? <span aria-hidden className={`mx-2 h-px flex-1 ${s.done ? "bg-ink" : "bg-line"}`} /> : null}
+          </li>
+        ))}
+      </ol>
+      {/* Mobiel: de actieve stapnaam op een eigen regel — inline liep de
+          verbindingslijn dwars door het label (te weinig ruimte op 390px). */}
+      {activeLabel ? <p className="mt-1.5 font-sans text-xs font-medium text-ink sm:hidden">{activeLabel}</p> : null}
+    </div>
   );
 }
 
@@ -94,6 +99,17 @@ function CheckoutForm() {
   const [notice, setNotice] = useState("");
   // Mobiel: inklapbaar besteloverzicht bóven het formulier (op lg staat het ernaast).
   const [summaryOpen, setSummaryOpen] = useState(false);
+  // Eén DeliveryOptions-instantie per viewport: twee tegelijk gemounte
+  // instanties deden dubbele estimate-POSTs en konden elkaars keuze terugzetten.
+  // null = nog niet gehydrateerd (render dan alleen de desktop-variant, CSS-verborgen).
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
   // SKU's die de voorraad-gate weigerde — markeren + in één klik verwijderbaar.
   const [unavailableSkus, setUnavailableSkus] = useState<string[]>([]);
   // Stappen-checkout: gegevens → betalen (één sectie per scherm, past op elke resolutie).
@@ -442,7 +458,11 @@ function CheckoutForm() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || t("common.error"));
-        setUnavailableSkus(Array.isArray(data.unavailableSkus) ? data.unavailableSkus.map(String) : []);
+        const skus = Array.isArray(data.unavailableSkus) ? data.unavailableSkus.map(String) : [];
+        setUnavailableSkus(skus);
+        // Mobiel: het overzicht staat standaard dicht — klap open zodat de
+        // rood-gemarkeerde regel(s) vindbaar zijn bij een voorraad-weigering.
+        if (skus.length) setSummaryOpen(true);
         return;
       }
       if (data.configured && data.checkoutUrl) {
@@ -484,7 +504,7 @@ function CheckoutForm() {
       {step === "gegevens" && prefill && !prefill.loggedIn ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-surface px-3 py-2 font-sans text-xs">
           <span className="text-ink-soft"><span className="font-medium text-ink">{t("checkout.existing_customer")}</span> {t("checkout.login_suggestion")}</span>
-          <Link href="/account/login?next=/afrekenen" className="btn-ghost !px-3 !py-1 whitespace-nowrap">{t("common.login")}</Link>
+          <Link href="/account/login?next=/afrekenen" className="btn-ghost !px-4 !py-2 whitespace-nowrap">{t("common.login")}</Link>
         </div>
       ) : null}
       {step === "gegevens" && prefill?.loggedIn ? (
@@ -518,7 +538,7 @@ function CheckoutForm() {
                   setBusiness(val);
                   if (!val) setForm((p) => ({ ...p, companyName: "", vatNumber: "" }));
                 }}
-                className={`px-4 py-1.5 font-sans text-sm transition-colors ${business === val ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
+                className={`px-4 py-2.5 font-sans text-sm transition-colors ${business === val ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
               >
                 {t(label)}
               </button>
@@ -564,7 +584,7 @@ function CheckoutForm() {
                 key={label}
                 type="button"
                 onClick={() => setPickupMode(val)}
-                className={`px-4 py-1.5 font-sans text-sm transition-colors ${pickupMode === val ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
+                className={`px-4 py-2.5 font-sans text-sm transition-colors ${pickupMode === val ? "bg-ink text-canvas" : "text-ink-soft hover:text-ink"}`}
               >
                 {t(label)}
               </button>
@@ -638,6 +658,26 @@ function CheckoutForm() {
             ) : null}
           </div>
 
+          {/* Mobiel: bezorgoptie + datum ín de stap zelf — in het (dichtgeklapte)
+              overzicht hierboven zou de klant de keuze anders nooit zien. Desktop
+              toont 'm in de zijkolom (hidden lg:block daar). */}
+          {/* empty:hidden — DeliveryOptions rendert null tot de schatting binnen
+              is; zonder dit stond er even een losse scheidingslijn. Alleen
+              mounten als we zeker mobiel zijn (isDesktop === false): CSS-hidden
+              zou een tweede fetchende instantie betekenen. */}
+          {!pickupMode && isDesktop === false ? (
+            <div className="mt-5 border-t border-line pt-4 empty:hidden lg:hidden">
+              <DeliveryOptions
+                items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                value={delivery}
+                onChange={(m, s) => {
+                  setDelivery(m);
+                  setExpressSurcharge(m === "express" ? s : expressSurcharge || s);
+                }}
+              />
+            </div>
+          ) : null}
+
           {error ? (
             <div role="alert" className="mt-4 rounded-card border border-danger/40 bg-danger/5 px-4 py-3 font-sans text-sm text-danger">{error}</div>
           ) : null}
@@ -676,6 +716,50 @@ function CheckoutForm() {
             </>
           ) : null}
 
+          {/* Mobiel: kortingscode/cadeaubon zichtbaar op de betaalstap — in het
+              dichtgeklapte overzicht bovenaan zou het veld anders onvindbaar zijn.
+              Desktop heeft het veld in de zijkolom (hidden lg:block daar). */}
+          <div className="mt-4 border-t border-line pt-4 lg:hidden">
+            {voucher ? (
+              <div className="flex items-center justify-between font-sans text-sm">
+                <span className="text-success">{t("checkout.discount_code")} {voucher.code} — {voucher.label}</span>
+                <button type="button" onClick={() => setVoucher(null)} className="-my-2 py-2 text-muted underline">{t("checkout.remove_code")}</button>
+              </div>
+            ) : null}
+            {giftcard ? (
+              <div className={`flex items-center justify-between font-sans text-sm ${voucher ? "mt-2" : ""}`}>
+                <span className="text-success">{t("checkout.giftcard_label")} {giftcard.code} — {t("checkout.giftcard_balance")} {formatEuro(giftcard.balanceCents)}</span>
+                <button type="button" onClick={() => setGiftcard(null)} className="-my-2 py-2 text-muted underline">{t("checkout.remove_code")}</button>
+              </div>
+            ) : null}
+            {!voucher || !giftcard ? (
+              <details className={voucher || giftcard ? "mt-3" : ""}>
+                <summary className="flex min-h-11 cursor-pointer list-none items-center font-sans text-sm text-ink underline underline-offset-4 [&::-webkit-details-marker]:hidden">
+                  {t("checkout.code_placeholder")}
+                </summary>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={codeInput}
+                    onChange={(e) => setCodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyCode();
+                      }
+                    }}
+                    placeholder={t("checkout.code_placeholder")}
+                    aria-label={t("checkout.code_placeholder")}
+                    className="w-full min-w-0 border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+                  />
+                  <button type="button" onClick={applyCode} disabled={codeBusy} className="btn-ghost !px-4 !py-2 whitespace-nowrap">
+                    {codeBusy ? "…" : t("common.apply")}
+                  </button>
+                </div>
+                {codeErr ? <p className="mt-1 font-sans text-xs text-danger">{codeErr}</p> : null}
+              </details>
+            ) : null}
+          </div>
+
           <label className="mt-3 flex items-start gap-2 font-sans text-sm">
             <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink" />
             <span className="text-ink-soft">{t("checkout.newsletter_opt_in")}</span>
@@ -707,14 +791,13 @@ function CheckoutForm() {
                 ? t("checkout.complete_with_giftcard")
                 : `${t("checkout.pay_securely")} ${formatEuro(payableCents)}`}
           </button>
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <FooterPayments />
-            <span className="font-sans text-xs text-muted">
-              {payableCents === 0
-                ? t("checkout.giftcard_covers_full")
-                : `${t("checkout.payment_via")} ${methods.find((m) => m.id === payMethod)?.description || "Mollie"} · ${t("checkout.payment_note")}`}
-            </span>
-          </div>
+          {/* Geen FooterPayments-strip hier: die chips zijn wit-op-wit buiten de
+              donkere footer, en de gekozen methode staat al in het betaalgrid. */}
+          <p className="mt-3 font-sans text-xs text-muted">
+            {payableCents === 0
+              ? t("checkout.giftcard_covers_full")
+              : `${t("checkout.payment_via")} ${methods.find((m) => m.id === payMethod)?.description || "Mollie"} · ${t("checkout.payment_note")}`}
+          </p>
           </>
           )}
         </form>
@@ -739,7 +822,9 @@ function CheckoutForm() {
           <div className={`border border-line p-4 ${summaryOpen ? "border-t-0" : "hidden"} lg:block lg:border-t`}>
             {/* Kop dubbelt op mobiel met de toggle-knop → alleen op desktop tonen. */}
             <p className="label-brand mb-3 hidden lg:block">{t("checkout.order_summary")}</p>
-            <ul className="hidden space-y-3 lg:block">
+            {/* Regelitems óók op mobiel: bij een voorraad-weigering moet de klant
+                het gemarkeerde artikel kunnen zien en verwijderen. */}
+            <ul className="space-y-3">
               {cart.lines.map((l) => {
                 const unavailable = unavailableSet.has(l.sku.toLowerCase());
                 return (
@@ -767,40 +852,52 @@ function CheckoutForm() {
                 );
               })}
             </ul>
-            <p className="font-sans text-sm text-ink-soft lg:hidden">{t("checkout.items_in_cart", { n: cart.lines.reduce((n, l) => n + l.qty, 0) })}</p>
-            <div className="mt-4 border-t border-line pt-4">
-              {pickupMode ? (
-                <div className="font-sans text-sm">
-                  <p className="font-medium text-ink">{t("checkout.receive_pickup")}</p>
-                  <p className="mt-1 text-ink-soft">{t("checkout.pickup_summary", { store: pickupStore || t("checkout.choose_store") })}</p>
-                </div>
-              ) : (
-                <DeliveryOptions
-                  items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
-                  value={delivery}
-                  onChange={(m, s) => {
-                    setDelivery(m);
-                    setExpressSurcharge(m === "express" ? s : expressSurcharge || s);
-                  }}
-                />
-              )}
-            </div>
-            <div className="mt-4 border-t border-line pt-4">
-              {/* Toegepaste codes */}
+            {/* Bezorgkeuze: op mobiel staat die ín stap 1 van het formulier —
+                deze desktop-instantie mount pas als we ZEKER desktop zijn
+                (=== true, niet tijdens de null-hydratiefase): anders vuurde de
+                pre-hydration-mount op mobiel alsnog een extra estimate-POST af.
+                Er gaat geen SSR-content verloren: de opties renderen sowieso
+                pas na de fetch. */}
+            {isDesktop === true ? (
+              <div className="mt-4 hidden border-t border-line pt-4 lg:block">
+                {pickupMode ? (
+                  <div className="font-sans text-sm">
+                    <p className="font-medium text-ink">{t("checkout.receive_pickup")}</p>
+                    <p className="mt-1 text-ink-soft">{t("checkout.pickup_summary", { store: pickupStore || t("checkout.choose_store") })}</p>
+                  </div>
+                ) : (
+                  <DeliveryOptions
+                    items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                    value={delivery}
+                    onChange={(m, s) => {
+                      setDelivery(m);
+                      setExpressSurcharge(m === "express" ? s : expressSurcharge || s);
+                    }}
+                  />
+                )}
+              </div>
+            ) : null}
+            {/* Kortingscode-blok: toegepaste codes + foutmelding zijn op ÁLLE
+                breedtes zichtbaar (de voucher-hervalidatie opent de mobiele
+                samenvatting en moet hier kunnen uitleggen waarom het totaal
+                veranderde). Alleen het invoerveld is desktop-only — op mobiel
+                zit dat als disclosure in stap 2. */}
+            <div className={`mt-4 border-t border-line pt-4 ${voucher || giftcard || codeErr ? "" : "hidden lg:block"}`}>
               {voucher ? (
                 <div className="flex items-center justify-between font-sans text-sm">
                   <span className="text-success">{t("checkout.discount_code")} {voucher.code} — {voucher.label}</span>
-                  <button type="button" onClick={() => setVoucher(null)} className="text-muted underline">{t("checkout.remove_code")}</button>
+                  <button type="button" onClick={() => setVoucher(null)} className="-my-2 py-2 text-muted underline">{t("checkout.remove_code")}</button>
                 </div>
               ) : null}
               {giftcard ? (
                 <div className={`flex items-center justify-between font-sans text-sm ${voucher ? "mt-2" : ""}`}>
                   <span className="text-success">{t("checkout.giftcard_label")} {giftcard.code} — {t("checkout.giftcard_balance")} {formatEuro(giftcard.balanceCents)}</span>
-                  <button type="button" onClick={() => setGiftcard(null)} className="text-muted underline">{t("checkout.remove_code")}</button>
+                  <button type="button" onClick={() => setGiftcard(null)} className="-my-2 py-2 text-muted underline">{t("checkout.remove_code")}</button>
                 </div>
               ) : null}
-              {/* Eén veld: kortingscode óf cadeaubon */}
-              <div className={voucher || giftcard ? "mt-3" : ""}>
+              {codeErr ? <p className={`font-sans text-xs text-danger ${voucher || giftcard ? "mt-2" : ""}`}>{codeErr}</p> : null}
+              {/* Eén veld: kortingscode óf cadeaubon (desktop; mobiel in stap 2) */}
+              <div className={`hidden lg:block ${voucher || giftcard || codeErr ? "mt-3" : ""}`}>
                 <div className="flex gap-2">
                   <input
                     value={codeInput}
@@ -819,7 +916,6 @@ function CheckoutForm() {
                     {codeBusy ? "…" : t("common.apply")}
                   </button>
                 </div>
-                {codeErr ? <p className="mt-1 font-sans text-xs text-danger">{codeErr}</p> : null}
               </div>
             </div>
             <dl className="mt-4 space-y-1.5 border-t border-line pt-4 font-sans text-sm">

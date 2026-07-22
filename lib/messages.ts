@@ -36,6 +36,14 @@ const nl: Dict = {
   "footer.newsletterCta": "Inschrijven",
   "delivery.beforeCutoff": "Voor 16:00 besteld, vandaag verzonden",
   "delivery.free": "Gratis verzending vanaf € 75",
+  // PLP: sorteer-opties + Sale-badge (bron voor de vertaal-cron; waren hardcoded).
+  "plp.sort.aanbevolen": "Aanbevolen",
+  "plp.sort.populair": "Populair",
+  "plp.sort.nieuw": "Nieuwste",
+  "plp.sort.prijs-op": "Prijs oplopend",
+  "plp.sort.prijs-af": "Prijs aflopend",
+  "plp.sort.naam": "Naam (A–Z)",
+  "plp.badge.sale": "Sale",
 };
 
 const en: Dict = {
@@ -69,6 +77,13 @@ const en: Dict = {
   // Topbar: zonder deze keys viel de EN-balk half terug op NL (mixed-language).
   "announcement.personalAdvice": "Personal advice in our 19 stores",
   "common.findStore": "find a store",
+  "plp.sort.aanbevolen": "Recommended",
+  "plp.sort.populair": "Popular",
+  "plp.sort.nieuw": "Newest",
+  "plp.sort.prijs-op": "Price: low to high",
+  "plp.sort.prijs-af": "Price: high to low",
+  "plp.sort.naam": "Name (A–Z)",
+  "plp.badge.sale": "Sale",
 };
 
 const de: Dict = {

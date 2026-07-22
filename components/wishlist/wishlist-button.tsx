@@ -42,7 +42,7 @@ export function WishlistButton({ handle, variant = "card", label }: Props) {
       }}
       aria-label={on ? t("wishlist.removeAriaLabel") : t("wishlist.addAriaLabel")}
       aria-pressed={on}
-      className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-canvas/90 text-ink shadow-card transition-colors hover:bg-canvas"
+      className="absolute right-2 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-canvas/90 text-ink shadow-card transition-colors hover:bg-canvas"
     >
       <Heart filled={on} />
     </button>
