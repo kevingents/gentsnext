@@ -1,19 +1,28 @@
 "use client";
 
 import Link from "next/link";
+import { useLocale, useT } from "@/components/i18n/locale-provider";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "@/components/i18n/locale-provider";
 
 type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: string };
 
 /**
  * "Vandaag afhalen in winkel X". Toont aantal winkels met voorraad voor de
  * gekozen maat; klik = volledige modal met ALLE winkels (voorraad/geen voorraad).
+ * Met `reserve` (handle+sku) kan de klant per winkel "reserveer om te passen":
+ * de voorraad wordt dan hard vastgehouden via de reserverings-rail.
  */
-export function ClickAndCollect({ branches }: { branches: Branch[] }) {
+export function ClickAndCollect({ branches, reserve }: { branches: Branch[]; reserve?: { handle: string; sku: string } }) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
+  // Reserveer-om-te-passen-flow binnen de modal.
+  const [selStore, setSelStore] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", phone: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState<{ store: string; validUntil: string | null } | null>(null);
   const available = branches.filter((b) => b.qty > 0);
   if (!available.length) return null;
   const openNow = available.filter((b) => b.openNow).length;
@@ -22,12 +31,41 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
     (a, b) => Number(b.openNow) - Number(a.openNow) || b.qty - a.qty
   );
 
+  async function submitReserve() {
+    if (!reserve || !selStore || busy) return;
+    setError("");
+    if (!form.name.trim()) return setError(t("reserve.error.name"));
+    if (!/.+@.+\..+/.test(form.email.trim())) return setError(t("reserve.error.email"));
+    setBusy(true);
+    try {
+      const r = await fetch("/api/reserveren", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle: reserve.handle, sku: reserve.sku, store: selStore, ...form }),
+      });
+      const d = await r.json();
+      if (d?.ok) setDone({ store: d.store || selStore, validUntil: d.validUntil || null });
+      else setError(String(d?.error || t("reserve.error.generic")));
+    } catch {
+      setError(t("reserve.error.generic"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="mt-3">
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            // Verse staat per opening: een eerdere bevestiging/fout mag een
+            // nieuwe reservering (bv. andere maat) niet blokkeren.
+            setDone(null);
+            setSelStore(null);
+            setError("");
+            setOpen(true);
+          }}
           className="flex w-full items-center justify-between border border-line bg-canvas px-4 py-3 text-left font-sans text-sm hover:border-ink"
         >
           <span className="flex items-center gap-2.5">
@@ -60,38 +98,113 @@ export function ClickAndCollect({ branches }: { branches: Branch[] }) {
                 {t("common.close")}
               </button>
             </div>
-            <p className="border-b border-line bg-surface px-5 py-3 font-sans text-xs text-ink-soft">
-              Reservering en ophaal volgt in de checkout-fase. Bel ondertussen direct
-              voor zekerheid.
-            </p>
-            <ul className="flex-1 divide-y divide-line overflow-y-auto">
-              {sorted.map((b) => {
-                const inStock = b.qty > 0;
-                return (
-                  <li key={b.store} className="flex items-center justify-between gap-3 px-5 py-3 font-sans text-sm">
-                    <span className="min-w-0">
-                      <span className="block truncate text-ink">{b.store}</span>
-                      {b.openLabel ? (
-                        <span className={`text-xs ${b.openNow ? "text-success" : "text-muted"}`}>{b.openLabel}</span>
+            {reserve && !done ? (
+              <p className="border-b border-line bg-surface px-5 py-3 font-sans text-xs text-ink-soft">{t("reserve.intro")}</p>
+            ) : null}
+            {done ? (
+              /* Bevestiging — vervangt de lijst zodat de klant niet dubbel reserveert. */
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <svg viewBox="0 0 24 24" className="h-10 w-10 text-success" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 12.5l2.5 2.5L16 9.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <p className="font-display text-xl font-light">{t("reserve.success.title")}</p>
+                <p className="font-sans text-sm text-ink-soft">
+                  {t("reserve.success.body", { store: done.store })}
+                  {done.validUntil
+                    ? ` ${t("reserve.success.until", { date: new Date(done.validUntil).toLocaleDateString(locale === "nl" ? "nl-NL" : locale, { day: "numeric", month: "long" }) })}`
+                    : ""}
+                </p>
+                <button type="button" onClick={() => setOpen(false)} className="btn-primary mt-2">
+                  {t("common.close")}
+                </button>
+              </div>
+            ) : (
+              <ul className="flex-1 divide-y divide-line overflow-y-auto">
+                {sorted.map((b) => {
+                  const inStock = b.qty > 0;
+                  const selected = selStore === b.store;
+                  return (
+                    <li key={b.store} className="px-5 py-3 font-sans text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block truncate text-ink">{b.store}</span>
+                          {b.openLabel ? (
+                            <span className={`text-xs ${b.openNow ? "text-success" : "text-muted"}`}>{b.openLabel}</span>
+                          ) : null}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-3">
+                          {inStock ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-success">
+                              <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+                              {b.qty > 5 ? t("clickCollect.modal.inStock") : t("clickCollect.modal.left", { count: b.qty })}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted">{t("clickCollect.modal.outOfStock")}</span>
+                          )}
+                          {reserve && inStock ? (
+                            <button
+                              type="button"
+                              onClick={() => { setSelStore(selected ? null : b.store); setError(""); }}
+                              aria-expanded={selected}
+                              className={`min-h-11 whitespace-nowrap font-sans text-xs underline underline-offset-4 ${selected ? "font-medium text-ink" : "text-ink"}`}
+                            >
+                              {t("reserve.cta")}
+                            </button>
+                          ) : null}
+                        </span>
+                      </div>
+                      {selected ? (
+                        <div className="mt-3 border border-line bg-surface p-3">
+                          <p className="font-sans text-xs text-ink-soft">{t("reserve.formIntro", { store: b.store })}</p>
+                          <div className="mt-2 grid gap-2">
+                            <input
+                              value={form.name}
+                              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                              placeholder={t("reserve.name")}
+                              aria-label={t("reserve.name")}
+                              autoComplete="name"
+                              className="w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                            />
+                            <input
+                              type="email"
+                              value={form.email}
+                              onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                              placeholder={t("reserve.email")}
+                              aria-label={t("reserve.email")}
+                              autoComplete="email"
+                              inputMode="email"
+                              className="w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                            />
+                            <input
+                              type="tel"
+                              value={form.phone}
+                              onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                              placeholder={t("reserve.phone")}
+                              aria-label={t("reserve.phone")}
+                              autoComplete="tel"
+                              inputMode="tel"
+                              className="w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+                            />
+                          </div>
+                          {error ? <p role="alert" className="mt-2 font-sans text-xs text-danger">{error}</p> : null}
+                          <button type="button" onClick={submitReserve} disabled={busy} className="btn-primary mt-3 w-full disabled:opacity-60">
+                            {busy ? "…" : t("reserve.submit")}
+                          </button>
+                        </div>
                       ) : null}
-                    </span>
-                    {inStock ? (
-                      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-success">
-                        <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
-                        {b.qty > 5 ? t("clickCollect.modal.inStock") : `Nog ${b.qty}`}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-muted">{t("clickCollect.modal.outOfStock")}</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="border-t border-line p-5">
-              <Link href="/pages/winkels" onClick={() => setOpen(false)} className="btn-ghost w-full">
-                Adressen & openingstijden
-              </Link>
-            </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {!done ? (
+              <div className="border-t border-line p-5">
+                <Link href="/pages/winkels" onClick={() => setOpen(false)} className="btn-ghost w-full">
+                  {t("clickCollect.modal.addresses")}
+                </Link>
+              </div>
+            ) : null}
           </div>
         </div>,
         document.body,
