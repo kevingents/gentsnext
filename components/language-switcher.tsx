@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, splitLocale, localizedPath, type Locale } from "@/lib/i18n";
 
-/** Taalkeuze — zet de cookie en navigeert naar de gelokaliseerde URL (fase 2). */
-export function LanguageSwitcher({ current }: { current: Locale }) {
+/** Taalkeuze — zet de cookie en navigeert naar de gelokaliseerde URL (fase 2).
+ *  `variant="inline"` (mobiele menu-drawer): één rij taalcodes i.p.v. dropdown. */
+export function LanguageSwitcher({ current, variant = "dropdown" }: { current: Locale; variant?: "dropdown" | "inline" }) {
   const [open, setOpen] = useState(false);
 
   function choose(loc: Locale) {
@@ -14,6 +15,27 @@ export function LanguageSwitcher({ current }: { current: Locale }) {
     // Strip het huidige prefix en navigeer naar de gekozen taal-URL.
     const { path } = splitLocale(window.location.pathname);
     window.location.href = localizedPath(path, loc) + window.location.search + window.location.hash;
+  }
+
+  if (variant === "inline") {
+    return (
+      <div className="flex items-center gap-1" role="group" aria-label={`${current.toUpperCase()} — taal wijzigen`}>
+        {LOCALES.map((loc) => (
+          <button
+            key={loc}
+            type="button"
+            onClick={() => choose(loc)}
+            aria-pressed={loc === current}
+            aria-label={LOCALE_LABELS[loc]}
+            className={`flex h-11 min-w-11 items-center justify-center px-1 font-sans text-xs uppercase tracking-wide ${
+              loc === current ? "font-semibold text-ink underline underline-offset-4" : "text-ink-soft"
+            }`}
+          >
+            {loc}
+          </button>
+        ))}
+      </div>
+    );
   }
 
   return (

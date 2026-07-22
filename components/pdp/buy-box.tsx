@@ -37,17 +37,6 @@ function BellIcon({ className }: { className?: string }) {
   );
 }
 
-/** Vrachtwagen — bezorging/verzending. */
-function TruckIcon({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M3 6.5h11v9H3zM14 9.5h3.6L21 13v2.5h-7z" />
-      <circle cx="7" cy="17.5" r="1.6" />
-      <circle cx="17.5" cy="17.5" r="1.6" />
-    </svg>
-  );
-}
-
 /** Winkelpui — omnichannel-voorraad (19 winkels). */
 function StoreIcon({ className }: { className?: string }) {
   return (
@@ -375,17 +364,18 @@ export function BuyBox({
       </div>
 
       {!allSoldOut ? (
-        <>
-          <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
-          {freeShipThresholdCents ? (
-            <p className="mt-2 flex items-center gap-1.5 font-sans text-xs text-ink-soft">
-              <TruckIcon className="h-3.5 w-3.5 shrink-0 text-ink" />
-              {priceCents >= freeShipThresholdCents
+        <DeliveryPromise
+          promise={deliveryPromise}
+          note={deliveryNote}
+          cutoffHour={cutoffHour}
+          extra={
+            freeShipThresholdCents
+              ? priceCents >= freeShipThresholdCents
                 ? t("pdp.freeShip.now")
-                : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })}
-            </p>
-          ) : null}
-        </>
+                : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })
+              : null
+          }
+        />
       ) : null}
 
       {/* Bestelknop + bewaren — of, als alles uitverkocht is, de mail-me-blok. */}

@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function Accordion({
   items,
 }: {
   items: { title: string; content: React.ReactNode }[];
 }) {
-  const [open, setOpen] = useState<number | null>(0);
+  // Mobiel: alles dicht (rustiger, korter scrollen); desktop: eerste item open.
+  // SSR rendert dicht; op desktop klapt het eerste item na hydration open.
+  const [open, setOpen] = useState<number | null>(null);
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) setOpen(0);
+  }, []);
   return (
     <div className="border-t border-line">
       {items.map((item, i) => {
@@ -25,7 +30,10 @@ export function Accordion({
                 {isOpen ? "–" : "+"}
               </span>
             </button>
-            {isOpen ? <div className="pb-5">{item.content}</div> : null}
+            {/* Dicht = CSS-verborgen, NIET conditioneel gerenderd: de inhoud
+                (productbeschrijving, FAQ) moet in de server-HTML staan voor
+                Google's mobile-first indexering. */}
+            <div className={isOpen ? "pb-5" : "hidden"}>{item.content}</div>
           </div>
         );
       })}

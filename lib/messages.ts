@@ -66,6 +66,9 @@ const en: Dict = {
   "footer.newsletterCta": "Subscribe",
   "delivery.beforeCutoff": "Order before 4 PM, shipped today",
   "delivery.free": "Free shipping from € 75",
+  // Topbar: zonder deze keys viel de EN-balk half terug op NL (mixed-language).
+  "announcement.personalAdvice": "Personal advice in our 19 stores",
+  "common.findStore": "find a store",
 };
 
 const de: Dict = {
