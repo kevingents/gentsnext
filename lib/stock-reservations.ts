@@ -47,20 +47,57 @@ export async function reservedBySku(skus: string[]): Promise<Map<string, number>
 }
 
 /**
+ * Actieve (niet-verlopen) voorraad-holds in fysieke filialen per (locatie, sku):
+ * onbetaalde reserveringen (kassa "vraag aan", reserveer-om-te-passen) en
+ * onbetaalde click&collect-checkouts. Die stuks liggen apart en horen niet als
+ * beschikbaar getoond te worden. Betaalde orders zitten NIET hierin (hun hold is
+ * vrijgegeven zodra het fulfillment-plan de reservering overneemt) — dus geen
+ * dubbeltelling met webReservedAllLocations.
+ */
+async function storeHoldsByLocationKey(skus: string[]): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
+  const clean = [...new Set(skus.map((s) => String(s || "").trim().toLowerCase()).filter(Boolean))];
+  if (!clean.length) return out;
+  try {
+    const db = getDb();
+    const rows = await db.execute<{ location: string; stock_key: string; qty: number }>(sql`
+      select location, stock_key, sum(qty)::int as qty
+      from web_stock_holds
+      where expires_at > now() and location <> 'online'
+        and stock_key in (${sql.join(clean.map((k) => sql`${k}`), sql`, `)})
+      group by location, stock_key
+    `);
+    for (const r of rows.rows) {
+      let m = out.get(r.location);
+      if (!m) {
+        m = new Map();
+        out.set(r.location, m);
+      }
+      m.set(r.stock_key, Math.max(0, Number(r.qty) || 0));
+    }
+  } catch {
+    // Best-effort: liever bruto tonen dan de PDP platleggen.
+  }
+  return out;
+}
+
+/**
  * Beschikbaar per artikel voor klant-weergave (PDP/maat), uit de gedeelde core:
- *   per locatie: net = SRS-baseline + kassa/pos-delta − web-reservering
+ *   per locatie: net = SRS-baseline + kassa/pos-delta − web-reservering − holds
  * total = som over alle locaties; online = som over de online-filialen.
- * Zo ziet de webshop óók de winkelverkopen (pos) en z'n eigen web-reserveringen —
- * één waarheid met de kassa, geen dubbelverkoop. byBranch.qty wordt netto.
+ * Zo ziet de webshop óók de winkelverkopen (pos), z'n eigen web-reserveringen én
+ * apart-gelegde stuks (reserveer-om-te-passen) — één waarheid met de kassa,
+ * geen dubbelverkoop. byBranch.qty wordt netto.
  */
 export async function availableForSkus(skus: string[]): Promise<Map<string, SkuStock>> {
   const clean = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];
   const out = new Map<string, SkuStock>();
   if (!clean.length) return out;
-  const [gross, posDelta, webRes, settings] = await Promise.all([
+  const [gross, posDelta, webRes, holds, settings] = await Promise.all([
     stockForSkus(clean),
     posDeltaByLocationKey(clean),
     webReservedAllLocations(),
+    storeHoldsByLocationKey(clean),
     getSettings(),
   ]);
   const online = onlineBranchSet(); // Set<branchId> of null = alle filialen
@@ -72,9 +109,10 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
       const locL = (b.store || "").toLowerCase();
       const pd = posDelta.get(locL)?.get(keyL) || 0; // negatief = kassa-verkoop
       const wr = webRes.get(locL)?.get(keyL) || 0; // door web gereserveerd
+      const held = holds.get(locL)?.get(keyL) || 0; // apart-gelegd (reservering/c&c)
       // Voorraad-veiligheid (safety stock) per filiaal: de laatste N stuks blijven
       // buiten verkoop/reservering (buffer tegen miteltelling/displaystuk).
-      const net = Math.max(0, b.qty + pd - wr - safetyStockFor(b.branchId, settings));
+      const net = Math.max(0, b.qty + pd - wr - held - safetyStockFor(b.branchId, settings));
       total += net;
       if (!online || online.has(b.branchId)) onlineQty += net;
       return { ...b, qty: net };

@@ -323,7 +323,9 @@ export async function sendReserveringEmail(input: {
   to: string; name?: string; store: string; validUntil?: Date | string | null;
   lines: { title?: string; sku?: string; size?: string; color?: string; qty?: number }[]; payToken?: string;
 }): Promise<boolean> {
-  const hi = input.name ? `Hoi ${input.name},` : "Hoi,";
+  // Naam escapen: sinds reserveer-om-te-passen is dit veld publiek beïnvloedbaar
+  // (HTML-injectie in een gebrande mail = phishing-kanaal).
+  const hi = input.name ? `Hoi ${String(input.name).replace(/</g, "&lt;")},` : "Hoi,";
   const tot = input.validUntil ? new Date(input.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) : "";
   const itemsHtml = (input.lines || []).map((l) => `
     <tr><td style="padding:10px 0;border-bottom:1px solid #EAEAEA">
@@ -346,6 +348,45 @@ export async function sendReserveringEmail(input: {
     </td></tr>
     ${cta}`;
   return sendEmail(input.to, `We houden je reservering vast in ${input.store}`, shell(inner));
+}
+
+/** Winkel-notificatie: klant reserveerde via de site om te passen (intern → NL).
+ *  Klant als reply-to zodat de winkel direct kan reageren. */
+export async function sendReservationStoreNotify(n: {
+  to: string; store: string; customerName: string; customerEmail: string; customerPhone: string;
+  title: string; size: string; color: string; validUntil: Date | string | null;
+}): Promise<boolean> {
+  if (!emailConfigured() || !n.to) return false;
+  const tot = n.validUntil ? new Date(n.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long" }) : "";
+  const lines = [
+    `Nieuwe pas-reservering via gents.nl voor ${n.store}:`,
+    "",
+    `Artikel: ${n.title}`,
+    [n.color, n.size && `maat ${n.size}`].filter(Boolean).join(" · "),
+    "",
+    `Klant: ${n.customerName}`,
+    `E-mail: ${n.customerEmail}`,
+    n.customerPhone ? `Telefoon: ${n.customerPhone}` : "",
+    "",
+    `Leg het artikel apart — de voorraad is al vastgehouden${tot ? ` t/m ${tot}` : ""}.`,
+    "De reservering staat ook in het kassa-reserveringenoverzicht.",
+  ].filter(Boolean);
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM,
+      to: [n.to],
+      reply_to: n.customerEmail || undefined,
+      subject: `Pas-reservering — ${n.title}${n.size ? ` (maat ${n.size})` : ""}`,
+      text: lines.join("\n"),
+    }),
+  });
+  if (!res.ok) {
+    console.error("[email] pas-reservering winkelnotificatie Resend-fout:", res.status, (await res.text()).slice(0, 200));
+    return false;
+  }
+  return true;
 }
 
 /** Double-opt-in: bevestigingsmail voor de nieuwsbrief. */

@@ -44,6 +44,22 @@ const nl: Dict = {
   "plp.sort.prijs-af": "Prijs aflopend",
   "plp.sort.naam": "Naam (A–Z)",
   "plp.badge.sale": "Sale",
+  // Reserveer-om-te-passen (PDP Click&Collect-modal)
+  "reserve.intro": "Gratis en vrijblijvend: reserveer om te passen — we leggen 'm voor je klaar in de winkel.",
+  "reserve.cta": "Leg voor mij klaar",
+  "reserve.formIntro": "Reserveren om te passen bij {store} — we houden 'm voor je vast en je hoeft niets te betalen.",
+  "reserve.name": "Naam",
+  "reserve.email": "E-mailadres",
+  "reserve.phone": "Telefoon (optioneel)",
+  "reserve.submit": "Reserveer om te passen",
+  "reserve.success.title": "Gereserveerd!",
+  "reserve.success.body": "We leggen 'm voor je klaar bij {store}. Je ontvangt een bevestiging per e-mail.",
+  "reserve.success.until": "We houden 'm vast t/m {date}.",
+  "reserve.error.name": "Vul je naam in.",
+  "reserve.error.email": "Vul een geldig e-mailadres in.",
+  "reserve.error.generic": "Reserveren lukte net niet — probeer het opnieuw of bel de winkel.",
+  "clickCollect.modal.left": "Nog {count}",
+  "clickCollect.modal.addresses": "Adressen & openingstijden",
 };
 
 const en: Dict = {
@@ -84,6 +100,21 @@ const en: Dict = {
   "plp.sort.prijs-af": "Price: high to low",
   "plp.sort.naam": "Name (A–Z)",
   "plp.badge.sale": "Sale",
+  "reserve.intro": "Free and without obligation: reserve to try on — we'll set it aside for you in store.",
+  "reserve.cta": "Set aside for me",
+  "reserve.formIntro": "Reserve to try on at {store} — we'll hold it for you, nothing to pay now.",
+  "reserve.name": "Name",
+  "reserve.email": "Email address",
+  "reserve.phone": "Phone (optional)",
+  "reserve.submit": "Reserve to try on",
+  "reserve.success.title": "Reserved!",
+  "reserve.success.body": "We'll set it aside for you at {store}. You'll receive a confirmation by email.",
+  "reserve.success.until": "We'll hold it until {date}.",
+  "reserve.error.name": "Please enter your name.",
+  "reserve.error.email": "Please enter a valid email address.",
+  "reserve.error.generic": "The reservation didn't go through — please try again or call the store.",
+  "clickCollect.modal.left": "{count} left",
+  "clickCollect.modal.addresses": "Addresses & opening hours",
 };
 
 const de: Dict = {

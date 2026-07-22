@@ -420,9 +420,16 @@ export function BuyBox({
         </>
       )}
 
-      {/* Ophalen in de winkel — secundaire optie, ónder de bestelknop */}
+      {/* Ophalen in de winkel — secundaire optie, ónder de bestelknop. Met een
+          gekozen maat (sku) kan de klant er ook "reserveer om te passen". */}
       {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
-        <ClickAndCollect branches={selectedSize.branches} />
+        <ClickAndCollect
+          // key per sku: maatwissel = verse component-staat (geen oude
+          // bevestiging/fout van een andere maat).
+          key={selectedSize.sku || selectedSize.size}
+          branches={selectedSize.branches}
+          reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
+        />
       ) : null}
 
       {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is
