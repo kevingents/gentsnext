@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useT } from "@/components/i18n/locale-provider";
 import { useCart } from "@/components/cart/cart-context";
 import { CartSuggestions } from "@/components/cart/cart-suggestions";
@@ -18,6 +18,16 @@ export function AddedToCartToast() {
   const t = useT();
   const cart = useCart();
   const added = cart.added;
+  // Cross-sell alleen mounten op ≥sm: CSS-verbergen liet de suggestie-fetch op
+  // mobiel gewoon doorlopen voor een rail die daar nooit getoond wordt.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const onChange = () => setWide(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     if (!added) return;
@@ -62,13 +72,18 @@ export function AddedToCartToast() {
           <p className="shrink-0 font-sans text-sm text-ink">{formatEuro(l.priceCents)}</p>
         </div>
 
-        <CartSuggestions
-          hoofdgroepen={[l.hoofdgroep].filter(Boolean) as string[]}
-          excludeHandles={[l.productHandle]}
-          onNavigate={cart.dismissAdded}
-          title={t("cart.added.suggestions")}
-          className="mt-4 border-t border-line pt-4"
-        />
+        {/* Cross-sell alleen op ≥sm — én alleen dan gemount (geen verborgen
+            fetch op mobiel); op mobiel staat dezelfde rail al in de drawer en
+            maakte de bevestiging een heel scherm hoog. */}
+        {wide ? (
+          <CartSuggestions
+            hoofdgroepen={[l.hoofdgroep].filter(Boolean) as string[]}
+            excludeHandles={[l.productHandle]}
+            onNavigate={cart.dismissAdded}
+            title={t("cart.added.suggestions")}
+            className="mt-4 border-t border-line pt-4"
+          />
+        ) : null}
 
         <div className="mt-4 grid gap-2">
           <button

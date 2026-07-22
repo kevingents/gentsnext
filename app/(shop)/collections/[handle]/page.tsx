@@ -102,12 +102,14 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         {" / "}
         <span className="text-ink">{collection.title}</span>
       </nav>
-      <div className="mt-6 border-b border-line pb-6">
-        <p className="label-brand">{t("collection.header.eyebrow")}</p>
-        <h1 className="mt-2 text-display-md">{collection.title}</h1>
+      {/* Mobiel compacter: eyebrow weg, en de (SEO-)beschrijving pas ónder het
+          grid — vol uitgerold duwde die de producten van het scherm. */}
+      <div className="mt-4 border-b border-line pb-4 sm:mt-6 sm:pb-6">
+        <p className="label-brand hidden sm:block">{t("collection.header.eyebrow")}</p>
+        <h1 className="text-display-md sm:mt-2">{collection.title}</h1>
         {collection.descriptionHtml ? (
           <div
-            className="mt-2 max-w-2xl font-sans text-sm text-ink-soft"
+            className="mt-2 hidden max-w-2xl font-sans text-sm text-ink-soft sm:block"
             dangerouslySetInnerHTML={{ __html: collection.descriptionHtml }}
           />
         ) : null}
@@ -121,11 +123,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
 
         {/* Grid */}
         <div>
+          {/* Mobiel geen losse sorteer-rij — sorteren zit in de filter-drawer. */}
           <div className="mb-6 hidden items-center justify-between lg:flex">
             <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
-            <SortSelect value={sel.sort} />
-          </div>
-          <div className="mb-6 lg:hidden">
             <SortSelect value={sel.sort} />
           </div>
 
@@ -147,7 +147,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           {totalPages > 1 ? (
             <nav className="mt-12 flex items-center justify-center gap-4 font-sans text-sm" aria-label={t("collection.pagination.aria")}>
               {sel.page > 1 ? (
-                <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page - 1)}>
+                <Link className="btn-ghost !px-4 !py-3" href={pageHref(sel.page - 1)}>
                   {t("collection.pagination.previous")}
                 </Link>
               ) : null}
@@ -155,11 +155,20 @@ export default async function CollectionPage({ params, searchParams }: Props) {
                 {t("collection.pagination.pageLabel")} {sel.page} {t("collection.pagination.of")} {totalPages}
               </span>
               {sel.page < totalPages ? (
-                <Link className="btn-ghost !px-4 !py-2" href={pageHref(sel.page + 1)}>
+                <Link className="btn-ghost !px-4 !py-3" href={pageHref(sel.page + 1)}>
                   {t("collection.pagination.next")}
                 </Link>
               ) : null}
             </nav>
+          ) : null}
+
+          {/* Mobiel: de collectie-beschrijving ónder de producten (boven het grid
+              duwde die alles weg; de tekst blijft zo wel vindbaar + indexeerbaar). */}
+          {collection.descriptionHtml ? (
+            <div
+              className="mt-10 border-t border-line pt-6 font-sans text-sm text-ink-soft sm:hidden"
+              dangerouslySetInnerHTML={{ __html: collection.descriptionHtml }}
+            />
           ) : null}
         </div>
       </div>

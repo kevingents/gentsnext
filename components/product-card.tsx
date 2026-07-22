@@ -17,7 +17,7 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
   return (
     <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
       {product.hasSale ? (
-        <ProductCardBadge label="Sale" tone="sale" />
+        <ProductCardBadge label={t("plp.badge.sale")} tone="sale" />
       ) : product.lowStock ? (
         <ProductCardBadge label={t("plp.badge.lastItems")} tone="sale" />
       ) : product.isNew ? (
@@ -58,7 +58,9 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
         ) : null}
       </div>
       <div className="flex flex-col gap-0.5">
-        {product.vendor ? (
+        {/* Eigen merk niet op elke kaart herhalen — dat is ruis; alleen externe
+            merken (bv. een gastlabel) zijn het vermelden waard. */}
+        {product.vendor && product.vendor.toUpperCase() !== "GENTS" ? (
           <p className="label-brand !text-[0.62rem]">{product.vendor}</p>
         ) : null}
         <h3 className="font-sans text-sm text-ink">{product.title}</h3>
