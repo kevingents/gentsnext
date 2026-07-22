@@ -239,7 +239,15 @@ export async function getSessionCustomer() {
     .select({ customer: customers })
     .from(customerSessions)
     .innerJoin(customers, eq(customers.id, customerSessions.customerId))
-    .where(and(eq(customerSessions.tokenHash, sha256(raw)), eq(customerSessions.kind, "session")))
+    .where(
+      and(
+        eq(customerSessions.tokenHash, sha256(raw)),
+        eq(customerSessions.kind, "session"),
+        // Server-side expiry: de cookie verloopt client-side (maxAge), maar een
+        // bewaard raw token mag na de 60 dagen ook hier niet meer valideren.
+        sql`${customerSessions.expiresAt} > now()`,
+      ),
+    )
     .limit(1);
   const row = rows[0];
   if (!row) return null;

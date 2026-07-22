@@ -43,12 +43,18 @@ export async function GET(req: Request) {
     );
     const expired = before.rows[0] ?? { n: 0, q: 0 };
     await sweepExpiredHolds();
+    // Verlopen klant-sessies/magic-tokens opruimen — getSessionCustomer weigert ze
+    // al (expiry-check in de query), dit houdt alleen de tabel klein.
+    const sessions = await db.execute<{ n: number }>(
+      sql`with gone as (delete from customer_sessions where expires_at < now() returning 1) select count(*)::int n from gone`,
+    );
     // Fase 0: teller herijken op de werkelijke holds + drift loggen (nulmeting).
     const reconcile = await reconcileReservationCounters();
     return NextResponse.json({
       ok: true,
       sweptHolds: expired.n,
       sweptQty: expired.q,
+      sweptSessions: sessions.rows[0]?.n ?? 0,
       reconcile: {
         checked: reconcile.checkedRows,
         drifted: reconcile.driftedRows,
