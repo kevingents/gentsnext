@@ -40,6 +40,24 @@ export async function ReviewsSection({
   reviews: PublicReview[];
 }) {
   const locale = await getLocale();
+
+  // Nog helemaal geen reviews → één compacte regel + knop i.p.v. een lege
+  // twee-koloms sectie met twee keer dezelfde "nog geen reviews"-melding.
+  if (!summary && !reviews.length) {
+    return (
+      <section id="reviews" className="mt-20 scroll-mt-24 border-t border-line pt-12">
+        <p className="label-brand">Reviews</p>
+        <h2 className="mt-2 text-display-md">Wat klanten zeggen</h2>
+        <p className="mt-4 max-w-prose font-sans text-sm text-ink-soft">
+          Er zijn nog geen reviews voor dit artikel. Deel als eerste je ervaring.
+        </p>
+        <div className="mt-5">
+          <WriteReview handle={handle} />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="reviews" className="mt-20 scroll-mt-24 border-t border-line pt-12">
       <p className="label-brand">Reviews</p>

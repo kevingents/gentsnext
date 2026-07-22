@@ -46,29 +46,18 @@ function cutoffSuffix(now: Date, cutoffHour: number, t: TFn): string {
     : t("delivery.cutoffTomorrow", { hour: cutoffHour });
 }
 
-/** Live aftel-tekst tot de cutoff, voor urgentie ("bestel binnen 2u 14m"). */
-function countdownLabel(now: Date, cutoffHour: number, t: TFn): string | null {
-  const day = now.getDay();
-  if (day === 0 || day === 6) return null; // weekend → geen vandaag-verzending
-  const cutoff = new Date(now);
-  cutoff.setHours(cutoffHour, 0, 0, 0);
-  const ms = cutoff.getTime() - now.getTime();
-  if (ms <= 0) return null;
-  const mins = Math.floor(ms / 60000);
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const remaining = h > 0 ? t("delivery.countdown.hoursMinutes", { hours: h, minutes: m }) : t("delivery.countdown.minutes", { minutes: m });
-  return t("delivery.countdownLabel", { remaining });
-}
-
 export function DeliveryPromise({
   promise,
   note,
   cutoffHour = 16,
+  extra,
 }: {
   promise?: string | null;
   note?: string | null;
   cutoffHour?: number;
+  /** Extra rustige regel in hetzelfde blok (bv. "Gratis verzending") — voorkomt
+   *  losse info-regels onder elkaar op mobiel. */
+  extra?: string | null;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -81,28 +70,25 @@ export function DeliveryPromise({
 
   // Eerste render (SSR/hydration): toon in elk geval de server-belofte.
   const headline = promise || (now ? nextDeliveryLabel(now, t, INTL_TAG[locale]) : null);
-  if (!headline) return null;
+  // Zonder headline maar mét extra ("Gratis verzending") tóch renderen — anders
+  // staat die regel zonder JS/zonder server-belofte nergens in de HTML.
+  if (!headline && !extra) return null;
 
-  const countdown = now ? countdownLabel(now, cutoffHour, t) : null;
+  // Bewust GEEN rode aftelteller meer: die herhaalde de headline ("voor 16:00
+  // besteld…") in schreeuwerig rood en maakte de PDP druk. Eén kalme belofte.
+  const sub = [note, !promise && now ? cutoffSuffix(now, cutoffHour, t) : null, extra]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="mt-6 border-y border-line py-3">
-      <p className="flex items-center gap-1.5 font-sans text-sm">
-        <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0 text-success"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
-        <span className="font-medium">{headline}</span>
-      </p>
-      {note ? <p className="mt-1 font-sans text-xs text-muted">{note}</p> : null}
-      {countdown ? (
-        <p className="mt-1 flex items-center gap-1.5 font-sans text-xs font-medium text-danger">
-          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-            <circle cx="12" cy="13" r="8" />
-            <path d="M12 9v4l2.5 2.5M9 2h6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {countdown}
+      {headline ? (
+        <p className="flex items-center gap-1.5 font-sans text-sm">
+          <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0 text-success"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+          <span className="font-medium">{headline}</span>
         </p>
-      ) : !promise && now ? (
-        <p className="mt-1 font-sans text-xs text-muted">{cutoffSuffix(now, cutoffHour, t)}</p>
       ) : null}
+      {sub ? <p className={`${headline ? "mt-1 " : ""}font-sans text-xs text-muted`}>{sub}</p> : null}
     </div>
   );
 }

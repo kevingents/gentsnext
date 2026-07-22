@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MenuItem } from "@/lib/main-menu";
-import { useT } from "@/components/i18n/locale-provider";
+import { useLocale, useT } from "@/components/i18n/locale-provider";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 /** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
 export function MegaMenuBar({ items }: { items: MenuItem[] }) {
@@ -132,6 +133,7 @@ export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
 
 function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -238,9 +240,16 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
             );
           })}
         </ul>
+        {/* Voetblok: wat op mobiel uit de header is gehaald (account, favorieten,
+            taal) + service-links. Zo blijft de balk zelf minimaal. */}
         <div className="border-t border-line px-5 py-4">
+          <Link href="/account" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("common.account")}</Link>
+          <Link href="/favorieten" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("common.wishlist")}</Link>
           <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.stores")}</Link>
           <Link href="/maatadvies" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.sizeAdvice")}</Link>
+          <div className="mt-2 border-t border-line/60 pt-2">
+            <LanguageSwitcher current={locale} variant="inline" />
+          </div>
         </div>
       </div>
     </div>

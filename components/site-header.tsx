@@ -63,15 +63,21 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
           >
             Winkels
           </Link>
-          <LanguageSwitcher current={locale} />
+          {/* Mobiel bewust minimaal (à la MR MARVIS): hamburger · logo · zoeken ·
+              tas. Taal, account en favorieten staan daar in de menu-drawer. */}
+          <div className="hidden lg:block">
+            <LanguageSwitcher current={locale} />
+          </div>
           <SearchTrigger />
-          <Link href="/account" aria-label="Mijn account" className="-mx-2 flex h-11 w-11 items-center justify-center text-ink-soft transition-colors hover:text-ink">
+          <Link href="/account" aria-label="Mijn account" className="-mx-2 hidden h-11 w-11 items-center justify-center text-ink-soft transition-colors hover:text-ink lg:flex">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
               <circle cx="12" cy="8" r="4" />
               <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />
             </svg>
           </Link>
-          <WishlistLink />
+          <div className="hidden lg:block">
+            <WishlistLink />
+          </div>
           <CartButton />
         </div>
       </div>

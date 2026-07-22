@@ -66,11 +66,11 @@ const SPEC_LABELS: [key: string, msgKey: string][] = [
   // Geen rauwe 'wasvoorschrift' hier — dat staat schoon (SVG-iconen) onder Onderhoud.
 ];
 
+// Bewust maar 2 regels: "persoonlijk advies" staat al in de topbar en "veilig
+// betalen" al als badge-rij onder de bestelknop — dubbelingen maakten de PDP druk.
 const TRUST_KEYS = [
   "pdp.trust_return",
   "pdp.trust_alteration",
-  "pdp.trust_advice",
-  "pdp.trust_payment",
 ];
 
 function stripHtml(html: string): string {
@@ -515,10 +515,17 @@ export default async function ProductPage({ params }: Props) {
         <section className="mt-20">
           <p className="label-brand">{t("pdp.lifestyle.eyebrow")}</p>
           <h2 className="mt-2 text-display-md">{t("pdp.lifestyle.title")}</h2>
-          <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* Mobiel: swipe-rail (1 beeld in beeld) i.p.v. 3 gestapelde full-width
+              beelden — scheelt ~2 schermen scrollen. Desktop: 3-koloms grid. */}
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label={t("pdp.lifestyle.title")}
+            className="mt-8 flex snap-x snap-mandatory gap-3 overflow-x-auto sm:grid sm:grid-cols-3 sm:overflow-visible"
+          >
             {[product.lifestyleImageUrl, product.lifestyleImageUrl2, product.lifestyleImageUrl3].filter(Boolean).map((src, i) => (
-              <div key={i} className="relative aspect-[2/3] overflow-hidden rounded-card bg-surface">
-                <Image src={src} alt={product.lifestyleImageAlt || product.title} fill sizes="(max-width: 768px) 100vw, 30vw" className="object-cover" />
+              <div key={i} className="relative aspect-[2/3] w-[80%] shrink-0 snap-start overflow-hidden rounded-card bg-surface sm:w-auto">
+                <Image src={src} alt={product.lifestyleImageAlt || product.title} fill sizes="(max-width: 768px) 80vw, 30vw" className="object-cover" />
               </div>
             ))}
           </div>
@@ -542,9 +549,13 @@ export default async function ProductPage({ params }: Props) {
         <section className="mt-20">
           <p className="label-brand">{t("pdp.complementary.eyebrow")}</p>
           <h2 className="mt-2 text-display-md">{t("pdp.complementary.title")}</h2>
-          <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+          {/* Mobiel: één swipe-rij i.p.v. een 2×2-blok — de derde shop-sectie op
+              rij mag niet nóg twee schermen kosten. Desktop: 4-koloms grid. */}
+          <div className="mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto sm:grid sm:grid-cols-4 sm:gap-x-4 sm:gap-y-8 sm:overflow-visible">
             {recommendations.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <div key={p.id} className="w-[45%] shrink-0 snap-start sm:w-auto">
+                <ProductCard product={p} />
+              </div>
             ))}
           </div>
         </section>
@@ -558,12 +569,13 @@ export default async function ProductPage({ params }: Props) {
         <section className="mt-20">
           <p className="label-brand">{t("pdp.blog.eyebrow")}</p>
           <h2 className="mt-2 text-display-md">{t("pdp.blog.title")}</h2>
-          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          {/* Mobiel: swipe-rail — 3 gestapelde 4:5-kaarten waren ~2 schermen. */}
+          <div className="mt-8 flex snap-x snap-mandatory gap-5 overflow-x-auto sm:grid sm:grid-cols-3 sm:overflow-visible">
             {blogPosts.map((b) => (
-              <Link key={b.slug} href={`/blog/${b.slug}`} className="group block">
+              <Link key={b.slug} href={`/blog/${b.slug}`} className="group block w-[70%] shrink-0 snap-start sm:w-auto">
                 <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface">
                   {b.heroImage ? (
-                    <Image src={b.heroImage} alt={b.title} fill sizes="(max-width: 640px) 100vw, 30vw" className="object-cover transition-transform duration-500 ease-brand group-hover:scale-[1.04]" />
+                    <Image src={b.heroImage} alt={b.title} fill sizes="(max-width: 640px) 70vw, 30vw" className="object-cover transition-transform duration-500 ease-brand group-hover:scale-[1.04]" />
                   ) : null}
                 </div>
                 <p className="mt-2 label-brand !text-[0.62rem]">{b.occasion || t("pdp.blog.defaultLabel")}</p>
