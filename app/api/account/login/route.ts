@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { issueMagicToken, magicLinkThrottled } from "@/lib/account";
 import { getSiteUrl } from "@/lib/site-url";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
+import { brandedEmailHtml } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +54,13 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           from,
           to: [email],
-          subject: "Je login-link voor GENTS",
-          html: `<p>Hallo,</p><p>Klik op de onderstaande knop om in te loggen bij GENTS. De link is 30 minuten geldig.</p><p><a href="${link}" style="display:inline-block;background:#0A0A0A;color:#fff;padding:12px 20px;text-decoration:none">Inloggen</a></p><p>Niet aangevraagd? Negeer deze e-mail.</p>`,
+          subject: "Je inloglink voor GENTS",
+          html: brandedEmailHtml({
+            heading: "Inloggen bij GENTS",
+            bodyHtml: "<p style=\"margin:0 0 10px\">Klik op de knop hieronder om in te loggen op je account. De link is <strong>30 minuten</strong> geldig en werkt één keer.</p><p style=\"margin:0\">Zo heb je je bestellingen, bewaarde maten, spaarpunten en favorieten meteen bij de hand.</p>",
+            cta: { label: "Inloggen", href: link },
+            footnote: "Heb je dit niet aangevraagd? Dan kun je deze e-mail veilig negeren — er gebeurt niets.",
+          }),
         }),
       });
     } catch (e) {

@@ -1,7 +1,7 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockNotifications, products, productVariants } from "@/db/schema";
-import { emailConfigured } from "@/lib/email";
+import { emailConfigured, brandedEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
 import { sendBackInStockWhatsApp, sendAlternativeWhatsApp, normalizePhone } from "@/lib/whatsapp";
 import { getSettings } from "@/lib/settings";
@@ -230,7 +230,11 @@ async function sendAlternativeEmail(
         from: process.env.RESEND_FROM,
         to: [n.email],
         subject: "Nog niet terug — maar dit alternatief is er wél in jouw maat",
-        html: `<p>Je wachtte op <strong>${n.origTitle}</strong>${maat}. Die is helaas nog niet terug op voorraad.</p><p>Goed nieuws: dit alternatief hebben we wél direct leverbaar in jouw maat:</p><p><strong>${n.altTitle}</strong></p><p><a href="${n.altUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;padding:12px 20px;text-decoration:none">Bekijk het alternatief</a></p>`,
+        html: brandedEmailHtml({
+          heading: "Dit alternatief is er wél in jouw maat",
+          bodyHtml: `<p style="margin:0 0 10px">Je wachtte op <strong>${n.origTitle}</strong>${maat}. Die is helaas nog niet terug op voorraad.</p><p style="margin:0 0 10px">Goed nieuws: dit alternatief hebben we wél direct leverbaar in jouw maat:</p><p style="margin:0;font:600 16px Arial,sans-serif;color:#111111">${n.altTitle}</p>`,
+          cta: { label: "Bekijk het alternatief", href: n.altUrl },
+        }),
       }),
     });
     if (!res.ok) {
@@ -264,7 +268,11 @@ async function sendBackInStockEmail(
         from: process.env.RESEND_FROM,
         to: [n.email],
         subject: `${title} is weer op voorraad`,
-        html: `<p>Goed nieuws!</p><p><strong>${title}</strong>${maat} is weer op voorraad. Wees er snel bij — op = op.</p><p><a href="${url}" style="display:inline-block;background:#0A0A0A;color:#fff;padding:12px 20px;text-decoration:none">Bekijk product</a></p>`,
+        html: brandedEmailHtml({
+          heading: `${title} is weer op voorraad`,
+          bodyHtml: `<p style="margin:0">Goed nieuws! <strong>${title}</strong>${maat} is weer op voorraad. Wees er snel bij — op = op.</p>`,
+          cta: { label: "Bekijk product", href: url },
+        }),
       }),
     });
     if (!res.ok) {

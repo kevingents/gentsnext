@@ -30,8 +30,10 @@ function passImages() {
   if (imgCache) return imgCache;
   const root = process.cwd();
   imgCache = {
-    icon: readFileSync(join(root, "public/brand/brand-logo-vierkant.png")),
-    logo: readFileSync(join(root, "public/brand/brand-logo-zwart.png")),
+    // Zwarte pas → WITTE merk-assets (Kevin, 21 juli: "zoals onze zwarte pas,
+    // wit logo"). Wit vierkant icoon (notificaties/lockscreen) + witte wordmark.
+    icon: readFileSync(join(root, "public/brand/wallet-icon-wit.png")),
+    logo: readFileSync(join(root, "public/brand/brand-logo-wit.png")),
   };
   return imgCache;
 }
@@ -46,9 +48,9 @@ export type LoyaltyPassInput = {
 
 /**
  * Bouwt een ondertekende GENTS-spaarpas (.pkpass) voor één klant. Premium look:
- * warme canvas-achtergrond, zwart logo, QR met de klant-referentie (scanbaar aan de
- * kassa om te sparen/inwisselen). serialNumber = customerId → opnieuw downloaden
- * werkt de bestaande pas bij i.p.v. een tweede pas te maken.
+ * zwarte pas met wit logo, QR met de klant-referentie (scanbaar aan de kassa om
+ * te sparen/inwisselen). serialNumber = customerId → opnieuw downloaden werkt de
+ * bestaande pas bij i.p.v. een tweede pas te maken.
  */
 export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   if (!walletConfigured()) throw new Error("Apple Wallet is niet geconfigureerd.");
@@ -77,9 +79,9 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       serialNumber: input.customerId,
       organizationName: "GENTS",
       description: "GENTS Spaarpas",
-      backgroundColor: "rgb(244, 242, 237)",
-      foregroundColor: "rgb(17, 17, 17)",
-      labelColor: "rgb(122, 118, 112)",
+      backgroundColor: "rgb(17, 17, 17)",
+      foregroundColor: "rgb(255, 255, 255)",
+      labelColor: "rgb(178, 174, 168)",
       // Web-service: hiermee kan iOS de pas zelf verversen (pull + APNs-push
       // bij een saldowijziging). Beide velden zijn verplicht om 'm te activeren.
       webServiceURL: walletWebServiceUrl(),
