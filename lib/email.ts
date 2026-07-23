@@ -223,7 +223,7 @@ function brandFooterRow(): string {
   return `<tr><td style="padding:8px 28px 26px">
     <div style="border-top:1px solid #E6E4DF;padding-top:18px">
       <div style="font:12px Arial,sans-serif;color:#111111">
-        ${link("/account", "Mijn account")} &nbsp;·&nbsp; ${link("/winkels", "Winkels")} &nbsp;·&nbsp; ${link("/retourneren", "Retourneren")} &nbsp;·&nbsp; ${link("/klantenservice", "Klantenservice")}
+        ${link("/account", "Mijn account")} &nbsp;·&nbsp; ${link("/pages/winkels", "Winkels")} &nbsp;·&nbsp; ${link("/retourneren", "Retourneren")} &nbsp;·&nbsp; ${link("/pages/klantenservice", "Klantenservice")}
       </div>
       <div style="font:11px Arial,sans-serif;color:#B2AEA8;margin-top:12px">Persoonlijk advies in 19 winkels · gratis retour binnen 14 dagen · alle prijzen incl. btw</div>
     </div>

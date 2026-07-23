@@ -7,7 +7,9 @@ export function ProductCardBadge({ label, tone = "neutral" }: { label: string; t
         ? "bg-ink text-canvas"
         : "bg-canvas text-ink border border-ink/15";
   return (
-    <span className={`absolute left-2 top-2 z-10 inline-flex items-center px-2 py-0.5 font-sans text-[0.6rem] uppercase tracking-wide ${cls}`}>
+    // max-w + truncate: een lange badge ("Laatste exemplaren") liep op smalle
+    // kaarten onder het wishlist-hartje door.
+    <span className={`absolute left-2 top-2 z-10 inline-flex max-w-[calc(100%-3.5rem)] items-center truncate px-2 py-0.5 font-sans text-[0.6rem] uppercase tracking-wide ${cls}`}>
       {label}
     </span>
   );

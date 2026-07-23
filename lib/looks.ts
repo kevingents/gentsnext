@@ -436,8 +436,10 @@ export async function getLookBuyData(handles: string[]): Promise<Record<string, 
     let e = out[r.handle];
     if (!e) {
       // Stijlvolle, korte spec-regel: materiaal/stof + pasvorm (zoals een atelier 'm noemt).
+      // Pasvorm alleen bij kleding — "Modern fit" bij schoenen/accessoires is onzin.
       const material = String(r.materiaal || r.samenstelling || "").trim();
-      const pasvorm = String(r.pasvorm || "").trim();
+      const NO_FIT = new Set(["Schoenen", "Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Sokken", "Sjaals", "Bretels"]);
+      const pasvorm = NO_FIT.has(String(r.hg || "")) ? "" : String(r.pasvorm || "").trim();
       const specs = [material, pasvorm].filter(Boolean).join(" · ").slice(0, 80);
       e = { color: r.color, hoofdgroep: r.hg || "", specs, sizes: [] };
       out[r.handle] = e;

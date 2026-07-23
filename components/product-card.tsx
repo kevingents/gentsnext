@@ -59,8 +59,11 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
       </div>
       <div className="flex flex-col gap-0.5">
         {/* Eigen merk niet op elke kaart herhalen — dat is ruis; alleen externe
-            merken (bv. een gastlabel) zijn het vermelden waard. */}
-        {product.vendor && product.vendor.toUpperCase() !== "GENTS" ? (
+            merken (bv. een gastlabel) zijn het vermelden waard. Ook niet tonen
+            als de titel al met het merk begint (dubbel "Blumfontain"). */}
+        {product.vendor &&
+        product.vendor.toUpperCase() !== "GENTS" &&
+        !product.title.toLowerCase().startsWith(product.vendor.toLowerCase()) ? (
           <p className="label-brand !text-[0.62rem]">{product.vendor}</p>
         ) : null}
         <h3 className="font-sans text-sm text-ink">{product.title}</h3>

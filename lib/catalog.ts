@@ -1,3 +1,4 @@
+import { isRealDiscount } from "@/lib/pricing";
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
@@ -156,7 +157,7 @@ async function buildProductCards(
       range.min = Math.min(range.min, v.priceCents);
       range.max = Math.max(range.max, v.priceCents);
     }
-    if (v.compareAtCents && v.compareAtCents > v.priceCents) {
+    if (v.compareAtCents && isRealDiscount(v.priceCents, v.compareAtCents)) {
       onSale.set(v.productId, true);
       const cur = compareAtBest.get(v.productId) ?? 0;
       if (v.compareAtCents > cur) compareAtBest.set(v.productId, v.compareAtCents);

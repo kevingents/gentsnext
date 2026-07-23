@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
-import { formatEuro } from "@/lib/pricing";
+import { formatEuro, isRealDiscount } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
@@ -183,7 +183,8 @@ export function BuyBox({
   // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
   // referentieprijs écht hoger is dan de getoonde prijs — anders zou bij een
   // duurdere maat een doorgestreepte lagere prijs een prijsVERHOGING suggereren.
-  const hasDiscount = Boolean(referenceCents && referenceCents > priceCents);
+  // isRealDiscount: minstens 5% én € 1 (geen sale-badge bij 5 cent afronding).
+  const hasDiscount = isRealDiscount(priceCents, referenceCents);
   const soldOut = Boolean(selectedSize && selectedSize.known && selectedSize.qty <= 0);
   // Hele kleur/product uitverkocht: geen enkele bekende maat heeft voorraad.
   const allSoldOut = Boolean(

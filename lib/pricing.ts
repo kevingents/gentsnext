@@ -18,6 +18,17 @@ import { priceHistory } from "@/db/schema";
 // bundles); re-export zodat de bestaande imports via "@/lib/pricing" blijven werken.
 export { formatEuro } from "@/lib/format";
 
+/**
+ * Alleen een korting tonen die de naam waard is: minstens 5% én € 1. Een
+ * doorgestreepte prijs bij 5 cent verschil (afronding in de brondata) ondermijnt
+ * elke echte sale-badge.
+ */
+export function isRealDiscount(priceCents: number, compareAtCents?: number | null): boolean {
+  if (!compareAtCents || compareAtCents <= priceCents) return false;
+  const diff = compareAtCents - priceCents;
+  return diff >= 100 && diff / compareAtCents >= 0.05;
+}
+
 export type TieredDiscountCfg = { enabled: boolean; minItems: number; percentOff: number };
 
 /** Staffelkorting: vanaf `minItems` artikelen → `percentOff`% op het subtotaal.
