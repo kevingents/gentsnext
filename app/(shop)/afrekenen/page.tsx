@@ -179,20 +179,26 @@ function CheckoutForm() {
       return d !== 0 ? d : x.name.localeCompare(y.name, "nl");
     });
   }, [stores, pickupAvail]);
-  // Toon alleen filialen waar (een deel van) de bestelling op voorraad ligt — verberg
-  // de 0-op-voorraad-winkels. Nog geen data → alles tonen (nooit terugvallen op leeg).
+  // Alleen winkels waar de HELE bestelling op voorraad ligt (Kevin, 23 juli):
+  // de lijst met "1/3 op voorraad"-winkels was onoverzichtelijk en een halve
+  // afhaling wil niemand. Nog geen data → alles tonen (nooit leeg tijdens laden);
+  // geen enkele winkel compleet → lege lijst + duidelijke melding in de UI.
+  const pickupAvailLoaded = Object.keys(pickupAvail).length > 0;
   const pickupStores = useMemo(() => {
-    const withStock = storesByAvail.filter((s) => {
-      const a = pickupAvail[s.name];
-      return !a || a.total === 0 || a.okCount > 0;
-    });
-    return withStock.length ? withStock : storesByAvail;
-  }, [storesByAvail, pickupAvail]);
-  // Viel de gekozen winkel weg uit de lijst (geen voorraad) → schakel naar de beste.
+    if (!pickupAvailLoaded) return storesByAvail;
+    return storesByAvail.filter((s) => pickupAvail[s.name]?.allOk);
+  }, [storesByAvail, pickupAvail, pickupAvailLoaded]);
+  // Viel de gekozen winkel weg uit de lijst → schakel naar de eerste complete
+  // winkel; is er géén complete winkel, wis de keuze (de submit-validatie
+  // blokkeert dan met een duidelijke melding).
   useEffect(() => {
-    if (!pickupMode || !pickupStores.length) return;
+    if (!pickupMode) return;
+    if (!pickupStores.length) {
+      if (pickupAvailLoaded && pickupStore) setPickupStore("");
+      return;
+    }
     if (!pickupStores.some((s) => s.name === pickupStore)) setPickupStore(pickupStores[0].name);
-  }, [pickupMode, pickupStores, pickupStore]);
+  }, [pickupMode, pickupStores, pickupStore, pickupAvailLoaded]);
   const [voucher, setVoucher] = useState<{ code: string; discountCents: number; label: string } | null>(null);
   const [giftcard, setGiftcard] = useState<{ code: string; balanceCents: number } | null>(null);
   const [tiered, setTiered] = useState<TieredDiscountCfg | null>(null);
@@ -591,43 +597,33 @@ function CheckoutForm() {
             ))}
           </div>
           {pickupMode ? (
-            <label className="mt-4 block">
-              <span className="font-sans text-sm text-ink">{t("checkout.choose_store")}</span>
-              <select
-                value={pickupStore}
-                onChange={(e) => setPickupStore(e.target.value)}
-                className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
-              >
-                {pickupStores.map((s) => {
-                  const a = pickupAvail[s.name];
-                  const suffix = !a || a.total === 0 ? "" : a.allOk ? ` — ${t("checkout.pickup_all_in_stock")}` : ` — ${t("checkout.pickup_partial_stock", { ok: a.okCount, total: a.total })}`;
-                  return <option key={s.name} value={s.name}>{s.name}{suffix}</option>;
-                })}
-              </select>
-              {(() => {
-                const sel = pickupAvail[pickupStore];
-                if (pickupAvailLoading && !sel) return <span className="mt-1 block font-sans text-xs text-muted">{t("checkout.pickup_checking")}</span>;
-                if (!sel || sel.total === 0) return <span className="mt-1 block font-sans text-xs text-muted">{t("checkout.pickup_free_note")}</span>;
-                if (sel.allOk) return <span className="mt-1 block font-sans text-xs text-success">{t("checkout.pickup_all_ok", { store: pickupStore })}</span>;
-                const missingTitles = sel.missingSkus
-                  .map((sku) => cart.lines.find((l) => l.sku.toLowerCase() === sku.toLowerCase())?.title)
-                  .filter(Boolean) as string[];
-                const best = storesByAvail.find((s) => pickupAvail[s.name]?.allOk);
-                return (
-                  <span className="mt-1 block font-sans text-xs text-ink-soft">
-                    <span className="text-danger">{t("checkout.pickup_not_all", { store: pickupStore })}</span>
-                    {missingTitles.length ? <> ({t("checkout.pickup_missing", { items: missingTitles.join(", ") })})</> : null}.{" "}
-                    {best && best.name !== pickupStore ? (
-                      <button type="button" onClick={() => setPickupStore(best.name)} className="font-medium text-ink underline">
-                        {t("checkout.pickup_choose_best", { store: best.name })}
-                      </button>
-                    ) : (
-                      t("checkout.pickup_choose_other")
-                    )}
-                  </span>
-                );
-              })()}
-            </label>
+            pickupAvailLoaded && !pickupStores.length ? (
+              /* Geen enkele winkel heeft de hele bestelling — duidelijk zeggen
+                 i.p.v. een lege dropdown; bezorgen is dan de weg. */
+              <p className="mt-4 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft" role="status">
+                {t("checkout.pickup_none_full")}
+              </p>
+            ) : (
+              <label className="mt-4 block">
+                <span className="font-sans text-sm text-ink">{t("checkout.choose_store")}</span>
+                {/* Alleen alles-op-voorraad-winkels → geen suffixen meer nodig. */}
+                <select
+                  value={pickupStore}
+                  onChange={(e) => setPickupStore(e.target.value)}
+                  className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+                >
+                  {pickupStores.map((s) => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+                {(() => {
+                  const sel = pickupAvail[pickupStore];
+                  if (pickupAvailLoading && !sel) return <span className="mt-1 block font-sans text-xs text-muted">{t("checkout.pickup_checking")}</span>;
+                  if (!sel || sel.total === 0) return <span className="mt-1 block font-sans text-xs text-muted">{t("checkout.pickup_free_note")}</span>;
+                  return <span className="mt-1 block font-sans text-xs text-success">{t("checkout.pickup_all_ok", { store: pickupStore })}</span>;
+                })()}
+              </label>
+            )
           ) : null}
 
           <p className="label-brand mt-4">{pickupMode ? t("checkout.contact_details") : t("checkout.contact_delivery")}</p>
