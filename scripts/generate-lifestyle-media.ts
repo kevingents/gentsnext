@@ -143,7 +143,7 @@ async function main() {
     : sql`p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})`;
   const queryRows = () => db.execute<{ id: string; handle: string; title: string; hg: string; img: string; l1: string; l2: string; l3: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
-      (select url from product_images pi where pi.product_id=p.id order by position limit 1) img,
+      (select url from product_images pi where pi.product_id=p.id and pi.source = '' order by position limit 1) img,
       p.lifestyle_image_url l1, p.lifestyle_image_url2 l2, p.lifestyle_image_url3 l3
     from products p
     where ${base} and ${filter}

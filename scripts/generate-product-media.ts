@@ -145,7 +145,7 @@ async function main() {
 
   const queryRows = () => db.execute<{ id: string; handle: string; title: string; hg: string; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
-      (select url from product_images pi where pi.product_id=p.id order by position limit 1) img
+      (select url from product_images pi where pi.product_id=p.id and pi.source = '' order by position limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
       ${onlyNew ? sql`and ${newCollectionCond}` : sql``}

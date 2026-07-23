@@ -451,20 +451,27 @@ export default async function ProductPage({ params }: Props) {
 
       <PdpSizeProvider>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
-        <Gallery
-          images={[
-            // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
-            // → detailfoto, daarna de echte productfoto's.
-            ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
-            ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
-            ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
-            ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain })),
-          ]}
-          title={product.title}
-          sizeMedia={sizeMedia}
-          video={product.modelVideoUrl || null}
-          lookHref={resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? "#shop-de-look" : undefined}
-        />
+        <div>
+          <Gallery
+            images={[
+              // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
+              // → detailfoto, daarna de echte productfoto's.
+              ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
+              ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
+              ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
+              ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain })),
+            ]}
+            title={product.title}
+            sizeMedia={sizeMedia}
+            video={product.modelVideoUrl || null}
+            lookHref={resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? "#shop-de-look" : undefined}
+          />
+          {/* Eerlijkheid: alleen AI-packshots (product zonder echte foto's) →
+              expliciete indicatie-noot onder de galerij. */}
+          {images.length > 0 && images.every((i) => i.source === "ai-packshot") && !product.modelImageUrl ? (
+            <p className="mt-2 font-sans text-xs text-muted">{t("pdp.aiImageNote")}</p>
+          ) : null}
+        </div>
 
         <div className="lg:sticky lg:top-24 lg:self-start">
           <BuyBox

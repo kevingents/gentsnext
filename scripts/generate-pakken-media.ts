@@ -163,7 +163,7 @@ async function main() {
 
   const queryRows = () => db.execute<{ id: string; handle: string; title: string; img: string; m1: string; m2: string; det: string; vid: string }>(sql`
     select p.id, p.handle, p.title,
-      (select url from product_images pi where pi.product_id=p.id order by position limit 1) img,
+      (select url from product_images pi where pi.product_id=p.id and pi.source = '' order by position limit 1) img,
       p.model_image_url m1, p.model_image_url2 m2, p.detail_image_url det, p.model_video_url vid
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
