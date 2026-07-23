@@ -10,6 +10,7 @@ import {
 import { ensureSiteContent } from "@/lib/site-settings-i18n";
 import { ensureLandingsContent } from "@/lib/landings-i18n";
 import { ensureNavContent } from "@/lib/nav-i18n";
+import { ensureCollectionsContent } from "@/lib/catalog-i18n";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -64,7 +65,16 @@ export async function GET(req: Request) {
       : await ensureCatalogTranslations(loc, { descriptions, limit }).catch((e) => ({
           error: String((e as Error).message),
         }));
-    result[loc] = { ui, site, landings, catalog };
+    // Omschrijvingen (SEO /de /en): elke nacht een beperkte batch, apart van
+    // de titels zodat de run binnen maxDuration blijft. ?descriptions=1 doet
+    // al een volledige gecombineerde run — dan hier overslaan.
+    const catalogDesc = skipProducts || descriptions
+      ? { translated: 0, skipped: true }
+      : await ensureCatalogTranslations(loc, { descriptions: true, limit: 60 }).catch((e) => ({
+          error: String((e as Error).message),
+        }));
+    const collections = await ensureCollectionsContent(loc).catch((e) => ({ error: String((e as Error).message) }));
+    result[loc] = { ui, site, landings, nav, catalog, catalogDesc, collections };
   }
 
   return NextResponse.json({ ok: true, descriptions, result });

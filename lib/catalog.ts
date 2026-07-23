@@ -190,7 +190,7 @@ async function buildProductCards(
     for (const t of tls) if (t.title) titleTl.set(t.productId, t.title);
   }
 
-  return base.map((p) => {
+  const cards = base.map((p) => {
     const img = firstImage.get(p.id);
     const range = priceRange.get(p.id);
     const rawAlt = (img?.alt || "").trim();
@@ -232,6 +232,7 @@ async function buildProductCards(
       category: categoryById.get(p.id) || "",
     };
   });
+  return cards;
 }
 
 export async function getCollectionProducts(collectionId: string, page: number, perPage: number) {
@@ -278,8 +279,27 @@ export const getProductByHandle = cache(async (handle: string) => {
     .from(products)
     .where(and(eq(products.handle, handle), eq(products.status, "active")))
     .limit(1);
-  const product = rows[0];
+  let product = rows[0];
   if (!product) return null;
+
+  // SEO/i18n: op /en /de /fr /es de vertaalde titel + omschrijving uit
+  // product_translations gebruiken — die stromen zo door naar de PDP-kop,
+  // meta-tags en JSON-LD. getLocale is fail-safe (scripts → NL pass-through).
+  const locale = await getLocale();
+  if (locale !== DEFAULT_LOCALE) {
+    const [tl] = await db
+      .select({ title: productTranslations.title, descriptionHtml: productTranslations.descriptionHtml })
+      .from(productTranslations)
+      .where(and(eq(productTranslations.productId, product.id), eq(productTranslations.locale, locale)))
+      .limit(1);
+    if (tl) {
+      product = {
+        ...product,
+        title: tl.title || product.title,
+        descriptionHtml: tl.descriptionHtml || product.descriptionHtml,
+      };
+    }
+  }
 
   const [variants, images, links, sizeMediaRows] = await Promise.all([
     db

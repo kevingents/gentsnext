@@ -11,12 +11,18 @@ import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { DEFAULT_LOCALE } from "@/lib/i18n";
+import { localizeCollectionText } from "@/lib/catalog-i18n";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
 
 export const dynamic = "force-dynamic";
 
+
+function stripMetaHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
 const PER_PAGE = 24;
 
 type Props = {
@@ -29,11 +35,16 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const sel = parsePlpParams(await searchParams);
   const collection = await getCollectionByHandle(handle);
   if (!collection) return {};
+  const locale = await getLocale();
+  const nl = locale === DEFAULT_LOCALE;
+  const colTitle = await localizeCollectionText(locale, "ct", collection.handle, collection.title);
+  const colDesc = await localizeCollectionText(locale, "cd", collection.handle, collection.descriptionHtml || "");
   return {
-    title: collection.seoTitle || collection.title,
+    title: (nl ? collection.seoTitle : "") || colTitle,
     description:
-      collection.seoDescription ||
-      `${collection.title} bij GENTS — betaalbare luxe voor elk formeel moment.`,
+      (nl ? collection.seoDescription : "") ||
+      stripMetaHtml(colDesc).slice(0, 160) ||
+      `${colTitle} — GENTS`,
     // Gefilterde/gepagineerde views niet als aparte canonical indexeren.
     alternates: await localeAlternates(
       sel.page > 1 ? `/collections/${handle}?page=${sel.page}` : `/collections/${handle}`,
@@ -49,6 +60,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const t = await getT(locale);
   const collection = await getCollectionByHandle(handle);
   if (!collection) notFound();
+  // Vertaalde collectie-titel/-omschrijving (ns ct/cd) — SEO voor /en /de.
+  const colTitle = await localizeCollectionText(locale, "ct", collection.handle, collection.title);
+  const colDesc = await localizeCollectionText(locale, "cd", collection.handle, collection.descriptionHtml || "");
 
   const filters = selectionToFilters(sel, { collectionId: collection.id });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
@@ -90,7 +104,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
-      { "@type": "ListItem", position: 2, name: collection.title, item: `${siteUrl}/collections/${handle}` },
+      { "@type": "ListItem", position: 2, name: colTitle, item: `${siteUrl}/collections/${handle}` },
     ],
   };
 
@@ -100,17 +114,17 @@ export default async function CollectionPage({ params, searchParams }: Props) {
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
-        <span className="text-ink">{collection.title}</span>
+        <span className="text-ink">{colTitle}</span>
       </nav>
       {/* Mobiel compacter: eyebrow weg, en de (SEO-)beschrijving pas ónder het
           grid — vol uitgerold duwde die de producten van het scherm. */}
       <div className="mt-4 border-b border-line pb-4 sm:mt-6 sm:pb-6">
         <p className="label-brand hidden sm:block">{t("collection.header.eyebrow")}</p>
-        <h1 className="text-display-md sm:mt-2">{collection.title}</h1>
+        <h1 className="text-display-md sm:mt-2">{colTitle}</h1>
         {collection.descriptionHtml ? (
           <div
             className="mt-2 hidden max-w-2xl font-sans text-sm text-ink-soft sm:block"
-            dangerouslySetInnerHTML={{ __html: collection.descriptionHtml }}
+            dangerouslySetInnerHTML={{ __html: colDesc }}
           />
         ) : null}
       </div>
@@ -167,7 +181,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           {collection.descriptionHtml ? (
             <div
               className="mt-10 border-t border-line pt-6 font-sans text-sm text-ink-soft sm:hidden"
-              dangerouslySetInnerHTML={{ __html: collection.descriptionHtml }}
+              dangerouslySetInnerHTML={{ __html: colDesc }}
             />
           ) : null}
         </div>

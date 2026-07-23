@@ -14,6 +14,7 @@ import { ShareRow } from "@/components/pdp/share-row";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
+import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getT } from "@/lib/t-server";
 import { buildModelLook, buildSuitLook, resolveLook, getLookBuyData } from "@/lib/looks";
 import { smartModelLook } from "@/lib/model-styling";
@@ -82,9 +83,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getProductByHandle(handle);
   if (!data) return {};
   const { product, images } = data;
+  // Niet-NL: de (vertaalde) titel/omschrijving uit getProductByHandle leidt —
+  // de Shopify-seoTitle/-seoDescription zijn Nederlands en zouden de meta
+  // op /en /de weer NL maken.
+  const locale = await getLocale();
+  const nl = locale === DEFAULT_LOCALE;
   const meta: Metadata = {
-    title: product.seoTitle || product.title,
-    description: product.seoDescription || stripHtml(product.descriptionHtml).slice(0, 160),
+    title: (nl ? product.seoTitle : "") || product.title,
+    description: (nl ? product.seoDescription : "") || stripHtml(product.descriptionHtml).slice(0, 160),
     alternates: await localeAlternates(`/products/${handle}`),
     openGraph: images[0] ? { images: [{ url: images[0].url }] } : undefined,
   };
@@ -201,8 +207,12 @@ export default async function ProductPage({ params }: Props) {
   ]);
   // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
   const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
-  // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde tekst.
-  const descriptionHtml = contentOverride?.descriptionHtml || product.descriptionHtml;
+  // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde
+  // tekst — maar alleen op NL: de override is Nederlands, en op /en /de wint
+  // de vertaalde omschrijving uit product_translations (via getProductByHandle).
+  const descriptionHtml = locale === DEFAULT_LOCALE
+    ? contentOverride?.descriptionHtml || product.descriptionHtml
+    : product.descriptionHtml;
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
   // Shop de look op de AI-modelfoto: het canvas-model draagt een vaste outfit;
