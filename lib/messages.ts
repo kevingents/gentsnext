@@ -61,6 +61,12 @@ const nl: Dict = {
   "clickCollect.modal.left": "Nog {count}",
   "clickCollect.modal.addresses": "Adressen & openingstijden",
   "pdp.aiImageNote": "Beeld ter indicatie (AI-weergave) — details kunnen afwijken van het echte artikel.",
+  // Reviews-sectie (was hardcoded NL → lekte door op /en)
+  "reviews.section.title": "Wat klanten zeggen",
+  "reviews.section.emptyIntro": "Er zijn nog geen reviews voor dit artikel. Deel als eerste je ervaring.",
+  "reviews.section.emptyList": "Nog geen geschreven reviews — schrijf de eerste.",
+  "reviews.section.countSingular": "review",
+  "reviews.section.countPlural": "reviews",
 };
 
 const en: Dict = {
@@ -117,6 +123,11 @@ const en: Dict = {
   "clickCollect.modal.left": "{count} left",
   "clickCollect.modal.addresses": "Addresses & opening hours",
   "pdp.aiImageNote": "Image for illustration (AI rendering) — details may differ from the actual item.",
+  "reviews.section.title": "What customers say",
+  "reviews.section.emptyIntro": "There are no reviews for this item yet. Be the first to share your experience.",
+  "reviews.section.emptyList": "No written reviews yet — write the first one.",
+  "reviews.section.countSingular": "review",
+  "reviews.section.countPlural": "reviews",
 };
 
 const de: Dict = {

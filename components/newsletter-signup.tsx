@@ -103,7 +103,7 @@ export function NewsletterSignup() {
         <button
           type="submit"
           disabled={state === "busy"}
-          className="inline-flex items-center justify-center border border-canvas bg-canvas px-5 py-2.5 font-sans text-sm font-medium text-ink transition-colors hover:bg-surface disabled:opacity-50"
+          className="inline-flex shrink-0 items-center justify-center whitespace-nowrap border border-canvas bg-canvas px-5 py-2.5 font-sans text-sm font-medium text-ink transition-colors hover:bg-surface disabled:opacity-50"
         >
           {state === "busy" ? t("common.processing") : t("newsletter.submit")}
         </button>
