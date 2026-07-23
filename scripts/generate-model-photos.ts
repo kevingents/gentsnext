@@ -202,7 +202,7 @@ async function main() {
   const cats = onlyHg ? onlyHg.split(",").map((s) => s.trim()).filter(Boolean) : Object.keys(STYLE);
   const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; vcl: string | null; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg, p.variant_color_label vcl,
-      (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
+      (select pi.url from product_images pi where pi.product_id=p.id and pi.source = '' order by pi.position asc limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
       ${handleList.length

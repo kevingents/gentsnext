@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { colorFamily } from "@/lib/colors";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
@@ -265,7 +265,9 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
   /* ── 3. Afbeeldingen + collectie-koppelingen (delete + insert) ───────── */
   const allProductIds = [...productIdByShopifyId.values()];
   for (const batch of chunked(allProductIds, 500)) {
-    await db.delete(productImages).where(inArray(productImages.productId, batch));
+    // AI-packshots (source='ai-packshot') NIET wegvagen: die zijn hier gegenereerd,
+    // niet gesynct — ze verdwijnen pas als er echte foto's binnenkomen (hieronder).
+    await db.delete(productImages).where(and(inArray(productImages.productId, batch), eq(productImages.source, "")));
     await db.delete(productCollections).where(inArray(productCollections.productId, batch));
   }
 
@@ -291,6 +293,12 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
   for (const batch of chunked(imageRows, 500)) {
     await db.insert(productImages).values(batch);
     stats.images += batch.length;
+  }
+  // Echte foto's winnen: producten die nu gesyncte beelden hebben, raken hun
+  // AI-packshot (indicatief beeld) kwijt.
+  const withRealImages = [...new Set(imageRows.map((r) => r.productId))];
+  for (const batch of chunked(withRealImages, 500)) {
+    await db.delete(productImages).where(and(inArray(productImages.productId, batch), eq(productImages.source, "ai-packshot")));
   }
   for (const batch of chunked(linkRows, 500)) {
     await db.insert(productCollections).values(batch).onConflictDoNothing();

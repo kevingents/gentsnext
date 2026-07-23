@@ -395,6 +395,9 @@ export const productImages = pgTable(
     url: text("url").notNull(),
     alt: text("alt").notNull().default(""),
     position: integer("position").notNull().default(0),
+    // '' = echte (gesyncte) foto; 'ai-packshot' = gegenereerd beeld ter indicatie.
+    // AI-rijen overleven de Shopify-import en wijken zodra echte foto's binnenkomen.
+    source: text("source").notNull().default(""),
   },
   (t) => [index("images_product_idx").on(t.productId, t.position)]
 );

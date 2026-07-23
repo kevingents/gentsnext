@@ -60,6 +60,7 @@ const nl: Dict = {
   "reserve.error.generic": "Reserveren lukte net niet — probeer het opnieuw of bel de winkel.",
   "clickCollect.modal.left": "Nog {count}",
   "clickCollect.modal.addresses": "Adressen & openingstijden",
+  "pdp.aiImageNote": "Beeld ter indicatie (AI-weergave) — details kunnen afwijken van het echte artikel.",
 };
 
 const en: Dict = {
@@ -115,9 +116,11 @@ const en: Dict = {
   "reserve.error.generic": "The reservation didn't go through — please try again or call the store.",
   "clickCollect.modal.left": "{count} left",
   "clickCollect.modal.addresses": "Addresses & opening hours",
+  "pdp.aiImageNote": "Image for illustration (AI rendering) — details may differ from the actual item.",
 };
 
 const de: Dict = {
+  "pdp.aiImageNote": "Abbildung zur Orientierung (KI-Darstellung) — Details können vom tatsächlichen Artikel abweichen.",
   "usp.specialist": "Spezialist für formelle Anlässe",
   "usp.luxury": "Bezahlbarer Luxus",
   "usp.returns": "Kostenlose Rückgabe innerhalb von 14 Tagen",
@@ -148,6 +151,7 @@ const de: Dict = {
 };
 
 const fr: Dict = {
+  "pdp.aiImageNote": "Image à titre indicatif (rendu IA) — les détails peuvent différer de l'article réel.",
   "usp.specialist": "Spécialiste des occasions formelles",
   "usp.luxury": "Luxe abordable",
   "usp.returns": "Retours gratuits sous 14 jours",
@@ -178,6 +182,7 @@ const fr: Dict = {
 };
 
 const es: Dict = {
+  "pdp.aiImageNote": "Imagen orientativa (representación por IA) — los detalles pueden diferir del artículo real.",
   "usp.specialist": "Especialistas en ropa formal",
   "usp.luxury": "Lujo asequible",
   "usp.returns": "Devoluciones gratis en 14 días",
