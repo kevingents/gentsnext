@@ -104,7 +104,7 @@ export async function translateStrings(
 /* ───────────────────────── UI + content KV-store ───────────────────────── */
 
 type StoreVal = { h: number; v: string; m?: boolean }; // m = handmatig (beheer-UI) — cron blijft eraf
-type Store = Record<string, StoreVal>; // sleutel = "<ns>:<key>"
+export type Store = Record<string, StoreVal>; // sleutel = "<ns>:<key>"
 
 const storeId = (locale: Locale) => `translations:${locale}`;
 

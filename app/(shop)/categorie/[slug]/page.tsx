@@ -12,6 +12,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { getCategoryLabels } from "@/lib/nav-i18n";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
@@ -47,6 +48,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const t = await getT(locale);
   const cat = categoryBySlug(slug);
   if (!cat) notFound();
+  // Vertaald categorie-label (ns "nav") voor kop + breadcrumb.
+  const catLabel = (await getCategoryLabels(locale)).get(cat.slug) ?? cat.label;
 
   const filters = selectionToFilters(sel, { category: cat.hoofdgroep });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
@@ -96,13 +99,13 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
-        <span className="text-ink">{cat.label}</span>
+        <span className="text-ink">{catLabel}</span>
       </nav>
       {/* Mobiel compacter: eyebrow weg en minder witruimte — het eerste product
           stond anders pas op een halve viewport. */}
       <div className="mt-4 border-b border-line pb-4 sm:mt-6 sm:pb-6">
         <p className="label-brand hidden sm:block">{t("cat.header.eyebrow")}</p>
-        <h1 className="text-display-md sm:mt-2">{cat.label}</h1>
+        <h1 className="text-display-md sm:mt-2">{catLabel}</h1>
       </div>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
