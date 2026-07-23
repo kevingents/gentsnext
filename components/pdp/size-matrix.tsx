@@ -109,8 +109,11 @@ export function SizeMatrix({
         ? num(a.size) - num(b.size)
         : rowSortIndex(sizeRowLabel(a.size)) - rowSortIndex(sizeRowLabel(b.size))
     );
+    // Rustig, uniform grid — zelfde beeldtaal als de pakken-matrix: doorgestreept
+    // + klein belletje voor uitverkocht (geen "Uitverkocht"-woord per tegel; de
+    // hint-regel eronder legt het belletje uit), rood puntje voor bijna-op.
     return (
-      <ul className="mt-2 flex flex-wrap gap-2">
+      <ul className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
         {sorted.map((s) => {
           const out = s.known && s.qty <= 0;
           const low = !out && s.known && s.qty > 0 && s.qty <= 3;
@@ -123,7 +126,7 @@ export function SizeMatrix({
                 aria-pressed={on}
                 aria-label={out ? `${sizeToken(s.size)} — ${soldOutHint}` : undefined}
                 title={out ? soldOutHint : low ? `Nog ${s.qty} op voorraad` : undefined}
-                className={`flex min-h-11 min-w-[3rem] flex-col items-center justify-center border px-3 py-2 text-center font-sans text-sm transition-colors ${
+                className={`relative flex h-11 w-full items-center justify-center border font-sans text-sm transition-colors ${
                   on
                     ? out
                       ? "border-ink text-ink ring-1 ring-ink"
@@ -135,12 +138,9 @@ export function SizeMatrix({
               >
                 <span className={out ? "line-through decoration-muted" : undefined}>{sizeToken(s.size)}</span>
                 {out ? (
-                  <span className="mt-0.5 flex items-center gap-1 text-[0.6rem] text-muted">
-                    <BellIcon className="h-2.5 w-2.5" />
-                    {t("pdp.size.soldoutTile")}
-                  </span>
+                  <BellIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-ink-soft" />
                 ) : low ? (
-                  <span className="mt-0.5 text-[0.6rem] text-danger">nog {s.qty}</span>
+                  <span aria-hidden className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" />
                 ) : null}
               </button>
             </li>
