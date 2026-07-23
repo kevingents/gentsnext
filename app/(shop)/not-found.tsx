@@ -26,7 +26,9 @@ export default function NotFound() {
             { label: "Maatadvies", href: "/maatadvies" },
           ].map((l) => (
             <li key={l.href}>
-              <Link href={l.href} className="block border border-line bg-canvas px-4 py-3 text-left font-sans text-sm transition-colors hover:border-ink">
+              {/* h-full + items-center: tegel met wrappende tekst ("Pak
+                  samenstellen") hield anders ongelijke rijhoogtes over. */}
+              <Link href={l.href} className="flex h-full min-h-[3.25rem] items-center border border-line bg-canvas px-4 py-3 text-left font-sans text-sm transition-colors hover:border-ink">
                 {l.label}
               </Link>
             </li>

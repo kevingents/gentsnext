@@ -43,8 +43,8 @@ export default async function GelegenhedenPage() {
       </nav>
 
       <div className="mt-6 max-w-2xl">
-        <p className="label-brand">{t("occasions.label")}</p>
-        <h1 className="mt-2 text-display-lg">{t("occasions.title")}</h1>
+        {/* Geen eyebrow: die herhaalde letterlijk de breadcrumb erboven. */}
+        <h1 className="text-display-lg">{t("occasions.title")}</h1>
         <p className="mt-4 font-sans text-ink-soft">
           {t("occasions.intro")}
         </p>
