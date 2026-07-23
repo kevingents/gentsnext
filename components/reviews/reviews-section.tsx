@@ -47,9 +47,9 @@ export async function ReviewsSection({
     return (
       <section id="reviews" className="mt-20 scroll-mt-24 border-t border-line pt-12">
         <p className="label-brand">Reviews</p>
-        <h2 className="mt-2 text-display-md">Wat klanten zeggen</h2>
+        <h2 className="mt-2 text-display-md">{t("reviews.section.title", locale)}</h2>
         <p className="mt-4 max-w-prose font-sans text-sm text-ink-soft">
-          Er zijn nog geen reviews voor dit artikel. Deel als eerste je ervaring.
+          {t("reviews.section.emptyIntro", locale)}
         </p>
         <div className="mt-5">
           <WriteReview handle={handle} />
@@ -61,7 +61,7 @@ export async function ReviewsSection({
   return (
     <section id="reviews" className="mt-20 scroll-mt-24 border-t border-line pt-12">
       <p className="label-brand">Reviews</p>
-      <h2 className="mt-2 text-display-md">Wat klanten zeggen</h2>
+      <h2 className="mt-2 text-display-md">{t("reviews.section.title", locale)}</h2>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
         {/* Samenvatting */}
@@ -73,7 +73,7 @@ export async function ReviewsSection({
                 <div className="pb-1">
                   <RatingStars rating={{ value: summary.value, count: summary.count }} size="md" showCount={false} />
                   <p className="mt-1 font-sans text-xs text-muted">
-                    {summary.count} {summary.count === 1 ? "review" : "reviews"}
+                    {summary.count} {summary.count === 1 ? t("reviews.section.countSingular", locale) : t("reviews.section.countPlural", locale)}
                   </p>
                 </div>
               </div>
@@ -96,7 +96,7 @@ export async function ReviewsSection({
             </>
           ) : (
             <p className="font-sans text-sm text-ink-soft">
-              Er zijn nog geen reviews voor dit artikel. Deel als eerste je ervaring.
+              {t("reviews.section.emptyIntro", locale)}
             </p>
           )}
           <div className="mt-6">
@@ -131,7 +131,7 @@ export async function ReviewsSection({
               ))}
             </ul>
           ) : (
-            <p className="font-sans text-sm text-muted">Nog geen geschreven reviews — schrijf de eerste.</p>
+            <p className="font-sans text-sm text-muted">{t("reviews.section.emptyList", locale)}</p>
           )}
         </div>
       </div>
