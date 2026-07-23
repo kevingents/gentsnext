@@ -8,11 +8,15 @@ import { AnnouncementBar } from "@/components/announcement-bar";
 import { SearchTrigger } from "@/components/search/search-trigger";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getLocale } from "@/lib/locale-server";
-import { getMenu } from "@/lib/menu-server";
+import { getLocalizedMenu } from "@/lib/nav-i18n";
+import { getT } from "@/lib/t-server";
 import type { MenuItem } from "@/lib/main-menu";
 
 export async function SiteHeader() {
-  const [locale, menu] = await Promise.all([getLocale(), getMenu()]);
+  const locale = await getLocale();
+  // Vertaald menu (ns "nav" via de vertaal-cron) — het menu is portal-data en
+  // lekte anders Nederlands op /en /de.
+  const menu = await getLocalizedMenu(locale);
   return (
     <>
       {/* Checkout = afleidingsvrij: geen campagne-balk met exit-link. */}
@@ -24,7 +28,8 @@ export async function SiteHeader() {
   );
 }
 
-function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale; menu: MenuItem[] }) {
+async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale; menu: MenuItem[] }) {
+  const t = await getT(locale);
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
       {/* Bovenrij: hamburger (mobiel) · logo · utilities */}
@@ -63,13 +68,13 @@ function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale
               href="/pak-samenstellen"
               className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
             >
-              Pak samenstellen
+              {t("nav.suitBuilder")}
             </Link>
             <Link
               href="/pages/winkels"
               className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
             >
-              Winkels
+              {t("nav.stores")}
             </Link>
             {/* Mobiel bewust minimaal (à la MR MARVIS): hamburger · logo · zoeken ·
                 tas. Taal, account en favorieten staan daar in de menu-drawer. */}

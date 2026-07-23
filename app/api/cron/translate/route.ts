@@ -9,6 +9,7 @@ import {
 } from "@/lib/translate";
 import { ensureSiteContent } from "@/lib/site-settings-i18n";
 import { ensureLandingsContent } from "@/lib/landings-i18n";
+import { ensureNavContent } from "@/lib/nav-i18n";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -57,6 +58,7 @@ export async function GET(req: Request) {
     // Portal-bewerkbare site-content (hero) — delta op de actuele bronteksten.
     const site = await ensureSiteContent(loc).catch((e) => ({ error: String((e as Error).message) }));
     const landings = await ensureLandingsContent(loc).catch((e) => ({ error: String((e as Error).message) }));
+    const nav = await ensureNavContent(loc).catch((e) => ({ error: String((e as Error).message) }));
     const catalog = skipProducts
       ? { translated: 0, skipped: true }
       : await ensureCatalogTranslations(loc, { descriptions, limit }).catch((e) => ({

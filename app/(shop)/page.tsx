@@ -14,6 +14,7 @@ import { listCollections, getHighlights, getProductsByHandles } from "@/lib/cata
 import { getTrendingHandles } from "@/lib/analytics";
 import { getAllLooks } from "@/lib/looks";
 import { CATEGORIES } from "@/lib/categories";
+import { getCategoryLabels } from "@/lib/nav-i18n";
 import { Reveal } from "@/components/reveal";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
@@ -73,7 +74,9 @@ export default async function Home() {
     getAllLooks().catch(() => []),
   ]);
   const t = await getT(locale);
-  const featured = CATEGORIES.slice(0, 8);
+  // Categorie-tegels met vertaalde labels (ns "nav") — waren hardcoded NL op /en.
+  const catLabels = await getCategoryLabels(locale);
+  const featured = CATEGORIES.slice(0, 8).map((c) => ({ ...c, label: catLabels.get(c.slug) ?? c.label }));
   const heroLook = looks[0] ?? null;
   const trending = await trendingPromise;
   const siteUrl = getSiteUrl();

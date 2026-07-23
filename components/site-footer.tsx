@@ -3,13 +3,15 @@ import Link from "next/link";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { FooterPayments } from "@/components/footer-payments";
 import { CookieSettingsLink } from "@/components/cookie-settings-link";
-import { getFooter } from "@/lib/footer-server";
+import { getLocalizedFooter } from "@/lib/nav-i18n";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 
 export async function SiteFooter() {
-  const { intro, columns } = await getFooter();
   const locale = await getLocale();
+  // Vertaalde footer-data (intro + kolommen; ns "nav" via de vertaal-cron) —
+  // de kolommen zijn portal-data en lekten anders Nederlands op /en /de.
+  const { intro, columns } = await getLocalizedFooter(locale);
   // getT i.p.v. statische t(): leest óók de cron-vertalingen uit de store,
   // zodat catalogus-sleutels (newsletterHint, legalDisputes.*) echt vertalen.
   const t = await getT(locale);
