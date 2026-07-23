@@ -32,7 +32,7 @@ export function hasTranslationProvider(): boolean {
 }
 
 /** Stabiele 32-bit hash van de brontekst, om wijzigingen te detecteren. */
-function hash(s: string): number {
+export function hash(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h;

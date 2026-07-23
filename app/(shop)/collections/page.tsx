@@ -7,6 +7,7 @@ import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { ArrowRightIcon } from "@/components/icons";
 import { getT } from "@/lib/t-server";
+import { localizeCollectionTitles } from "@/lib/catalog-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ const FEATURED: { slug: string; img: string }[] = [
 export default async function CollectionsPage() {
   const locale = await getLocale();
   const t = await getT(locale);
-  const collections = await listCollections();
+  const collections = await localizeCollectionTitles(locale, await listCollections());
   const featured = FEATURED.map((f) => {
     const cat = CATEGORIES.find((c) => c.slug === f.slug);
     return cat ? { ...cat, img: f.img } : null;
