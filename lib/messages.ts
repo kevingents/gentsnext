@@ -67,6 +67,7 @@ const nl: Dict = {
   "reviews.section.emptyList": "Nog geen geschreven reviews — schrijf de eerste.",
   "reviews.section.countSingular": "review",
   "reviews.section.countPlural": "reviews",
+  "checkout.pickup_none_full": "Geen enkele winkel heeft op dit moment je hele bestelling op voorraad. Kies bezorgen — dan sturen we alles in één keer thuis.",
 };
 
 const en: Dict = {
@@ -128,6 +129,7 @@ const en: Dict = {
   "reviews.section.emptyList": "No written reviews yet — write the first one.",
   "reviews.section.countSingular": "review",
   "reviews.section.countPlural": "reviews",
+  "checkout.pickup_none_full": "No store currently has your entire order in stock. Choose delivery instead — we'll ship everything to you in one go.",
 };
 
 const de: Dict = {
