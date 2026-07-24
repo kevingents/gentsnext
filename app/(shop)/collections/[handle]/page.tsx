@@ -5,7 +5,7 @@ import { ProductCard } from "@/components/product-card";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
-import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTasteCats } from "@/lib/catalog";
+import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTasteCats, isTechnicalCollection } from "@/lib/catalog";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
@@ -45,6 +45,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
       (nl ? collection.seoDescription : "") ||
       stripMetaHtml(colDesc).slice(0, 160) ||
       `${colTitle} — GENTS`,
+    // Technische app-collecties (XCloud/filter-index) nooit laten indexeren.
+    ...(isTechnicalCollection(collection) ? { robots: { index: false, follow: false } } : {}),
     // Gefilterde/gepagineerde views niet als aparte canonical indexeren.
     alternates: await localeAlternates(
       sel.page > 1 ? `/collections/${handle}?page=${sel.page}` : `/collections/${handle}`,
