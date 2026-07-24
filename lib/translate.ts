@@ -77,6 +77,7 @@ export async function translateStrings(
       body: JSON.stringify({
         model: process.env.CONTENT_MODEL || process.env.SUPPORT_MODEL || "claude-haiku-4-5-20251001",
         max_tokens: maxTokens,
+        temperature: 0,
         system: sys,
         messages: [{ role: "user", content: user }],
       }),
@@ -137,7 +138,7 @@ export async function ensureEntries(
   entries: TransEntry[],
   locale: Locale,
   kind: "ui" | "title" | "description" = "ui",
-): Promise<{ translated: number; total: number }> {
+): Promise<{ translated: number; total: number; failed?: number }> {
   if (locale === DEFAULT_LOCALE || !entries.length) return { translated: 0, total: entries.length };
   const store = await getTranslationStore(locale);
   const todo = entries.filter((e) => {
@@ -146,19 +147,36 @@ export async function ensureEntries(
     return !cur || cur.h !== hash(e.source);
   });
   let translated = 0;
+  let failed = 0;
   // Omschrijvingen in kleinere batches: lange HTML-teksten × 30 liepen tegen
   // het output-plafond aan (zie translateStrings).
   const CHUNK = kind === "description" ? 12 : 30;
   for (let i = 0; i < todo.length; i += CHUNK) {
     const batch = todo.slice(i, i + CHUNK);
-    const out = await translateStrings(batch.map((b) => b.source), locale, kind);
+    let out: string[] | null = null;
+    try {
+      out = await translateStrings(batch.map((b) => b.source), locale, kind);
+    } catch {
+      // Batch-formaat mislukt (bv. model levert geen nette array) → per item
+      // opnieuw; één weigerend item blijft dan NL en blokkeert niet de rest.
+      out = [];
+      for (const b of batch) {
+        try {
+          out.push((await translateStrings([b.source], locale, kind))[0] || "");
+        } catch {
+          out.push("");
+          failed++;
+        }
+      }
+    }
     batch.forEach((b, j) => {
-      store[`${b.ns}:${b.key}`] = { h: hash(b.source), v: out[j] || b.source };
+      // Geen vertaling → entry NIET opslaan, zodat de volgende run 'm opnieuw probeert.
+      if (out![j]) store[`${b.ns}:${b.key}`] = { h: hash(b.source), v: out![j] };
     });
-    translated += batch.length;
+    translated += batch.filter((_, j) => Boolean(out![j])).length;
     await saveTranslationStore(locale, store); // incrementeel: bestand tegen time-outs
   }
-  return { translated, total: entries.length };
+  return { translated, total: entries.length, ...(failed ? { failed } : {}) };
 }
 
 /** UI-microcopy (lib/messages NL-sleutels) vertalen naar één locale. */
