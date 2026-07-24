@@ -123,7 +123,9 @@ const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v
 
 export const DEFAULT_SETTINGS: Settings = {
   freeShippingCents: num(process.env.GENTS_FREE_SHIPPING_CENTS, 7500),
-  shippingCents: num(process.env.GENTS_SHIPPING_CENTS, 495),
+  // NL-tarief conform de gepubliceerde DHL-staffel (bezorgpagina); andere
+  // landen staan in lib/shipping-zones.
+  shippingCents: num(process.env.GENTS_SHIPPING_CENTS, 395),
   expressSurchargeCents: num(process.env.GENTS_EXPRESS_SURCHARGE_CENTS, 150),
   // Basisuur = "einde dag" (geen vroege cutoff); de bindende cutoff zit in de
   // per-weekdag-override hieronder (magazijn vrijdag 16:00, winkels vrijdag 17:00).

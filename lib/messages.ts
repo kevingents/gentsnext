@@ -78,6 +78,9 @@ const nl: Dict = {
   "myStore.inStockClosed": "Op voorraad in {store}",
   "myStore.notInStock": "Niet op voorraad in {store}",
   "myStore.elsewhere": "wel in {count} andere winkels",
+  "checkout.country": "Land",
+  "checkout.shipping_rate_free_from": "Verzendkosten {amount} — gratis vanaf {threshold}",
+  "checkout.shipping_rate_flat": "Verzendkosten {amount}",
 };
 
 const en: Dict = {
@@ -150,6 +153,9 @@ const en: Dict = {
   "myStore.inStockClosed": "In stock at {store}",
   "myStore.notInStock": "Not in stock at {store}",
   "myStore.elsewhere": "available in {count} other stores",
+  "checkout.country": "Country",
+  "checkout.shipping_rate_free_from": "Shipping {amount} — free from {threshold}",
+  "checkout.shipping_rate_flat": "Shipping {amount}",
 };
 
 const de: Dict = {

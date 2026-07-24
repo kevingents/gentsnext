@@ -16,7 +16,8 @@ const KNOWLEDGE = `
 GENTS is dé Nederlandse herenmode-specialist voor formele momenten (pakken, overhemden, smoking, accessoires, schoenen). 19 winkels in NL en België + webshop.
 
 VERZENDING & LEVERTIJD:
-- Gratis verzending vanaf € 75; daaronder € 4,95.
+- Nederland/België: € 3,95, gratis vanaf € 75. Duitsland: € 4,95, gratis vanaf € 100. Overig Europa: € 12,95 (geen gratis verzending).
+- Eén keer verzendkosten per bestelling, ook als er meerdere pakketten komen.
 - Voor 16:00 besteld op werkdagen = vaak dezelfde dag verzonden.
 - Standaard levertijd 2-3 werkdagen; vanuit ons magazijn vaak sneller (1-2 werkdagen).
 - Snellere levering (express) tegen € 1,50 toeslag, te kiezen bij het afrekenen.
