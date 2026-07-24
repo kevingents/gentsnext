@@ -13,6 +13,8 @@ import { createWorldlineCheckout } from "@/lib/worldline";
 import { activePaymentProvider, paymentConfigured } from "@/lib/payments";
 import { getSiteUrl } from "@/lib/site-url";
 import { getSessionCustomer } from "@/lib/account";
+import { getStores } from "@/lib/stores";
+import { availableInStore } from "@/lib/store-core";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -39,10 +41,43 @@ export async function POST(req: Request) {
 
   const deliveryMethod: DeliveryMethod =
     body?.deliveryMethod === "express" ? "express" : body?.deliveryMethod === "pickup" ? "pickup" : "standard";
-  const pickupStore = String(body?.pickupStore || "").trim();
+  // Wordt bij afhalen vervangen door de canonieke winkelnaam (server-casing),
+  // zodat downstream (pick-opdrachten, mails, portal-filters) altijd matcht.
+  let pickupStore = String(body?.pickupStore || "").trim();
   // Adres alleen vereist bij bezorgen; bij afhalen in winkel is een winkelkeuze nodig.
   if (deliveryMethod === "pickup") {
     if (!pickupStore) return bad("Kies een winkel om af te halen.");
+    // Server-waarheid: de gekozen winkel moet bestaan én de HELE bestelling op
+    // voorraad hebben — de checkout filtert al, maar voorraad kan wijzigen
+    // tussen kiezen en afrekenen (en de client is niet te vertrouwen).
+    const store = getStores().find((s) => s.title.toLowerCase() === pickupStore.toLowerCase());
+    if (!store) return bad("Kies een winkel om af te halen.");
+    pickupStore = store.title;
+    const need = new Map<string, number>();
+    for (const it of items) {
+      const sku = String(it.sku || "").trim();
+      if (sku) need.set(sku, (need.get(sku) || 0) + Math.max(1, Number(it.qty) || 1));
+    }
+    try {
+      const avail = await availableInStore(store.title, [...need.keys()]);
+      const lc = new Map<string, number>();
+      for (const [k, v] of avail) lc.set(k.toLowerCase(), v);
+      const missing = [...need].filter(([sku, qty]) => (lc.get(sku.toLowerCase()) ?? 0) < qty).map(([sku]) => sku);
+      if (missing.length) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `${store.title} heeft niet meer alles op voorraad. Kies een andere winkel of laat je bestelling bezorgen.`,
+            pickupUnavailable: true,
+            unavailableSkus: missing,
+          },
+          { status: 409 },
+        );
+      }
+    } catch {
+      // Fail-closed: zonder bevestigde winkelvoorraad geen afhaal-order.
+      return bad("De winkelvoorraad kon niet worden gecontroleerd. Probeer het opnieuw of kies bezorgen.");
+    }
   } else {
     for (const f of ["street", "houseNumber", "postalCode", "city"]) {
       if (!String(c[f] || "").trim()) return bad("Vul alle adresvelden in.");

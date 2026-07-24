@@ -133,61 +133,49 @@ function CheckoutForm() {
   // Afhalen in winkel (click & collect): gratis, geen adres nodig.
   const [pickupMode, setPickupMode] = useState(false);
   const [pickupStore, setPickupStore] = useState("");
-  const [stores, setStores] = useState<{ name: string; city: string }[]>([]);
-  useEffect(() => {
-    let active = true;
-    fetch("/api/stores")
-      .then((r) => r.json())
-      .then((d) => { if (active) { const s = d.stores || []; setStores(s); setPickupStore((cur) => cur || s[0]?.name || ""); } })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
   // Voorraad per winkel voor de afhaal-keuze: welke winkel heeft álles op voorraad?
   type StoreAvail = { name: string; city: string; allOk: boolean; okCount: number; total: number; missingSkus: string[] };
   const [pickupAvail, setPickupAvail] = useState<Record<string, StoreAvail>>({});
-  const [pickupAvailLoading, setPickupAvailLoading] = useState(false);
+  // Fail-closed: zolang de check niet geslaagd is tonen we GEEN winkellijst —
+  // een volledige lijst tijdens laden/fout liet winkels zonder voorraad zien.
+  const [pickupAvailState, setPickupAvailState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [pickupAvailRefresh, setPickupAvailRefresh] = useState(0);
   const cartSig = cart.lines.map((l) => `${l.sku}:${l.qty}`).join("|");
   useEffect(() => {
-    if (!pickupMode || cart.lines.length === 0) { setPickupAvail({}); return; }
+    if (!pickupMode || cart.lines.length === 0) { setPickupAvail({}); setPickupAvailState("idle"); return; }
     let active = true;
-    setPickupAvailLoading(true);
+    setPickupAvailState("loading");
     fetch("/api/pickup-availability", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty })) }),
     })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then((d) => {
         if (!active) return;
         const map: Record<string, StoreAvail> = {};
         for (const s of (d.stores || []) as StoreAvail[]) map[s.name] = s;
         setPickupAvail(map);
+        setPickupAvailState("loaded");
       })
-      .catch(() => {})
-      .finally(() => { if (active) setPickupAvailLoading(false); });
+      .catch(() => { if (active) { setPickupAvail({}); setPickupAvailState("error"); } });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickupMode, cartSig]);
-  const storesByAvail = useMemo(() => {
-    const rank = (n: string) => {
-      const a = pickupAvail[n];
-      if (!a || a.total === 0) return -1;
-      return a.allOk ? 2 : a.okCount > 0 ? 1 : 0;
-    };
-    return [...stores].sort((x, y) => {
-      const d = rank(y.name) - rank(x.name);
-      return d !== 0 ? d : x.name.localeCompare(y.name, "nl");
-    });
-  }, [stores, pickupAvail]);
+  }, [pickupMode, cartSig, pickupAvailRefresh]);
   // Alleen winkels waar de HELE bestelling op voorraad ligt (Kevin, 23 juli):
   // de lijst met "1/3 op voorraad"-winkels was onoverzichtelijk en een halve
-  // afhaling wil niemand. Nog geen data → alles tonen (nooit leeg tijdens laden);
-  // geen enkele winkel compleet → lege lijst + duidelijke melding in de UI.
-  const pickupAvailLoaded = Object.keys(pickupAvail).length > 0;
+  // afhaling wil niemand. Zonder geslaagde check géén lijst (laden/fout toont
+  // een status i.p.v. de dropdown); geen enkele winkel compleet → melding.
+  // De lijst komt uit hetzélfde availability-antwoord (bevat alle winkels) —
+  // een aparte /api/stores-fetch gaf een race met een ongefilterde eerste keus.
+  const pickupAvailLoaded = pickupAvailState === "loaded";
   const pickupStores = useMemo(() => {
-    if (!pickupAvailLoaded) return storesByAvail;
-    return storesByAvail.filter((s) => pickupAvail[s.name]?.allOk);
-  }, [storesByAvail, pickupAvail, pickupAvailLoaded]);
+    if (!pickupAvailLoaded) return [];
+    return Object.values(pickupAvail)
+      .filter((s) => s.allOk)
+      .sort((a, b) => a.name.localeCompare(b.name, "nl"))
+      .map((s) => ({ name: s.name, city: s.city }));
+  }, [pickupAvail, pickupAvailLoaded]);
   // Viel de gekozen winkel weg uit de lijst → schakel naar de eerste complete
   // winkel; is er géén complete winkel, wis de keuze (de submit-validatie
   // blokkeert dan met een duidelijke melding).
@@ -399,7 +387,13 @@ function CheckoutForm() {
       document.getElementById(`checkout-field-${name}`)?.focus();
     };
     if (pickupMode) {
-      if (!pickupStore) { setError(t("checkout.error_pickup_store")); return; }
+      // Doorgaan kan pas als de voorraad-check geslaagd is én de gekozen winkel
+      // de héle bestelling heeft — anders kon je tijdens het laden doorklikken.
+      if (!pickupAvailLoaded) {
+        setError(t(pickupAvailState === "error" ? "checkout.pickup_check_failed" : "checkout.pickup_checking"));
+        return;
+      }
+      if (!pickupStore || !pickupAvail[pickupStore]?.allOk) { setError(t("checkout.error_pickup_store")); return; }
     } else {
       if (!POSTCODE_RE.test(form.postalCode || "")) { fieldFail("postalCode", t("checkout.error_postcode")); return; }
       if (!HOUSENR_RE.test((form.houseNumber || "").trim())) { fieldFail("houseNumber", t("checkout.error_housenumber")); return; }
@@ -421,7 +415,7 @@ function CheckoutForm() {
     setError("");
     setUnavailableSkus([]);
     if (pickupMode) {
-      if (!pickupStore) { setError(t("checkout.error_pickup_store")); return; }
+      if (!pickupStore || !pickupAvail[pickupStore]?.allOk) { setError(t("checkout.error_pickup_store")); return; }
     } else {
       // Lichte validatie (datakwaliteit → minder mislukte bezorgingen).
       if (!POSTCODE_RE.test(form.postalCode || "")) {
@@ -463,6 +457,17 @@ function CheckoutForm() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        if (data.pickupUnavailable) {
+          // Winkelvoorraad wijzigde tussen kiezen en afrekenen. NIET de
+          // verwijder-artikelen-flow: de artikelen zijn elders wél leverbaar.
+          // Terug naar stap 1 met een ververste lijst, zodat de klant zélf
+          // opnieuw een (complete) winkel kiest — nooit stil herkiezen.
+          setError(t("checkout.pickup_unavailable"));
+          setPickupStore("");
+          setPickupAvailRefresh((n) => n + 1);
+          setStep("gegevens");
+          return;
+        }
         setError(data.error || t("common.error"));
         const skus = Array.isArray(data.unavailableSkus) ? data.unavailableSkus.map(String) : [];
         setUnavailableSkus(skus);
@@ -597,7 +602,23 @@ function CheckoutForm() {
             ))}
           </div>
           {pickupMode ? (
-            pickupAvailLoaded && !pickupStores.length ? (
+            pickupAvailState === "error" ? (
+              /* Check mislukt → géén lijst tonen (fail-closed), wel opnieuw kunnen proberen. */
+              <div className="mt-4 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft" role="status">
+                <p>{t("checkout.pickup_check_failed")}</p>
+                <button
+                  type="button"
+                  onClick={() => setPickupAvailRefresh((n) => n + 1)}
+                  className="mt-2 text-ink underline underline-offset-4"
+                >
+                  {t("checkout.pickup_retry")}
+                </button>
+              </div>
+            ) : !pickupAvailLoaded ? (
+              <p className="mt-4 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft" role="status" aria-busy="true">
+                {t("checkout.pickup_checking")}
+              </p>
+            ) : !pickupStores.length ? (
               /* Geen enkele winkel heeft de hele bestelling — duidelijk zeggen
                  i.p.v. een lege dropdown; bezorgen is dan de weg. */
               <p className="mt-4 rounded-card border border-line bg-surface px-4 py-3 font-sans text-sm text-ink-soft" role="status">
@@ -616,12 +637,9 @@ function CheckoutForm() {
                     <option key={s.name} value={s.name}>{s.name}</option>
                   ))}
                 </select>
-                {(() => {
-                  const sel = pickupAvail[pickupStore];
-                  if (pickupAvailLoading && !sel) return <span className="mt-1 block font-sans text-xs text-muted">{t("checkout.pickup_checking")}</span>;
-                  if (!sel || sel.total === 0) return <span className="mt-1 block font-sans text-xs text-muted">{t("checkout.pickup_free_note")}</span>;
-                  return <span className="mt-1 block font-sans text-xs text-success">{t("checkout.pickup_all_ok", { store: pickupStore })}</span>;
-                })()}
+                {pickupStore ? (
+                  <span className="mt-1 block font-sans text-xs text-success">{t("checkout.pickup_all_ok", { store: pickupStore })}</span>
+                ) : null}
               </label>
             )
           ) : null}
