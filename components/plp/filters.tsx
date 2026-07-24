@@ -197,7 +197,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {facets.fits.length > 0 ? (
         <FilterGroup title={t("plp.filters.fit")}>
           <CheckList
-            items={facets.fits.map((fit) => ({ value: fit.value, label: fit.value, count: fit.count }))}
+            items={facets.fits.map((fit) => ({ value: fit.value, label: fit.label ?? fit.value, count: fit.count }))}
             selected={selection.fits}
             onToggle={(v) => apply({ fits: toggle(selection.fits, v) })}
           />
@@ -208,7 +208,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {facets.materials.length > 1 ? (
         <FilterGroup title={t("plp.filters.material")}>
           <CheckList
-            items={facets.materials.map((m) => ({ value: m.value, label: m.value, count: m.count }))}
+            items={facets.materials.map((m) => ({ value: m.value, label: m.label ?? m.value, count: m.count }))}
             selected={selection.materials}
             onToggle={(v) => apply({ materials: toggle(selection.materials, v) })}
           />
@@ -219,7 +219,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {facets.patterns.length > 1 ? (
         <FilterGroup title={t("plp.filters.pattern")}>
           <CheckList
-            items={facets.patterns.map((pt) => ({ value: pt.value, label: pt.value, count: pt.count }))}
+            items={facets.patterns.map((pt) => ({ value: pt.value, label: pt.label ?? pt.value, count: pt.count }))}
             selected={selection.patterns}
             onToggle={(v) => apply({ patterns: toggle(selection.patterns, v) })}
           />
@@ -230,7 +230,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {facets.seasons.length > 1 ? (
         <FilterGroup title={t("plp.filters.season")}>
           <CheckList
-            items={facets.seasons.map((s) => ({ value: s.value, label: s.value, count: s.count }))}
+            items={facets.seasons.map((s) => ({ value: s.value, label: s.label ?? s.value, count: s.count }))}
             selected={selection.seasons}
             onToggle={(v) => apply({ seasons: toggle(selection.seasons, v) })}
           />

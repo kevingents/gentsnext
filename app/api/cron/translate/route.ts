@@ -11,6 +11,7 @@ import { ensureSiteContent } from "@/lib/site-settings-i18n";
 import { ensureLandingsContent } from "@/lib/landings-i18n";
 import { ensureNavContent } from "@/lib/nav-i18n";
 import { ensureCollectionsContent } from "@/lib/catalog-i18n";
+import { ensureFacetContent } from "@/lib/facet-i18n";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -74,7 +75,8 @@ export async function GET(req: Request) {
           error: String((e as Error).message),
         }));
     const collections = await ensureCollectionsContent(loc).catch((e) => ({ error: String((e as Error).message) }));
-    result[loc] = { ui, site, landings, nav, catalog, catalogDesc, collections };
+    const facets = await ensureFacetContent(loc).catch((e) => ({ error: String((e as Error).message) }));
+    result[loc] = { ui, site, landings, nav, catalog, catalogDesc, collections, facets };
   }
 
   return NextResponse.json({ ok: true, descriptions, result });
