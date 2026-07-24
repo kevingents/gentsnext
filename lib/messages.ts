@@ -70,6 +70,7 @@ const nl: Dict = {
   "checkout.pickup_none_full": "Geen enkele winkel heeft op dit moment je hele bestelling op voorraad. Kies bezorgen — dan sturen we alles in één keer thuis.",
   "checkout.pickup_check_failed": "De winkelvoorraad kon niet worden gecontroleerd.",
   "checkout.pickup_retry": "Probeer opnieuw",
+  "checkout.pickup_unavailable": "De gekozen winkel heeft niet meer alles op voorraad. Kies een andere winkel of laat je bestelling bezorgen.",
 };
 
 const en: Dict = {
@@ -134,6 +135,7 @@ const en: Dict = {
   "checkout.pickup_none_full": "No store currently has your entire order in stock. Choose delivery instead — we'll ship everything to you in one go.",
   "checkout.pickup_check_failed": "We couldn't check store stock.",
   "checkout.pickup_retry": "Try again",
+  "checkout.pickup_unavailable": "The selected store no longer has your entire order in stock. Choose another store or have your order delivered.",
 };
 
 const de: Dict = {

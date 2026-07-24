@@ -133,15 +133,6 @@ function CheckoutForm() {
   // Afhalen in winkel (click & collect): gratis, geen adres nodig.
   const [pickupMode, setPickupMode] = useState(false);
   const [pickupStore, setPickupStore] = useState("");
-  const [stores, setStores] = useState<{ name: string; city: string }[]>([]);
-  useEffect(() => {
-    let active = true;
-    fetch("/api/stores")
-      .then((r) => r.json())
-      .then((d) => { if (active) { const s = d.stores || []; setStores(s); setPickupStore((cur) => cur || s[0]?.name || ""); } })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
   // Voorraad per winkel voor de afhaal-keuze: welke winkel heeft álles op voorraad?
   type StoreAvail = { name: string; city: string; allOk: boolean; okCount: number; total: number; missingSkus: string[] };
   const [pickupAvail, setPickupAvail] = useState<Record<string, StoreAvail>>({});
@@ -171,26 +162,20 @@ function CheckoutForm() {
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupMode, cartSig, pickupAvailRefresh]);
-  const storesByAvail = useMemo(() => {
-    const rank = (n: string) => {
-      const a = pickupAvail[n];
-      if (!a || a.total === 0) return -1;
-      return a.allOk ? 2 : a.okCount > 0 ? 1 : 0;
-    };
-    return [...stores].sort((x, y) => {
-      const d = rank(y.name) - rank(x.name);
-      return d !== 0 ? d : x.name.localeCompare(y.name, "nl");
-    });
-  }, [stores, pickupAvail]);
   // Alleen winkels waar de HELE bestelling op voorraad ligt (Kevin, 23 juli):
   // de lijst met "1/3 op voorraad"-winkels was onoverzichtelijk en een halve
   // afhaling wil niemand. Zonder geslaagde check géén lijst (laden/fout toont
   // een status i.p.v. de dropdown); geen enkele winkel compleet → melding.
+  // De lijst komt uit hetzélfde availability-antwoord (bevat alle winkels) —
+  // een aparte /api/stores-fetch gaf een race met een ongefilterde eerste keus.
   const pickupAvailLoaded = pickupAvailState === "loaded";
   const pickupStores = useMemo(() => {
     if (!pickupAvailLoaded) return [];
-    return storesByAvail.filter((s) => pickupAvail[s.name]?.allOk);
-  }, [storesByAvail, pickupAvail, pickupAvailLoaded]);
+    return Object.values(pickupAvail)
+      .filter((s) => s.allOk)
+      .sort((a, b) => a.name.localeCompare(b.name, "nl"))
+      .map((s) => ({ name: s.name, city: s.city }));
+  }, [pickupAvail, pickupAvailLoaded]);
   // Viel de gekozen winkel weg uit de lijst → schakel naar de eerste complete
   // winkel; is er géén complete winkel, wis de keuze (de submit-validatie
   // blokkeert dan met een duidelijke melding).
@@ -404,7 +389,10 @@ function CheckoutForm() {
     if (pickupMode) {
       // Doorgaan kan pas als de voorraad-check geslaagd is én de gekozen winkel
       // de héle bestelling heeft — anders kon je tijdens het laden doorklikken.
-      if (!pickupAvailLoaded) { setError(t("checkout.pickup_checking")); return; }
+      if (!pickupAvailLoaded) {
+        setError(t(pickupAvailState === "error" ? "checkout.pickup_check_failed" : "checkout.pickup_checking"));
+        return;
+      }
       if (!pickupStore || !pickupAvail[pickupStore]?.allOk) { setError(t("checkout.error_pickup_store")); return; }
     } else {
       if (!POSTCODE_RE.test(form.postalCode || "")) { fieldFail("postalCode", t("checkout.error_postcode")); return; }
@@ -469,12 +457,20 @@ function CheckoutForm() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        if (data.pickupUnavailable) {
+          // Winkelvoorraad wijzigde tussen kiezen en afrekenen. NIET de
+          // verwijder-artikelen-flow: de artikelen zijn elders wél leverbaar.
+          // Terug naar stap 1 met een ververste lijst, zodat de klant zélf
+          // opnieuw een (complete) winkel kiest — nooit stil herkiezen.
+          setError(t("checkout.pickup_unavailable"));
+          setPickupStore("");
+          setPickupAvailRefresh((n) => n + 1);
+          setStep("gegevens");
+          return;
+        }
         setError(data.error || t("common.error"));
         const skus = Array.isArray(data.unavailableSkus) ? data.unavailableSkus.map(String) : [];
         setUnavailableSkus(skus);
-        // Winkelvoorraad wijzigde tussen kiezen en afrekenen → lijst verversen,
-        // zodat de klant meteen de nog-wel-complete winkels ziet.
-        if (data.pickupUnavailable) setPickupAvailRefresh((n) => n + 1);
         // Mobiel: het overzicht staat standaard dicht — klap open zodat de
         // rood-gemarkeerde regel(s) vindbaar zijn bij een voorraad-weigering.
         if (skus.length) setSummaryOpen(true);

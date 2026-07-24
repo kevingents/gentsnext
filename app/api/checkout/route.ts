@@ -41,7 +41,9 @@ export async function POST(req: Request) {
 
   const deliveryMethod: DeliveryMethod =
     body?.deliveryMethod === "express" ? "express" : body?.deliveryMethod === "pickup" ? "pickup" : "standard";
-  const pickupStore = String(body?.pickupStore || "").trim();
+  // Wordt bij afhalen vervangen door de canonieke winkelnaam (server-casing),
+  // zodat downstream (pick-opdrachten, mails, portal-filters) altijd matcht.
+  let pickupStore = String(body?.pickupStore || "").trim();
   // Adres alleen vereist bij bezorgen; bij afhalen in winkel is een winkelkeuze nodig.
   if (deliveryMethod === "pickup") {
     if (!pickupStore) return bad("Kies een winkel om af te halen.");
@@ -50,6 +52,7 @@ export async function POST(req: Request) {
     // tussen kiezen en afrekenen (en de client is niet te vertrouwen).
     const store = getStores().find((s) => s.title.toLowerCase() === pickupStore.toLowerCase());
     if (!store) return bad("Kies een winkel om af te halen.");
+    pickupStore = store.title;
     const need = new Map<string, number>();
     for (const it of items) {
       const sku = String(it.sku || "").trim();
