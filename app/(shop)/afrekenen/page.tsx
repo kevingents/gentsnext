@@ -10,7 +10,7 @@ import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
-import { SHIPPING_ZONES, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
+import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
 
 type Field = {
   name: string;
@@ -94,6 +94,7 @@ function CheckoutForm() {
   // op NL terwijl de bezorgpagina BE/DE/EU belooft (UX-audit).
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const zone = zoneFor(country);
+  const countries = enabledZones();
   const [business, setBusiness] = useState(false);
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
@@ -250,7 +251,7 @@ function CheckoutForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartSig]);
 
-  type PrefillAddr = { id: string; label: string; firstName: string; lastName: string; street: string; houseNumber: string; postalCode: string; city: string };
+  type PrefillAddr = { id: string; label: string; firstName: string; lastName: string; street: string; houseNumber: string; postalCode: string; city: string; country?: string };
   type Prefill = { loggedIn: boolean; email?: string; firstName?: string; lastName?: string; phone?: string; defaultAddressId?: string | null; addresses?: PrefillAddr[] };
   const [prefill, setPrefill] = useState<Prefill | null>(null);
   const [addrId, setAddrId] = useState("");
@@ -287,6 +288,8 @@ function CheckoutForm() {
     const a = prefill?.addresses?.find((x) => x.id === id);
     if (!a) return;
     setForm((p) => ({ ...p, firstName: a.firstName || p.firstName, lastName: a.lastName || p.lastName, postalCode: a.postalCode, houseNumber: a.houseNumber, street: a.street, city: a.city }));
+    // Land meenemen: anders botst een BE/DE-adres op de NL-postcodecontrole.
+    if (a.country && a.country !== country) setCountry(a.country);
   }
 
   // Adres-autofill: postcode + huisnummer → straat + plaats.
@@ -690,15 +693,20 @@ function CheckoutForm() {
             {!pickupMode ? (
               <label className="col-span-full block">
                 <span className="font-sans text-sm text-ink">{t("checkout.country")}</span>
-                <select
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
-                >
-                  {SHIPPING_ZONES.map((z) => (
-                    <option key={z.code} value={z.code}>{z.label}</option>
-                  ))}
-                </select>
+                {/* Eén bezorgland → geen keuzelijst met één optie, maar de naam. */}
+                {countries.length > 1 ? (
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+                  >
+                    {countries.map((z) => (
+                      <option key={z.code} value={z.code}>{z.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="mt-1 block font-sans text-sm text-ink-soft">{zone.label}</span>
+                )}
                 {/* Tarief + gratis-drempel van het gekozen land — dezelfde
                     DHL-staffel die de server rekent. */}
                 <span className="mt-1 block font-sans text-xs text-muted">

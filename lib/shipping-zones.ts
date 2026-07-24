@@ -23,18 +23,27 @@ export type ShippingZone = {
   postcode: RegExp;
   /** Voorbeeld voor het invoerveld. */
   postcodeExample: string;
+  /**
+   * Aan = klanten uit dit land kunnen afrekenen. Staat voor alles behalve NL
+   * UIT: de keten erachter is er nog niet klaar voor (ketencheck 24 juli) —
+   * geen internationaal verzendlabel/track&trace, geen btw/OSS-afhandeling,
+   * retourportaal + retourlabel zijn NL(/BE-winkel)-only, en de bezorgbelofte
+   * ("morgen in huis") kent geen landtransit. Zodra dat geregeld is: hier op
+   * true zetten — de tarieven kloppen al.
+   */
+  enabled: boolean;
 };
 
 /** DHL-staffel zoals op de bezorgpagina (bron: Kevin, 24 juli 2026). */
 export const SHIPPING_ZONES: ShippingZone[] = [
-  { code: "NL", label: "Nederland", rateCents: 395, freeFromCents: 7500, postcode: /^[1-9][0-9]{3}\s?[a-zA-Z]{2}$/, postcodeExample: "1234 AB" },
-  { code: "BE", label: "België", rateCents: 395, freeFromCents: 7500, postcode: /^[1-9][0-9]{3}$/, postcodeExample: "2000" },
-  { code: "DE", label: "Duitsland", rateCents: 495, freeFromCents: 10000, postcode: /^[0-9]{5}$/, postcodeExample: "10115" },
-  { code: "AT", label: "Oostenrijk", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{4}$/, postcodeExample: "1010" },
-  { code: "FR", label: "Frankrijk", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{5}$/, postcodeExample: "75001" },
-  { code: "LU", label: "Luxemburg", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{4}$/, postcodeExample: "1009" },
-  { code: "ES", label: "Spanje", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{5}$/, postcodeExample: "28001" },
-  { code: "IT", label: "Italië", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{5}$/, postcodeExample: "00184" },
+  { code: "NL", label: "Nederland", rateCents: 395, freeFromCents: 7500, postcode: /^[1-9][0-9]{3}\s?[a-zA-Z]{2}$/, postcodeExample: "1234 AB" , enabled: true },
+  { code: "BE", label: "België", rateCents: 395, freeFromCents: 7500, postcode: /^[1-9][0-9]{3}$/, postcodeExample: "2000" , enabled: false },
+  { code: "DE", label: "Duitsland", rateCents: 495, freeFromCents: 10000, postcode: /^[0-9]{5}$/, postcodeExample: "10115" , enabled: false },
+  { code: "AT", label: "Oostenrijk", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{4}$/, postcodeExample: "1010" , enabled: false },
+  { code: "FR", label: "Frankrijk", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{5}$/, postcodeExample: "75001" , enabled: false },
+  { code: "LU", label: "Luxemburg", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{4}$/, postcodeExample: "1009" , enabled: false },
+  { code: "ES", label: "Spanje", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{5}$/, postcodeExample: "28001" , enabled: false },
+  { code: "IT", label: "Italië", rateCents: 1295, freeFromCents: null, postcode: /^[0-9]{5}$/, postcodeExample: "00184" , enabled: false },
 ];
 
 export const DEFAULT_COUNTRY = "NL";
@@ -44,9 +53,15 @@ export function zoneFor(code: string): ShippingZone {
   return SHIPPING_ZONES.find((z) => z.code === c) ?? SHIPPING_ZONES[0];
 }
 
+/** Landen waar de klant nu écht kan bestellen (UI-lijst). */
+export function enabledZones(): ShippingZone[] {
+  return SHIPPING_ZONES.filter((z) => z.enabled);
+}
+
+/** Bezorgen we hier? Onbekend óf uitgezet land → nee (fail-closed). */
 export function isKnownCountry(code: string): boolean {
   const c = String(code || "").trim().toUpperCase();
-  return SHIPPING_ZONES.some((z) => z.code === c);
+  return SHIPPING_ZONES.some((z) => z.code === c && z.enabled);
 }
 
 /**
