@@ -17,29 +17,32 @@ import { products, productImages } from "@/db/schema";
  *
  *   npm run gen:ai-packshots -- 10                  (10 producten deze run)
  *   npm run gen:ai-packshots -- 50 Overhemden       (alleen één hoofdgroep)
+ *   npm run gen:ai-packshots -- 200 Overhemden redo (bestaande AI-beelden VERVANGEN
+ *                                                    door de actuele stijl; echte
+ *                                                    foto's blijven altijd ongemoeid)
  */
 
 const MODEL = process.env.FAL_PACKSHOT_MODEL || "fal-ai/flux-pro/v1.1-ultra";
 
 const STYLE =
-  "Professional high-end menswear e-commerce product packshot. Clean seamless soft light warm grey studio background (#f2f0ec), soft even diffused lighting, subtle natural shadow under the product, tack sharp, premium catalog quality. Product perfectly centered with generous even margins. STRICTLY no people and absolutely NO visible mannequin of any kind — no black, chrome, wooden or tailor-bust mannequin, no head, no neck stand, no hands, no legs: the garment must appear hollow and self-supporting (true invisible ghost mannequin). No text, no labels with words, no watermark, no logo, no props.";
+  "Professional high-end menswear e-commerce product packshot. The soft light warm grey studio backdrop (#f2f0ec) fills the ENTIRE image edge-to-edge — no white backdrop panel, no inner frame, no border, no vignette, the background is one continuous seamless tone across the whole frame. Soft even diffused lighting, subtle natural shadow under the product, tack sharp, premium catalog quality. Product large and perfectly centered. STRICTLY no people and absolutely NO mannequin, bust, torso form, neck stand or hanger visible in any form — no black, chrome or wooden display forms. No text, no labels with words, no watermark, no logo, no props.";
 
-// Presentatie per hoofdgroep — ghost-mannequin voor gedragen kleding, nette
-// flat-lay/stilleven voor accessoires. Het gilet volgt de huisregel niet (dicht
-// geknoopt bestaat niet zonder model) — onderste knoop blijft open benoemd.
+// Presentatie per hoofdgroep — gedragen kleding ALTIJD netjes gevouwen/plat
+// gefotografeerd (top-down flat-lay): ghost-mannequin-prompts leverden bij FLUX
+// tóch bustes met houten halsknop op (Kevin, 24 juli: "niet op een houten
+// ding"). De gevouwen stijl (zoals de GENTS TTL-shot) is wél goedgekeurd.
 const PRESENT: Record<string, string> = {
-  Overhemden: "invisible ghost mannequin effect: the dress shirt shown in 3D form as if worn, collar crisp and buttoned, sleeves neatly shaped",
-  "Polo-shirts": "invisible ghost mannequin effect: the polo shirt shown in 3D form as if worn, collar neat",
-  "T-Shirts": "invisible ghost mannequin effect: the t-shirt shown in 3D form as if worn",
-  Truien: "invisible ghost mannequin effect: the knitwear shown in 3D form as if worn, neckline neat",
-  "Truien & Vesten": "invisible ghost mannequin effect: the knitwear shown in 3D form as if worn",
-  Vesten: "invisible ghost mannequin effect: the cardigan shown in 3D form as if worn, hanging naturally",
-  Colberts: "invisible ghost mannequin effect: the blazer shown in 3D form as if worn, lapels sharp, front view",
-  // Volledig pak/jas 'zwevend' krijgt FLUX niet betrouwbaar voor elkaar (er
-  // verschijnt toch een pop met hoofd/chroom) → bewust een strakke HOOFDLOZE
-  // matte paspop: consistent en professioneel.
+  Overhemden: "the dress shirt expertly folded in a neat rectangle, photographed top-down flat-lay, collar crisp and buttoned facing up, one cuff elegantly tucked beside the fold",
+  "Polo-shirts": "the polo shirt expertly folded in a neat rectangle, photographed top-down flat-lay, collar neat and facing up",
+  "T-Shirts": "the t-shirt expertly folded in a neat rectangle, photographed top-down flat-lay",
+  Truien: "the knitwear expertly folded in a neat rectangle, photographed top-down flat-lay, neckline visible at the top, knit texture sharp",
+  "Truien & Vesten": "the knitwear expertly folded in a neat rectangle, photographed top-down flat-lay, knit texture sharp",
+  Vesten: "the cardigan expertly folded in a neat rectangle, photographed top-down flat-lay, button placket visible",
+  Colberts: "the blazer laid out flat photographed top-down, front closed, lapels sharp, sleeves folded neatly inward",
+  // Volledig pak/jas 'zwevend' of gevouwen oogt niet — bewust een strakke
+  // HOOFDLOZE matte paspop: consistent en professioneel (goedgekeurde stijl).
   Pakken: "the full suit (jacket over matching trousers) displayed on a minimal HEADLESS matte light-grey display mannequin — the form ends at the neck in a flat cap, strictly no head, no face, no chrome or reflective surfaces, no visible hands",
-  Gilets: "invisible ghost mannequin effect: the waistcoat shown in 3D form as if worn, bottom button left undone",
+  Gilets: "the waistcoat laid out flat photographed top-down, front visible with the bottom button left undone",
   Jassen: "the coat displayed on a minimal HEADLESS matte light-grey display mannequin — the form ends at the neck in a flat cap, strictly no head, no face, no chrome or reflective surfaces, no visible hands",
   Broeken: "the trousers neatly folded over an invisible hanger bar, hanging straight, front view",
   Jeans: "the jeans neatly folded over an invisible hanger bar, hanging straight, front view",
@@ -50,7 +53,7 @@ const PRESENT: Record<string, string> = {
   Riemen: "the leather belt loosely coiled in a neat spiral, buckle facing up",
   Bretels: "the suspenders neatly arranged flat in a Y-shape",
   Sjaals: "the scarf loosely folded lengthwise with soft drape, laid flat",
-  Manchetknopen: "the pair of cufflinks close-up on a subtle surface, macro detail",
+  Manchetknopen: "the pair of cufflinks side by side facing up, photographed top-down close-up directly on the seamless warm grey backdrop, macro detail",
   Sokken: "the pair of socks neatly folded flat side by side",
 };
 
@@ -117,12 +120,17 @@ async function main() {
 
   const count = Math.max(1, Math.min(1200, Number(process.argv[2]) || 10));
   const onlyHg = (process.argv[3] || "").trim();
+  const redo = (process.argv[4] || "").trim() === "redo";
 
   const db = getDb();
-  // Kandidaten: actief + voorraad + groep-primair + GEEN enkele image-rij.
-  // Best verkoopbare eerst (meeste voorraad). Idempotent: producten met een
-  // (AI-)beeld vallen automatisch buiten de selectie.
+  // Kandidaten: actief + voorraad + groep-primair. Normaal: GEEN enkele
+  // image-rij (idempotent). Redo: juist producten met alléén een ai-packshot
+  // (stijl-vervanging); producten met échte foto's blijven altijd buiten schot.
   const hgCond = onlyHg ? sql` and p.attributes->>'hoofdgroep_omschrijving' = ${onlyHg}` : sql``;
+  const imgCond = redo
+    ? sql` and exists (select 1 from product_images i where i.product_id = p.id and i.source = 'ai-packshot')
+        and not exists (select 1 from product_images i where i.product_id = p.id and i.source = '')`
+    : sql` and not exists (select 1 from product_images i where i.product_id = p.id)`;
   const rows = await db.execute<Cand>(sql`
     select p.id, p.handle, p.title,
       coalesce(p.attributes->>'hoofdgroep_omschrijving', '') as hoofdgroep,
@@ -130,12 +138,11 @@ async function main() {
       coalesce(p.attributes->>'materiaal', p.attributes->>'samenstelling_materiaal', '') as materiaal,
       coalesce(p.attributes->>'dessin', '') as dessin
     from products p
-    where p.status = 'active' and p.in_stock = true and p.is_group_primary = true
-      and not exists (select 1 from product_images i where i.product_id = p.id)${hgCond}
+    where p.status = 'active' and p.in_stock = true and p.is_group_primary = true${imgCond}${hgCond}
     order by p.stock_qty desc nulls last
     limit ${count}
   `);
-  console.log(`⏳ ${rows.rows.length} producten · model ${MODEL}`);
+  console.log(`⏳ ${rows.rows.length} producten · model ${MODEL}${redo ? " · REDO (bestaande AI-beelden vervangen)" : ""}`);
 
   let ok = 0;
   for (const c of rows.rows) {
@@ -146,6 +153,10 @@ async function main() {
     // CDN-cache het oude beeld blijven tonen.
     const saved = await toBlob(url, `ai-packshots/${c.handle}-${Date.now().toString(36)}.jpg`, token);
     if (!saved) { console.log("   ✗ upload mislukt"); continue; }
+    // Redo: oude AI-rijen eerst weg (nieuwe stijl vervangt, geen duplicaten).
+    if (redo) {
+      await db.execute(sql`delete from product_images where product_id = ${c.id}::uuid and source = 'ai-packshot'`);
+    }
     // Her-check bij insert: kreeg het product ondertussen (import-run) échte
     // foto's, dan slaan we de AI-rij over — echte foto's winnen altijd.
     const ins = await db.execute<{ id: string }>(sql`
