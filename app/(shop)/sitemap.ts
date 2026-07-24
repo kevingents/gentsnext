@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { listCollections, listProductHandles } from "@/lib/catalog";
 import { getSiteUrl } from "@/lib/site-url";
+import { LOCALES, HREFLANG, localePrefix, DEFAULT_LOCALE } from "@/lib/i18n";
 import { SIZE_GUIDES } from "@/lib/size-chart-hub";
 import { CATEGORIES } from "@/lib/categories";
 import { BRANDS } from "@/lib/brands";
@@ -14,22 +15,38 @@ export const revalidate = 3600;
  * Faalt stil naar een minimale variant wanneer de database (nog) niet
  * bereikbaar is, zodat een build zonder DATABASE_URL niet breekt.
  */
+/**
+ * Taalvarianten van één (prefix-loos) pad als hreflang-alternates. De
+ * anderstalige URL's (/de/… /en/…) stonden niet in de sitemap én worden nergens
+ * náár gelinkt — daardoor waren ze voor Google praktisch onvindbaar. Google
+ * leest deze `alternates.languages` uit als xhtml:link-annotaties.
+ */
+function withLanguages(siteUrl: string, path: string) {
+  const languages: Record<string, string> = {};
+  for (const l of LOCALES) {
+    if (l === DEFAULT_LOCALE) continue;
+    languages[HREFLANG[l]] = `${siteUrl}${localePrefix(l)}${path === "/" ? "" : path}`;
+  }
+  return { alternates: { languages } };
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = getSiteUrl();
   const base: MetadataRoute.Sitemap = [
-    { url: siteUrl, changeFrequency: "daily", priority: 1 },
-    { url: `${siteUrl}/collections`, changeFrequency: "weekly", priority: 0.6 },
-    { url: `${siteUrl}/blog`, changeFrequency: "weekly", priority: 0.6 },
-    { url: `${siteUrl}/looks`, changeFrequency: "weekly", priority: 0.6 },
-    { url: `${siteUrl}/gelegenheden`, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${siteUrl}/afspraak`, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${siteUrl}/maatadvies`, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${siteUrl}/maattabellen`, changeFrequency: "monthly", priority: 0.6 },
+    { url: siteUrl, changeFrequency: "daily", priority: 1, ...withLanguages(siteUrl, "/") },
+    { url: `${siteUrl}/collections`, changeFrequency: "weekly", priority: 0.6, ...withLanguages(siteUrl, "/collections") },
+    { url: `${siteUrl}/blog`, changeFrequency: "weekly", priority: 0.6, ...withLanguages(siteUrl, "/blog") },
+    { url: `${siteUrl}/looks`, changeFrequency: "weekly", priority: 0.6, ...withLanguages(siteUrl, "/looks") },
+    { url: `${siteUrl}/gelegenheden`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/gelegenheden") },
+    { url: `${siteUrl}/afspraak`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/afspraak") },
+    { url: `${siteUrl}/maatadvies`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/maatadvies") },
+    { url: `${siteUrl}/maattabellen`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/maattabellen") },
     // Canonieke categorie-PLP's (de volledige listings) — statisch, dus altijd mee.
     ...CATEGORIES.map((c) => ({
       url: `${siteUrl}/categorie/${c.slug}`,
       changeFrequency: "daily" as const,
       priority: 0.8,
+      ...withLanguages(siteUrl, `/categorie/${c.slug}`),
     })),
     ...BRANDS.map((b) => ({
       url: `${siteUrl}/merken/${b.slug}`,
@@ -57,6 +74,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         url: `${siteUrl}/collections/${c.handle}`,
         changeFrequency: "daily" as const,
         priority: 0.7,
+        ...withLanguages(siteUrl, `/collections/${c.handle}`),
       })),
       ...blog.map((p) => ({
         url: `${siteUrl}/blog/${p.slug}`,
@@ -74,6 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         lastModified: p.updatedAt,
         changeFrequency: "daily" as const,
         priority: 0.8,
+        ...withLanguages(siteUrl, `/products/${p.handle}`),
       })),
     ];
   } catch {
