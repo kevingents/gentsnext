@@ -311,7 +311,13 @@ function CheckoutForm() {
   const totalCents = Math.max(0, cart.subtotalCents - discountCents) + shippingCents;
   // Cadeaubon dekt (een deel van) het hele bedrag incl. verzending.
   const giftcardCents = giftcard ? Math.min(giftcard.balanceCents, totalCents) : 0;
-  const payableCents = Math.max(0, totalCents - giftcardCents);
+  const clientPayableCents = Math.max(0, totalCents - giftcardCents);
+  // Server-correctie na een prijs-409: toon en gebruik het échte totaal zodat
+  // de klant met één extra klik alsnog voor het juiste bedrag kan afrekenen.
+  const [serverTotalOverride, setServerTotalOverride] = useState<number | null>(null);
+  const cartSigForTotal = cart.lines.map((l) => `${l.sku}:${l.qty}`).join("|");
+  useEffect(() => { setServerTotalOverride(null); }, [cartSigForTotal, voucher?.code, giftcard?.code, pickupMode, delivery]);
+  const payableCents = serverTotalOverride ?? clientPayableCents;
 
   const unavailableSet = new Set(unavailableSkus.map((s) => s.toLowerCase()));
   function removeLine(id: string) {
@@ -452,6 +458,9 @@ function CheckoutForm() {
           method: payMethod,
           voucherCode: voucher?.code || "",
           giftcardCode: giftcard?.code || "",
+          // Server vergelijkt: wijkt het echte totaal af (prijs/actie gewijzigd
+          // sinds toevoegen) → 409 i.p.v. stil een ander bedrag innen.
+          expectedTotalCents: payableCents,
           items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty, groupId: l.groupId, roleLabel: l.roleLabel })),
         }),
       });
@@ -469,6 +478,9 @@ function CheckoutForm() {
           return;
         }
         setError(data.error || t("common.error"));
+        // Prijs gewijzigd → knop toont voortaan het server-totaal; nogmaals
+        // betalen gaat dan wél door (expectedTotalCents matcht weer).
+        if (data.priceChanged && Number.isFinite(data.serverTotalCents)) setServerTotalOverride(data.serverTotalCents);
         const skus = Array.isArray(data.unavailableSkus) ? data.unavailableSkus.map(String) : [];
         setUnavailableSkus(skus);
         // Mobiel: het overzicht staat standaard dicht — klap open zodat de
@@ -782,8 +794,9 @@ function CheckoutForm() {
           <label className="mt-3 flex items-start gap-2 font-sans text-sm">
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink" />
             <span className="text-ink-soft">
-              {t("checkout.agree_terms")} <Link href="/pages/algemene-voorwaarden" className="text-ink underline">{t("common.terms_link")}</Link> {t("checkout.and_the")}{" "}
-              <Link href="/pages/retourneren" className="text-ink underline">{t("common.withdrawal_link")}</Link> {t("checkout.withdrawal_note")}
+              {/* Nieuw tabblad: wegnavigeren wiste hier de complete checkout-invoer. */}
+              {t("checkout.agree_terms")} <a href="/pages/algemene-voorwaarden" target="_blank" rel="noopener" className="text-ink underline">{t("common.terms_link")}</a> {t("checkout.and_the")}{" "}
+              <a href="/retourneren" target="_blank" rel="noopener" className="text-ink underline">{t("common.withdrawal_link")}</a> {t("checkout.withdrawal_note")}
             </span>
           </label>
 

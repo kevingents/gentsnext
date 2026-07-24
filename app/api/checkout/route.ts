@@ -101,6 +101,24 @@ export async function POST(req: Request) {
     }
     return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
   }
+  // Prijs-guard: de betaalknop toonde het client-totaal (localStorage-prijzen);
+  // de server herprijst uit de DB. Wijkt dat af (sale gestart/afgelopen sinds
+  // toevoegen) → order annuleren en de klant het nieuwe bedrag laten zien,
+  // nooit stil een ander bedrag naar Mollie sturen dan de knop beloofde.
+  const expectedTotalCents = Number(body?.expectedTotalCents);
+  if (Number.isFinite(expectedTotalCents) && expectedTotalCents >= 0 && order.totalCents !== expectedTotalCents) {
+    await voidUnpaidOrder(order.id).catch(() => {});
+    return NextResponse.json(
+      {
+        ok: false,
+        priceChanged: true,
+        serverTotalCents: order.totalCents,
+        error: "De prijzen zijn bijgewerkt sinds je de artikelen toevoegde. Controleer je winkelwagen — het actuele totaal is " +
+          `€ ${(order.totalCents / 100).toFixed(2).replace(".", ",")}.`,
+      },
+      { status: 409 },
+    );
+  }
 
   // Vaste, server-bepaalde site-URL (nooit de client-Host) voor betaal-callbacks/
   // redirects — host-header-injectie mag een webhook/return niet kunnen wegkapen.
