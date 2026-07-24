@@ -22,10 +22,14 @@ export function ShopTheLook({
   look,
   aspectClass = "aspect-[4/5]",
   buy,
+  soldOutHandles,
 }: {
   look: ResolvedLook;
   aspectClass?: string;
   buy?: Record<string, LookBuyData>;
+  /** Handles die de buy-box al als uitverkocht beschouwt ("Dit item" op de PDP) —
+   *  die krijgen in de look geen "Kies maat"-knop maar dezelfde Uitverkocht-stijl. */
+  soldOutHandles?: string[];
 }) {
   const cart = useCart();
   const t = useT();
@@ -71,6 +75,15 @@ export function ShopTheLook({
   }
 
   const shoppable = Boolean(buy);
+
+  // Uitverkocht per look-item: expliciet aangeleverd (het buy-box-oordeel voor
+  // "Dit item") óf alle bekende maten netto op. Dan geen "Kies maat" — dat was
+  // een dood pad naar een drawer vol doorgestreepte maten.
+  function isSoldOut(handle: string): boolean {
+    if (soldOutHandles?.includes(handle)) return true;
+    const d = buy?.[handle];
+    return Boolean(d && d.sizes.length > 0 && d.sizes.every((s) => s.known && s.qty <= 0));
+  }
 
   // Geopende maat-drawer (één tegelijk) — voorkomt een lange pagina vol matrices.
   const dh = sizeDrawer !== null ? look.products[sizeDrawer] : null;
@@ -161,6 +174,15 @@ export function ShopTheLook({
                   {shoppable && data && data.sizes.length ? (
                     <div className="mt-2.5 flex items-center justify-between gap-3">
                       <span className="font-sans text-sm text-ink">{price}</span>
+                      {isSoldOut(h.handle) ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="shrink-0 rounded-card border border-line px-3.5 py-1.5 font-sans text-xs font-medium text-muted opacity-60"
+                        >
+                          {t("common.soldOut")}
+                        </button>
+                      ) : (
                       <button
                         type="button"
                         onClick={() => setSizeDrawer(i)}
@@ -174,6 +196,7 @@ export function ShopTheLook({
                       >
                         {added[i] ? t("looks.shopTheLook.added") : sel ? `Maat ${sel}` : t("looks.shopTheLook.chooseSizeBtn")}
                       </button>
+                      )}
                     </div>
                   ) : (
                     <div className="mt-2.5 flex items-center justify-between gap-3">
@@ -215,11 +238,15 @@ export function ShopTheLook({
               <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">{t("look.drawer.sizeAdvice")}</Link>
             </div>
             <SizeMatrix
-              sizes={dData.sizes.map((s) => ({ ...s, known: true }))}
+              sizes={dData.sizes}
               hoofdgroep={dData.hoofdgroep}
               selected={dSel ?? null}
               onSelect={(size) => setPicked((p) => ({ ...p, [sizeDrawer!]: size }))}
             />
+            {/* Alles op? Zeg dat expliciet onder de maten i.p.v. alleen doorstrepen. */}
+            {isSoldOut(dh.handle) ? (
+              <p className="mt-3 font-sans text-sm text-muted">{t("pdp.size.soldout")}</p>
+            ) : null}
 
             <button
               type="button"

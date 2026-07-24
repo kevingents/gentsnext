@@ -5,6 +5,8 @@ import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 import { sortSizes } from "@/lib/sizing";
 import { colorSwatch } from "@/lib/colors";
+import { stockAvailable } from "@/lib/stock";
+import { availableForSkus } from "@/lib/stock-reservations";
 
 /**
  * "Shop the look" — gecureerde outfits met klikbare hotspots op een modelfoto
@@ -412,7 +414,7 @@ export type ResolvedHotspot = Hotspot & { product: ProductCardData | null };
 export type ResolvedLook = Look & { products: ResolvedHotspot[] };
 
 /** Koopgegevens per look-product: maten + voorraad + sku voor direct-in-winkelwagen. */
-export type LookBuySize = { size: string; sku: string; priceCents: number; qty: number };
+export type LookBuySize = { size: string; sku: string; priceCents: number; qty: number; known: boolean };
 export type LookBuyData = { color: string; hoofdgroep: string; specs: string; sizes: LookBuySize[] };
 
 export async function getLookBuyData(handles: string[]): Promise<Record<string, LookBuyData>> {
@@ -431,6 +433,14 @@ export async function getLookBuyData(handles: string[]): Promise<Record<string, 
     where p.handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)}) and coalesce(v.size,'') <> ''
     order by p.handle, v.position asc
   `);
+  // Netto ONLINE-voorraad — dezelfde bron als de PDP-buy-box (availableForSkus):
+  // product_variants.stock_qty is het bruto totaal over alle winkels + magazijn en
+  // ziet kassaverkopen/web-reserveringen/safety stock niet. Daardoor verkocht de
+  // look door waar de buy-box al "Uitverkocht" toonde (UX-logica-audit, top-punt).
+  // Eén call voor álle skus; valt terug op bruto (known=false) als de voorraadbron
+  // tijdelijk leeg is — zelfde gedrag als de buy-box bij hasStock=false.
+  const allSkus = [...new Set(rows.rows.map((r) => r.sku).filter(Boolean))];
+  const [netStock, hasStock] = await Promise.all([availableForSkus(allSkus), stockAvailable()]);
   const out: Record<string, LookBuyData> = {};
   for (const r of rows.rows) {
     let e = out[r.handle];
@@ -445,7 +455,9 @@ export async function getLookBuyData(handles: string[]): Promise<Record<string, 
       out[r.handle] = e;
     }
     if (e.sizes.some((s) => s.size === r.size)) continue;
-    e.sizes.push({ size: r.size, sku: r.sku, priceCents: Number(r.price) || 0, qty: Number(r.qty) || 0 });
+    const known = hasStock && Boolean(r.sku);
+    const qty = known ? netStock.get(r.sku)?.online ?? 0 : Number(r.qty) || 0;
+    e.sizes.push({ size: r.size, sku: r.sku, priceCents: Number(r.price) || 0, qty, known });
   }
   for (const handle of Object.keys(out)) out[handle].sizes = sortSizes(out[handle].sizes);
   return out;

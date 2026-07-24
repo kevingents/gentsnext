@@ -61,6 +61,13 @@ export function LookDetail({
 
   const items = look.products.filter((h) => h.product);
 
+  // Alle bekende maten netto op → geen "Kies maat"-knop (dood pad naar een
+  // drawer vol doorgestreepte maten) maar een disabled Uitverkocht-knop.
+  function isSoldOut(handle: string): boolean {
+    const d = buy[handle];
+    return Boolean(d && d.sizes.length > 0 && d.sizes.every((s) => s.known && s.qty <= 0));
+  }
+
   // Hero + galerij samen voor de lightbox-navigatie.
   const heroImages = useMemo(() => [{ url: hero, alt: look.title }, ...gallery.map((g) => ({ url: g.url, alt: g.alt }))], [hero, gallery, look.title]);
 
@@ -235,6 +242,15 @@ export function LookDetail({
                   <div className="mt-2.5 flex items-center justify-between gap-3">
                     <span className="font-sans text-sm text-ink">{price}</span>
                     {shoppable ? (
+                      isSoldOut(handle) ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="shrink-0 rounded-card border border-line px-3.5 py-1.5 font-sans text-xs font-medium text-muted opacity-60"
+                        >
+                          {t("common.soldOut")}
+                        </button>
+                      ) : (
                       <button
                         type="button"
                         onClick={() => (single ? addItem(i, data!.sizes[0].size) : setSizeDrawer(i))}
@@ -244,6 +260,7 @@ export function LookDetail({
                       >
                         {added[i] ? t("looks.detail.added") : single ? t("looks.detail.addToCart") : sel ? `Maat ${sel}` : t("looks.detail.chooseSizeBtn")}
                       </button>
+                      )
                     ) : (
                       <span className="shrink-0 font-sans text-xs text-muted">{t("common.temporarilyUnavailable")}</span>
                     )}
@@ -284,11 +301,15 @@ export function LookDetail({
               <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-2">{t("look.drawer.sizeAdvice")}</Link>
             </div>
             <SizeMatrix
-              sizes={dData.sizes.map((s) => ({ ...s, known: true }))}
+              sizes={dData.sizes}
               hoofdgroep={dData.hoofdgroep}
               selected={dSel ?? null}
               onSelect={(size) => setPicked((p) => ({ ...p, [sizeDrawer!]: size }))}
             />
+            {/* Alles op? Zeg dat expliciet onder de maten i.p.v. alleen doorstrepen. */}
+            {isSoldOut(dHandle) ? (
+              <p className="mt-3 font-sans text-sm text-muted">{t("pdp.size.soldout")}</p>
+            ) : null}
 
             <button
               type="button"
