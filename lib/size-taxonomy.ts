@@ -60,7 +60,11 @@ export function sizeGroup(value: string, layout: SizeLayout): SizeGroup {
   const token = sizeToken(value);
   const num = parseInt(token, 10);
   if (layout === "extra-sleeve") {
-    if (SLEEVE7.test(token) && Number.isNaN(num)) return "long";
+    // Mouwlengte-7 = eindigt op 7 met een lettermaat-basis ("S7","3XL7").
+    // NIET op parseInt leunen: parseInt("3XL7")=3 (geen NaN) → "3XL7" belandde
+    // in de Regular-kolom; en puur-numerieke maten ("27") zijn géén mouwlengte.
+    const base = token.slice(0, -1);
+    if (SLEEVE7.test(token) && !/^\d+$/.test(token) && ROW_MAP[base]) return "long";
     return "regular";
   }
   if (layout === "regular-only") return "regular";

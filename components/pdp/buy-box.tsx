@@ -8,6 +8,7 @@ import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { usePdpSize } from "@/components/pdp/pdp-size-context";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { SizeChartButton } from "@/components/pdp/size-chart-modal";
+import { SizeFinderButton } from "@/components/pdp/size-finder-modal";
 import { ColorSiblings, type SiblingItem } from "@/components/pdp/color-siblings";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
@@ -303,9 +304,8 @@ export function BuyBox({
               <p className="font-sans text-sm font-medium">{t("pdp.size.label")}</p>
               <div className="flex items-center gap-3 font-sans text-xs">
                 <SizeChartButton hoofdgroep={hoofdgroep} pageHandle={sizeChartHandle} />
-                <Link href="/maatadvies" className="text-ink underline underline-offset-4">
-                  {t("pdp.size.finder")}
-                </Link>
+                {/* Overlay i.p.v. wegnavigeren — de klant blijft op het product. */}
+                <SizeFinderButton />
               </div>
             </div>
             {active ? (
