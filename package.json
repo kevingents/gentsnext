@@ -20,6 +20,7 @@
     "backfill:sizelabel": "tsx scripts/backfill-size-label.ts",
     "sync:catalog": "tsx scripts/sync-catalog-flags.ts",
     "gen:ai-packshots": "tsx scripts/generate-ai-packshots.ts",
+    "gen:occasion-tiles": "tsx scripts/generate-occasion-tiles.ts",
     "translate:catalog": "tsx scripts/translate-catalog.ts",
     "generate:model-photos": "tsx scripts/generate-model-photos.ts"
   },
