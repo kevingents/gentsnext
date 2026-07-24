@@ -71,6 +71,13 @@ const nl: Dict = {
   "checkout.pickup_check_failed": "De winkelvoorraad kon niet worden gecontroleerd.",
   "checkout.pickup_retry": "Probeer opnieuw",
   "checkout.pickup_unavailable": "De gekozen winkel heeft niet meer alles op voorraad. Kies een andere winkel of laat je bestelling bezorgen.",
+  "myStore.badge": "Mijn winkel",
+  "myStore.set": "Maak dit mijn winkel",
+  "myStore.unset": "Niet meer mijn winkel",
+  "myStore.inStock": "Op voorraad in {store} — vandaag ophalen",
+  "myStore.inStockClosed": "Op voorraad in {store}",
+  "myStore.notInStock": "Niet op voorraad in {store}",
+  "myStore.elsewhere": "wel in {count} andere winkels",
 };
 
 const en: Dict = {
@@ -136,6 +143,13 @@ const en: Dict = {
   "checkout.pickup_check_failed": "We couldn't check store stock.",
   "checkout.pickup_retry": "Try again",
   "checkout.pickup_unavailable": "The selected store no longer has your entire order in stock. Choose another store or have your order delivered.",
+  "myStore.badge": "My store",
+  "myStore.set": "Make this my store",
+  "myStore.unset": "Remove as my store",
+  "myStore.inStock": "In stock at {store} — collect today",
+  "myStore.inStockClosed": "In stock at {store}",
+  "myStore.notInStock": "Not in stock at {store}",
+  "myStore.elsewhere": "available in {count} other stores",
 };
 
 const de: Dict = {

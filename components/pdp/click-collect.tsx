@@ -13,10 +13,21 @@ type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: strin
  * Met `reserve` (handle+sku) kan de klant per winkel "reserveer om te passen":
  * de voorraad wordt dan hard vastgehouden via de reserverings-rail.
  */
-export function ClickAndCollect({ branches, reserve }: { branches: Branch[]; reserve?: { handle: string; sku: string } }) {
+export function ClickAndCollect({
+  branches,
+  reserve,
+  myStore,
+}: {
+  branches: Branch[];
+  reserve?: { handle: string; sku: string };
+  /** Winkelnaam van "mijn winkel" (server-side uit cookie/profiel). */
+  myStore?: string | null;
+}) {
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
+  // Lokale echo van de keuze: de server-prop komt pas na een refresh mee.
+  const [favorite, setFavorite] = useState<string | null>(myStore ?? null);
   // Reserveer-om-te-passen-flow binnen de modal.
   const [selStore, setSelStore] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
@@ -28,8 +39,26 @@ export function ClickAndCollect({ branches, reserve }: { branches: Branch[]; res
   const openNow = available.filter((b) => b.openNow).length;
   // Open + op voorraad eerst.
   const sorted = [...branches].sort(
-    (a, b) => Number(b.openNow) - Number(a.openNow) || b.qty - a.qty
+    (a, b) =>
+      Number(b.store === favorite) - Number(a.store === favorite) ||
+      Number(b.openNow) - Number(a.openNow) ||
+      b.qty - a.qty
   );
+
+  async function pickFavorite(store: string) {
+    // Aan/uit: nogmaals klikken wist de voorkeur.
+    const next = favorite === store ? "" : store;
+    setFavorite(next || null);
+    try {
+      await fetch("/api/mijn-winkel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store: next }),
+      });
+    } catch {
+      /* voorkeur is comfort, geen blocker */
+    }
+  }
 
   async function submitReserve() {
     if (!reserve || !selStore || busy) return;
@@ -128,7 +157,14 @@ export function ClickAndCollect({ branches, reserve }: { branches: Branch[]; res
                     <li key={b.store} className="px-5 py-3 font-sans text-sm">
                       <div className="flex items-center justify-between gap-3">
                         <span className="min-w-0">
-                          <span className="block truncate text-ink">{b.store}</span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-ink">{b.store}</span>
+                            {b.store === favorite ? (
+                              <span className="shrink-0 border border-line px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-ink-soft">
+                                {t("myStore.badge")}
+                              </span>
+                            ) : null}
+                          </span>
                           {b.openLabel ? (
                             <span className={`text-xs ${b.openNow ? "text-success" : "text-muted"}`}>{b.openLabel}</span>
                           ) : null}
@@ -142,6 +178,18 @@ export function ClickAndCollect({ branches, reserve }: { branches: Branch[]; res
                           ) : (
                             <span className="text-xs text-muted">{t("clickCollect.modal.outOfStock")}</span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => pickFavorite(b.store)}
+                            aria-pressed={b.store === favorite}
+                            title={b.store === favorite ? t("myStore.unset") : t("myStore.set")}
+                            className="flex h-11 w-8 shrink-0 items-center justify-center text-ink-soft hover:text-ink"
+                          >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill={b.store === favorite ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" aria-hidden>
+                              <path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z" strokeLinejoin="round" />
+                            </svg>
+                            <span className="sr-only">{b.store === favorite ? t("myStore.unset") : t("myStore.set")}</span>
+                          </button>
                           {reserve && inStock ? (
                             <button
                               type="button"
