@@ -25,25 +25,26 @@ import { products, productImages } from "@/db/schema";
 const MODEL = process.env.FAL_PACKSHOT_MODEL || "fal-ai/flux-pro/v1.1-ultra";
 
 const STYLE =
-  "Professional high-end menswear e-commerce product packshot. The soft light warm grey studio backdrop (#f2f0ec) fills the ENTIRE image edge-to-edge — no white backdrop panel, no inner frame, no border, no vignette, the background is one continuous seamless tone across the whole frame. Soft even diffused lighting, subtle natural shadow under the product, tack sharp, premium catalog quality. Product large and perfectly centered. STRICTLY no people and absolutely NO mannequin, bust, torso form, neck stand or hanger visible in any form — no black, chrome or wooden display forms. No text, no labels with words, no watermark, no logo, no props.";
+  "Professional high-end menswear e-commerce product packshot, exactly like premium webshop studio photography. The very light neutral grey seamless studio backdrop (#f4f4f4) fills the ENTIRE image edge-to-edge — no white backdrop panel, no inner frame, no border, no vignette, one continuous seamless tone across the whole frame. Soft even diffused lighting, subtle soft shadow, tack sharp, premium catalog quality. Product large and perfectly centered. STRICTLY no people. No text, no labels with words, no watermark, no logo, no props.";
 
-// Presentatie per hoofdgroep — gedragen kleding ALTIJD netjes gevouwen/plat
-// gefotografeerd (top-down flat-lay): ghost-mannequin-prompts leverden bij FLUX
-// tóch bustes met houten halsknop op (Kevin, 24 juli: "niet op een houten
-// ding"). De gevouwen stijl (zoals de GENTS TTL-shot) is wél goedgekeurd.
+// Ghost-mannequin met natuurlijk volume — de stijl van onze échte studiofoto's
+// (Kevin, 24 juli: referentie overshirt-light-grey). Cruciaal in de bewoording:
+// het kledingstuk "zweeft" met gevulde 3D-vorm, hals is HOL (binnenkant kraag
+// zichtbaar) en er is expliciet géén buste/vorm/hanger — de eerdere generieke
+// ghost-prompt leverde bustes met houten halsknop op, vandaar de harde bans.
+const GHOST =
+  "shown with the invisible-mannequin ghost effect: natural three-dimensional body volume as if worn by an invisible person, chest and shoulders filled out, the neck opening HOLLOW showing the inside of the back collar, floating against the backdrop. Absolutely NO mannequin, bust, torso form, neck block, wooden knob, stand or hanger visible — nothing black, chrome or wooden behind or inside the garment";
 const PRESENT: Record<string, string> = {
-  Overhemden: "the dress shirt expertly folded in a neat rectangle, photographed top-down flat-lay, collar crisp and buttoned facing up, one cuff elegantly tucked beside the fold",
-  "Polo-shirts": "the polo shirt expertly folded in a neat rectangle, photographed top-down flat-lay, collar neat and facing up",
-  "T-Shirts": "the t-shirt expertly folded in a neat rectangle, photographed top-down flat-lay",
-  Truien: "the knitwear expertly folded in a neat rectangle, photographed top-down flat-lay, neckline visible at the top, knit texture sharp",
-  "Truien & Vesten": "the knitwear expertly folded in a neat rectangle, photographed top-down flat-lay, knit texture sharp",
-  Vesten: "the cardigan expertly folded in a neat rectangle, photographed top-down flat-lay, button placket visible",
-  Colberts: "the blazer laid out flat photographed top-down, front closed, lapels sharp, sleeves folded neatly inward",
-  // Volledig pak/jas 'zwevend' of gevouwen oogt niet — bewust een strakke
-  // HOOFDLOZE matte paspop: consistent en professioneel (goedgekeurde stijl).
-  Pakken: "the full suit (jacket over matching trousers) displayed on a minimal HEADLESS matte light-grey display mannequin — the form ends at the neck in a flat cap, strictly no head, no face, no chrome or reflective surfaces, no visible hands",
-  Gilets: "the waistcoat laid out flat photographed top-down, front visible with the bottom button left undone",
-  Jassen: "the coat displayed on a minimal HEADLESS matte light-grey display mannequin — the form ends at the neck in a flat cap, strictly no head, no face, no chrome or reflective surfaces, no visible hands",
+  Overhemden: `the dress shirt ${GHOST}, buttoned up, collar crisp, straight front view, sleeves falling naturally at the sides`,
+  "Polo-shirts": `the polo shirt ${GHOST}, collar neat, straight front view`,
+  "T-Shirts": `the t-shirt ${GHOST}, straight front view`,
+  Truien: `the knitwear sweater ${GHOST}, straight front view, knit texture sharp`,
+  "Truien & Vesten": `the knitwear ${GHOST}, straight front view, knit texture sharp`,
+  Vesten: `the cardigan ${GHOST}, button placket closed, straight front view`,
+  Colberts: `the blazer ${GHOST}, front buttoned, lapels sharp, straight front view`,
+  Pakken: `the full suit — jacket buttoned with the matching trousers below as one worn outfit — ${GHOST}, straight front view`,
+  Gilets: `the waistcoat ${GHOST}, bottom button left undone, straight front view`,
+  Jassen: `the coat ${GHOST}, front closed, straight front view`,
   Broeken: "the trousers neatly folded over an invisible hanger bar, hanging straight, front view",
   Jeans: "the jeans neatly folded over an invisible hanger bar, hanging straight, front view",
   Schoenen: "the pair of shoes at a three-quarter angle, one shoe slightly ahead of the other, on a subtle seamless floor",
