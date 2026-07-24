@@ -10,6 +10,7 @@ import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
+import { SHIPPING_ZONES, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
 
 type Field = {
   name: string;
@@ -89,6 +90,10 @@ function CheckoutForm() {
   const canceled = params.get("geannuleerd") === "1";
 
   const [form, setForm] = useState<Record<string, string>>({});
+  // Bezorgland: bepaalt tarief, gratis-drempel én postcode-formaat. Stond vast
+  // op NL terwijl de bezorgpagina BE/DE/EU belooft (UX-audit).
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const zone = zoneFor(country);
   const [business, setBusiness] = useState(false);
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
@@ -288,7 +293,8 @@ function CheckoutForm() {
   useEffect(() => {
     const pc = (form.postalCode || "").replace(/\s/g, "").toUpperCase();
     const nr = (form.houseNumber || "").trim();
-    if (!/^[1-9][0-9]{3}[A-Z]{2}$/.test(pc) || !nr) return;
+    // Postcode-API is NL-only; voor BE/DE/EU vult de klant zelf straat + plaats.
+    if (country !== DEFAULT_COUNTRY || !/^[1-9][0-9]{3}[A-Z]{2}$/.test(pc) || !nr) return;
     let active = true;
     fetch(`/api/postcode?postcode=${pc}&number=${encodeURIComponent(nr)}`)
       .then((r) => r.json())
@@ -299,9 +305,11 @@ function CheckoutForm() {
     return () => {
       active = false;
     };
-  }, [form.postalCode, form.houseNumber]);
+  }, [form.postalCode, form.houseNumber, country]);
 
-  const baseShipping = pickupMode ? 0 : cart.subtotalCents >= freeShipCents ? 0 : cart.subtotalCents > 0 ? shipCents : 0;
+  const baseShipping = pickupMode
+    ? 0
+    : shippingCentsFor(country, cart.subtotalCents, { rateCents: shipCents, freeFromCents: freeShipCents });
   const surcharge = pickupMode ? 0 : delivery === "express" ? expressSurcharge : 0;
   const shippingCents = baseShipping + surcharge;
   const itemCount = cart.lines.reduce((n, l) => n + l.qty, 0);
@@ -401,7 +409,7 @@ function CheckoutForm() {
       }
       if (!pickupStore || !pickupAvail[pickupStore]?.allOk) { setError(t("checkout.error_pickup_store")); return; }
     } else {
-      if (!POSTCODE_RE.test(form.postalCode || "")) { fieldFail("postalCode", t("checkout.error_postcode")); return; }
+      if (!zone.postcode.test((form.postalCode || "").trim())) { fieldFail("postalCode", t("checkout.error_postcode")); return; }
       if (!HOUSENR_RE.test((form.houseNumber || "").trim())) { fieldFail("houseNumber", t("checkout.error_housenumber")); return; }
       // Straat/plaats kunnen leeg blijven als de postcode-API het adres niet kent
       // (bv. nieuwbouw) — de server weigert lege adresvelden, dus hier al blokkeren.
@@ -424,7 +432,7 @@ function CheckoutForm() {
       if (!pickupStore || !pickupAvail[pickupStore]?.allOk) { setError(t("checkout.error_pickup_store")); return; }
     } else {
       // Lichte validatie (datakwaliteit → minder mislukte bezorgingen).
-      if (!POSTCODE_RE.test(form.postalCode || "")) {
+      if (!zone.postcode.test((form.postalCode || "").trim())) {
         setError(t("checkout.error_postcode"));
         return;
       }
@@ -452,7 +460,7 @@ function CheckoutForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contact: form,
+          contact: { ...form, country },
           deliveryMethod: pickupMode ? "pickup" : delivery,
           pickupStore: pickupMode ? pickupStore : "",
           method: payMethod,
@@ -666,7 +674,7 @@ function CheckoutForm() {
                   type={f.type ?? "text"}
                   inputMode={f.inputMode}
                   autoComplete={f.autoComplete}
-                  placeholder={f.placeholder}
+                  placeholder={f.name === "postalCode" ? zone.postcodeExample : f.placeholder}
                   value={form[f.name] || ""}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -680,7 +688,28 @@ function CheckoutForm() {
               </label>
             ))}
             {!pickupMode ? (
-              <p className="col-span-full font-sans text-xs text-muted">{t("checkout.delivery_nl_only")}</p>
+              <label className="col-span-full block">
+                <span className="font-sans text-sm text-ink">{t("checkout.country")}</span>
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="mt-1 w-full border border-line bg-canvas px-4 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+                >
+                  {SHIPPING_ZONES.map((z) => (
+                    <option key={z.code} value={z.code}>{z.label}</option>
+                  ))}
+                </select>
+                {/* Tarief + gratis-drempel van het gekozen land — dezelfde
+                    DHL-staffel die de server rekent. */}
+                <span className="mt-1 block font-sans text-xs text-muted">
+                  {zone.freeFromCents !== null
+                    ? t("checkout.shipping_rate_free_from", {
+                        amount: formatEuro(country === DEFAULT_COUNTRY ? shipCents : zone.rateCents),
+                        threshold: formatEuro(country === DEFAULT_COUNTRY ? freeShipCents : zone.freeFromCents),
+                      })
+                    : t("checkout.shipping_rate_flat", { amount: formatEuro(zone.rateCents) })}
+                </span>
+              </label>
             ) : null}
           </div>
 

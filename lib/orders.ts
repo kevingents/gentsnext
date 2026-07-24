@@ -8,6 +8,7 @@ import { sendOrderConfirmation } from "@/lib/email";
 import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
+import { shippingCentsFor, DEFAULT_COUNTRY, isKnownCountry } from "@/lib/shipping-zones";
 import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
@@ -164,6 +165,12 @@ export async function createOrder(
   if (missingSkus.length) throw new OutOfStockError(missingSkus, missingSkus);
   if (!lines.length) throw new Error("Geen geldige producten in de bestelling.");
 
+  // Onbekend land zou stil het NL-tarief krijgen — liever weigeren dan een
+  // order aannemen die we niet tegen het juiste tarief kunnen verzenden.
+  if (deliveryMethod !== "pickup" && contact.country && !isKnownCountry(contact.country)) {
+    throw new Error("We bezorgen (nog) niet in dit land. Kies een ander land of haal je bestelling op in de winkel.");
+  }
+
   const subtotalCents = lines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
   // Kortingscode server-side valideren (nooit het clientbedrag vertrouwen).
   let discountCents = 0;
@@ -199,7 +206,14 @@ export async function createOrder(
   // Verzendkosten + (optionele) express-toeslag — alles uit de instelbare settings.
   // Afhalen in winkel ('pickup') is gratis: geen verzendkosten, geen toeslag.
   const isPickup = method === "pickup";
-  const baseShipping = isPickup ? 0 : subtotalCents >= settings.freeShippingCents ? 0 : settings.shippingCents;
+  // Verzendkosten per land (DHL-staffel, lib/shipping-zones); NL blijft via de
+  // instelbare settings lopen zodat één knop de baas is over het thuisland.
+  const baseShipping = isPickup
+    ? 0
+    : shippingCentsFor(contact.country || DEFAULT_COUNTRY, subtotalCents, {
+        rateCents: settings.shippingCents,
+        freeFromCents: settings.freeShippingCents,
+      });
   const surcharge = method === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
   const totalBeforeGiftcard = Math.max(0, subtotalCents - discountCents) + shippingCents;
