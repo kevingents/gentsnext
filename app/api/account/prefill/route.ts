@@ -25,6 +25,7 @@ export async function GET() {
       houseNumber: a.houseNumber,
       postalCode: a.postalCode,
       city: a.city,
+      country: a.country || "NL",
     })),
   });
 }
