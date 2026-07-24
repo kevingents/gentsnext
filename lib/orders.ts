@@ -212,6 +212,11 @@ export async function createOrder(
     if (g.valid) {
       giftcardCents = g.applyCents;
       appliedGiftcard = g.code;
+    } else {
+      // Zelfde regel als de voucher hierboven: een bon die tussen 'toepassen'
+      // en 'betalen' ongeldig werd of leeg raakte (saldo deelt met de kassa!)
+      // mag NOOIT stil vervallen — anders int Mollie meer dan de knop beloofde.
+      throw new Error("De cadeaukaart is niet meer geldig of heeft geen saldo meer — verwijder 'm en probeer opnieuw.");
     }
   }
   const totalCents = Math.max(0, totalBeforeGiftcard - giftcardCents);
