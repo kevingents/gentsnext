@@ -14,6 +14,7 @@ import { ShareRow } from "@/components/pdp/share-row";
 import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
+import { getCategoryLabels } from "@/lib/nav-i18n";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getT } from "@/lib/t-server";
 import { buildModelLook, buildSuitLook, resolveLook, getLookBuyData } from "@/lib/looks";
@@ -183,8 +184,11 @@ export default async function ProductPage({ params }: Props) {
   const rating = parseRating(attrs);
   // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
   const cat = categoryByHoofdgroep(hoofdgroep);
+  // Categorienaam vertaald (ns "nav", zelfde bron als mega-menu en PLP) — stond
+  // in het NL op /en /de, ook in het breadcrumb-JSON-LD.
+  const catLabels = await getCategoryLabels(locale);
   const breadcrumb = cat
-    ? { handle: `__cat__${cat.slug}`, title: cat.label }
+    ? { handle: `__cat__${cat.slug}`, title: catLabels.get(cat.slug) ?? cat.label }
     : collections.find((c) => !c.handle.includes("all-products")) ?? collections[0];
   const breadcrumbHref = cat
     ? `/categorie/${cat.slug}`

@@ -11,6 +11,7 @@ import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
+import { localizeFacets } from "@/lib/facet-i18n";
 import { getT } from "@/lib/t-server";
 import { getCategoryLabels } from "@/lib/nav-i18n";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
@@ -55,7 +56,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
   const [sessionCustomer, facets] = await Promise.all([
     getSessionCustomer(),
-    getFacets({ category: cat.hoofdgroep }),
+    getFacets({ category: cat.hoofdgroep }).then((fc) => localizeFacets(locale, fc)),
   ]);
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
   const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);

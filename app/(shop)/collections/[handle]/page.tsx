@@ -10,6 +10,7 @@ import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
+import { localizeFacets } from "@/lib/facet-i18n";
 import { getT } from "@/lib/t-server";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { localizeCollectionText } from "@/lib/catalog-i18n";
@@ -70,7 +71,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
   const [sessionCustomer, facets] = await Promise.all([
     getSessionCustomer(),
-    getFacets({ collectionId: collection.id }),
+    getFacets({ collectionId: collection.id }).then((fc) => localizeFacets(locale, fc)),
   ]);
   // Shop in jouw maat: leid de categorie af uit de collectie-naam (gemengde
   // collecties matchen niet → geen chip).

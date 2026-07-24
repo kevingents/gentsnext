@@ -409,13 +409,15 @@ export type ProductFilters = {
 
 export type Facets = {
   types: { value: string; label: string; count: number }[];
-  materials: { value: string; count: number }[];
-  patterns: { value: string; count: number }[];
-  seasons: { value: string; count: number }[];
+  // label = zichtbare (vertaalde) tekst; value blijft de NL-bronwaarde die in
+  // de URL/filterlogica staat — zie lib/facet-i18n.
+  materials: { value: string; label?: string; count: number }[];
+  patterns: { value: string; label?: string; count: number }[];
+  seasons: { value: string; label?: string; count: number }[];
   ironFreeCount: number;
   colors: { key: ColorFamily; label: string; hex: string; count: number }[];
   sizes: { value: string; label: string; count: number }[];
-  fits: { value: string; count: number }[];
+  fits: { value: string; label?: string; count: number }[];
   priceMinCents: number;
   priceMaxCents: number;
 };
