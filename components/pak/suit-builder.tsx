@@ -13,6 +13,7 @@ import { parseComposition, parseCare, careProse } from "@/lib/care";
 import { MaterialBlock, CareBlock } from "@/components/pdp/care-material";
 import { Accordion } from "@/components/pdp/accordion";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
+import { SizeFinderButton } from "@/components/pdp/size-finder-modal";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 
 const ROLE_LABEL: Record<SuitRole, string> = {
@@ -199,7 +200,7 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
         <div className="mt-6">
           <div className="flex items-center justify-between">
             <p className="font-sans text-sm font-medium">{t("pak.builder.sizePerPart")}</p>
-            <Link href="/maatadvies" className="font-sans text-xs text-ink underline underline-offset-4">{t("pdp.size.finder")}</Link>
+            <span className="font-sans text-xs"><SizeFinderButton /></span>
           </div>
           <p className="mt-1 font-sans text-xs text-muted">{t("pak.builder.sizePerPartHint")}</p>
 
