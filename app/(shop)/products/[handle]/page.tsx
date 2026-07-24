@@ -199,7 +199,7 @@ export default async function ProductPage({ params }: Props) {
     getVariantSiblings(product.variantGroupKey || "", product.handle),
     getReviewSummary(product.handle),
     getPublishedReviews(product.handle, 30),
-    representativeSku ? estimateDelivery([{ sku: representativeSku, qty: 1 }]) : Promise.resolve(null),
+    representativeSku ? estimateDelivery([{ sku: representativeSku, qty: 1 }], { locale }) : Promise.resolve(null),
     getProductViewStats(product.handle),
     getCachedReviewAiSummary(product.handle),
     getProductContentOverride(product.handle),

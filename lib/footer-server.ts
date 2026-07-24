@@ -42,7 +42,7 @@ const DEFAULT_COLS: FooterCol[] = [
       { label: "Maatadvies", href: "/maatadvies" },
       { label: "Afspraak maken", href: "/afspraak" },
       { label: "Bezorging & levertijd", href: "/pages/bezorgkosten-levertijden" },
-      { label: "Retourneren", href: "/pages/retourneren" },
+      { label: "Retourneren", href: "/retourneren" },
       { label: "Onze winkels", href: "/pages/winkels" },
     ],
   },
