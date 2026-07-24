@@ -205,6 +205,10 @@ async function main() {
       (select pi.url from product_images pi where pi.product_id=p.id and pi.source = '' order by pi.position asc limit 1) img
     from products p
     where p.status='active' and p.has_image and p.in_stock and p.is_group_primary
+      -- Alleen producten met een ÉCHTE foto: has_image is sinds de AI-packshots
+      -- ook waar voor AI-only producten, en die mogen nooit VTON-input zijn —
+      -- zonder deze eis vullen ze de limit en wordt de run stilletjes leeg.
+      and exists (select 1 from product_images pi where pi.product_id=p.id and pi.source = '')
       ${handleList.length
         ? sql`and p.handle in (${sql.join(handleList.map((h) => sql`${h}`), sql`, `)})`
         : redoExisting
@@ -220,13 +224,13 @@ async function main() {
   // Geleerde model-smaak (goed-/afkeuringen uit de portal Modellen-studio).
   const learnBlock = modelLearningsBlock(await getModelLearnings());
 
-  let done = 0, err = 0, seen = 0;
+  let done = 0, err = 0, seen = 0, skipped = 0;
   const rowsArr = rows.rows;
   const CONC = 3; // gentler onder FASHN-load (minder valse high-load-fouten)
   async function handle(r: (typeof rowsArr)[number], i: number) {
     try {
       const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
-      if (!prompt || !r.img) return;
+      if (!prompt || !r.img) { skipped++; return; }
       const out = await runProductToModel(r.img, prompt + learnBlock, apiKey!);
       if (!out) { err++; return; }
       // FASHN levert native 4:5 (aspect_ratio); padTo45 is dan een no-op.
@@ -242,7 +246,7 @@ async function main() {
     seen = Math.min(i + CONC, rowsArr.length);
     console.log(`  …${seen}/${rowsArr.length} (klaar ${done}, fout ${err})`);
   }
-  console.log(`\n✓ Klaar — ${done} modelfoto's gegenereerd, ${err} fout. Ze leiden de galerij.`);
+  console.log(`\n✓ Klaar — ${done} modelfoto's gegenereerd, ${err} fout${skipped ? `, ${skipped} overgeslagen (geen echte foto/prompt)` : ""}. Ze leiden de galerij.`);
   process.exit(0);
 }
 
