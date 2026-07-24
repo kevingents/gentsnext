@@ -562,7 +562,15 @@ export default async function ProductPage({ params }: Props) {
           <h2 className="mt-2 text-display-md">{t("pdp.shopLook.title")}</h2>
           <p className="mt-2 max-w-prose font-sans text-ink-soft">{t("pdp.look_instruction")}</p>
           <div className="mt-8">
-            <ShopTheLook look={resolvedModelLook} aspectClass="aspect-[2/3]" buy={lookBuy} />
+            {/* Zelfde voorraadwaarheid als de buy-box: beschouwt die dit product
+                als uitverkocht, dan toont ook "Dit item" in de look Uitverkocht
+                i.p.v. een werkende "Kies maat"-knop. */}
+            <ShopTheLook
+              look={resolvedModelLook}
+              aspectClass="aspect-[2/3]"
+              buy={lookBuy}
+              soldOutHandles={!anyInStock ? [product.handle] : undefined}
+            />
           </div>
         </section>
       ) : null}
