@@ -105,6 +105,7 @@ REGELS:
 - Volg de GENTS-stijlregels: warm/gekleurd pak (zand, koraal, groen, bordeaux, bruin) → cognac/bruine schoenen; antraciet/zwart of black-tie → zwarte (lak)schoen; altijd een wit overhemd met kraag onder een pak; smoking → lakschoen + strik; gilet onderste knoop open.
 - Toon: warm, deskundig, niet schreeuwerig. 3-5 secties, elk met 1-3 gekoppelde producten (handles).
 - Verander NOOIT de merknaam.
+- TAAL-QA: vlekkeloos Nederlands — geen Engelse of Duitse restwoorden (geen "warmth", "starched", "mutige"), geen half-vertaalde termen ("Zwart-tie" moet "Black tie" zijn), kloppende lidwoorden. Vaktermen die WEL mogen: black tie, white tie, smoking, dresscode, slim fit, suède, navy. Kleuren in het Nederlands (cognac, niet "tan"). Lees je tekst na alsof een taalpurist meeleest.
 Antwoord ALLEEN met JSON:
 {"title":"...","excerpt":"1 zin","intro":"1-2 alinea's","sections":[{"heading":"...","body":"1-2 alinea's","productHandles":["handle1"]}],"seoTitle":"max 60 tekens","seoDescription":"140-160 tekens"}`;
 
