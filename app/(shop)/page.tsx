@@ -66,10 +66,12 @@ export default async function Home() {
 
   // Alle onafhankelijke reads in één Promise.all i.p.v. sequentieel (geen render-waterfall);
   // elk fail-soft zodat een lege/niet-bereikbare bron de hero + USP niet omvertrekt.
-  const [collections, pakHighlights, overhemdHighlights, settings, looks] = await Promise.all([
+  // Highlights ruim (8) ophalen: na de trending-await filteren we overlap weg,
+  // anders stond hetzelfde (nieuwe, populaire) pak in "Populair nu" én de strip.
+  const [collections, pakHighlightsRaw, overhemdHighlightsRaw, settings, looks] = await Promise.all([
     listCollections().catch(() => []),
-    getHighlights("Pakken", 4).catch(() => []),
-    getHighlights("Overhemden", 4).catch(() => []),
+    getHighlights("Pakken", 8).catch(() => []),
+    getHighlights("Overhemden", 8).catch(() => []),
     getLocalizedSiteSettings(locale),
     getAllLooks().catch(() => []),
   ]);
@@ -79,6 +81,9 @@ export default async function Home() {
   const featured = CATEGORIES.slice(0, 8).map((c) => ({ ...c, label: catLabels.get(c.slug) ?? c.label }));
   const heroLook = looks[0] ?? null;
   const trending = await trendingPromise;
+  const trendingHandles = new Set(trending.map((p) => p.handle));
+  const pakHighlights = pakHighlightsRaw.filter((p) => !trendingHandles.has(p.handle)).slice(0, 4);
+  const overhemdHighlights = overhemdHighlightsRaw.filter((p) => !trendingHandles.has(p.handle)).slice(0, 4);
   const siteUrl = getSiteUrl();
   const stores = getStores();
   const orgJsonLd = {

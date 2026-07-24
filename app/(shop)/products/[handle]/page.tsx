@@ -191,8 +191,10 @@ export default async function ProductPage({ params }: Props) {
     : breadcrumb ? `/collections/${breadcrumb.handle}` : "";
   // getSessionCustomer (maat-voorselectie) + getSettings (look-config) zijn onafhankelijk
   // van de productdata → mee in de parallelle batch i.p.v. twee losse round-trips.
-  const [recommendations, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings] = await Promise.all([
-    getRecommendations(hoofdgroep, product.id, 4),
+  // Aanbevelingen ruim ophalen (8): na het resolven van de look filteren we de
+  // look-items eruit zodat "Maak de look compleet" geen dubbelingen toont.
+  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings] = await Promise.all([
+    getRecommendations(hoofdgroep, product.id, 8),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
     getReviewSummary(product.handle),
@@ -260,6 +262,10 @@ export default async function ProductPage({ params }: Props) {
   const lookBuy = resolvedModelLook
     ? await getLookBuyData(resolvedModelLook.products.filter((h) => h.product).map((h) => h.handle))
     : undefined;
+  // "Maak de look compleet" zonder items die al in Shop-de-look staan — beide
+  // secties kozen onafhankelijk complementaire producten en toonden dubbel.
+  const lookHandles = new Set((resolvedModelLook?.products ?? []).map((h) => h.handle));
+  const recommendations = recommendationsRaw.filter((r) => !lookHandles.has(r.handle)).slice(0, 4);
 
   // Voorkeur: kleurvarianten uit de titel-groepering (dekt o.a. de 235 dassen-
   // /pochet-/strik-groepen); val terug op Shopify group_data-metafield. Daarna
