@@ -395,6 +395,18 @@ export async function updateSizeProfile(customerId: string, sizeProfile: SizePro
   await db.update(customers).set({ sizeProfile, updatedAt: sql`now()` }).where(eq(customers.id, customerId));
 }
 
+/** Losse voorkeur bijwerken (bv. favoriteStore) — merge, nooit de rest wissen. */
+export async function updatePreference(customerId: string, key: string, value: string) {
+  const db = getDb();
+  await db
+    .update(customers)
+    .set({
+      preferences: sql`coalesce(${customers.preferences}, '{}'::jsonb) || jsonb_build_object(${key}::text, ${value}::text)`,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(customers.id, customerId));
+}
+
 /* ── AVG: inzage & verwijdering ───────────────────────────────────────────── */
 
 /** Alle persoonsgegevens van de klant in één bundel (recht op inzage/dataportabiliteit). */

@@ -64,6 +64,8 @@ type Props = {
   hoofdgroep: string;
   sizeChartHandle: string | null;
   productHandle: string;
+  /** "Mijn winkel" (winkelnaam) — server-side uit cookie/profiel. */
+  myStore?: string | null;
   image: string;
   colors: BuyColor[];
   minPriceCents: number;
@@ -90,6 +92,7 @@ export function BuyBox({
   hoofdgroep,
   sizeChartHandle,
   productHandle,
+  myStore,
   image,
   colors,
   minPriceCents,
@@ -324,6 +327,33 @@ export function BuyBox({
             <span><span className="font-medium text-ink">{t("pdp.size.my")}</span> — {t("pdp.size.autoSelected")}</span>
           </p>
         ) : null}
+        {/* Mijn winkel: direct antwoord op "ligt dit in mijn winkel?" — de
+            winkelvoorraad per maat hebben we hier al, dus dit kost niets extra. */}
+        {myStore && selectedSize ? (() => {
+          const hit = (selectedSize.branches ?? []).find((b) => b.store === myStore);
+          const others = (selectedSize.branches ?? []).filter((b) => b.qty > 0 && b.store !== myStore).length;
+          return hit && hit.qty > 0 ? (
+            <p className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs text-success">
+              <StoreIcon className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {/* "Vandaag ophalen" alleen als de winkel nu open is — anders
+                    beloofde de regel iets wat vandaag niet kan. */}
+                <span className="font-medium">
+                  {hit.openNow ? t("myStore.inStock", { store: myStore }) : t("myStore.inStockClosed", { store: myStore })}
+                </span>
+                {hit.openLabel ? <span className="text-muted"> · {hit.openLabel}</span> : null}
+              </span>
+            </p>
+          ) : (
+            <p className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs text-muted">
+              <StoreIcon className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {t("myStore.notInStock", { store: myStore })}
+                {others > 0 ? <span> · {t("myStore.elsewhere", { count: others })}</span> : null}
+              </span>
+            </p>
+          );
+        })() : null}
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
@@ -429,6 +459,7 @@ export function BuyBox({
           // bevestiging/fout van een andere maat).
           key={selectedSize.sku || selectedSize.size}
           branches={selectedSize.branches}
+          myStore={myStore}
           reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
         />
       ) : null}
