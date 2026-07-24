@@ -65,6 +65,10 @@ export async function translateStrings(
 
   const anth = process.env.ANTHROPIC_API_KEY;
   const oai = process.env.OPENAI_API_KEY;
+  // Omschrijvingen (HTML-alinea's) zijn fors langer dan UI-labels; 4000 was
+  // voor 30 stuks nét genoeg voor en/de maar te krap voor fr/es (langere
+  // taal) → afgekapte JSON → "Onverwacht vertaalresultaat".
+  const maxTokens = kind === "description" ? 8000 : 4000;
   let text = "";
   if (anth) {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -72,7 +76,7 @@ export async function translateStrings(
       headers: { "x-api-key": anth, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: process.env.CONTENT_MODEL || process.env.SUPPORT_MODEL || "claude-haiku-4-5-20251001",
-        max_tokens: 4000,
+        max_tokens: maxTokens,
         system: sys,
         messages: [{ role: "user", content: user }],
       }),
@@ -142,7 +146,9 @@ export async function ensureEntries(
     return !cur || cur.h !== hash(e.source);
   });
   let translated = 0;
-  const CHUNK = 30;
+  // Omschrijvingen in kleinere batches: lange HTML-teksten × 30 liepen tegen
+  // het output-plafond aan (zie translateStrings).
+  const CHUNK = kind === "description" ? 12 : 30;
   for (let i = 0; i < todo.length; i += CHUNK) {
     const batch = todo.slice(i, i + CHUNK);
     const out = await translateStrings(batch.map((b) => b.source), locale, kind);

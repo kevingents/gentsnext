@@ -65,9 +65,21 @@ export type ProductCardData = {
   category?: string;
 };
 
+/**
+ * Technische app-collecties uit Shopify (XCloud Search, filter-index, ChatGPT-
+ * beschrijvingen): geen klant-content. Uit de lijsten/sitemap houden en op de
+ * PLP niet laten indexeren — de handle blijft wel direct bereikbaar.
+ */
+export function isTechnicalCollection(c: { handle: string; title: string }): boolean {
+  return (
+    /\[|\bapp\b|all products|do.?not.?delete/i.test(c.title) ||
+    /^(cloud-search|xcloud|smart-products-filter|all-products-)/.test(c.handle)
+  );
+}
+
 export async function listCollections() {
   const db = getDb();
-  return db
+  const rows = await db
     .select({
       id: collections.id,
       handle: collections.handle,
@@ -76,6 +88,7 @@ export async function listCollections() {
     })
     .from(collections)
     .orderBy(asc(collections.position), asc(collections.title));
+  return rows.filter((c) => !isTechnicalCollection(c));
 }
 
 // React.cache: een collectie-PLP haalt dit 2× per request op (page + generateMetadata);
