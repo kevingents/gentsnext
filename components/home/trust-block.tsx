@@ -12,7 +12,7 @@ const ITEMS = [
   {
     titleKey: "home.trustBlock.returnTitle",
     bodyKey: "home.trustBlock.returnDesc",
-    href: "/pages/retourneren",
+    href: "/retourneren",
     labelKey: "home.trustBlock.returnLink",
   },
   {

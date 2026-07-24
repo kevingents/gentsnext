@@ -31,7 +31,11 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
     return Array.isArray(v) ? v[0] : v;
   };
   const sortRaw = get("sort") as ProductSort | undefined;
-  const [pMin, pMax] = csv(get("prijs")).map((n) => Number(n));
+  // De schrijver (selectionToQuery) schrijft "prijs=100-200"; hier werd op
+  // komma gesplitst → het prijsfilter deed stilletjes niets. Beide accepteren.
+  const [pMin, pMax] = (get("prijs") || "")
+    .split(/[-,]/)
+    .map((s) => Number(s.trim()));
   return {
     types: csv(get("type")),
     materials: csv(get("materiaal")),

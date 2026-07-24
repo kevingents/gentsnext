@@ -17,7 +17,7 @@ export async function HerroepingLanding() {
       <h1 className="mt-2 text-display-md">{t("landing.herroeping.title", locale)}</h1>
       <p className="mt-3 font-sans text-ink-soft">
         {t("landing.herroeping.intro1", locale)}{" "}
-        <Link href="/pages/retourneren" className="text-ink underline">{t("landing.herroeping.returnPortalWord", locale)}</Link>
+        <Link href="/retourneren" className="text-ink underline">{t("landing.herroeping.returnPortalWord", locale)}</Link>
         {" "}{t("landing.herroeping.intro2", locale)}
       </p>
 
@@ -54,7 +54,7 @@ export async function HerroepingLanding() {
       </div>
 
       <div className="mt-8 flex flex-wrap gap-3">
-        <Link href="/pages/retourneren" className="btn-primary">{t("landing.herroeping.returnPortal", locale)}</Link>
+        <Link href="/retourneren" className="btn-primary">{t("landing.herroeping.returnPortal", locale)}</Link>
         <a href={`mailto:${EMAIL}?subject=Herroeping%20bestelling`} className="btn-ghost">{t("landing.herroeping.mailButton", locale)}</a>
       </div>
     </div>

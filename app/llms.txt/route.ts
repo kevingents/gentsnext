@@ -23,7 +23,7 @@ GENTS is dé Nederlandse formele-momenten-specialist. Wij verkopen pakken, colbe
 - [Maatadvies](${url}/maatadvies): Online maatcalculator voor colbert-/lengte-/boordmaat
 - [Etiquette & dresscodes](${url}/pages/etiquette): Gids voor black tie, white tie, gala, smart casual, tenue de ville, jacquet, promovendus
 - [Klantenservice](${url}/pages/service): Service- en hulppagina
-- [Retourneren](${url}/pages/retourneren): 14 dagen gratis retour
+- [Retourneren](${url}/retourneren): binnen 14 dagen — gratis bij tegoed of inleveren in de winkel
 - [Bezorging & levertijd](${url}/pages/bezorgkosten-levertijden): Gratis verzending vanaf €75
 - [Over GENTS](${url}/pages/over-gents): Bedrijfsverhaal
 - [Trouwen met GENTS](${url}/pages/trouwen-met-gents): Bruidsmode-advies
