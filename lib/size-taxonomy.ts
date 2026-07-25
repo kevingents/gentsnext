@@ -27,6 +27,12 @@ const ROW_MAP: Record<string, string> = {
   // SHORT (kwartmaten)
   "22": "XS", "23": "S", "24": "M", "25": "M/L", "26": "L", "27": "XL",
   "28": "XXL", "29": "3XL", "30": "4XL", "31": "5XL", "32": "6XL",
+  // OVERHEMD-BOORDMATEN. Losse boordmaten stonden als eigen buckets in het
+  // maatfilter (XS · M · XL · 36 · 39 · 41 · 43 …) — twee maatsystemen door
+  // elkaar. Alleen de maten die NIET botsen met de pakken-reeks (42-64 even);
+  // 42/44/46 blijven pakmaten, overhemden dragen daar toch "L 41/42"-labels.
+  "36": "XS", "37": "S", "38": "S", "39": "M", "40": "M",
+  "41": "L", "43": "XL", "45": "XXL",
 };
 
 export const ROW_ORDER = ["XXS", "XS", "S", "M", "M/L", "L", "XL", "XXL", "3XL", "4XL", "5XL", "6XL"];

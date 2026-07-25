@@ -6,6 +6,7 @@ import { COLOR_FAMILIES } from "@/lib/colors";
 import { ensureEntries, getTranslationStore, pickFreshTranslation, type TransEntry, type Store } from "@/lib/translate";
 import type { Facets } from "@/lib/catalog";
 import { typeLabel } from "@/lib/catalog";
+import { MATERIAL_BUCKETS, PATTERN_BUCKETS, normalizeType } from "@/lib/facet-taxonomy";
 
 /**
  * i18n-laag over de FILTER-WAARDEN op de PLP (kleur, type, materiaal, dessin,
@@ -38,9 +39,16 @@ async function facetSourceTexts(): Promise<string[]> {
   const out = new Set<string>();
   for (const r of rows) {
     const v = (r.v || "").trim();
-    if (v) out.add(typeLabel(v)); // "MM" → "Mix & match": vertaal wat de klant ziet
+    if (!v) continue;
+    const norm = normalizeType(v); // interne codes eruit, varianten samengevoegd
+    if (norm) out.add(typeLabel(norm));
   }
   for (const c of COLOR_FAMILIES) out.add(c.label);
+  // Gebucket materiaal/dessin: de bucket-naam is de zichtbare tekst, niet de
+  // rauwe bronwaarde — die moet dus door de vertaalrail.
+  for (const b of MATERIAL_BUCKETS) out.add(b.key);
+  for (const b of PATTERN_BUCKETS) out.add(b.key);
+  out.add("Effen");
   return [...out];
 }
 
