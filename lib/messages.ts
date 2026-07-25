@@ -11,7 +11,7 @@ type Dict = Record<string, string>;
 const nl: Dict = {
   "usp.specialist": "Formele-momenten specialist",
   "usp.luxury": "Betaalbare luxe",
-  "usp.returns": "Gratis retour binnen 14 dagen",
+  "usp.returns": "14 dagen retourrecht",
   "usp.advice": "Persoonlijk advies in 19 winkels",
   "nav.suitBuilder": "Pak samenstellen",
   "nav.sizeAdvice": "Maatadvies",
@@ -86,7 +86,7 @@ const nl: Dict = {
 const en: Dict = {
   "usp.specialist": "Formalwear specialists",
   "usp.luxury": "Affordable luxury",
-  "usp.returns": "Free returns within 14 days",
+  "usp.returns": "14-day returns",
   "usp.advice": "Personal advice in 19 stores",
   "nav.suitBuilder": "Build your suit",
   "nav.sizeAdvice": "Size advice",
