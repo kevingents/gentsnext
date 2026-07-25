@@ -1463,7 +1463,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "mail.welcome.subject": "Je GENTS-welkomstkorting: {percent}% met code {code}",
   "mail.welcome.heading": "Je welkomstkorting staat klaar",
   "mail.welcome.intro": "Bedankt voor je inschrijving. Met deze code krijg je <strong>{percent}% korting</strong> op je volgende bestelling:",
-  "mail.welcome.useNote": "Vul 'm bij het afrekenen in onder “Kortingscode”.",
+  // Geen typografische aanhalingstekens: die lieten de Duitse vertaalronde
+  // structureel struikelen (de andere talen kwamen er wel doorheen).
+  "mail.welcome.useNote": "Vul 'm bij het afrekenen in onder Kortingscode.",
   "mail.welcome.cta": "Begin met shoppen",
   "mail.welcome.footnote": "Eenmalig te gebruiken en {days} dagen geldig.",
   // — PDP-FAQ (lib/pdp-faq) — ook de bron van het FAQPage-JSON-LD —
