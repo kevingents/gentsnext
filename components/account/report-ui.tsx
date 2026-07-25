@@ -14,19 +14,75 @@ const ICONS: Record<string, string> = {
   image: "M3 5h18v14H3V5zm0 11l5-5 4 4 3-3 6 6M16 9a1 1 0 100-2 1 1 0 000 2z",
   truck: "M3 16V6h11v10M14 9h4l3 3v4h-3M6 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
   gift: "M20 12v9H4v-9M2 7h20v5H2V7zM12 22V7M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z",
+  layers: "M12 2l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5",
+  hanger: "M12 6a2 2 0 112-2 2 2 0 01-2 2v3l8 5H4l8-5",
+  pen: "M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z",
+  globe: "M12 21a9 9 0 100-18 9 9 0 000 18zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18 15 15 0 010-18z",
+  link: "M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7",
+  pin: "M12 21s7-6.3 7-11a7 7 0 10-14 0c0 4.7 7 11 7 11zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z",
+  calendar: "M8 2v4M16 2v4M3 10h18M5 6h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z",
 };
 
-const NAV = [
-  { href: "/account/statistieken", label: "Statistieken", icon: "chart" },
-  { href: "/account/orders", label: "Orders", icon: "cart" },
-  { href: "/account/klanten", label: "Klanten", icon: "users" },
-  { href: "/account/rapportages", label: "Rapportages", icon: "doc" },
-  { href: "/account/reviews", label: "Reviews", icon: "star" },
-  { href: "/account/analytics", label: "Funnel", icon: "funnel" },
-  { href: "/account/productmedia", label: "Productmedia", icon: "image" },
-  { href: "/account/cadeaubonnen", label: "Cadeaubonnen", icon: "gift" },
-  { href: "/account/instellingen", label: "Instellingen", icon: "gear" },
+/**
+ * Site-studio: alles wat over de WEBSHOP ZELF gaat — content, vindbaarheid,
+ * presentatie, meten en instellingen. Dagelijkse operatie (bestellingen
+ * afhandelen, retouren, klantvragen, voorraad) hoort in de portal, waar het
+ * team al werkt en waar rollen en winkelrechten geregeld zijn. Besluit Kevin,
+ * 24 juli 2026: splitsen op soort werk, elk onderdeel één vaste plek.
+ */
+const NAV_GROUPS: { title: string; items: { href: string; label: string; icon: string }[] }[] = [
+  {
+    title: "Meten",
+    items: [
+      { href: "/account/statistieken", label: "Statistieken", icon: "chart" },
+      { href: "/account/analytics", label: "Gedrag & funnel", icon: "funnel" },
+      { href: "/account/rapportages", label: "Rapportages", icon: "doc" },
+    ],
+  },
+  {
+    title: "Content",
+    items: [
+      { href: "/account/paginas", label: "Pagina's", icon: "pen" },
+      { href: "/account/looks", label: "Looks", icon: "hanger" },
+      { href: "/account/blog", label: "Stijlgids", icon: "doc" },
+      { href: "/account/gelegenheden", label: "Gelegenheden", icon: "calendar" },
+      { href: "/account/menu", label: "Menu", icon: "layers" },
+    ],
+  },
+  {
+    title: "Vindbaarheid",
+    items: [
+      { href: "/account/seo", label: "SEO", icon: "globe" },
+      { href: "/account/vertalingen", label: "Vertalingen", icon: "globe" },
+      { href: "/account/redirects", label: "Redirects", icon: "link" },
+    ],
+  },
+  {
+    title: "Presentatie",
+    items: [
+      { href: "/account/merchandising", label: "Uitgelicht", icon: "pin" },
+      { href: "/account/productmedia", label: "Productmedia", icon: "image" },
+      { href: "/account/reviews", label: "Reviews", icon: "star" },
+    ],
+  },
+  {
+    title: "Beheer",
+    items: [
+      { href: "/account/instellingen", label: "Instellingen", icon: "gear" },
+      { href: "/account/cadeaubonnen", label: "Cadeaubonnen", icon: "gift" },
+    ],
+  },
+  {
+    // Operatie: staat hier zolang de portal-kant nog niet leidend is.
+    title: "Operatie (verhuist naar portal)",
+    items: [
+      { href: "/account/orders", label: "Bestellingen", icon: "cart" },
+      { href: "/account/klanten", label: "Klanten", icon: "users" },
+      { href: "/account/fulfilment", label: "Fulfilment", icon: "truck" },
+    ],
+  },
 ];
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 function NavIcon({ name }: { name: string }) {
   return (
@@ -47,19 +103,24 @@ export function BackofficeShell({ active, title, children }: { active: string; t
               <span className="grid h-9 w-9 place-items-center rounded-lg bg-cream/10 font-display text-sm tracking-brand text-cream">G</span>
               <div className="leading-tight">
                 <div className="text-sm font-semibold tracking-wide text-cream">GENTS</div>
-                <div className="text-[10px] uppercase tracking-wider text-cream/50">Back-office</div>
+                <div className="text-[10px] uppercase tracking-wider text-cream/50">Site-studio</div>
               </div>
             </div>
-            <nav className="space-y-0.5">
-              {NAV.map((n) => {
-                const on = active === n.href;
-                return (
-                  <Link key={n.href} href={n.href} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${on ? "bg-cream/15 font-medium text-cream" : "text-cream/70 hover:bg-cream/10 hover:text-cream"}`}>
-                    <NavIcon name={n.icon} />
-                    {n.label}
-                  </Link>
-                );
-              })}
+            <nav className="space-y-3">
+              {NAV_GROUPS.map((g) => (
+                <div key={g.title} className="space-y-0.5">
+                  <p className="px-3 pb-1 text-[10px] uppercase tracking-wider text-cream/40">{g.title}</p>
+                  {g.items.map((n) => {
+                    const on = active === n.href;
+                    return (
+                      <Link key={n.href} href={n.href} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${on ? "bg-cream/15 font-medium text-cream" : "text-cream/70 hover:bg-cream/10 hover:text-cream"}`}>
+                        <NavIcon name={n.icon} />
+                        {n.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
             <div className="mt-3 border-t border-cream/10 pt-2">
               <Link href="/" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-cream/55 hover:text-cream">← Naar de site</Link>
