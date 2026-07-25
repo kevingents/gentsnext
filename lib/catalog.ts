@@ -20,7 +20,8 @@ import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { NEW_COLLECTION_HANDLE } from "@/lib/new-collection";
 import { mySizeBuckets } from "@/lib/size-match";
-import { rowSortIndex, rowDisplayLabel } from "@/lib/size-taxonomy";
+import { rowSortIndex, rowDisplayLabel, sizeRowLabel } from "@/lib/size-taxonomy";
+import { MATERIAL_BUCKETS, PATTERN_BUCKETS, bucketsFor, sqlPatternFor, normalizeType, expandType, LOOSE_MIN_COUNT, type FacetBucket } from "@/lib/facet-taxonomy";
 import { isSizeToken, expandSynonyms, parseSynonyms } from "@/lib/search-helpers";
 import { getSettings } from "@/lib/settings";
 
@@ -609,16 +610,18 @@ function allConditions(f: ProductFilters): SQL[] {
     conds.push(inList(sql`${products.attributes} ->> 'pasvorm'`, f.fits));
   }
   if (f.types?.length) {
-    conds.push(inList(sql`${products.attributes} ->> 'subgroep'`, f.types));
+    // Samengevoegde types meenemen: "Pakken" moet ook "Pakken Modern Fit" vinden.
+    const expanded = [...new Set(f.types.flatMap((v) => expandType(v)))];
+    conds.push(inList(sql`${products.attributes} ->> 'subgroep'`, expanded));
   }
   if (f.materials?.length) {
-    conds.push(inList(sql`${products.attributes} ->> 'materiaal'`, f.materials));
+    conds.push(bucketCondition(sql`${products.attributes} ->> 'materiaal'`, f.materials, MATERIAL_BUCKETS));
   }
   if (f.patterns?.length) {
     // "Effen" = geen/leeg dessin; combineer met eventuele echte dessins via OR.
     const real = f.patterns.filter((p) => p !== "Effen");
     const ors: SQL[] = [];
-    if (real.length) ors.push(inList(sql`${products.attributes} ->> 'print_design'`, real));
+    if (real.length) ors.push(bucketCondition(sql`${products.attributes} ->> 'print_design'`, real, PATTERN_BUCKETS));
     if (f.patterns.includes("Effen")) ors.push(sql`coalesce(trim(${products.attributes} ->> 'print_design'), '') = ''`);
     if (ors.length) conds.push(sql`(${sql.join(ors, sql` or `)})`);
   }
@@ -757,6 +760,24 @@ export async function getFilteredProducts(
 }
 
 /** Facetten zonder cache-laag (rechtstreeks de DB). getFacets() wrapt dit met caching. */
+
+/**
+ * Filterconditie voor een gebucket facet: bekende bucket → patroonmatch (zodat
+ * "Wol" ook "Polyester wol" vindt), onbekende waarde → exacte match zodat oude
+ * gedeelde filterlinks blijven werken.
+ */
+function bucketCondition(col: SQL, values: string[], buckets: FacetBucket[]): SQL {
+  const ors: SQL[] = [];
+  const exact: string[] = [];
+  for (const v of values) {
+    const pattern = sqlPatternFor(v, buckets);
+    if (pattern) ors.push(sql`${col} ~* ${pattern}`);
+    else exact.push(v);
+  }
+  if (exact.length) ors.push(inList(col, exact));
+  return ors.length ? sql`(${sql.join(ors, sql` or `)})` : sql`true`;
+}
+
 export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   const db = getDb();
   // Facetten binnen de context (collectie/categorie), onafhankelijk van de
@@ -803,16 +824,45 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   const colors = COLOR_FAMILIES.filter((c) => colorCount.has(c.key)).map((c) => ({ ...c, count: colorCount.get(c.key) ?? 0 }));
 
   // Lettermaat-buckets (XS/M/L/…) in natuurlijke volgorde.
-  const sizes = of(vRows, "size")
-    .map((r) => ({ value: r.v ?? "", label: rowDisplayLabel(r.v ?? ""), count: r.n }))
+  const sizeAcc = new Map<string, number>();
+  for (const r of of(vRows, "size")) {
+    // Hergroeperen op lettermaat: de opgeslagen size_label dateert van de
+    // import, dus losse boordmaten (36/39/41) stonden náást XS/M/L.
+    const bucket = sizeRowLabel(r.v ?? "") || (r.v ?? "");
+    if (bucket) sizeAcc.set(bucket, (sizeAcc.get(bucket) ?? 0) + r.n);
+  }
+  const sizes = [...sizeAcc]
+    .map(([value, count]) => ({ value, label: rowDisplayLabel(value), count }))
     .sort((a, b) => rowSortIndex(a.value) - rowSortIndex(b.value));
 
   const fits = of(pRows, "pasvorm").map((r) => ({ value: r.v ?? "", count: r.n })).sort((a, b) => b.count - a.count);
 
-  const types = of(pRows, "subgroep").map((r) => ({ value: r.v ?? "", label: typeLabel(r.v ?? ""), count: r.n })).sort((a, b) => b.count - a.count);
+  // Type: interne codes eruit, pasvorm-varianten samengevoegd (Pakken Modern
+  // Fit → Pakken); tellingen van samengevoegde waarden optellen.
+  const typeCount = new Map<string, number>();
+  for (const r of of(pRows, "subgroep")) {
+    const norm = normalizeType(r.v ?? "");
+    if (norm) typeCount.set(norm, (typeCount.get(norm) ?? 0) + r.n);
+  }
+  const types = [...typeCount].map(([value, count]) => ({ value, label: typeLabel(value), count })).sort((a, b) => b.count - a.count);
 
-  // Materiaal: alleen tonen wat genoeg voorkomt.
-  const materials = of(pRows, "materiaal").map((r) => ({ value: r.v ?? "", count: r.n })).filter((m) => m.count >= 2).sort((a, b) => b.count - a.count).slice(0, 12);
+  // Materiaal + dessin op HOOFDCOMPONENT (lib/facet-taxonomy): "Polyester
+  // viscose" viel eerst als eigen filter naast "Katoen"; wie op wol zocht miste
+  // elke wolmix. Eén product kan in meerdere buckets vallen.
+  const bucketed = (facet: string, buckets: typeof MATERIAL_BUCKETS) => {
+    const acc = new Map<string, number>();
+    for (const r of of(pRows, facet)) {
+      for (const key of bucketsFor(r.v ?? "", buckets)) acc.set(key, (acc.get(key) ?? 0) + r.n);
+    }
+    const bucketKeys = new Set(buckets.map((b) => b.key));
+    return [...acc]
+      .map(([value, count]) => ({ value, count }))
+      // Bucket-waarden vanaf 2; losse rest-waarden pas vanaf LOOSE_MIN_COUNT.
+      .filter((x) => (bucketKeys.has(x.value) ? x.count >= 2 : x.count >= LOOSE_MIN_COUNT))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
+  };
+  const materials = bucketed("materiaal", MATERIAL_BUCKETS);
 
   // Seizoen: alleen echte seizoenen (geen "NOS"/"Black friday"-ruis).
   const seasons = of(pRows, "seizoen").filter((r) => REAL_SEASONS.has(r.v ?? "")).map((r) => ({ value: r.v ?? "", count: r.n })).sort((a, b) => b.count - a.count);
@@ -821,7 +871,7 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   const effenCount = scalar(pRows, "effen");
   const patterns = [
     ...(effenCount >= 2 ? [{ value: "Effen", count: effenCount }] : []),
-    ...of(pRows, "print_design").map((r) => ({ value: r.v ?? "", count: r.n })).filter((p) => p.count >= 2).sort((a, b) => b.count - a.count).slice(0, 12),
+    ...bucketed("print_design", PATTERN_BUCKETS),
   ];
 
   return {
