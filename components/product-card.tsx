@@ -94,9 +94,12 @@ export function ProductCard({
         <h3 className="font-sans text-sm text-ink">{product.title}</h3>
         <p className="font-sans text-sm text-ink-soft">
           {product.hasPriceRange ? `${t("product.from")} ` : ""}
-          <span className={product.compareAtCents ? "text-danger" : ""}>{formatEuro(product.minPriceCents)}</span>
-          {product.compareAtCents ? (
-            <span className="ml-2 text-xs text-muted line-through">{formatEuro(product.compareAtCents)}</span>
+          {/* Doorstreping hangt aan dezelfde vlag als de sale-badge (Omnibus-
+              referentieprijs uit lib/pricing) — badge en "van"-prijs kunnen dus
+              niet los van elkaar verschijnen, en niet los van de PDP. */}
+          <span className={product.hasSale ? "text-danger" : ""}>{formatEuro(product.minPriceCents)}</span>
+          {product.hasSale && product.referenceCents ? (
+            <span className="ml-2 text-xs text-muted line-through">{formatEuro(product.referenceCents)}</span>
           ) : null}
         </p>
         {product.colorCount && product.colorCount > 1 ? (

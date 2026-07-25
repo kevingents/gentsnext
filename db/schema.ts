@@ -443,6 +443,12 @@ export const orders = pgTable(
     postalCode: text("postal_code").notNull().default(""),
     city: text("city").notNull().default(""),
     country: text("country").notNull().default("NL"),
+    /** Taal waarin de klant besteld heeft (nl|en|de|fr|es) — de bevestigings- én
+     *  statusmails gaan in DEZE taal. Waarom op de order en niet meegegeven vanaf
+     *  de checkout: de bevestiging vertrekt vanuit de betaal-webhook en de
+     *  statusmails uit het back-office, dagen later; die kennen alléén de order.
+     *  Zelfde patroon als appointments.locale. */
+    locale: text("locale").notNull().default("nl"),
     /** Zakelijk bestellen (optioneel): bedrijfsnaam + BTW-nummer. */
     companyName: text("company_name").notNull().default(""),
     vatNumber: text("vat_number").notNull().default(""),

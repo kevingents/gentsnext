@@ -371,6 +371,11 @@ export default async function ProductPage({ params }: Props) {
   const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
   const materiaal = String(attrs.materiaal ?? "").trim();
 
+  // Eén keer opbouwen in de taal van de pagina — het zichtbare blok én het
+  // FAQPage-JSON-LD moeten dezelfde (vertaalde) tekst tonen, anders leest Google
+  // Nederlandse vragen op een pagina met lang="en".
+  const faq = faqFor(hoofdgroep, t);
+
   const accordionItems = [
     ...(descriptionHtml
       ? [
@@ -386,10 +391,10 @@ export default async function ProductPage({ params }: Props) {
         ]
       : []),
     ...(composition.length || materiaal
-      ? [{ title: t("pdp.material"), content: <MaterialBlock composition={composition} fallback={materiaal} /> }]
+      ? [{ title: t("pdp.material"), content: <MaterialBlock composition={composition} fallback={materiaal} t={t} /> }]
       : []),
     ...(careItems.length || careProseLines.length
-      ? [{ title: t("pdp.accordion.care"), content: <CareBlock items={careItems} prose={careProseLines} /> }]
+      ? [{ title: t("pdp.accordion.care"), content: <CareBlock items={careItems} prose={careProseLines} t={t} /> }]
       : []),
     ...(specs.length
       ? [
@@ -427,7 +432,7 @@ export default async function ProductPage({ params }: Props) {
       title: t("pdp.accordion.faq"),
       content: (
         <dl className="font-sans text-sm">
-          {faqFor(hoofdgroep).map((f) => (
+          {faq.map((f) => (
             <div key={f.q} className="py-3 first:pt-0 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-line">
               <dt className="font-medium text-ink">{f.q}</dt>
               <dd className="mt-1 leading-relaxed text-ink-soft">{f.a}</dd>
@@ -441,7 +446,7 @@ export default async function ProductPage({ params }: Props) {
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: faqFor(hoofdgroep).map((f) => ({
+    mainEntity: faq.map((f) => ({
       "@type": "Question",
       name: f.q,
       acceptedAnswer: { "@type": "Answer", text: f.a },

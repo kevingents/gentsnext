@@ -5,6 +5,7 @@ import { orders, orderLines, products, productVariants } from "@/db/schema";
 import { parseCare, type CareItem } from "@/lib/care";
 import { getRecommendations, getOrderCrossSell, type ProductCardData } from "@/lib/catalog";
 import { sendOrderConfirmation } from "@/lib/email";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n";
 import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
@@ -152,7 +153,12 @@ export async function createOrder(
   giftcardCode = "",
   pickupStore = "",
   soldByStore = "",
-  customerId: string | null = null
+  customerId: string | null = null,
+  // Taal van de klant op het moment van bestellen. Leggen we hier vast omdat de
+  // bevestigingsmail pas ná de betaling vertrekt (webhook) en de statusmails nog
+  // veel later uit het back-office — die kennen alléén de order, niet de sessie.
+  // Kassa-/winkelorders geven niets mee en blijven dus Nederlands.
+  locale: Locale = DEFAULT_LOCALE
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -254,6 +260,7 @@ export async function createOrder(
       postalCode: contact.postalCode.trim(),
       city: contact.city.trim(),
       country: (contact.country || "NL").trim(),
+      locale: isLocale(locale) ? locale : DEFAULT_LOCALE,
       companyName: (contact.companyName || "").trim(),
       vatNumber: (contact.vatNumber || "").trim(),
       deliveryMethod: method,
@@ -551,7 +558,9 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   }
   const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
   const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
-  const ok = await sendOrderConfirmation(order, lines, recs);
+  // De webhook kent de klantsessie niet meer — de taal reist mee op de order.
+  const locale: Locale = isLocale(String(order.locale || "")) ? (order.locale as Locale) : DEFAULT_LOCALE;
+  const ok = await sendOrderConfirmation(order, lines, recs, locale);
   if (!ok) {
     // Niet verstuurd → claim terugdraaien zodat een volgende webhook het opnieuw probeert.
     await db.update(orders).set({ confirmationSentAt: null }).where(eq(orders.id, orderId));
@@ -660,7 +669,15 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   if (!order) return false;
   const { notifyOrderStatus } = await import("@/lib/order-notify");
   await notifyOrderStatus(
-    { orderNumber: order.orderNumber, email: order.email, firstName: order.firstName, phone: order.phone, accessToken: order.accessToken },
+    {
+      orderNumber: order.orderNumber,
+      email: order.email,
+      firstName: order.firstName,
+      phone: order.phone,
+      accessToken: order.accessToken,
+      // Statusmail in de taal waarin besteld is (zie orders.locale).
+      locale: order.locale,
+    },
     status
   );
   return true;

@@ -1,14 +1,91 @@
 import { getSiteUrl } from "@/lib/site-url";
 import { formatEuro as euro } from "@/lib/format";
+import { DEFAULT_LOCALE, localizedPath, type Locale } from "@/lib/i18n";
+import { interpolate, t as tStatic } from "@/lib/messages";
+import { getT } from "@/lib/t-server";
 
 /**
  * Transactionele mail via Resend (env-gated op RESEND_API_KEY). Bewust zonder
  * extra SDK: directe call naar de Resend API, net als de Mollie-client.
  * Afzender via RESEND_FROM (bv. "GENTS <bestellingen@gents.nl>").
+ *
+ * Taal: klant-mails volgen de taal waarin de klant de site gebruikte. De
+ * teksten komen uit dezelfde vertaalrail als de site (getT → cron-store →
+ * statische dict → NL), en het lang-attribuut van de mail loopt mee. Interne
+ * notificaties (winkel/HQ) blijven bewust Nederlands.
  */
 
 export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
+}
+
+/** Vertaal-functie in de vorm die getT(locale) teruggeeft. */
+type Tr = (key: string, params?: Record<string, string | number>) => string;
+
+/**
+ * NL-brontekst van de mail-sleutels. Vangnet: `t()` geeft de sleutelnaam terug
+ * zolang een sleutel nog niet in de centrale catalogus staat — dan zou er
+ * letterlijk "mail.order.intro" in een klantmail belanden. Deze map houdt de
+ * mail in dat geval gewoon Nederlands (= het gedrag van vóór deze wijziging).
+ * Zodra de sleutels in lib/messages staan wint de catalogus en is dit dood hout.
+ */
+const MAIL_NL: Record<string, string> = {
+  "mail.line.size": "maat {size}",
+  "mail.footer.pricesInclVat": "Alle prijzen incl. btw",
+  "mail.footer.usps": "Persoonlijk advies in 19 winkels · gratis retour binnen 14 dagen · alle prijzen incl. btw",
+  "mail.order.subject": "Je GENTS-bestelling {orderNumber} is bevestigd",
+  "mail.order.heading": "Bedankt voor je bestelling, {name}",
+  "mail.order.headingNoName": "Bedankt voor je bestelling",
+  "mail.order.intro": "We hebben je betaling ontvangen en gaan voor je aan de slag. Hieronder vind je je bestelling.",
+  "mail.order.remaining": "Nog te betalen",
+  "mail.order.points": "Je spaart {points} punten met deze bestelling",
+  "mail.order.pointsBody":
+    "Bekijk en verzilver ze in je {link}. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.",
+  "mail.order.accountLink": "GENTS-account",
+  "mail.order.returnNote": "Niet helemaal tevreden? Je hebt 14 dagen bedenktijd en retourneert gratis.",
+  "mail.order.questions": "Vragen? Antwoord op deze mail of bezoek {link}.",
+  "mail.login.subject": "Je inloglink voor GENTS",
+  "mail.login.heading": "Inloggen bij GENTS",
+  "mail.login.body1": "Klik op de knop hieronder om in te loggen op je account. De link is 30 minuten geldig en werkt één keer.",
+  "mail.login.body2": "Zo heb je je bestellingen, bewaarde maten, spaarpunten en favorieten meteen bij de hand.",
+  "mail.login.footnote": "Heb je dit niet aangevraagd? Dan kun je deze e-mail veilig negeren — er gebeurt niets.",
+  "mail.greeting.fallbackName": "daar",
+  "mail.status.viewOrder": "Bekijk je bestelling",
+  "mail.status.shipped.subject": "Je GENTS-bestelling {orderNumber} is verzonden",
+  "mail.status.shipped.text": "Hoi {name}, goed nieuws! Je bestelling {orderNumber} is onderweg.",
+  "mail.status.readyPickup.subject": "Je GENTS-bestelling {orderNumber} ligt klaar",
+  "mail.status.readyPickup.text": "Hoi {name}, je bestelling {orderNumber} ligt klaar om af te halen in de winkel. Tot snel!",
+  "mail.status.delivered.subject": "Hoe bevalt je GENTS-bestelling?",
+  "mail.status.delivered.heading": "Hoe bevalt je bestelling?",
+  "mail.status.delivered.text":
+    "Hoi {name}, je bestelling {orderNumber} is bezorgd. We zijn benieuwd wat je ervan vindt — een korte review helpt andere klanten enorm en kost je maar een minuutje.",
+  "mail.status.refunded.subject": "Je GENTS-bestelling {orderNumber} is terugbetaald",
+  "mail.status.refunded.text": "Hoi {name}, je betaling voor {orderNumber} is terugbetaald. Vragen? We helpen je graag.",
+};
+
+/** Legt het NL-vangnet onder een vertaler (zie MAIL_NL). */
+function withFallback(tr: Tr): Tr {
+  return (key, params) => {
+    const v = tr(key, params);
+    return v === key && MAIL_NL[key] ? interpolate(MAIL_NL[key], params) : v;
+  };
+}
+
+/** Nederlandse vertaler — voor mails die bewust NL blijven (interne notificaties). */
+const nlT: Tr = withFallback((key, params) => tStatic(key, DEFAULT_LOCALE, params));
+
+/**
+ * Vertaler voor een klantmail. Leest óók de cron-vertalingen (dezelfde bron als
+ * de site) en valt bij een storing terug op Nederlands: een mail mag nooit op
+ * i18n stukgaan.
+ */
+export async function mailT(locale: Locale): Promise<Tr> {
+  if (locale === DEFAULT_LOCALE) return nlT;
+  try {
+    return withFallback(await getT(locale));
+  } catch {
+    return nlT;
+  }
 }
 
 type OrderLine = {
@@ -36,53 +113,55 @@ type OrderInfo = {
 
 type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
 
-function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = []): string {
+function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = [], t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
   const site = getSiteUrl();
+  // Links met locale-prefix: de mail wordt ook geopend zonder onze taal-cookie.
+  const url = (path: string) => `${site}${localizedPath(path, locale)}`;
   const points = Math.max(0, Math.floor(order.totalCents / 100)); // 1 punt per euro
   const rows = lines
     .map(
       (l) => `<tr>
         <td style="padding:8px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">
           ${l.roleLabel ? `<span style="color:#8B8B8B">${l.roleLabel}: </span>` : ""}${l.title}
-          <div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && `maat ${l.size}`, `${l.quantity}×`].filter(Boolean).join(" · ")}</div>
+          <div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && t("mail.line.size", { size: l.size }), `${l.quantity}×`].filter(Boolean).join(" · ")}</div>
         </td>
         <td align="right" style="padding:8px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${euro(l.unitPriceCents * l.quantity)}</td>
       </tr>`
     )
     .join("");
 
-  return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
+  return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#fff;border:1px solid #E6E4DF">
         ${brandHeaderRow()}
         <tr><td style="padding:24px 28px 8px">
-          <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Bedankt voor je bestelling, ${order.firstName || ""}</h1>
+          <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${order.firstName ? t("mail.order.heading", { name: order.firstName }) : t("mail.order.headingNoName")}</h1>
           <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">
-            We hebben je betaling ontvangen en gaan voor je aan de slag. Hieronder vind je je bestelling.
+            ${t("mail.order.intro")}
           </p>
-          <p style="font:13px Arial,sans-serif;color:#8B8B8B;margin:4px 0">Bestelnummer <strong style="color:#0A0A0A">${order.orderNumber}</strong></p>
+          <p style="font:13px Arial,sans-serif;color:#8B8B8B;margin:4px 0">${t("order.order_number")} <strong style="color:#0A0A0A">${order.orderNumber}</strong></p>
         </td></tr>
         <tr><td style="padding:8px 28px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}
-            <tr><td style="padding:10px 0 0;font:14px Arial,sans-serif;color:#8B8B8B">Subtotaal</td><td align="right" style="padding:10px 0 0;font:14px Arial,sans-serif;color:#0A0A0A">${euro(order.subtotalCents)}</td></tr>
-            ${order.discountCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">Korting</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.discountCents)}</td></tr>` : ""}
-            <tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">Verzending</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">${order.shippingCents === 0 ? "Gratis" : euro(order.shippingCents)}</td></tr>
-            ${order.giftcardCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">Cadeaubon</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.giftcardCents)}</td></tr>` : ""}
-            <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${order.giftcardCents ? "Nog te betalen" : "Totaal"}</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>
+            <tr><td style="padding:10px 0 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("cart.subtotal")}</td><td align="right" style="padding:10px 0 0;font:14px Arial,sans-serif;color:#0A0A0A">${euro(order.subtotalCents)}</td></tr>
+            ${order.discountCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("checkout.discount")}</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.discountCents)}</td></tr>` : ""}
+            <tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("checkout.shipping")}</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">${order.shippingCents === 0 ? t("checkout.free") : euro(order.shippingCents)}</td></tr>
+            ${order.giftcardCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("checkout.giftcard_label")}</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.giftcardCents)}</td></tr>` : ""}
+            <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${order.giftcardCents ? t("mail.order.remaining") : t("checkout.total")}</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>
           </table>
         </td></tr>
         ${
           recs.length
             ? `<tr><td style="padding:20px 28px 4px">
-          <p style="font:600 14px Arial,sans-serif;color:#0A0A0A;margin:0 0 12px">Maak je look compleet</p>
+          <p style="font:600 14px Arial,sans-serif;color:#0A0A0A;margin:0 0 12px">${t("order.complete_outfit_label")}</p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
             ${recs
               .map(
                 (r) => `<td width="33%" valign="top" style="padding:0 5px">
-              <a href="${site}/products/${r.handle}" style="text-decoration:none;color:#0A0A0A">
+              <a href="${url(`/products/${r.handle}`)}" style="text-decoration:none;color:#0A0A0A">
                 ${r.imageUrl ? `<img src="${r.imageUrl}" width="100%" alt="" style="display:block;border:1px solid #E6E4DF;background:#F6F5F2"/>` : ""}
                 <div style="font:12px Arial,sans-serif;color:#0A0A0A;margin-top:6px;line-height:1.3">${r.title}</div>
-                <div style="font:12px Arial,sans-serif;color:#8B8B8B">${r.hasPriceRange ? "vanaf " : ""}${euro(r.minPriceCents)}</div>
+                <div style="font:12px Arial,sans-serif;color:#8B8B8B">${r.hasPriceRange ? `${t("product.from")} ` : ""}${euro(r.minPriceCents)}</div>
               </a>
             </td>`
               )
@@ -95,23 +174,23 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
           points > 0
             ? `<tr><td style="padding:8px 28px 0">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#F6F5F2;border:1px solid #E6E4DF;padding:16px">
-            <div style="font:600 14px Arial,sans-serif;color:#0A0A0A">Je spaart ${points} punten met deze bestelling</div>
-            <div style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin-top:4px">Bekijk en verzilver ze in je <a href="${site}/account" style="color:#0A0A0A">GENTS-account</a>. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.</div>
+            <div style="font:600 14px Arial,sans-serif;color:#0A0A0A">${t("mail.order.points", { points })}</div>
+            <div style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin-top:4px">${t("mail.order.pointsBody", { link: `<a href="${url("/account")}" style="color:#0A0A0A">${t("mail.order.accountLink")}</a>` })}</div>
           </td></tr></table>
         </td></tr>`
             : ""
         }
         <tr><td style="padding:16px 28px 28px">
           <p style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">
-            <strong>Bezorgadres</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}
+            <strong>${t("checkout.delivery_address")}</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}
           </p>
           <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:16px">
-            Niet helemaal tevreden? Je hebt 14 dagen bedenktijd en retourneert gratis.
-            Vragen? Antwoord op deze mail of bezoek <a href="${site}" style="color:#0A0A0A">gents.nl</a>.
+            ${t("mail.order.returnNote")}
+            ${t("mail.order.questions", { link: `<a href="${url("/")}" style="color:#0A0A0A">gents.nl</a>` })}
           </p>
         </td></tr>
       </table>
-      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam · Alle prijzen incl. btw</div>
+      <div style="font:11px Arial,sans-serif;color:#8B8B8B;margin-top:16px">GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam · ${t("mail.footer.pricesInclVat")}</div>
     </td></tr></table>
   </body></html>`;
 }
@@ -215,28 +294,33 @@ function brandHeaderRow(): string {
   </td></tr>`;
 }
 
-/** Gebrande footer binnen de kaart: snelkoppelingen + tagline. */
-function brandFooterRow(): string {
+/** Gebrande footer binnen de kaart: snelkoppelingen + tagline.
+ *  De links krijgen het locale-prefix mee (/en/…): een mail wordt ook geopend
+ *  op een apparaat zonder onze taal-cookie, en dan zou de klant alsnog op de
+ *  Nederlandse pagina belanden. */
+function brandFooterRow(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
   const site = getSiteUrl();
   const link = (href: string, label: string) =>
-    `<a href="${site}${href}" style="color:#111111;text-decoration:none;font:12px Arial,sans-serif">${label}</a>`;
+    `<a href="${site}${localizedPath(href, locale)}" style="color:#111111;text-decoration:none;font:12px Arial,sans-serif">${label}</a>`;
   return `<tr><td style="padding:8px 28px 26px">
     <div style="border-top:1px solid #E6E4DF;padding-top:18px">
       <div style="font:12px Arial,sans-serif;color:#111111">
-        ${link("/account", "Mijn account")} &nbsp;·&nbsp; ${link("/pages/winkels", "Winkels")} &nbsp;·&nbsp; ${link("/retourneren", "Retourneren")} &nbsp;·&nbsp; ${link("/pages/klantenservice", "Klantenservice")}
+        ${link("/account", t("common.account"))} &nbsp;·&nbsp; ${link("/pages/winkels", t("nav.stores"))} &nbsp;·&nbsp; ${link("/retourneren", t("retourneren.title"))} &nbsp;·&nbsp; ${link("/pages/klantenservice", t("help.link.service"))}
       </div>
-      <div style="font:11px Arial,sans-serif;color:#B2AEA8;margin-top:12px">Persoonlijk advies in 19 winkels · gratis retour binnen 14 dagen · alle prijzen incl. btw</div>
+      <div style="font:11px Arial,sans-serif;color:#B2AEA8;margin-top:12px">${t("mail.footer.usps")}</div>
     </div>
   </td></tr>`;
 }
 
-function shell(inner: string): string {
-  return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
+/** Mail-huisstijl. `locale`/`t` bepalen de taal van de vaste onderdelen én het
+ *  lang-attribuut; zonder argumenten blijft alles Nederlands (interne mails). */
+function shell(inner: string, locale: Locale = DEFAULT_LOCALE, t: Tr = nlT): string {
+  return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#EDEBE7;padding:24px 12px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#fff;border:1px solid #E6E4DF">
         ${brandHeaderRow()}
         ${inner}
-        ${brandFooterRow()}
+        ${brandFooterRow(t, locale)}
       </table>
       <div style="font:11px Arial,sans-serif;color:#9a958d;margin-top:14px">GENTS B.V. · Lemelerbergweg 15, 1101 AJ Amsterdam</div>
     </td></tr></table>
@@ -246,8 +330,17 @@ function shell(inner: string): string {
 /**
  * Gebrande e-mail (voor losse mails buiten de lifecycle-set, bv. de inlog-link).
  * `bodyHtml` is vrije HTML in de contentzone; optionele knop + voetnoot.
+ * De aanroeper levert de teksten al vertaald aan (zoals de afspraak-mail) en
+ * geeft dan `locale` + `t` mee, zodat lang-attribuut en footer meelopen.
  */
-export function brandedEmailHtml(opts: { heading: string; bodyHtml: string; cta?: { label: string; href: string }; footnote?: string }): string {
+export function brandedEmailHtml(opts: {
+  heading: string;
+  bodyHtml: string;
+  cta?: { label: string; href: string };
+  footnote?: string;
+  locale?: Locale;
+  t?: Tr;
+}): string {
   const inner = `
     <tr><td style="padding:26px 28px 6px">
       <h1 style="font:400 22px Arial,sans-serif;color:#111111;margin:0">${opts.heading}</h1>
@@ -258,7 +351,7 @@ export function brandedEmailHtml(opts: { heading: string; bodyHtml: string; cta?
     </td></tr>` : ""}
     ${opts.footnote ? `<tr><td style="padding:10px 28px 6px;font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.5">${opts.footnote}</td></tr>` : ""}
   `;
-  return shell(inner);
+  return shell(inner, opts.locale ?? DEFAULT_LOCALE, opts.t ?? nlT);
 }
 
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
@@ -407,8 +500,15 @@ export async function sendNewsletterConfirmation(email: string, confirmUrl: stri
   return sendEmail(email, "Bevestig je GENTS-nieuwsbrief", shell(inner));
 }
 
-export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = []): Promise<boolean> {
+/** Orderbevestiging in de taal waarin de klant besteld heeft (orders.locale). */
+export async function sendOrderConfirmation(
+  order: OrderInfo,
+  lines: OrderLine[],
+  recs: CrossSellItem[] = [],
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
   if (!emailConfigured()) return false;
+  const t = await mailT(locale);
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -418,8 +518,8 @@ export async function sendOrderConfirmation(order: OrderInfo, lines: OrderLine[]
     body: JSON.stringify({
       from: process.env.RESEND_FROM,
       to: [order.email],
-      subject: `Je GENTS-bestelling ${order.orderNumber} is bevestigd`,
-      html: orderHtml(order, lines, recs),
+      subject: t("mail.order.subject", { orderNumber: order.orderNumber }),
+      html: orderHtml(order, lines, recs, t, locale),
     }),
   });
   if (!res.ok) {

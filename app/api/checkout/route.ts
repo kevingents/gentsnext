@@ -15,6 +15,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { getSessionCustomer } from "@/lib/account";
 import { getStores } from "@/lib/stores";
 import { availableInStore } from "@/lib/store-core";
+import { getLocale } from "@/lib/locale-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -90,9 +91,14 @@ export async function POST(req: Request) {
   // Ingelogde klant → order meteen aan het account koppelen (punten, zichtbaar in
   // "mijn bestellingen", juiste bedankt-CTA). Gast blijft mogelijk (customerId null).
   const sessionCustomer = await getSessionCustomer();
+  // Taal van de klant vastleggen op de order: de bevestigingsmail vertrekt pas
+  // vanuit de betaal-webhook en de statusmails uit het back-office — daar is de
+  // sessie weg. De middleware slaat /api over, dus getLocale() leest hier de
+  // locale-cookie die diezelfde middleware op elke /en-, /de-… pagina zet.
+  const locale = await getLocale();
   let order;
   try {
-    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore, "", sessionCustomer?.id ?? null);
+    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore, "", sessionCustomer?.id ?? null, locale);
   } catch (e) {
     // Voorraad-gate weigert → geef de niet-leverbare SKU's terug zodat de checkout
     // ze kan markeren en de klant ze in één klik kan verwijderen.

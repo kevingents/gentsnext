@@ -1,4 +1,4 @@
-import { isRealDiscount } from "@/lib/pricing";
+import { getReferencePrices, isRealDiscount } from "@/lib/pricing";
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
@@ -54,8 +54,13 @@ export type ProductCardData = {
   hasPriceRange: boolean;
   isNew?: boolean;
   hasSale?: boolean;
-  /** Hoogste compareAt-prijs voor de variant die nu op sale is — voor doorstrepen. */
-  compareAtCents?: number;
+  /**
+   * Omnibus-referentieprijs ("van"-prijs) van dezelfde variant die de PDP bij het
+   * openen toont — alleen gevuld als er een ECHTE korting is (isRealDiscount).
+   * Bewust NIET het Shopify-veld compareAtCents: dat is een vrij invulbaar
+   * marketingveld en leverde kaarten op die korting beloofden die de PDP niet gaf.
+   */
+  referenceCents?: number;
   /** Aantal kleuren in de variantgroep (≥2 → toon "+N kleuren" op de kaart). */
   colorCount?: number;
   /** Lage voorraad → eerlijke schaarste-badge ("Laatste exemplaren"). */
@@ -126,12 +131,15 @@ async function buildProductCards(
       .orderBy(asc(productImages.position)),
     db
       .select({
+        id: productVariants.id,
         productId: productVariants.productId,
         priceCents: productVariants.priceCents,
-        compareAtCents: productVariants.compareAtCents,
       })
       .from(productVariants)
-      .where(inArray(productVariants.productId, ids)),
+      .where(inArray(productVariants.productId, ids))
+      // Positie-volgorde: de PDP kiest de EERSTE variant met de laagste prijs;
+      // de kaart moet exact diezelfde variant pakken, anders wijkt de "van"-prijs af.
+      .orderBy(asc(productVariants.position)),
     db
       .select({
         id: products.id,
@@ -162,8 +170,8 @@ async function buildProductCards(
     if (!firstImage.has(img.productId)) firstImage.set(img.productId, { url: img.url, alt: img.alt });
   }
   const priceRange = new Map<string, { min: number; max: number }>();
-  const onSale = new Map<string, boolean>();
-  const compareAtBest = new Map<string, number>();
+  // Goedkoopste variant per product — dezelfde die de PDP als startprijs toont.
+  const cheapestVariant = new Map<string, { id: string; priceCents: number }>();
   for (const v of variants) {
     const range = priceRange.get(v.productId);
     if (!range) priceRange.set(v.productId, { min: v.priceCents, max: v.priceCents });
@@ -171,11 +179,9 @@ async function buildProductCards(
       range.min = Math.min(range.min, v.priceCents);
       range.max = Math.max(range.max, v.priceCents);
     }
-    if (v.compareAtCents && isRealDiscount(v.priceCents, v.compareAtCents)) {
-      onSale.set(v.productId, true);
-      const cur = compareAtBest.get(v.productId) ?? 0;
-      if (v.compareAtCents > cur) compareAtBest.set(v.productId, v.compareAtCents);
-    }
+    const cheap = cheapestVariant.get(v.productId);
+    // Strikt kleiner: bij gelijke prijs wint de eerste in positie-volgorde (= PDP-keuze).
+    if (!cheap || v.priceCents < cheap.priceCents) cheapestVariant.set(v.productId, { id: v.id, priceCents: v.priceCents });
   }
 
   const NEW_DAYS = 30;
@@ -193,15 +199,36 @@ async function buildProductCards(
   const isEnglishish = (s: string) =>
     /\b(the|with|smiling|man|stylish|wearing|worn|outfit|shirt|trousers)\b/i.test(s);
 
-  // Vertaalde titels voor niet-NL locale (AI-vertaling, product_translations).
-  const locale = await getLocale();
-  const titleTl = new Map<string, string>();
-  if (locale !== DEFAULT_LOCALE) {
-    const tls = await db
-      .select({ productId: productTranslations.productId, title: productTranslations.title })
-      .from(productTranslations)
-      .where(and(inArray(productTranslations.productId, ids), eq(productTranslations.locale, locale)));
-    for (const t of tls) if (t.title) titleTl.set(t.productId, t.title);
+  // Kortingswaarheid = die van de PDP: de Omnibus-referentieprijs uit de eigen
+  // prijshistorie (lib/pricing), niet het vrij invulbare Shopify-veld compareAt.
+  // Eén gebatchte query voor de hele lijst (alleen de goedkoopste variant per
+  // product, dus ~1 id per kaart) en meteen in de Promise.all naast het
+  // vertaalwerk — zo kost het geen extra round-trip, en is er geen moment waarop
+  // de promise zonder handler kan afketsen (unhandled rejection).
+  const [referencePrices, titleTl] = await Promise.all([
+    getReferencePrices([...cheapestVariant.values()].map((v) => v.id)),
+    // Vertaalde titels voor niet-NL locale (AI-vertaling, product_translations).
+    (async () => {
+      const map = new Map<string, string>();
+      const locale = await getLocale();
+      if (locale === DEFAULT_LOCALE) return map;
+      const tls = await db
+        .select({ productId: productTranslations.productId, title: productTranslations.title })
+        .from(productTranslations)
+        .where(and(inArray(productTranslations.productId, ids), eq(productTranslations.locale, locale)));
+      for (const t of tls) if (t.title) map.set(t.productId, t.title);
+      return map;
+    })(),
+  ]);
+
+  // Alleen een "van"-prijs als de drempel gehaald wordt (isRealDiscount: ≥5% én ≥€1),
+  // exact zoals de buy-box op de PDP. Geen referentieprijs → geen doorstreping,
+  // geen sale-badge. Beide velden komen uit dezelfde bron, dus ze kunnen niet
+  // meer uit elkaar lopen.
+  const saleRefCents = new Map<string, number>();
+  for (const [productId, v] of cheapestVariant) {
+    const ref = referencePrices.get(v.id);
+    if (isRealDiscount(v.priceCents, ref)) saleRefCents.set(productId, ref!);
   }
 
   const cards = base.map((p) => {
@@ -236,8 +263,8 @@ async function buildProductCards(
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,
-      hasSale: onSale.get(p.id) ?? false,
-      compareAtCents: compareAtBest.get(p.id),
+      hasSale: saleRefCents.has(p.id),
+      referenceCents: saleRefCents.get(p.id),
       colorCount: colorCount.get(p.id) ?? 1,
       lowStock: (() => {
         const q = stockQtyById.get(p.id) ?? 0;

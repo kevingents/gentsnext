@@ -7,9 +7,16 @@ import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 const KEY = "gents-welcome-v1";
 
 /**
- * Welkomstkorting-popup: 10% op de eerste bestelling in ruil voor inschrijven.
- * Verschijnt één keer per bezoeker, na een korte vertraging of bij exit-intent.
- * Maakt een echte, verzilverbare kortingscode aan (/api/welcome-discount).
+ * Welkomstkorting-popup: 10% korting in ruil voor inschrijven. Verschijnt één
+ * keer per bezoeker, na een korte vertraging of bij exit-intent. Maakt een
+ * echte, verzilverbare kortingscode aan (/api/welcome-discount).
+ *
+ * Bewust GEEN "op je eerste bestelling" meer: niets in de keten dwingt dat af.
+ * De code is een gewone single-use voucher die bij het afrekenen niet aan een
+ * klant of aan een eerste order wordt getoetst, dus die belofte konden we niet
+ * waarmaken. Wil je 'm alsnog afdwingen, dan moet validateVoucher (lib/vouchers)
+ * de code aan het e-mailadres én aan "nog geen orders" koppelen — dat is een
+ * echte wijziging in checkout, geen tekstje.
  */
 export function WelcomePopup() {
   const t = useT();
@@ -17,6 +24,10 @@ export function WelcomePopup() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [code, setCode] = useState("");
+  // Alleen "we hebben 'm ook gemaild" tonen als de server dat écht deed
+  // (mail is env-gated en best-effort) — anders vervangen we de ene loze
+  // belofte door de volgende.
+  const [mailed, setMailed] = useState(false);
   const [err, setErr] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -69,6 +80,7 @@ export function WelcomePopup() {
       const d = await r.json();
       if (d.ok) {
         setCode(d.code);
+        setMailed(Boolean(d.mailed));
         setState("done");
         try {
           localStorage.setItem(KEY, "1");
@@ -103,14 +115,14 @@ export function WelcomePopup() {
         <div className="bg-ink px-8 py-8 text-center text-canvas">
           <p className="label-brand !text-canvas/70">{t("welcome.brand")}</p>
           <p className="mt-2 font-display text-4xl font-light">{t("welcome.discount")}</p>
-          <p className="mt-1 font-sans text-sm text-canvas/80">{t("welcome.discountSubtitle")}</p>
+          <p className="mt-1 font-sans text-sm text-canvas/80">{t("welcome.discountSubtitleNext")}</p>
         </div>
         <div className="px-8 py-6">
           {state === "done" ? (
             <div className="text-center">
               <p className="font-sans text-sm text-ink-soft">{t("welcome.codeLabel")}</p>
               <p className="my-2 inline-block bg-surface px-4 py-2 font-display text-xl tracking-widest">{code}</p>
-              <p className="font-sans text-xs text-muted">{t("welcome.codeNote")}</p>
+              <p className="font-sans text-xs text-muted">{mailed ? t("welcome.codeNoteMailed") : t("welcome.codeNote")}</p>
               <button type="button" onClick={close} className="btn-primary mt-5 w-full">{t("welcome.continue")}</button>
             </div>
           ) : (
