@@ -7,6 +7,7 @@ import { WishlistLink } from "@/components/wishlist/wishlist-link";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { SearchTrigger } from "@/components/search/search-trigger";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { TrackLink } from "@/components/analytics/track-link";
 import { getLocale } from "@/lib/locale-server";
 import { getLocalizedMenu } from "@/lib/nav-i18n";
 import { getT } from "@/lib/t-server";
@@ -43,8 +44,11 @@ async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").
           </div>
         </div>
 
-        <Link
+        {/* De vaste kop-links meten we apart van het mega-menu (source "header"):
+            het zijn andere uitgangen dan een kolomlink in een paneel. */}
+        <TrackLink
           href="/"
+          trackProps={{ source: "header", label: "logo" }}
           aria-label="GENTS — naar de homepage"
           className="shrink-0 lg:absolute lg:left-1/2 lg:-translate-x-1/2"
         >
@@ -56,7 +60,7 @@ async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").
             priority
             className="h-10 w-auto lg:h-11"
           />
-        </Link>
+        </TrackLink>
 
         {/* Icoon-knoppen hebben een 44×44px tikvlak met -mx-2-compensatie; gap-4
             i.p.v. gap-5 houdt de zichtbare spatiëring gelijk zonder overlappende
@@ -64,18 +68,20 @@ async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").
         <div className="flex items-center gap-4 lg:flex-1 lg:justify-end">
           {/* Op de checkout géén utilities (zoeken/account/tas/menu) — focus. */}
           <HideOnCheckout>
-            <Link
+            <TrackLink
               href="/pak-samenstellen"
+              trackProps={{ source: "header", label: "pak-samenstellen" }}
               className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
             >
               {t("nav.suitBuilder")}
-            </Link>
-            <Link
+            </TrackLink>
+            <TrackLink
               href="/pages/winkels"
+              trackProps={{ source: "header", label: "winkels" }}
               className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
             >
               {t("nav.stores")}
-            </Link>
+            </TrackLink>
             {/* Mobiel bewust minimaal (à la MR MARVIS): hamburger · logo · zoeken ·
                 tas. Taal, account en favorieten staan daar in de menu-drawer. */}
             <div className="hidden lg:block">

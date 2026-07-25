@@ -5,6 +5,7 @@ import { useTransition } from "react";
 import type { ProductSort } from "@/lib/catalog";
 import { SORT_LABELS } from "@/lib/plp-params";
 import { useT } from "@/components/i18n/locale-provider";
+import { track } from "@/lib/track-client";
 
 export function SortSelect({ value }: { value: ProductSort }) {
   const t = useT();
@@ -14,6 +15,8 @@ export function SortSelect({ value }: { value: ProductSort }) {
   const [, startTransition] = useTransition();
 
   function onChange(next: string) {
+    // Meten of iemand ooit van de default "Aanbevolen" afwijkt.
+    track("sort", { props: { value: next } });
     const params = new URLSearchParams(sp.toString());
     if (next === "aanbevolen") params.delete("sort");
     else params.set("sort", next);

@@ -696,10 +696,41 @@ function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; u
  */
 async function getPopularityScoresUncached(popDays: number): Promise<{ handle: string; score: number }[]> {
   const db = getDb();
+  // Twee bronnen bij elkaar: gedrag op de site (events) én wat er daadwerkelijk
+  // verkocht is (order_lines). Dat tweede is cruciaal — de webshop heeft
+  // duizenden betaalde orders maar pas sinds kort volledige event-meting, dus
+  // zonder verkoopdata zou "populair" nog maanden op bijna niets draaien.
+  // Verkoop weegt zwaar (8/stuk): het is het enige signaal dat écht telt.
   const res = await db.execute<{ handle: string; score: number }>(sql`
-    select handle, sum(case when type='add_to_cart' then 3 when type='product_view' then 1 else 0 end)::int as score
-    from ${events}
-    where handle <> '' and type in ('product_view','add_to_cart') and created_at > now() - (${popDays} || ' days')::interval
+    with gedrag as (
+      select handle, sum(case
+               when type='add_to_cart' then 3
+               when type='wishlist_add' then 2
+               when type='product_click' then 1
+               when type='product_view' then 1
+               else 0 end)::int as score
+      from ${events}
+      where handle <> ''
+        and type in ('product_view','product_click','add_to_cart','wishlist_add')
+        and created_at > now() - (${popDays} || ' days')::interval
+      group by handle
+    ),
+    verkocht as (
+      select l.product_handle as handle, (sum(l.quantity) * 8)::int as score
+      from ${orderLines} l
+      join ${orders} o on o.id = l.order_id
+      where o.status in ('paid','shipped','ready_pickup','delivered')
+        -- Verkoop krijgt een RUIMER venster dan klikgedrag: een klik veroudert
+        -- snel, maar "dit verkocht goed" blijft maanden relevant — en met het
+        -- huidige webshop-volume zou 30 dagen bijna niets opleveren.
+        and o.created_at > now() - (${popDays * 6} || ' days')::interval
+        and coalesce(l.product_handle, '') <> ''
+      group by l.product_handle
+    )
+    select handle, sum(score)::int as score from (
+      select handle, score from gedrag
+      union all select handle, score from verkocht
+    ) samen
     group by handle
     order by score desc
     limit 500
@@ -709,7 +740,7 @@ async function getPopularityScoresUncached(popDays: number): Promise<{ handle: s
 // Zelfde cache-profiel als _facetsCached: gedeeld door álle bezoekers, 3 min vers.
 const _popularityCached = unstable_cache(
   (popDays: number) => getPopularityScoresUncached(popDays),
-  ["plp-popularity-v1"],
+  ["plp-popularity-v4"],
   { revalidate: 180 },
 );
 

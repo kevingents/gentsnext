@@ -21,6 +21,16 @@ export type IncomingEvent = {
 const ALLOWED = new Set([
   "pageview", "product_view", "search", "search_no_results", "filter",
   "add_to_cart", "cart_view", "checkout_start", "purchase", "stock_notify", "wishlist_add",
+  // search_click werd wél gevuurd (instant-search) maar ontbrak hier, dus élke
+  // klik op een zoekresultaat verdween — de enige doorklik-meting die er was.
+  "search_click",
+  // Navigatie + lijstgedrag: waar klikt de klant in menu/footer/tegels, welke
+  // filters en sortering kiest hij, en op welke POSITIE klikt hij in een lijst.
+  // Zonder positie beloont een populariteitsranking alleen wat toevallig
+  // bovenaan stond (positie-bias) — dit maakt de lus corrigeerbaar.
+  "nav_click", "product_click", "sort",
+  // Maat-frictie: klik op een uitverkochte maat = direct inkoopsignaal.
+  "size_click",
   // Klantafspraken: server-side gelogd bij een geslaagde boeking (type+winkel in props).
   "afspraak_geboekt",
 ]);

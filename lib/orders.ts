@@ -8,6 +8,7 @@ import { sendOrderConfirmation } from "@/lib/email";
 import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
+import { recordEvents } from "@/lib/analytics";
 import { shippingCentsFor, DEFAULT_COUNTRY, isKnownCountry } from "@/lib/shipping-zones";
 import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
@@ -464,7 +465,30 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     .update(orders)
     .set(set)
     .where(whereClause)
-    .returning({ id: orders.id, voucherCode: orders.voucherCode });
+    .returning({ id: orders.id, voucherCode: orders.voucherCode, orderNumber: orders.orderNumber, totalCents: orders.totalCents });
+  // Omzet-event op het choke-point van élke betaling. Het bestaande
+  // purchase-event stond client-side op de bedanktpagina en miste daardoor
+  // vrijwel alles (1 event tegenover 28.436 betaalde orders): adblockers,
+  // afgebroken redirects en weigeraars van de cookie-melding. Dit is eigen
+  // administratie, geen tracking-cookie — dus consent-vrij, net als de
+  // afspraak-boeking. De statusovergang is al idempotent (whereClause), dus
+  // een dubbele webhook levert geen dubbel event op.
+  if (orderStatus === "paid" && updated.length) {
+    for (const o of updated) {
+      recordEvents([
+        {
+          sessionId: "server",
+          type: "purchase",
+          path: "/api/webhooks",
+          // handle blijft leeg: dat veld is voor PRODUCT-handles (de ranking
+          // telt erop). Het ordernummer hoort in props.
+          handle: "",
+          valueCents: o.totalCents,
+          props: { source: "webhook", orderNumber: o.orderNumber },
+        },
+      ]).catch(() => {});
+    }
+  }
   // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven ÉN een
   // ingezette single-use voucher (welkomstkorting/spaarpunten-bon) weer activeren. Dit
   // is het choke-point voor álle betaalstatussen (Mollie + Worldline, webhook + return),
