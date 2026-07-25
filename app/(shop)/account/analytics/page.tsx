@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
 import { getDashboard } from "@/lib/analytics";
+import { getNavInsights } from "@/lib/nav-insights";
 import { getProductsByHandles } from "@/lib/catalog";
 import { BackofficeShell } from "@/components/account/report-ui";
 
@@ -21,7 +22,7 @@ export default async function AnalyticsPage() {
     );
   }
 
-  const d = await getDashboard(30);
+  const [d, nav] = await Promise.all([getDashboard(30), getNavInsights(30)]);
   const cards = await getProductsByHandles(d.topProducts.map((p) => p.handle));
   const titleByHandle = new Map(cards.map((c) => [c.handle, c.title]));
 
@@ -69,6 +70,47 @@ export default async function AnalyticsPage() {
         />
         <List title="Activiteit per type" rows={d.counts.map((c) => ({ label: c.type, n: c.n }))} />
       </div>
+
+      {/* Navigatie & lijstgedrag — waar klikt de klant écht, en wat zegt dat
+          over menu, filters en ranking. */}
+      <section className="mt-14 border-t border-line pt-10">
+        <h2 className="font-display text-2xl font-light">Wat de klant aanklikt</h2>
+        <p className="mt-1 font-sans text-sm text-pslate">
+          {nav.totalNavClicks === 0
+            ? "Nog geen navigatie-data. Deze meting is net toegevoegd; over een paar dagen staat hier waar mensen klikken."
+            : `${nav.totalNavClicks} navigatie-kliks in ${nav.days} dagen.`}
+        </p>
+
+        <div className="mt-8 grid gap-10 lg:grid-cols-2">
+          <List title="Meest geklikte menu-items" rows={nav.menu.map((m) => ({ label: m.label, n: m.clicks, href: m.href || undefined }))} />
+          <List title="Meest geklikte categorietegels (home)" rows={nav.tiles.map((m) => ({ label: m.label, n: m.clicks }))} />
+          <List
+            title="Menu-items die niemand aanklikt"
+            rows={nav.ongebruikteMenuItems.map((l) => ({ label: l, n: 0 }))}
+            empty={nav.totalNavClicks < 25 ? "Te weinig data om dit te kunnen zeggen." : "Elk menu-item wordt gebruikt."}
+            danger
+          />
+          <List title="Meest gekozen filters" rows={nav.filters.map((f) => ({ label: `${f.facet}: ${f.value}`, n: f.clicks }))} />
+          <List title="Gekozen sortering" rows={nav.sorts.map((s) => ({ label: s.value, n: s.clicks }))} />
+          <List
+            title="Waar in de lijst wordt geklikt"
+            rows={nav.clickPositions.map((p) => ({ label: p.bucket, n: p.clicks }))}
+            empty="Nog geen kliks op productkaarten gemeten."
+          />
+          <List
+            title="Gevraagd maar uitverkocht (inkoopsignaal)"
+            rows={nav.gemisteMaten.map((s) => ({ label: `${s.handle} — maat ${s.size}`, n: s.clicks, href: `/products/${s.handle}` }))}
+            empty="Geen klikken op uitverkochte maten."
+            danger
+          />
+          <List
+            title="Zoekopdrachten zonder resultaat"
+            rows={nav.nulResultaten.map((r) => ({ label: r.query, n: r.n }))}
+            empty="Iedereen vindt wat hij zoekt."
+            danger
+          />
+        </div>
+      </section>
     </BackofficeShell>
   );
 }

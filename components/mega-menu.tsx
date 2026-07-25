@@ -7,6 +7,17 @@ import { createPortal } from "react-dom";
 import type { MenuItem } from "@/lib/main-menu";
 import { useLocale, useT } from "@/components/i18n/locale-provider";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { track } from "@/lib/track-client";
+
+/**
+ * Eén regel per menuklik. Fire-and-forget: track() queue't alleen, dus het
+ * openen van de link wacht hier nooit op. De href gaat mee als stabiele
+ * sleutel — labels komen vertaald uit de portal-data (ns "nav") en verschillen
+ * dus per taal.
+ */
+function trackNav(label: string, href: string, column?: string) {
+  track("nav_click", { props: { source: "menu", label, href, ...(column ? { column } : {}) } });
+}
 
 /** Desktop: menubalk met brede, geanimeerde mega-panelen (beeld + kolommen). */
 export function MegaMenuBar({ items }: { items: MenuItem[] }) {
@@ -45,7 +56,7 @@ function DesktopItem({ item }: { item: MenuItem }) {
   if (!hasMega) {
     return (
       <li className="group">
-        <Link href={item.href}>
+        <Link href={item.href} onClick={() => trackNav(item.label, item.href)}>
           <Label>{item.label}</Label>
         </Link>
       </li>
@@ -88,7 +99,11 @@ function DesktopItem({ item }: { item: MenuItem }) {
                 <ul className="space-y-2">
                   {col.links.map((l) => (
                     <li key={l.label}>
-                      <Link href={l.href} onClick={closeOnNav} className="group/link inline-flex items-center gap-1.5 font-sans text-sm text-ink-soft transition-colors hover:text-ink">
+                      <Link
+                        href={l.href}
+                        onClick={() => { trackNav(l.label, l.href, col.title); closeOnNav(); }}
+                        className="group/link inline-flex items-center gap-1.5 font-sans text-sm text-ink-soft transition-colors hover:text-ink"
+                      >
                         {l.label}
                         <span aria-hidden className="translate-x-0 opacity-0 transition-all duration-200 group-hover/link:translate-x-0.5 group-hover/link:opacity-100">→</span>
                       </Link>
@@ -98,7 +113,12 @@ function DesktopItem({ item }: { item: MenuItem }) {
               </div>
             ))}
             {(item.features ?? []).map((f) => (
-              <Link key={f.label} href={f.href} onClick={closeOnNav} className="group/feat relative block aspect-[4/5] overflow-hidden rounded-card bg-surface">
+              <Link
+                key={f.label}
+                href={f.href}
+                onClick={() => { trackNav(f.label, f.href, "uitgelicht"); closeOnNav(); }}
+                className="group/feat relative block aspect-[4/5] overflow-hidden rounded-card bg-surface"
+              >
                 <Image src={f.image} alt={f.label} fill sizes="22vw" className="object-cover transition-transform duration-500 group-hover/feat:scale-105" />
                 <span className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
                 <span className="absolute inset-x-4 bottom-4 text-canvas">
@@ -222,7 +242,12 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
                           <div key={col.title ?? col.links[0].label} className="mb-2">
                             {col.title ? <p className="px-6 pb-1 pt-2 font-sans text-[0.65rem] uppercase tracking-wide text-muted">{col.title}</p> : null}
                             {col.links.map((l) => (
-                              <Link key={l.label} href={l.href} onClick={onClose} className="block px-6 py-2 font-sans text-sm text-ink-soft">
+                              <Link
+                                key={l.label}
+                                href={l.href}
+                                onClick={() => { trackNav(l.label, l.href, col.title); onClose(); }}
+                                className="block px-6 py-2 font-sans text-sm text-ink-soft"
+                              >
                                 {l.label}
                               </Link>
                             ))}
@@ -232,7 +257,11 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
                     ) : null}
                   </>
                 ) : (
-                  <Link href={item.href} onClick={onClose} className="block px-3 py-3.5 font-sans text-sm font-medium">
+                  <Link
+                    href={item.href}
+                    onClick={() => { trackNav(item.label, item.href); onClose(); }}
+                    className="block px-3 py-3.5 font-sans text-sm font-medium"
+                  >
                     {item.label}
                   </Link>
                 )}

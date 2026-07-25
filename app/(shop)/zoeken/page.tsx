@@ -5,6 +5,7 @@ import { CrossIcon } from "@/components/icons";
 import { searchProducts, suggestCorrection } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { TrackSearch } from "@/components/analytics/track-search";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,9 @@ export default async function ZoekenPage({ searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
+      {/* Meet de zoekPAGINA (volledige zoekterm + echt aantal treffers) — de
+          instant-search meet alleen losse toetsaanslagen. */}
+      <TrackSearch query={effectiveQuery} resultCount={results.length} />
       <p className="label-brand">{t("search.header.eyebrow")}</p>
       <h1 className="mt-2 text-display-md">
         {query ? `${t("search.results_for")} "${autoCorrected && didYouMean ? didYouMean : query}"` : t("search.header.emptyTitle")}

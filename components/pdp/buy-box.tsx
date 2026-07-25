@@ -18,6 +18,7 @@ import { RatingStars } from "@/components/rating-stars";
 import type { ProductRating } from "@/lib/reviews";
 import { useCart } from "@/components/cart/cart-context";
 import { useT } from "@/components/i18n/locale-provider";
+import { track } from "@/lib/track-client";
 
 /** Klein statusbolletje (SVG i.p.v. tekst-glyph "●"). */
 function Dot() {
@@ -316,7 +317,15 @@ export function BuyBox({
                 sizes={active.sizes}
                 hoofdgroep={hoofdgroep}
                 selected={size}
-                onSelect={setSize}
+                onSelect={(s) => {
+                  // Klik op een uitverkochte maat = direct inkoopsignaal: de
+                  // klant wilde 'm, wij hadden 'm niet.
+                  const gekozen = active.sizes.find((x) => x.size === s);
+                  if (gekozen && gekozen.known && gekozen.qty <= 0) {
+                    track("size_click", { handle: productHandle, props: { size: s, inStock: false } });
+                  }
+                  setSize(s);
+                }}
               />
             ) : null}
           </>

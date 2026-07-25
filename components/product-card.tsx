@@ -7,15 +7,40 @@ import { formatEuro } from "@/lib/pricing";
 import { useT } from "@/components/i18n/locale-provider";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { ProductCardBadge } from "@/components/product-card-badge";
+import { track } from "@/lib/track-client";
 
 // Brede/kleine accessoires passen niet in de 3:4-tegel met object-cover → heel tonen.
 const FIT_CONTAIN = new Set(["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"]);
 
-export function ProductCard({ product, priority = false }: { product: ProductCardData; priority?: boolean }) {
+export function ProductCard({
+  product,
+  priority = false,
+  position,
+  listId,
+  sort,
+}: {
+  product: ProductCardData;
+  priority?: boolean;
+  /** 1-gebaseerde plek in de lijst — zonder positie beloont een populariteits-
+   *  ranking alleen wat toevallig bovenaan stond (positie-bias). */
+  position?: number;
+  /** Welke lijst ("categorie:overhemden", "collection:sale"). */
+  listId?: string;
+  sort?: string;
+}) {
   const t = useT();
   const contain = FIT_CONTAIN.has(product.category || "");
   return (
-    <Link href={`/products/${product.handle}`} className="group relative flex flex-col gap-3">
+    <Link
+      href={`/products/${product.handle}`}
+      onClick={() =>
+        track("product_click", {
+          handle: product.handle,
+          props: { ...(position ? { position } : {}), ...(listId ? { listId } : {}), ...(sort ? { sort } : {}) },
+        })
+      }
+      className="group relative flex flex-col gap-3"
+    >
       {product.hasSale ? (
         <ProductCardBadge label={t("plp.badge.sale")} tone="sale" />
       ) : product.lowStock ? (

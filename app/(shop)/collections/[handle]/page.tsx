@@ -156,7 +156,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
               {items.map((product, i) => (
-                <ProductCard key={product.id} product={product} priority={i < 8} />
+                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * PER_PAGE + i + 1} listId={`collection:${handle}`} sort={sel.sort} />
               ))}
             </div>
           )}

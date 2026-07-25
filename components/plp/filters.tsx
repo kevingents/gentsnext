@@ -9,6 +9,7 @@ import { buildPlpQuery, type PlpSelection } from "@/lib/plp-params";
 import { useT } from "@/components/i18n/locale-provider";
 import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import { SortSelect } from "@/components/plp/sort-select";
+import { track } from "@/lib/track-client";
 
 type Props = {
   facets: Facets;
@@ -33,6 +34,12 @@ function priceBrackets(
     { label: t("plp.price.from", { amount: 350 }), min: 350 },
   ];
   return b.filter((x) => (x.min ?? 0) <= maxEuro);
+}
+
+
+/** Eén regel per filterkeuze: welk facet, welke waarde, aan of uit. */
+function trackFilter(facet: string, value: string, on: boolean) {
+  track("filter", { props: { facet, value, on } });
 }
 
 export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
@@ -129,7 +136,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
           <CheckList
             items={facets.types.map((tp) => ({ value: tp.value, label: tp.label, count: tp.count }))}
             selected={selection.types}
-            onToggle={(v) => apply({ types: toggle(selection.types, v) })}
+            onToggle={(v) => { trackFilter("type", v, !selection.types.includes(v)); apply({ types: toggle(selection.types, v) }); }}
           />
         </FilterGroup>
       ) : null}
@@ -145,7 +152,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                 <button
                   key={c.key}
                   type="button"
-                  onClick={() => apply({ colors: toggle(selection.colors, c.key) })}
+                  onClick={() => { trackFilter("kleur", c.key, !selection.colors.includes(c.key)); apply({ colors: toggle(selection.colors, c.key) }); }}
                   aria-pressed={active}
                   title={`${c.label} (${c.count})`}
                   // Selectie via ring + vetgedrukt label — niet alléén randkleur (duidelijk
@@ -178,7 +185,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                 <button
                   key={s.value}
                   type="button"
-                  onClick={() => apply({ sizes: toggle(selection.sizes, s.value) })}
+                  onClick={() => { trackFilter("maat", s.value, !selection.sizes.includes(s.value)); apply({ sizes: toggle(selection.sizes, s.value) }); }}
                   aria-pressed={active}
                   title={`${s.label} (${s.count})`}
                   className={`min-h-11 min-w-[3rem] border px-2 py-1.5 text-center font-sans text-xs transition-colors lg:min-h-0 ${
@@ -199,7 +206,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
           <CheckList
             items={facets.fits.map((fit) => ({ value: fit.value, label: fit.label ?? fit.value, count: fit.count }))}
             selected={selection.fits}
-            onToggle={(v) => apply({ fits: toggle(selection.fits, v) })}
+            onToggle={(v) => { trackFilter("pasvorm", v, !selection.fits.includes(v)); apply({ fits: toggle(selection.fits, v) }); }}
           />
         </FilterGroup>
       ) : null}
@@ -210,7 +217,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
           <CheckList
             items={facets.materials.map((m) => ({ value: m.value, label: m.label ?? m.value, count: m.count }))}
             selected={selection.materials}
-            onToggle={(v) => apply({ materials: toggle(selection.materials, v) })}
+            onToggle={(v) => { trackFilter("materiaal", v, !selection.materials.includes(v)); apply({ materials: toggle(selection.materials, v) }); }}
           />
         </FilterGroup>
       ) : null}
@@ -221,7 +228,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
           <CheckList
             items={facets.patterns.map((pt) => ({ value: pt.value, label: pt.label ?? pt.value, count: pt.count }))}
             selected={selection.patterns}
-            onToggle={(v) => apply({ patterns: toggle(selection.patterns, v) })}
+            onToggle={(v) => { trackFilter("dessin", v, !selection.patterns.includes(v)); apply({ patterns: toggle(selection.patterns, v) }); }}
           />
         </FilterGroup>
       ) : null}
@@ -232,7 +239,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
           <CheckList
             items={facets.seasons.map((s) => ({ value: s.value, label: s.label ?? s.value, count: s.count }))}
             selected={selection.seasons}
-            onToggle={(v) => apply({ seasons: toggle(selection.seasons, v) })}
+            onToggle={(v) => { trackFilter("seizoen", v, !selection.seasons.includes(v)); apply({ seasons: toggle(selection.seasons, v) }); }}
           />
         </FilterGroup>
       ) : null}

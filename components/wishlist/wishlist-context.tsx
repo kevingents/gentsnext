@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { track } from "@/lib/track-client";
 
 const KEY = "gents-wishlist-v1";
 
@@ -41,7 +42,13 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
   const has = useCallback((h: string) => handles.includes(h), [handles]);
   const toggle = useCallback((h: string) => {
-    setHandles((prev) => (prev.includes(h) ? prev.filter((x) => x !== h) : [h, ...prev].slice(0, 200)));
+    setHandles((prev) => {
+      const had = prev.includes(h);
+      // Alleen het TOEVOEGEN meten: bewaren is een sterkere koopintentie dan
+      // kijken en telt daarom mee in de populariteitsranking.
+      if (!had) track("wishlist_add", { handle: h });
+      return had ? prev.filter((x) => x !== h) : [h, ...prev].slice(0, 200);
+    });
   }, []);
   const remove = useCallback((h: string) => setHandles((prev) => prev.filter((x) => x !== h)), []);
   const clear = useCallback(() => setHandles([]), []);
