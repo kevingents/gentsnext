@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IconChevron, IconPlus, IconTrash } from "@/components/account/studio-icons";
+import { IMAGE_HINT, isSafeImageSrc } from "@/lib/safe-image";
 
 export type StudioPage = {
   slug: string;
@@ -29,6 +30,27 @@ export function PagesEditor({ initial, reserved }: { initial: StudioPage[]; rese
   const [open, setOpen] = useState<number | null>(initial.length ? null : 0);
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
+  /**
+   * Versiestempel van de lijst zoals die geladen is. De portal schrijft
+   * hetzelfde document; zonder deze stempel zou opslaan de wijziging van een
+   * collega (of van een tweede tabblad) stilzwijgend wissen.
+   */
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/account/paginas")
+      .then((r) => r.json())
+      .then((d: { version?: string }) => {
+        if (!cancelled && typeof d?.version === "string") setVersion(d.version);
+      })
+      .catch(() => {
+        // Geen versie = geen botsingscontrole; opslaan blijft gewoon werken.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const reservedSet = new Set(reserved);
 
@@ -62,6 +84,8 @@ export function PagesEditor({ initial, reserved }: { initial: StudioPage[]; rese
       if (!slug) out.push(`${nr}: webadres is verplicht.`);
       else if (seen.has(slug)) out.push(`${nr}: webadres "${slug}" bestaat al twee keer.`);
       else if (reservedSet.has(slug)) out.push(`${nr}: webadres "${slug}" is bezet door een vaste pagina.`);
+      // Een beeld dat next/image niet aankan laat de publieke pagina crashen.
+      if (!isSafeImageSrc(p.image || "")) out.push(`${nr}: ${IMAGE_HINT}`);
       seen.add(slug);
     });
     return out;
@@ -81,11 +105,12 @@ export function PagesEditor({ initial, reserved }: { initial: StudioPage[]; rese
       const r = await fetch("/api/account/paginas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: payload }),
+        body: JSON.stringify({ items: payload, ...(version ? { version } : {}) }),
       });
-      const d = (await r.json()) as { ok?: boolean; error?: string; items?: StudioPage[] };
+      const d = (await r.json()) as { ok?: boolean; error?: string; items?: StudioPage[]; version?: string };
       if (r.ok && d.ok) {
         setItems(d.items || payload);
+        if (typeof d.version === "string") setVersion(d.version);
         setState("done");
         setMsg("Opgeslagen — binnen een halve minuut live op de site.");
       } else {

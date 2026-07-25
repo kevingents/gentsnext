@@ -46,6 +46,9 @@ function cleanTarget(raw: string): string {
   return wild ? `${base === "/" ? "" : base}/*` : base;
 }
 
+const isWildcard = (s: string) => /\/\*+$/.test(String(s || ""));
+const isExternal = (s: string) => /^https?:\/\//i.test(String(s || "").trim());
+
 export type RedirectInput = {
   source: string;
   target: string;
@@ -53,6 +56,12 @@ export type RedirectInput = {
   active?: boolean;
   /** Bij bewerken: de bron zoals die nu is opgeslagen (maakt hernoemen mogelijk). */
   originalSource?: string;
+  /**
+   * "create" weigert een bron die al een regel heeft (knop "Nieuwe redirect" in de
+   * Site-studio). Standaard blijft het gedrag upsert, want het portal-endpoint
+   * werkt bestaande regels bij door ze simpelweg opnieuw op te sturen.
+   */
+  mode?: "create" | "upsert";
 };
 
 /**
@@ -64,9 +73,26 @@ export async function upsertRedirect(input: RedirectInput): Promise<Redirect[]> 
   if (!source || source === "/" || source === "/*") {
     throw new Error("Vul een geldig bron-pad in, bijvoorbeeld /oude-pagina of /oude-map/*.");
   }
+  // Bewust op de RUWE invoer: normPath("") geeft "/", dus een leeg doel zou hierna
+  // ongemerkt een actieve 301 naar de homepage worden.
+  if (!String(input.target ?? "").trim()) {
+    throw new Error("Vul een doel in: een pad (/nieuwe-pagina) of een volledige URL.");
+  }
   const target = cleanTarget(input.target);
   if (!target || target === "/*") throw new Error("Vul een doel in: een pad (/nieuwe-pagina) of een volledige URL.");
   if (target === source) throw new Error("Bron en doel zijn hetzelfde — dat levert een oneindige lus op.");
+  // Wildcard-bron: matchRedirect matcht een wildcard óók op het prefix zelf
+  // (`p === prefix || p.startsWith(prefix + "/")`), dus een doel dat binnen de
+  // eigen bron valt stuurt de bezoeker eindeloos naar zichzelf terug.
+  if (isWildcard(source) && !isExternal(target)) {
+    const prefix = source.replace(/\/\*+$/, "");
+    const targetBase = target.replace(/\/\*+$/, "");
+    if (targetBase === prefix || targetBase.startsWith(prefix + "/")) {
+      throw new Error(
+        `Doel ${target} valt zelf onder ${source} — dat levert een oneindige lus op. Kies een doel buiten ${prefix}.`,
+      );
+    }
+  }
 
   const entry: Redirect = {
     source,
@@ -88,6 +114,11 @@ export async function upsertRedirect(input: RedirectInput): Promise<Redirect[]> 
     else list.push(entry);
   } else {
     const idx = list.findIndex((r) => cleanSource(r.source) === source);
+    // Nieuwe regel op een bron die al bezet is: niet stil overschrijven. In een
+    // gesorteerde, gefilterde tabel ziet de beheerder de bestaande regel niet staan.
+    if (idx >= 0 && input.mode === "create") {
+      throw new Error(`Er bestaat al een regel voor ${source}.`);
+    }
     if (idx >= 0) list[idx] = entry;
     else list.push(entry);
   }

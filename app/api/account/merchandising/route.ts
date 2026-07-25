@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { searchProducts } from "@/lib/catalog";
-import { setMerchandisingPins, pinKey, type PinContextKind } from "@/lib/merchandising";
-import { recordPinsSince, resolvePinItems, type PinItem } from "@/lib/merchandising-admin";
+import { pinKey, type PinContextKind } from "@/lib/merchandising";
+import {
+  checkPinsInContext,
+  recordPinsSince,
+  resolvePinItems,
+  savePinsForContext,
+  type PinItem,
+} from "@/lib/merchandising-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +16,9 @@ export const dynamic = "force-dynamic";
  * Site-studio → Uitgelicht. Beheert de merchandising-pins vanuit de webshop
  * zelf (dus zonder portal en zonder studio-token).
  *
- * GET  ?q=…  → producten zoeken om te pinnen.
+ * GET  ?q=…&kind=…&slug=…      → producten zoeken om te pinnen, alleen die
+ *                                daadwerkelijk op díe winkelpagina staan.
+ * GET  ?handles=a,b&kind&slug  → controle: doen deze pins daar iets?
  * POST { kind, slug, handles[] } → de pins van één context (over)schrijven.
  *
  * Alleen voor ingelogde beheerders.
@@ -29,17 +37,45 @@ export async function GET(req: Request) {
   const denied = await denyIfNotAdmin();
   if (denied) return denied;
 
-  const q = (new URL(req.url).searchParams.get("q") || "").trim().slice(0, 80);
+  const params = new URL(req.url).searchParams;
+  const q = (params.get("q") || "").trim().slice(0, 80);
+  const ctxKind: PinContextKind | null =
+    params.get("kind") === "collection" ? "collection" : params.get("kind") === "categorie" ? "categorie" : null;
+  const ctxSlug = (params.get("slug") || "").trim();
+  const hasContext = Boolean(ctxKind && ctxSlug);
+
+  // Controlemodus: doen deze (al gepinde) handles iets op deze winkelpagina?
+  const toCheck = (params.get("handles") || "")
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean)
+    .slice(0, MAX_PINS);
+  if (toCheck.length) {
+    if (!hasContext) return NextResponse.json({ ok: true, checks: [] });
+    try {
+      return NextResponse.json({ ok: true, checks: await checkPinsInContext(ctxKind!, ctxSlug, toCheck) });
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+    }
+  }
+
   if (q.length < 2) return NextResponse.json({ ok: true, results: [] });
   try {
-    const found = await searchProducts(q, 12);
-    const results: PinItem[] = found.map((p) => ({
+    // Ruimer zoeken en daarna filteren: een pin werkt alleen binnen de gekozen
+    // categorie/collectie, dus resultaten daarbuiten aanbieden is misleidend.
+    const found = await searchProducts(q, hasContext ? 48 : 12);
+    let results: PinItem[] = found.map((p) => ({
       handle: p.handle,
       title: p.title,
       imageUrl: p.imageUrl,
       priceCents: p.minPriceCents,
       known: true,
     }));
+    if (hasContext) {
+      const checks = await checkPinsInContext(ctxKind!, ctxSlug, results.map((r) => r.handle));
+      const ok = new Set(checks.filter((c) => c.ok).map((c) => c.handle));
+      results = results.filter((r) => ok.has(r.handle)).slice(0, 12);
+    }
     return NextResponse.json({ ok: true, results });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
@@ -69,7 +105,9 @@ export async function POST(req: Request) {
 
   try {
     const key = pinKey(kind, slug);
-    const saved = await setMerchandisingPins(kind, slug, handles);
+    // Alleen deze pin-sleutel bijschrijven, niet de hele instellingen-rij vanuit
+    // een cache — zie savePinsForContext.
+    const saved = await savePinsForContext(key, handles);
     const [since, pinned] = await Promise.all([recordPinsSince(key, saved), resolvePinItems(saved)]);
     return NextResponse.json({ ok: true, key, handles: saved, since, pinned });
   } catch (e) {

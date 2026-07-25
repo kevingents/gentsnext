@@ -1,16 +1,18 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
-import { CATEGORIES } from "@/lib/categories";
-import { getProductsByHandles, listCollections } from "@/lib/catalog";
+import { CATEGORIES, categoryBySlug } from "@/lib/categories";
+import { getCollectionByHandle, getProductsByHandles, listCollections } from "@/lib/catalog";
 import { pinKey, type PinContextKind } from "@/lib/merchandising";
+import { clearSettingsCache } from "@/lib/settings";
 
 /**
  * Beheerlaag voor "Uitgelicht" (merchandising-pins) in de Site-studio.
  *
- * De pins zelf blijven in lib/merchandising (settings-store, één bron van
- * waarheid). Dit bestand voegt alleen toe wat de BEHEERDER nodig heeft om een
- * verantwoorde keuze te maken:
+ * De pins zelf blijven in de settings-store (app_settings.global →
+ * merchandisingPins), één bron van waarheid; dit bestand schrijft daar gericht
+ * één sleutel in (savePinsForContext) en voegt verder toe wat de BEHEERDER nodig
+ * heeft om een verantwoorde keuze te maken:
  *
  *  1. "gepind sinds": wanneer een pin gezet is. Een pin overrulet in de
  *     "Aanbevolen"-sort ALLE gedragssignalen (populariteit, maat, smaak), dus
@@ -46,6 +48,39 @@ export type PinContext = {
 export type PinSinceMap = Record<string, Record<string, string>>;
 
 const LOG_ID = "merchandising_pin_log";
+
+/** Zelfde plafond als lib/merchandising hanteert bij het lezen van de pins. */
+const MAX_PINS = 24;
+
+/**
+ * Schrijft de pins van ÉÉN context weg zonder de rest van de instellingen aan te
+ * raken. setMerchandisingPins in lib/merchandising bouwt de nieuwe waarde op uit
+ * getSettings() — een module-cache van 30 seconden — en updateSettings schrijft
+ * daarna de VOLLEDIGE app_settings-rij 'global' terug. Een instelling die een
+ * collega (of dezelfde beheerder in een ander tabblad) net via Instellingen
+ * wijzigde, zit niet in die cache en wordt bij het pinnen zonder melding
+ * teruggedraaid. Hier muteren we daarom in SQL alleen data->'merchandisingPins'
+ * en daarbinnen alleen deze sleutel; de rest van de rij blijft precies zoals hij
+ * op dat moment in de database staat.
+ */
+export async function savePinsForContext(key: string, handles: string[]): Promise<string[]> {
+  const clean = [...new Set((handles || []).map((h) => String(h || "").trim()).filter(Boolean))].slice(0, MAX_PINS);
+  const currentPins = sql`coalesce(app_settings.data->'merchandisingPins', '{}'::jsonb)`;
+  // Lege lijst = pin-config voor deze context weghalen (zelfde gedrag als voorheen).
+  const nextPins = clean.length
+    ? sql`${currentPins} || ${JSON.stringify({ [key]: clean })}::jsonb`
+    : sql`${currentPins} - ${key}::text`;
+  const db = getDb();
+  await db.execute(sql`
+    insert into app_settings (id, data, updated_at)
+    values ('global', ${JSON.stringify({ merchandisingPins: clean.length ? { [key]: clean } : {} })}::jsonb, now())
+    on conflict (id) do update
+      set data = jsonb_set(coalesce(app_settings.data, '{}'::jsonb), '{merchandisingPins}', ${nextPins}, true),
+          updated_at = now()`);
+  // De leescache van lib/settings zou anders tot 30s de oude pins blijven serveren.
+  clearSettingsCache();
+  return clean;
+}
 
 function normalizeSince(raw: unknown): PinSinceMap {
   const out: PinSinceMap = {};
@@ -153,4 +188,65 @@ export async function listPinContexts(existingKeys: string[]): Promise<PinContex
     contexts.push({ key, kind, slug, label: slug || key, group: "Onbekende context" });
   }
   return contexts;
+}
+
+/** Uitkomst per handle: doet deze pin iets op de gekozen winkelpagina? */
+export type PinCheck = { handle: string; ok: boolean; reason?: string };
+
+/**
+ * Controleert of een handle daadwerkelijk OP de winkelpagina van deze context
+ * verschijnt. Nodig omdat een pin niets toevoegt: hij is alleen een ORDER BY
+ * binnen de resultaten van de PLP (lib/catalog → buildPlpOrder). Zit het product
+ * niet in de categorie/collectie, of valt het buiten de zichtbaarheidsregel
+ * (actief + foto + voorraad + primaire kleur), dan gebeurt er domweg niets —
+ * terwijl de studio wél "staat bovenaan" meldde. Dat moet de beheerder zien.
+ */
+export async function checkPinsInContext(
+  kind: PinContextKind,
+  slug: string,
+  handles: string[],
+): Promise<PinCheck[]> {
+  const list = [...new Set(handles.map((h) => String(h || "").trim()).filter(Boolean))];
+  if (!list.length) return [];
+
+  const hoofdgroep = kind === "categorie" ? categoryBySlug(slug)?.hoofdgroep || "" : "";
+  const collection = kind === "collection" ? await getCollectionByHandle(slug) : null;
+  // Onbekende context (verwijderde collectie of categorie): niets zinnigs te
+  // zeggen — de editor waarschuwt daar al apart over.
+  if (kind === "categorie" ? !hoofdgroep : !collection) return list.map((h) => ({ handle: h, ok: true }));
+
+  const inContext =
+    kind === "categorie"
+      ? sql`p.attributes ->> 'hoofdgroep_omschrijving' = ${hoofdgroep}`
+      : sql`exists (select 1 from product_collections pc where pc.product_id = p.id and pc.collection_id = ${collection!.id})`;
+
+  try {
+    const db = getDb();
+    const rows = await db.execute<{ handle: string; zichtbaar: boolean; in_context: boolean }>(sql`
+      select p.handle,
+             (p.status = 'active' and p.has_image and p.in_stock and p.is_group_primary) as zichtbaar,
+             (${inContext}) as in_context
+      from products p
+      where p.handle in (${sql.join(list.map((h) => sql`${h}`), sql`, `)})
+    `);
+    const byHandle = new Map(rows.rows.map((r) => [r.handle, r]));
+    return list.map((h) => {
+      const r = byHandle.get(h);
+      if (!r) return { handle: h, ok: false, reason: "staat niet meer in de catalogus" };
+      if (!r.in_context) {
+        return {
+          handle: h,
+          ok: false,
+          reason: kind === "categorie" ? "zit niet in deze categorie" : "zit niet in deze collectie",
+        };
+      }
+      if (!r.zichtbaar) {
+        return { handle: h, ok: false, reason: "staat niet op de winkelpagina (uitverkocht, geen foto, of een kleurvariant)" };
+      }
+      return { handle: h, ok: true };
+    });
+  } catch {
+    // Een controlefout mag het beheer niet blokkeren: dan maar geen oordeel.
+    return list.map((h) => ({ handle: h, ok: true }));
+  }
 }

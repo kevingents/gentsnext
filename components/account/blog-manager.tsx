@@ -107,6 +107,22 @@ export function BlogManager({
 
   async function save() {
     if (!draft) return;
+    // Een leeg titelveld zou zonder melding een naamloos artikel opleveren.
+    if (!draft.title.trim()) {
+      setMsg({ tone: "fail", text: "Titel is verplicht — het artikel zou anders naamloos op /blog staan." });
+      return;
+    }
+    // Server én client gooien secties weg die geen kop én tekst hebben. Half
+    // ingevulde secties zijn bijna altijd werk in uitvoering: die stil laten
+    // verdwijnen onder de melding "Artikel bijgewerkt" is verlies zonder signaal.
+    const half = draft.sections
+      .map((s, i) => ({ nr: i + 1, heading: s.heading.trim(), body: s.body.trim() }))
+      .filter((s) => (s.heading ? 1 : 0) + (s.body ? 1 : 0) === 1);
+    if (half.length) {
+      const uitleg = half.map((s) => `sectie ${s.nr} (${s.heading ? "geen tekst" : "geen kop"})`).join(", ");
+      if (!window.confirm(`Half ingevuld: ${uitleg}. Zo wordt die niet opgeslagen. Toch doorgaan en weglaten?`)) return;
+    }
+    const kept = draft.sections.filter((s) => s.heading.trim() && s.body.trim());
     const res = await post({
       action: "update",
       slug: draft.slug,
@@ -115,10 +131,16 @@ export function BlogManager({
       intro: draft.intro,
       seoTitle: draft.seoTitle,
       seoDescription: draft.seoDescription,
-      sections: draft.sections.filter((s) => s.heading.trim() && s.body.trim()),
+      sections: kept,
     });
     if (res.ok) {
-      setMsg({ tone: "ok", text: "Artikel bijgewerkt." });
+      const weg = draft.sections.length - kept.length;
+      setMsg({
+        tone: "ok",
+        text: weg
+          ? `Artikel bijgewerkt — ${weg} lege of half ingevulde sectie(s) zijn niet opgeslagen.`
+          : "Artikel bijgewerkt.",
+      });
       cancel();
       router.refresh();
     } else {

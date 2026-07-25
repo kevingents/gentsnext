@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { getMenu } from "@/lib/menu-server";
 import { setContentDoc } from "@/lib/content-store";
+import { CONFLICT_MESSAGE, docVersion } from "@/lib/content-version";
+import { IMAGE_HINT, isSafeImageSrc } from "@/lib/safe-image";
 import type { MenuItem } from "@/lib/main-menu";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +11,8 @@ export const runtime = "nodejs";
 
 /**
  * Hoofdmenu vanuit de Site-studio in de webshop zelf (/account/menu).
- *   GET  → het huidige menu (eigen content-doc of de MAIN_MENU-seed).
- *   POST { items } → het complete menu opslaan in content:menu (gesaneerd).
+ *   GET  → het huidige menu (eigen content-doc of de MAIN_MENU-seed) + versiestempel.
+ *   POST { items, version } → het complete menu opslaan in content:menu (gesaneerd).
  * Auth: ingelogde beheerder (sessie). Bewust NIET de studio-token-route.
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
@@ -71,7 +73,8 @@ export async function GET() {
   const denied = await guard();
   if (denied) return denied;
   try {
-    return NextResponse.json({ ok: true, items: await getMenu() });
+    const items = await getMenu();
+    return NextResponse.json({ ok: true, items, version: docVersion(items) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
@@ -81,9 +84,9 @@ export async function POST(req: Request) {
   const denied = await guard();
   if (denied) return denied;
 
-  let body: { items?: unknown };
+  let body: { items?: unknown; version?: unknown };
   try {
-    body = (await req.json()) as { items?: unknown };
+    body = (await req.json()) as { items?: unknown; version?: unknown };
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
   }
@@ -91,9 +94,37 @@ export async function POST(req: Request) {
   if (!items.length) {
     return NextResponse.json({ ok: false, error: "Het menu mag niet leeg zijn." }, { status: 400 });
   }
+  // Sfeer-tegels dragen een beeld dat next/image moet kunnen laden; een ander
+  // adres laat de header op ELKE publieke pagina crashen.
+  const badImages = items
+    .flatMap((i) => (i.features || []).map((f) => ({ item: i.label, image: f.image, label: f.label })))
+    .filter((f) => !isSafeImageSrc(f.image));
+  if (badImages.length) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Beeld van sfeer-tegel(s) klopt niet: ${badImages.map((f) => `${f.item} → ${f.label || f.image}`).join(", ")}. ${IMAGE_HINT}`,
+      },
+      { status: 400 },
+    );
+  }
+
+  let live: string;
+  try {
+    live = docVersion(await getMenu());
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+  }
+  // Botsingscontrole: het menu wordt óók vanuit het portal geschreven; zonder
+  // deze check wist de laatste opslag stilzwijgend de wijziging van de ander.
+  const version = typeof body.version === "string" ? body.version : "";
+  if (version && version !== live) {
+    return NextResponse.json({ ok: false, error: CONFLICT_MESSAGE, version: live }, { status: 409 });
+  }
+
   try {
     await setContentDoc("menu", { items });
-    return NextResponse.json({ ok: true, items });
+    return NextResponse.json({ ok: true, items, version: docVersion(items) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

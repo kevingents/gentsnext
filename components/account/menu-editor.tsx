@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MenuColumn, MenuItem, MenuLink } from "@/lib/main-menu";
 import { IconChevron, IconDown, IconPlus, IconTrash, IconUp } from "@/components/account/studio-icons";
 
@@ -30,6 +30,27 @@ export function MenuEditor({ initial }: { initial: MenuItem[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
+  /**
+   * Versiestempel van het menu zoals het geladen is. Het portal-venster schrijft
+   * hetzelfde document; zonder deze stempel zou opslaan de wijziging van een
+   * collega (of van een tweede tabblad) stilzwijgend wissen.
+   */
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/account/menu")
+      .then((r) => r.json())
+      .then((d: { version?: string }) => {
+        if (!cancelled && typeof d?.version === "string") setVersion(d.version);
+      })
+      .catch(() => {
+        // Geen versie = geen botsingscontrole; opslaan blijft gewoon werken.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function update(next: MenuItem[]) {
     setItems(next);
@@ -93,11 +114,12 @@ export function MenuEditor({ initial }: { initial: MenuItem[] }) {
       const r = await fetch("/api/account/menu", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, ...(version ? { version } : {}) }),
       });
-      const d = (await r.json()) as { ok?: boolean; error?: string; items?: MenuItem[] };
+      const d = (await r.json()) as { ok?: boolean; error?: string; items?: MenuItem[]; version?: string };
       if (r.ok && d.ok) {
         setItems(d.items || items);
+        if (typeof d.version === "string") setVersion(d.version);
         setState("done");
         setMsg("Opgeslagen — binnen een halve minuut zichtbaar in het menu.");
       } else {

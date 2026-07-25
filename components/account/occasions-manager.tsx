@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { IMAGE_HINT, isSafeImageSrc } from "@/lib/safe-image";
 
 /**
  * Gelegenheden-beheer in de Site-studio: de tegels op /gelegenheden. Alles wordt
@@ -43,6 +44,10 @@ function hrefLooksSafe(href: string): boolean {
   return /^(\/|https:\/\/|mailto:|tel:|#)/i.test(href.trim());
 }
 
+/** Zelfde grenzen als de server, zodat de beheerder het hier al ziet. */
+const MAX_ITEMS = 24;
+const MAX_LINKS = 8;
+
 function emptyOccasion(): AdminOccasion {
   return { slug: "", title: "", eyebrow: "", intro: "", image: "", ctaLabel: "Bekijk", ctaHref: "/", links: [] };
 }
@@ -52,6 +57,27 @@ export function OccasionsManager({ initial }: { initial: AdminOccasion[] }) {
   const [items, setItems] = useState<AdminOccasion[]>(initial);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "fail"; text: string } | null>(null);
+  /**
+   * Versiestempel van de lijst zoals die geladen is. Het portal-venster schrijft
+   * hetzelfde document (content:occasions); zonder deze stempel zou opslaan de
+   * wijziging van een collega of van een tweede tabblad stilzwijgend wissen.
+   */
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/account/gelegenheden")
+      .then((r) => r.json())
+      .then((d: { version?: string }) => {
+        if (!cancelled && typeof d?.version === "string") setVersion(d.version);
+      })
+      .catch(() => {
+        // Geen versie = geen botsingscontrole; opslaan blijft gewoon werken.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const dirty = JSON.stringify(items) !== JSON.stringify(initial);
 
@@ -98,15 +124,30 @@ export function OccasionsManager({ initial }: { initial: AdminOccasion[] }) {
       setMsg({ tone: "fail", text: "Er moet minstens één gelegenheid overblijven." });
       return;
     }
+    if (items.length > MAX_ITEMS) {
+      setMsg({ tone: "fail", text: `Maximaal ${MAX_ITEMS} gelegenheden; er zijn er nu ${items.length}.` });
+      return;
+    }
+    const tooManyLinks = items.filter((o) => o.links.length > MAX_LINKS).map((o) => o.title || o.slug);
+    if (tooManyLinks.length) {
+      setMsg({ tone: "fail", text: `Maximaal ${MAX_LINKS} extra links per gelegenheid — te veel bij: ${tooManyLinks.join(", ")}.` });
+      return;
+    }
+    // Een beeld dat next/image niet aankan laat /gelegenheden crashen.
+    const badImage = items.find((o) => !isSafeImageSrc(o.image));
+    if (badImage) {
+      setMsg({ tone: "fail", text: `Beeld klopt niet bij "${badImage.title || badImage.slug}". ${IMAGE_HINT}` });
+      return;
+    }
     setBusy(true);
     setMsg(null);
     try {
       const r = await fetch("/api/account/gelegenheden", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, ...(version ? { version } : {}) }),
       });
-      const d = (await r.json()) as { ok?: boolean; error?: string; items?: AdminOccasion[] };
+      const d = (await r.json()) as { ok?: boolean; error?: string; items?: AdminOccasion[]; version?: string };
       if (!r.ok || !d.ok) {
         setMsg({ tone: "fail", text: d.error || "Opslaan mislukt." });
         return;
@@ -114,6 +155,7 @@ export function OccasionsManager({ initial }: { initial: AdminOccasion[] }) {
       // De server saneert (slug, veilige links); overnemen zodat het formulier
       // toont wat er écht is opgeslagen en niet onterecht "niet opgeslagen" meldt.
       if (Array.isArray(d.items)) setItems(d.items);
+      if (typeof d.version === "string") setVersion(d.version);
       setMsg({ tone: "ok", text: "Opgeslagen — direct zichtbaar op /gelegenheden." });
       router.refresh();
     } catch {
@@ -128,7 +170,7 @@ export function OccasionsManager({ initial }: { initial: AdminOccasion[] }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-pslate">{items.length} gelegenheid(heden) · de volgorde hier is de volgorde op de site</p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={addItem} className={BTN2}>
+          <button type="button" onClick={addItem} disabled={items.length >= MAX_ITEMS} className={BTN2}>
             <span className="mr-1.5"><Icon path={P_PLUS} /></span>
             Gelegenheid toevoegen
           </button>
@@ -169,6 +211,9 @@ export function OccasionsManager({ initial }: { initial: AdminOccasion[] }) {
                 <label className="block">
                   <span className="text-xs text-pslate">Beeld (URL of pad in /public)</span>
                   <input value={o.image} onChange={(e) => patch(i, { image: e.target.value })} placeholder="/brand/brand-impression-wedding.jpg" className={`mt-0.5 ${FIELD}`} />
+                  {!isSafeImageSrc(o.image) ? (
+                    <span className="mt-1 block text-xs text-red-700">{IMAGE_HINT}</span>
+                  ) : null}
                 </label>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <label className="block">
@@ -190,8 +235,10 @@ export function OccasionsManager({ initial }: { initial: AdminOccasion[] }) {
 
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-pslate">Extra links</span>
-                    <button type="button" onClick={() => addLink(i)} className={BTN2}>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-pslate">
+                      Extra links ({o.links.length}/{MAX_LINKS})
+                    </span>
+                    <button type="button" onClick={() => addLink(i)} disabled={o.links.length >= MAX_LINKS} className={BTN2}>
                       <span className="mr-1.5"><Icon path={P_PLUS} /></span>
                       Link toevoegen
                     </button>

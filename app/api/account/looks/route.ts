@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
-import { saveLook, deleteStoredLook, type StoredLook } from "@/lib/looks";
+import { saveLook, deleteStoredLook, getManagedLooks, type StoredLook } from "@/lib/looks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,8 +10,9 @@ export const runtime = "nodejs";
  * Alleen voor ingelogde beheerders — de portal gebruikt zijn eigen
  * token-endpoint onder /api/studio. De opslag zelf zit in lib/looks.
  *
- * POST { action:"save", look }   → opslaan/publiceren (status in de look)
- *      { action:"delete", slug } → uit de store halen (standaard-look blijft)
+ * POST { action:"save", look, create? } → opslaan/publiceren (status in de look);
+ *                                         create:true = nieuwe look, bestaande slug weigeren
+ *      { action:"delete", slug }        → uit de store halen (standaard-look blijft)
  */
 function sanitizeLook(input: unknown): StoredLook | null {
   const b = (input || {}) as Record<string, unknown>;
@@ -57,9 +58,9 @@ export async function POST(req: Request) {
   if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
   if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let body: { action?: unknown; look?: unknown; slug?: unknown };
+  let body: { action?: unknown; look?: unknown; slug?: unknown; create?: unknown };
   try {
-    body = (await req.json()) as { action?: unknown; look?: unknown; slug?: unknown };
+    body = (await req.json()) as { action?: unknown; look?: unknown; slug?: unknown; create?: unknown };
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
   }
@@ -74,6 +75,14 @@ export async function POST(req: Request) {
     }
     const look = sanitizeLook(body.look);
     if (!look) return NextResponse.json({ ok: false, error: "Ongeldige look — een slug is verplicht." }, { status: 400 });
+    // saveLook is een blinde upsert op slug: zonder deze controle overschrijft een
+    // "Nieuwe look" met een bestaande slug die look zonder enige waarschuwing.
+    if (body.create === true && (await getManagedLooks()).some((l) => l.slug === look.slug)) {
+      return NextResponse.json(
+        { ok: false, error: `Er bestaat al een look met de slug "${look.slug}". Kies een andere slug of bewerk de bestaande look.` },
+        { status: 409 },
+      );
+    }
     await saveLook(look);
     return NextResponse.json({ ok: true, look });
   } catch (e) {

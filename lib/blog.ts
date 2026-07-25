@@ -148,9 +148,21 @@ export async function generateBlogPost(topicKey?: string): Promise<BlogPost | nu
   const usedHandles = [...new Set(sections.flatMap((s) => s.productHandles))];
   const hero = products.find((p) => usedHandles.includes(p.handle) && p.modelImageUrl)?.modelImageUrl || products.find((p) => p.modelImageUrl)?.modelImageUrl || "";
 
+  // De lijst pas NU opnieuw lezen: de Claude-call hierboven duurt tientallen
+  // seconden en intussen kan een redacteur een artikel hebben bijgewerkt of
+  // verwijderd (lib/blog-admin schrijft dezelfde rij). Met de momentopname van
+  // vóór de call zouden we dat werk stil terugdraaien. `existing` diende alleen
+  // om het onderwerp te kiezen.
+  const fresh = await readStore();
+
   // Unieke slug (onderwerp + volgnummer als 't al bestaat).
   let slug = slugify(parsed.title) || topic.key;
-  if (existing.some((p) => p.slug === slug)) slug = `${slug}-${existing.length + 1}`;
+  if (fresh.some((p) => p.slug === slug)) {
+    const base = slug;
+    let n = fresh.length + 1;
+    while (fresh.some((p) => p.slug === `${base}-${n}`)) n++;
+    slug = `${base}-${n}`;
+  }
 
   const post: BlogPost = {
     slug,
@@ -167,6 +179,6 @@ export async function generateBlogPost(topicKey?: string): Promise<BlogPost | nu
     seoTitle: parsed.seoTitle ? String(parsed.seoTitle).slice(0, 200) : undefined,
     seoDescription: parsed.seoDescription ? String(parsed.seoDescription).slice(0, 320) : undefined,
   };
-  await writeStore([post, ...existing].slice(0, 200));
+  await writeStore([post, ...fresh].slice(0, 200));
   return post;
 }

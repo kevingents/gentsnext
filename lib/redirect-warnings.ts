@@ -60,6 +60,17 @@ const isExternal = (s: string) => /^https?:\/\//i.test(String(s || "").trim());
 const basePath = (s: string) => norm(String(s || "").replace(/\/\*+$/, ""));
 const under = (p: string, prefix: string) => p === prefix || p.startsWith(prefix + "/");
 
+/**
+ * Sleutel waarop een regel wordt herkend — spiegel van cleanSource in
+ * lib/redirects-admin (pad genormaliseerd, wildcard-staart blijft staan). Gedeeld
+ * met het formulier, zodat "bestaat al" client- en serverkant hetzelfde beoordeelt.
+ */
+export const redirectSourceKey = (source: string) => {
+  const raw = String(source || "").trim();
+  const base = basePath(raw);
+  return isWild(raw) ? `${base === "/" ? "" : base}/*` : base;
+};
+
 export type RedirectWarning = { level: "blok" | "let-op"; text: string };
 export type RedirectLike = { source: string; target: string; active?: boolean };
 
@@ -110,9 +121,18 @@ export function redirectWarnings(rule: RedirectLike, all: RedirectLike[] = []): 
         out.push({ level: "let-op", text: `Keten: ${tgt} wordt zelf weer doorgestuurd naar ${chain.target}. Wijs direct naar de eindbestemming.` });
       }
     }
-    // Wildcard-bron zonder wildcard-doel: het restpad valt weg.
-    if (isWild(rule.source) && !isWild(rule.target)) {
-      out.push({ level: "let-op", text: "Alles onder deze bron gaat naar één vast doel. Wil je het restpad meenemen, zet dan ook /* achter het doel." });
+    if (isWild(rule.source)) {
+      if (under(tgt, src)) {
+        // De winkel matcht een wildcard óók op het prefix zelf, dus een doel dat
+        // binnen de eigen bron valt stuurt de bezoeker eindeloos naar zichzelf.
+        out.push({
+          level: "blok",
+          text: `Oneindige lus: ${tgt} valt zelf onder ${rule.source}. Kies een doel buiten ${src}.`,
+        });
+      } else if (!isWild(rule.target)) {
+        // Wildcard-bron zonder wildcard-doel: het restpad valt weg.
+        out.push({ level: "let-op", text: "Alles onder deze bron gaat naar één vast doel. Wil je het restpad meenemen, zet dan ook /* achter het doel." });
+      }
     }
   }
 

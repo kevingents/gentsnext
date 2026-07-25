@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
-import { getManagedLooks, getLookBuyData } from "@/lib/looks";
+import { getManagedLooks, getLookBuyData, getLookGallery, getLook } from "@/lib/looks";
 import { getProductsByHandles } from "@/lib/catalog";
 import { BackofficeShell } from "@/components/account/report-ui";
 import { LooksManager, type AdminLook, type ProductHealth } from "@/components/account/looks-manager";
@@ -68,15 +68,38 @@ export default async function LooksAdminPage() {
     health[handle] = { state: soldOut ? "sold-out" : "ok", title };
   }
 
-  const looks: AdminLook[] = stored.map((l) => ({
+  // Wat er NU op /looks/<slug> staat: dezelfde galerij-opbouw als de site
+  // (sfeerbeelden van de producten + de lookSfeer-store). Puur ter informatie —
+  // zie de opmerking bij images[] hieronder.
+  const siteImages = await Promise.all(
+    stored.map(async (l) => {
+      try {
+        const { hero, gallery } = await getLookGallery(l);
+        return [hero, ...gallery.map((g) => g.url)].filter(Boolean);
+      } catch {
+        return [l.image].filter(Boolean);
+      }
+    }),
+  );
+
+  const looks: AdminLook[] = stored.map((l, i) => ({
     slug: l.slug,
     title: l.title,
     subtitle: l.subtitle || "",
     occasion: l.occasion || "",
     theme: l.theme || "",
     image: l.image || "",
-    images: l.images && l.images.length ? l.images : l.image ? [l.image] : [],
-    story: l.story || "",
+    // Alleen de door de beheerder ECHT ingestelde foto's. Vullen we dit met de
+    // studio-modelfoto, dan slaat de editor die bij het eerste 'Opslaan' op als
+    // expliciete override en wint hij in getLookGallery altijd — waarmee de hele
+    // sfeerbeeld-galerij van de live look verdwijnt.
+    images: l.images ?? [],
+    siteImages: siteImages[i],
+    // getManagedLooks levert de ruwe LOOKS af; het verhaal van de ingebouwde looks
+    // wordt pas bij het renderen toegevoegd (withStory). getLook() past dat wél toe,
+    // dus zo toont het formulier de tekst die de klant nu echt ziet.
+    story: l.story || getLook(l.slug)?.story || "",
+    defaultStory: getLook(l.slug)?.story || "",
     status: l.status,
     updatedAt: l.updatedAt || "",
     hotspots: l.hotspots.map((h) => ({ handle: h.handle, label: h.label || "", x: h.x, y: h.y })),

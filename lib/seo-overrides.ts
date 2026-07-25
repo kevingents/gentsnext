@@ -5,7 +5,9 @@ import { appSettings } from "@/db/schema";
 /**
  * Portal-beheerbare SEO-overrides per pad. Overschrijft de automatisch bepaalde
  * meta-titel/omschrijving (en optioneel noindex) van een pagina zónder code/
- * redeploy. Bron: app_settings-rij `seoOverrides` (map pad → override). 30s cache.
+ * redeploy. Bron: app_settings-rij `seoOverrides` (map pad → override). De 30s
+ * cache is er alleen voor de leespaden (generateMetadata); schrijven gaat altijd
+ * over een verse lees.
  *
  * Pad = canoniek pad zonder taal-prefix, bv. "/products/<handle>" of
  * "/categorie/<slug>". De storefront leest dit in generateMetadata.
@@ -33,6 +35,23 @@ async function read(): Promise<Store> {
   return _cache;
 }
 
+/**
+ * Verse lees, cache bewust omzeild: elk SCHRIJFpad doet read-modify-write op de
+ * hele map, en er zijn twee schrijvers (de studio via /api/account/seo en de
+ * portal via /api/studio/site/seo) die elk op hun eigen serverless-instantie een
+ * cache van 30s hebben. Wie op een oude momentopname verder bouwt, schrijft de wijziging
+ * van de andere kant zonder melding weg. Gooit bij een leesfout — dan mislukt het
+ * opslaan zichtbaar in plaats van dat de map stil op één regel wordt teruggezet.
+ */
+async function readFresh(): Promise<Store> {
+  const db = getDb();
+  const rows = await db.select().from(appSettings).where(eq(appSettings.id, ID)).limit(1);
+  const s = (rows[0]?.data ?? {}) as Store;
+  _cache = s;
+  _at = Date.now();
+  return s;
+}
+
 async function write(s: Store): Promise<void> {
   const db = getDb();
   await db
@@ -56,10 +75,19 @@ export async function getAllSeoOverrides(): Promise<Array<{ path: string } & Seo
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/** Staat er al een regel op dit pad? Verse lees: bij hernoemen mag een oude cache
+ *  niet doen alsof het doelpad nog vrij is. */
+export async function hasSeoOverride(path: string): Promise<boolean> {
+  const p = norm(path);
+  if (!p || p === "/") return false;
+  const s = await readFresh();
+  return Object.prototype.hasOwnProperty.call(s, p);
+}
+
 export async function setSeoOverride(path: string, patch: SeoOverride): Promise<void> {
   const p = norm(path);
   if (!p || p === "/") return;
-  const s = { ...(await read()) };
+  const s = { ...(await readFresh()) };
   const entry: SeoOverride = {};
   const title = patch.title !== undefined ? String(patch.title).trim().slice(0, 200) : s[p]?.title;
   const description = patch.description !== undefined ? String(patch.description).trim().slice(0, 320) : s[p]?.description;
@@ -73,7 +101,7 @@ export async function setSeoOverride(path: string, patch: SeoOverride): Promise<
 }
 
 export async function deleteSeoOverride(path: string): Promise<void> {
-  const s = { ...(await read()) };
+  const s = { ...(await readFresh()) };
   delete s[norm(path)];
   await write(s);
 }

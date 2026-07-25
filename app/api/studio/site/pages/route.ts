@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
 import { getStorePages, saveStorePages, type StorePage } from "@/lib/content-pages";
+import { reservedPageSlugs } from "@/lib/reserved-page-slugs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,9 +14,6 @@ export const runtime = "nodejs";
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const slugify = (v: unknown) => s(v, 80).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-/** Slugs met een vaste, in code afgehandelde pagina — een eigen pagina hierop zou
- *  stilletjes overschaduwd worden (de route checkt deze vóór getStorePage). Weiger ze. */
-const RESERVED = new Set(["etiquette", "klantenservice", "service", "herroepingsformulier", "zakelijk", "students", "winkels", "uitvaartkleding", "trouw-afspraak"]);
 
 function sanitize(input: unknown): StorePage[] {
   const items = Array.isArray(input) ? input : [];
@@ -60,7 +58,12 @@ export async function POST(req: Request) {
   }
   if (!Array.isArray(body?.items)) return NextResponse.json({ ok: false, error: "Ongeldige lijst." }, { status: 400 });
   const items = sanitize(body.items);
-  const reserved = items.filter((p) => RESERVED.has(p.slug)).map((p) => p.slug);
+  // Slugs met een vaste, in code afgehandelde pagina: een eigen pagina hierop zou
+  // stilletjes overschaduwd worden. Zelfde lijst als /api/account/paginas —
+  // reservedPageSlugs() kent naast de vaste landings óók alle winkelpagina's,
+  // die in deze route eerder ontbraken.
+  const blocked = new Set(reservedPageSlugs());
+  const reserved = items.filter((p) => blocked.has(p.slug)).map((p) => p.slug);
   if (reserved.length) {
     return NextResponse.json(
       { ok: false, error: `Deze slug(s) zijn gereserveerd voor een vaste pagina en kunnen niet als content-pagina: ${reserved.join(", ")}. Kies een andere slug.` },

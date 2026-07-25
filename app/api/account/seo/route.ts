@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
-import { getAllSeoOverrides, setSeoOverride, deleteSeoOverride } from "@/lib/seo-overrides";
+import { getAllSeoOverrides, setSeoOverride, deleteSeoOverride, hasSeoOverride } from "@/lib/seo-overrides";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -67,9 +67,19 @@ export async function POST(req: Request) {
     }
 
     // Hernoemen van het pad: eerst het nieuwe zetten, dan het oude opruimen.
+    // Weigeren als het nieuwe pad al een regel heeft — anders overschrijft het
+    // hernoemen die titel/omschrijving/noindex zonder dat iemand het ziet
+    // (zelfde regel als upsertRedirect in lib/redirects-admin).
     const original = body.originalPath ? norm(String(body.originalPath)) : "";
+    const renaming = Boolean(original) && original !== "/" && original !== path;
+    if (renaming && (await hasSeoOverride(path))) {
+      return NextResponse.json(
+        { ok: false, error: `Er bestaat al een SEO-regel voor ${path}. Werk die regel bij of kies een ander pad.` },
+        { status: 400 },
+      );
+    }
     await setSeoOverride(path, { title, description, noindex });
-    if (original && original !== "/" && original !== path) await deleteSeoOverride(original);
+    if (renaming) await deleteSeoOverride(original);
 
     return NextResponse.json({ ok: true, overrides: await getAllSeoOverrides() });
   } catch (e) {

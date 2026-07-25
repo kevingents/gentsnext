@@ -17,8 +17,12 @@ export type AdminLook = {
   occasion: string;
   theme: string;
   image: string;
+  /** Alleen de expliciet ingestelde foto's — leeg = de site kiest zelf. */
   images: string[];
+  siteImages: string[];
   story: string;
+  /** Het ingebouwde verhaal van deze look; leegmaken van 'story' valt hierop terug. */
+  defaultStory: string;
   status: "published" | "draft";
   updatedAt: string;
   hotspots: Hotspot[];
@@ -59,11 +63,23 @@ function emptyLook(): AdminLook {
     theme: "",
     image: "",
     images: [],
+    siteImages: [],
     story: "",
+    defaultStory: "",
     status: "draft",
     updatedAt: "",
     hotspots: [],
   };
+}
+
+/** Zelfde normalisatie als de route, zodat de dubbele-slug-controle klopt. */
+function toSlug(v: string): string {
+  return v.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Vingerafdruk van het formulier (inclusief het losse foto-tekstvak). */
+function snap(d: AdminLook, imagesText: string): string {
+  return JSON.stringify([d, imagesText]);
 }
 
 export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Record<string, ProductHealth> }) {
@@ -74,6 +90,8 @@ export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Re
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "fail"; text: string } | null>(null);
   const [isNew, setIsNew] = useState(false);
+  /** Momentopname bij het openen — waaraan we zien of er onopgeslagen werk is. */
+  const [snapshot, setSnapshot] = useState("");
 
   /** Fouten per look: producten die niet meer actief of uitverkocht zijn. */
   const problems = useMemo(() => {
@@ -94,26 +112,45 @@ export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Re
   const brokenLooks = looks.filter((l) => (problems[l.slug]?.broken || 0) > 0);
   const published = looks.filter((l) => l.status === "published").length;
 
-  function startEdit(look: AdminLook) {
-    setIsNew(false);
-    setEditing(look.slug);
-    setDraft({ ...look, hotspots: look.hotspots.map((h) => ({ ...h })) });
-    setImagesText(look.images.join("\n"));
+  const dirty = draft ? snap(draft, imagesText) !== snapshot : false;
+
+  /** Een lang formulier (verhaal, foto's, hotspots) nooit stil weggooien. */
+  function confirmDiscard(): boolean {
+    return !dirty || window.confirm("Je hebt wijzigingen die nog niet zijn opgeslagen. Weggooien?");
+  }
+
+  function openLook(look: AdminLook, asNew: boolean) {
+    const d = asNew ? look : { ...look, hotspots: look.hotspots.map((h) => ({ ...h })) };
+    const imgs = look.images.join("\n");
+    setIsNew(asNew);
+    setEditing(asNew ? "__nieuw__" : look.slug);
+    setDraft(d);
+    setImagesText(imgs);
+    setSnapshot(snap(d, imgs));
     setMsg(null);
+  }
+
+  function startEdit(look: AdminLook) {
+    if (!confirmDiscard()) return;
+    openLook(look, false);
   }
 
   function startNew() {
-    setIsNew(true);
-    setEditing("__nieuw__");
-    setDraft(emptyLook());
-    setImagesText("");
-    setMsg(null);
+    if (!confirmDiscard()) return;
+    openLook(emptyLook(), true);
   }
 
-  function cancel() {
+  /** Sluit zonder te vragen — na opslaan/verwijderen is er niets meer te verliezen. */
+  function close() {
     setEditing(null);
     setDraft(null);
     setIsNew(false);
+    setSnapshot("");
+  }
+
+  function cancel() {
+    if (!confirmDiscard()) return;
+    close();
   }
 
   function patch(p: Partial<AdminLook>) {
@@ -149,6 +186,8 @@ export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Re
 
   async function save() {
     if (!draft) return;
+    // Alleen meesturen wat de beheerder echt invulde: een leeg foto-veld mag geen
+    // override worden, anders bevriest de look op één foto en verdwijnt de galerij.
     const images = imagesText.split(/\n+/).map((s) => s.trim()).filter(Boolean);
     const look = {
       ...draft,
@@ -156,15 +195,20 @@ export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Re
       image: images[0] || draft.image,
       hotspots: draft.hotspots.filter((h) => h.handle.trim()),
     };
-    if (!look.slug.trim()) {
+    const slug = toSlug(look.slug);
+    if (!slug) {
       setMsg({ tone: "fail", text: "Een look heeft een slug nodig (het laatste deel van de URL)." });
       return;
     }
-    if (await post({ action: "save", look })) {
+    // Opslaan is een upsert op slug: een nieuwe look met een bestaande slug zou de
+    // bestaande stil overschrijven. De server weigert het ook, dit scheelt een ronde.
+    if (isNew && looks.some((l) => l.slug === slug)) {
+      setMsg({ tone: "fail", text: `Er bestaat al een look met de slug "${slug}". Kies een andere slug of bewerk de bestaande look.` });
+      return;
+    }
+    if (await post({ action: "save", look, create: isNew })) {
       setMsg({ tone: "ok", text: look.status === "published" ? "Opgeslagen en live op /looks." : "Opgeslagen als concept — nog niet op de site." });
-      setEditing(null);
-      setDraft(null);
-      setIsNew(false);
+      close();
       router.refresh();
     }
   }
@@ -173,7 +217,7 @@ export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Re
     if (!window.confirm(`"${slug}" verwijderen? Een standaard-look valt daarna terug op de ingebouwde versie.`)) return;
     if (await post({ action: "delete", slug })) {
       setMsg({ tone: "ok", text: "Look verwijderd uit het beheer." });
-      cancel();
+      close();
       router.refresh();
     }
   }
@@ -234,9 +278,10 @@ export function LooksManager({ looks, health }: { looks: AdminLook[]; health: Re
             <li key={look.slug} className={CARD}>
               <div className="flex flex-wrap items-start gap-4">
                 <div className="h-20 w-16 shrink-0 overflow-hidden rounded-lg bg-pnavy-50">
-                  {look.image ? (
+                  {/* De foto zoals de site 'm toont, niet het compat-veld image. */}
+                  {look.siteImages[0] || look.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={look.image} alt="" className="h-full w-full object-cover" />
+                    <img src={look.siteImages[0] || look.image} alt="" className="h-full w-full object-cover" />
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -341,6 +386,10 @@ function LookForm({
     setDraft((d) => (d ? { ...d, hotspots: d.hotspots.filter((_, idx) => idx !== i) } : d));
   }
 
+  const typed = imagesText.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+  // Voorbeeld = wat de site zou tonen: eigen foto eerst, anders de huidige hero.
+  const preview = typed[0] || draft.siteImages[0] || draft.image.trim();
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -385,22 +434,48 @@ function LookForm({
           placeholder="Waarom werkt deze combinatie? Alinea's scheiden met een lege regel."
           className={`mt-0.5 ${FIELD}`}
         />
-        <span className="mt-1 block text-xs text-pslate">Lege regel = nieuwe alinea op de look-pagina.</span>
+        <span className="mt-1 block text-xs text-pslate">
+          Lege regel = nieuwe alinea op de look-pagina.
+          {draft.defaultStory ? " Leegmaken zet het standaardverhaal van deze look terug." : ""}
+        </span>
       </label>
 
       <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
         <label className="block">
-          <span className="text-xs text-pslate">Foto&apos;s (één URL per regel)</span>
+          <span className="text-xs text-pslate">Eigen foto&apos;s (één URL per regel)</span>
           <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} rows={4} placeholder="https://…" className={`mt-0.5 ${FIELD}`} />
-          <span className="mt-1 block text-xs text-pslate">De eerste is de hoofdfoto. Leeg laten = de site kiest zelf een sfeerbeeld.</span>
+          <span className="mt-1 block text-xs text-pslate">
+            De eerste is de hoofdfoto. Alleen invullen als je de galerij wilt vervangen — leeg laten betekent dat de
+            site zelf sfeerbeelden van de producten kiest.
+          </span>
         </label>
         <div className="h-32 w-24 overflow-hidden rounded-lg bg-pnavy-50">
-          {(imagesText.split(/\n+/)[0] || draft.image).trim() ? (
+          {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={(imagesText.split(/\n+/)[0] || draft.image).trim()} alt="" className="h-full w-full object-cover" />
+            <img src={preview} alt="" className="h-full w-full object-cover" />
           ) : null}
         </div>
       </div>
+
+      {/* Read-only: wat er nu écht op de look-pagina staat. Zonder dit ziet de
+          beheerder niet dat een leeg foto-veld toch een volle galerij oplevert. */}
+      {draft.siteImages.length ? (
+        <div>
+          <span className="text-xs text-pslate">
+            {typed.length
+              ? `Staat nu op de site — wordt vervangen door de ${typed.length} foto('s) hierboven`
+              : `Staat nu op de site (${draft.siteImages.length} foto('s), automatisch gekozen)`}
+          </span>
+          <ul className="mt-1 flex flex-wrap gap-1.5">
+            {draft.siteImages.slice(0, 8).map((u) => (
+              <li key={u} className={`h-16 w-12 overflow-hidden rounded bg-pnavy-50 ${typed.length ? "opacity-40" : ""}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={u} alt="" className="h-full w-full object-cover" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div>
         <div className="mb-2 flex items-center justify-between gap-3">

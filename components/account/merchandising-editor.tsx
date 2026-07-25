@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatEuro } from "@/lib/format";
-import type { PinContext, PinItem, PinSinceMap } from "@/lib/merchandising-admin";
+import type { PinCheck, PinContext, PinItem, PinSinceMap } from "@/lib/merchandising-admin";
 
 /**
  * "Uitgelicht" — merchandising-pins beheren vanuit de Site-studio.
@@ -98,6 +98,12 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<PinItem[]>([]);
   const [searching, setSearching] = useState(false);
+  /**
+   * handle → reden waarom deze pin op DEZE winkelpagina niets doet. Een pin is
+   * alleen een volgorde binnen de PLP-resultaten; een product dat daar niet in
+   * zit (andere categorie, uitverkocht, kleurvariant) verandert er niets aan.
+   */
+  const [pinProblems, setPinProblems] = useState<Record<string, string>>({});
   // Ouderdom hangt af van "nu" → pas ná mount tonen, anders wijkt de
   // server-render af van de client-render.
   const [mounted, setMounted] = useState(false);
@@ -130,7 +136,18 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
     [contexts, savedByKey]
   );
 
+  const activeKind = active?.kind || "";
+  const activeSlug = active?.slug || "";
+
+  /** Aantal pins in de huidige lijst dat op deze winkelpagina niets doet. */
+  const uselessPins = useMemo(
+    () => draft.filter((i) => i.known && pinProblems[i.handle]).length,
+    [draft, pinProblems]
+  );
+
   // Zoeken (debounced). Een afgebroken zoekopdracht mag de nieuwste niet overschrijven.
+  // De zoekopdracht draagt de gekozen context mee: de server geeft alleen
+  // producten terug die op díe winkelpagina staan, want alleen daar doet een pin iets.
   useEffect(() => {
     const term = q.trim();
     if (term.length < 2) {
@@ -143,7 +160,8 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
     const ctrl = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/account/merchandising?q=${encodeURIComponent(term)}`, { signal: ctrl.signal });
+        const url = `/api/account/merchandising?q=${encodeURIComponent(term)}&kind=${encodeURIComponent(activeKind)}&slug=${encodeURIComponent(activeSlug)}`;
+        const r = await fetch(url, { signal: ctrl.signal });
         const d = await r.json();
         if (!cancelled) setResults(Array.isArray(d.results) ? (d.results as PinItem[]) : []);
       } catch {
@@ -157,7 +175,34 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [q]);
+  }, [q, activeKind, activeSlug]);
+
+  // Controle van de al opgeslagen pins: staan ze er op deze pagina écht?
+  useEffect(() => {
+    const handles = (savedByKey[activeKey] || []).map((i) => i.handle);
+    if (!activeKind || !activeSlug || !handles.length) {
+      setPinProblems({});
+      return;
+    }
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const url = `/api/account/merchandising?kind=${encodeURIComponent(activeKind)}&slug=${encodeURIComponent(activeSlug)}&handles=${encodeURIComponent(handles.join(","))}`;
+    fetch(url, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((d: { checks?: PinCheck[] }) => {
+        if (cancelled) return;
+        const out: Record<string, string> = {};
+        for (const c of d.checks || []) if (!c.ok && c.reason) out[c.handle] = c.reason;
+        setPinProblems(out);
+      })
+      .catch(() => {
+        // Controle mislukt → geen oordeel tonen; het beheer blijft werken.
+      });
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [activeKey, activeKind, activeSlug, savedByKey]);
 
   function switchContext(key: string) {
     if (dirty && !window.confirm("Je hebt wijzigingen die nog niet zijn opgeslagen. Weggooien?")) return;
@@ -212,10 +257,13 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
         setSavedByKey((s) => ({ ...s, [active.key]: pinned }));
         setSinceByKey((s) => ({ ...s, [active.key]: (d.since as Record<string, string>) || {} }));
         setDraft(pinned);
+        // Bewust niet "staat bovenaan": of een pin écht bovenaan komt hangt
+        // ervan af of het product op die winkelpagina staat. Dat oordeel staat
+        // per product in de lijst hieronder.
         setMsg({
           tone: "ok",
           text: pinned.length
-            ? `Opgeslagen — ${pinned.length} product${pinned.length === 1 ? "" : "en"} staat bovenaan bij ${active.label}.`
+            ? `Opgeslagen — ${pinned.length} product${pinned.length === 1 ? "" : "en"} vastgezet bij ${active.label}.`
             : `Opgeslagen — er staat niets meer vastgezet bij ${active.label}; de ranking volgt weer volledig het klantgedrag.`,
         });
       }
@@ -308,6 +356,14 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
           <p className={`mb-3 text-sm ${msg.tone === "fail" ? "text-red-700" : "text-emerald-700"}`}>{msg.text}</p>
         ) : null}
 
+        {uselessPins ? (
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            {uselessPins} vastgezet product{uselessPins === 1 ? "" : "en"} doe{uselessPins === 1 ? "t" : "n"} hier
+            niets — zie de rode regel eronder. Een pin bepaalt alleen de volgorde ván deze winkelpagina; wat er niet op
+            staat, komt er ook niet door een pin op.
+          </p>
+        ) : null}
+
         {draft.length === 0 ? (
           <p className="text-sm text-pslate">
             Niets vastgezet. De volgorde volgt hier volledig de ranking: wat klanten bekijken, in het mandje leggen en
@@ -356,6 +412,10 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
                     {!item.known ? (
                       <span className="mt-0.5 block text-xs font-medium text-red-700">
                         Niet meer in de catalogus — deze pin doet niets meer; haal hem weg.
+                      </span>
+                    ) : pinProblems[item.handle] ? (
+                      <span className="mt-0.5 block text-xs font-medium text-red-700">
+                        {pinProblems[item.handle]} — deze pin doet hier niets.
                       </span>
                     ) : null}
                   </span>
@@ -412,7 +472,10 @@ export function MerchandisingEditor({ contexts, pins, since }: Props) {
           />
         </label>
         <p className="mt-1.5 text-xs text-pslate">
-          Alleen actieve producten met foto en voorraad kunnen gepind worden — die staan ook echt in de lijst.
+          Je ziet alleen producten die op{" "}
+          {active ? <span className="font-medium text-pnavy">{active.label}</span> : "deze pagina"} ook echt staan:
+          actief, met foto, op voorraad en in deze {active?.kind === "collection" ? "collectie" : "categorie"}. Een
+          product daarbuiten komt door een pin niet alsnog in de lijst.
         </p>
 
         <div className="mt-3">

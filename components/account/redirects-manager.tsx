@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { redirectWarnings, type RedirectWarning } from "@/lib/redirect-warnings";
+import { redirectSourceKey, redirectWarnings, type RedirectWarning } from "@/lib/redirect-warnings";
 
 /**
  * Beheer van de URL-redirects in de Site-studio. Praat met
@@ -62,6 +62,20 @@ export function RedirectsManager({ initial }: { initial: RedirectRow[] }) {
   );
   const blocking = list.filter((r) => (warnings.get(r.source) || []).some((w) => w.level === "blok")).length;
 
+  /**
+   * Een nieuwe regel op een bron die al bezet is zou de bestaande stil
+   * overschrijven — en in een gesorteerde, gefilterde tabel zie je die niet staan.
+   * De server weigert het ook (mode "create"); hier zie je het al tijdens het typen.
+   */
+  const duplicate = useMemo(() => {
+    if (!draft || draft.originalSource) return null;
+    const key = redirectSourceKey(draft.source);
+    if (!draft.source.trim() || key === "/") return null;
+    return list.find((r) => redirectSourceKey(r.source) === key) ?? null;
+  }, [draft, list]);
+  /** Beide velden moeten gevuld zijn: een leeg doel werd anders een 301 naar de homepage. */
+  const incomplete = !draft || !draft.source.trim() || !draft.target.trim();
+
   async function send(payload: Record<string, unknown>, okText: string) {
     setBusy(true);
     setMsg(null);
@@ -89,7 +103,7 @@ export function RedirectsManager({ initial }: { initial: RedirectRow[] }) {
 
   async function saveDraft(e: React.FormEvent) {
     e.preventDefault();
-    if (!draft) return;
+    if (!draft || incomplete || duplicate) return;
     const ok = await send(
       {
         source: draft.source,
@@ -199,8 +213,16 @@ export function RedirectsManager({ initial }: { initial: RedirectRow[] }) {
             </label>
           </div>
 
-          {draftWarnings.length ? (
+          {draftWarnings.length || duplicate ? (
             <ul className="mt-4 space-y-1.5">
+              {duplicate ? (
+                <WarningLine
+                  warning={{
+                    level: "blok",
+                    text: `Er bestaat al een regel voor ${duplicate.source} (naar ${duplicate.target}). Sluit dit formulier en bewerk die regel, anders overschrijf je hem.`,
+                  }}
+                />
+              ) : null}
               {draftWarnings.map((w, i) => (
                 <WarningLine key={i} warning={w} />
               ))}
@@ -212,13 +234,16 @@ export function RedirectsManager({ initial }: { initial: RedirectRow[] }) {
             (/oud/schoenen → /nieuw/schoenen).
           </p>
 
-          <div className="mt-4 flex gap-2">
-            <button type="submit" disabled={busy} className={BTN}>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={busy || incomplete || !!duplicate} className={BTN}>
               {busy ? "Opslaan…" : "Opslaan"}
             </button>
             <button type="button" onClick={() => setDraft(null)} disabled={busy} className={BTN_SEC}>
               Annuleren
             </button>
+            {incomplete && !duplicate ? (
+              <span className="font-sans text-xs text-pslate">Vul zowel het oude pad als het doel in.</span>
+            ) : null}
           </div>
         </form>
       ) : null}

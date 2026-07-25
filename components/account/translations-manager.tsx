@@ -98,14 +98,14 @@ export function TranslationsManager({ initial, initialLocale, locales, localeLab
     setPage(1);
   }
 
-  async function post(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  async function post(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string; warnings?: string[] }> {
     const r = await fetch("/api/account/vertalingen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const d = (await r.json()) as { ok?: boolean; error?: string };
-    return { ok: Boolean(r.ok && d.ok), error: d.error };
+    const d = (await r.json()) as { ok?: boolean; error?: string; warnings?: string[] };
+    return { ok: Boolean(r.ok && d.ok), error: d.error, warnings: d.warnings };
   }
 
   async function save(row: TransRow) {
@@ -182,7 +182,14 @@ export function TranslationsManager({ initial, initialLocale, locales, localeLab
       setMsg(res.error || "De vertaalronde is niet gelukt.");
       return;
     }
-    setMsg("Vertaalronde klaar — de lijst is bijgewerkt.");
+    // Deels gelukt is géén succes: de beheerder moet zien welk onderdeel klapte.
+    const warnings = res.warnings || [];
+    setMsgFail(warnings.length > 0);
+    setMsg(
+      warnings.length
+        ? `Vertaalronde klaar, maar niet alles is gelukt — ${warnings.join(" ")}`
+        : "Vertaalronde klaar — de lijst is bijgewerkt.",
+    );
     await load();
   }
 
@@ -273,6 +280,12 @@ export function TranslationsManager({ initial, initialLocale, locales, localeLab
             Zelf een vertaalronde starten kan niet: er staat geen AI-sleutel op de server. Handmatig aanpassen werkt wel.
           </p>
         ) : null}
+        {running ? (
+          <p className="mt-2 text-xs text-pslate">
+            Zolang de ronde loopt staan de regels op slot: de ronde schrijft dezelfde lijst weg en zou een wijziging van
+            jou meteen weer overschrijven. Zodra de ronde klaar is kun je weer bewerken.
+          </p>
+        ) : null}
       </div>
 
       {msg ? (
@@ -340,15 +353,19 @@ export function TranslationsManager({ initial, initialLocale, locales, localeLab
                     </div>
                     <div>
                       <p className="text-[0.65rem] uppercase tracking-wider text-pslate">{localeLabels[locale] || locale}</p>
+                      {/* Tijdens een vertaalronde op slot: die ronde schrijft het hele
+                          document `translations:<locale>` weg en zou een handmatige
+                          bewerking die er tussendoor landt stil overschrijven. */}
                       <textarea
                         value={draft}
                         onChange={(e) => setDrafts((p) => ({ ...p, [id]: e.target.value }))}
+                        disabled={running}
                         rows={Math.min(6, Math.max(2, Math.ceil((row.source.length || 1) / 70)))}
                         placeholder="Nog geen vertaling"
-                        className={`mt-0.5 w-full resize-y rounded-lg ${fieldClass}`}
+                        className={`mt-0.5 w-full resize-y rounded-lg ${fieldClass} disabled:opacity-60`}
                       />
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={() => save(row)} disabled={busy || !dirty} className={`${btnPrimary} disabled:opacity-40`}>
+                        <button type="button" onClick={() => save(row)} disabled={busy || running || !dirty} className={`${btnPrimary} disabled:opacity-40`}>
                           {busy ? "Bezig…" : "Opslaan"}
                         </button>
                         {dirty ? (
@@ -367,7 +384,7 @@ export function TranslationsManager({ initial, initialLocale, locales, localeLab
                           </button>
                         ) : null}
                         {row.value || row.manual ? (
-                          <button type="button" onClick={() => reset(row)} disabled={busy} className="text-sm text-pslate underline disabled:opacity-40">
+                          <button type="button" onClick={() => reset(row)} disabled={busy || running} className="text-sm text-pslate underline disabled:opacity-40">
                             Terug op automatisch
                           </button>
                         ) : null}

@@ -12,6 +12,7 @@ import {
 } from "@/lib/translate";
 import { ensureSiteContent } from "@/lib/site-settings-i18n";
 import { ensureLandingsContent } from "@/lib/landings-i18n";
+import { ensureNavContent } from "@/lib/nav-i18n";
 import { collectTranslationSources } from "@/lib/translation-sources";
 
 export const dynamic = "force-dynamic";
@@ -123,11 +124,35 @@ export async function POST(req: Request) {
         { status: 412 },
       );
     }
-    const asError = (e: unknown) => ({ error: String((e as Error)?.message || e) });
-    const ui = await ensureUi(locale).catch(asError);
-    const site = await ensureSiteContent(locale).catch(asError);
-    const landings = await ensureLandingsContent(locale).catch(asError);
-    return NextResponse.json({ ok: true, ui, site, landings });
+    // Elke stap apart afvangen zodat één klapper de rest niet blokkeert, maar de
+    // fouten gaan wél mee terug: anders meldt de knop "klaar" terwijl er niets
+    // vertaald is. `failed` uit ensureEntries (per-item-mislukkingen) idem.
+    const steps: { label: string; run: () => Promise<{ translated: number; total: number; failed?: number }> }[] = [
+      { label: "Microcopy", run: () => ensureUi(locale) },
+      { label: "Navigatie", run: () => ensureNavContent(locale) },
+      { label: "Homepage", run: () => ensureSiteContent(locale) },
+      { label: "Landingspagina's", run: () => ensureLandingsContent(locale) },
+    ];
+    const warnings: string[] = [];
+    let translated = 0;
+    let done = 0;
+    for (const step of steps) {
+      try {
+        const r = await step.run();
+        translated += r.translated;
+        if (r.failed) warnings.push(`${step.label}: ${r.failed} tekst(en) niet gelukt.`);
+        done++;
+      } catch (e) {
+        warnings.push(`${step.label}: ${String((e as Error)?.message || e)}`);
+      }
+    }
+    if (!done) {
+      return NextResponse.json(
+        { ok: false, error: `De vertaalronde is niet gelukt. ${warnings.join(" ")}`.trim() },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json({ ok: true, translated, warnings });
   }
 
   const ns = String(body.ns || "").trim();

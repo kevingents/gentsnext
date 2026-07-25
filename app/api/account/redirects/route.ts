@@ -62,6 +62,9 @@ export async function POST(req: Request) {
       status: Number(body.status),
       active: body.active === undefined ? true : Boolean(body.active),
       originalSource: body.originalSource ? String(body.originalSource) : undefined,
+      // Zonder originalSource komt dit uit de knop "Nieuwe redirect"; dan mag een
+      // bestaande regel op dezelfde bron niet zomaar overschreven worden.
+      mode: body.originalSource ? "upsert" : "create",
     });
     return NextResponse.json({ ok: true, redirects });
   } catch (e) {
