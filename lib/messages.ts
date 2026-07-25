@@ -186,7 +186,9 @@ const de: Dict = {
   "pdp.aiImageNote": "Abbildung zur Orientierung (KI-Darstellung) — Details können vom tatsächlichen Artikel abweichen.",
   "usp.specialist": "Spezialist für formelle Anlässe",
   "usp.luxury": "Bezahlbarer Luxus",
-  "usp.returns": "Kostenlose Rückgabe innerhalb von 14 Tagen",
+  // Neutraal, net als nl/en: gratis is de retour alleen bij tegoed of inleveren
+  // in de winkel — "kostenlos" beloofde meer dan we waarmaken.
+  "usp.returns": "14 Tage Rückgaberecht",
   "usp.advice": "Persönliche Beratung in 19 Geschäften",
   "nav.suitBuilder": "Anzug zusammenstellen",
   "nav.sizeAdvice": "Größenberatung",
@@ -217,7 +219,8 @@ const fr: Dict = {
   "pdp.aiImageNote": "Image à titre indicatif (rendu IA) — les détails peuvent différer de l'article réel.",
   "usp.specialist": "Spécialiste des occasions formelles",
   "usp.luxury": "Luxe abordable",
-  "usp.returns": "Retours gratuits sous 14 jours",
+  // Neutraal, net als nl/en (zie de Duitse variant hierboven).
+  "usp.returns": "Retour sous 14 jours",
   "usp.advice": "Conseils personnalisés dans 19 magasins",
   "nav.suitBuilder": "Composez votre costume",
   "nav.sizeAdvice": "Guide des tailles",
@@ -248,7 +251,8 @@ const es: Dict = {
   "pdp.aiImageNote": "Imagen orientativa (representación por IA) — los detalles pueden diferir del artículo real.",
   "usp.specialist": "Especialistas en ropa formal",
   "usp.luxury": "Lujo asequible",
-  "usp.returns": "Devoluciones gratis en 14 días",
+  // Neutraal, net als nl/en (zie de Duitse variant hierboven).
+  "usp.returns": "Devoluciones en 14 días",
   "usp.advice": "Asesoramiento personal en 19 tiendas",
   "nav.suitBuilder": "Crea tu traje",
   "nav.sizeAdvice": "Guía de tallas",

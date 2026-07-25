@@ -305,7 +305,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
           {extras?.careItems.length ? (
             <>
               <p className="mt-6 font-sans text-sm font-medium text-ink">{t("order.care_title")}</p>
-              <div className="mt-3"><CareBlock items={extras.careItems} prose={[]} /></div>
+              <div className="mt-3"><CareBlock items={extras.careItems} prose={[]} t={t} /></div>
             </>
           ) : null}
         </section>

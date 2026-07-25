@@ -66,6 +66,12 @@ export type Settings = {
     minItems: number;
     percentOff: number;
   };
+  /**
+   * Sale-weergave: hoeveel dagen ná een prijsverlaging we die verlaging nog als
+   * sale tonen (doorgestreepte van-prijs + badge). Daarna is de lagere prijs
+   * gewoon de normale prijs. Rekenkern: lib/pricing (computeReferencePrices).
+   */
+  saleAnnouncementDays: number;
   // Retouren: bedenktijd, retourkosten bij geld-terug (DHL-label), en of store
   // credit / omruilen altijd een gratis retour geeft.
   returnConfig: {
@@ -161,6 +167,11 @@ export const DEFAULT_SETTINGS: Settings = {
     validityMonths: 24,
   },
   tieredDiscount: { enabled: false, minItems: 2, percentOff: 10 },
+  // 30 = DEFAULT_SALE_ANNOUNCEMENT_DAYS uit lib/pricing. Bewust hier als getal
+  // herhaald en niet geïmporteerd: lib/pricing importeert dit bestand al, en een
+  // import terug zou een cyclus geven waarbij DEFAULT_SETTINGS bij module-init
+  // een half-geladen constante ziet.
+  saleAnnouncementDays: num(process.env.GENTS_SALE_ANNOUNCEMENT_DAYS, 30),
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
     dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 499), // S-pakket heenzending, ex toeslagen (eigen DHL-contract)

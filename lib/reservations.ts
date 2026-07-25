@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { reservations } from "@/db/schema";
 import { reserveOrderStock, releaseOrderHolds } from "@/lib/store-reserve";
 import { availableInStore } from "@/lib/store-core";
-import { createOrder, finalizeRegisterPaidOrder, type CheckoutContact, type CheckoutItem } from "@/lib/orders";
+import { createOrder, markRegisterPaid, confirmAndPlan, paymentRefForOrderNumber, type CheckoutContact, type CheckoutItem } from "@/lib/orders";
 import { getReservationHoldDays } from "@/lib/reservation-config";
 
 /**
@@ -184,11 +184,29 @@ export function reservationAmountCents(lines: ReservationLine[]): number {
  * `finalizeRegisterPaidOrder` markeert betaald + plant de fulfilment (geen Mollie;
  * de betaling liep al via de reserverings-betaallink).
  */
+/**
+ * Bevestigen + inplannen nog eens aanbieden voor een reservering die al is omgezet.
+ * Kent de order alleen bij ordernummer, dus eerst de betaalreferentie opzoeken.
+ * Geen ref (order handmatig verwijderd o.i.d.) → niets te doen.
+ */
+async function hervatBevestigenEnPlannen(orderNumber: string): Promise<void> {
+  const ref = orderNumber ? await paymentRefForOrderNumber(orderNumber) : null;
+  if (ref) await confirmAndPlan(ref);
+}
+
 export async function convertReservationToOrder(reservationId: string): Promise<{ ok: boolean; orderNumber?: string; alreadyDone?: boolean; error?: string }> {
   const db = getDb();
   const [r] = await db.select().from(reservations).where(eq(reservations.id, reservationId)).limit(1);
   if (!r) return { ok: false, error: "Reservering niet gevonden." };
-  if (r.status === "converted" || r.convertedOrderId) return { ok: true, orderNumber: r.convertedOrderId, alreadyDone: true };
+  if (r.status === "converted" || r.convertedOrderId) {
+    // Al omgezet — maar dit ís het retry-pad. Kwam de webhook hier terug omdat de
+    // bevestiging of het inplannen de vorige keer faalde, dan moeten die stappen
+    // alsnog gebeuren. Beide claimen zichzelf, dus wat al gelukt is wordt niet
+    // herhaald; wat openstaat wordt opnieuw geprobeerd. Zonder dit zou een order
+    // met een mislukte mail nooit meer een tweede kans krijgen.
+    await hervatBevestigenEnPlannen(r.convertedOrderId);
+    return { ok: true, orderNumber: r.convertedOrderId, alreadyDone: true };
+  }
   const lines = (Array.isArray(r.lines) ? r.lines : []) as ReservationLine[];
   if (!lines.length) return { ok: false, error: "Reservering zonder regels." };
 
@@ -229,7 +247,17 @@ export async function convertReservationToOrder(reservationId: string): Promise<
     await db.update(reservations).set({ status: prevStatus, updatedAt: new Date() }).where(eq(reservations.id, reservationId)).catch(() => {});
     return { ok: false, error: e instanceof Error ? e.message : "Order kon niet aangemaakt worden." };
   }
-  await finalizeRegisterPaidOrder(order.id);
+  // VOLGORDE IS KRITIEK. De order bestaat en is betaald — daarmee ís de reservering
+  // omgezet, en dat feit moet vastliggen vóór er nog iets kan misgaan. Stond het
+  // afvinken ná bevestigen-en-inplannen, dan zou één mislukte bevestigingsmail de
+  // reservering op "converting" laten staan; de Mollie-retry ziet dan een niet-omgezette
+  // reservering en maakt een TWEEDE betaalde order voor dezelfde betaling.
+  const paymentRef = await markRegisterPaid(order.id);
   await markReservationConverted(reservationId, order.orderNumber);
+  // Pas hierna bevestigen + inplannen. Beide stappen claimen zichzelf en zijn dus
+  // veilig opnieuw uit te voeren; gooit er een, dan geeft de webhook 500 en probeert
+  // Mollie het opnieuw — en die retry komt hieronder langs de "al omgezet"-tak, die
+  // exact dezelfde twee stappen nog eens aanbiedt zonder een order bij te maken.
+  await confirmAndPlan(paymentRef);
   return { ok: true, orderNumber: order.orderNumber };
 }

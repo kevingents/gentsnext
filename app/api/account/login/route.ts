@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { issueMagicToken, magicLinkThrottled } from "@/lib/account";
 import { getSiteUrl } from "@/lib/site-url";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
-import { brandedEmailHtml } from "@/lib/email";
+import { brandedEmailHtml, mailT } from "@/lib/email";
+import { getLocale } from "@/lib/locale-server";
+import { localizedPath } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,10 @@ export const dynamic = "force-dynamic";
  * Vraagt een magic-login-link aan. Stuurt de link per e-mail (Resend) als dat
  * geconfigureerd is; anders (dev) geven we de link in de respons terug zodat
  * de flow testbaar is zonder e-mailinfra.
+ *
+ * De mail volgt de taal van de bezoeker: de middleware slaat /api over, dus
+ * getLocale() leest hier de locale-cookie die diezelfde middleware op elke
+ * /en-, /de-… pagina zet.
  */
 export async function POST(req: Request) {
   // Per-IP backstop: de per-e-mail-throttle is te omzeilen door adres-rotatie
@@ -40,26 +46,33 @@ export async function POST(req: Request) {
   }
 
   const { rawToken } = await issueMagicToken(email);
+  const locale = await getLocale();
   // next mag alleen een interne (relatieve) pad zijn — geen open redirect.
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "";
+  // Zonder next landt de verify-route op /account; voor een anderstalige
+  // bezoeker sturen we 'm naar de eigen taalversie (/en/account), zodat de mail
+  // én de bestemming dezelfde taal spreken.
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : localizedPath("/account", locale);
   const link = `${getSiteUrl()}/api/account/verify?token=${encodeURIComponent(rawToken)}${safeNext ? `&next=${encodeURIComponent(safeNext)}` : ""}`;
 
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM;
   if (apiKey && from) {
     try {
+      const t = await mailT(locale);
       await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           from,
           to: [email],
-          subject: "Je inloglink voor GENTS",
+          subject: t("mail.login.subject"),
           html: brandedEmailHtml({
-            heading: "Inloggen bij GENTS",
-            bodyHtml: "<p style=\"margin:0 0 10px\">Klik op de knop hieronder om in te loggen op je account. De link is <strong>30 minuten</strong> geldig en werkt één keer.</p><p style=\"margin:0\">Zo heb je je bestellingen, bewaarde maten, spaarpunten en favorieten meteen bij de hand.</p>",
-            cta: { label: "Inloggen", href: link },
-            footnote: "Heb je dit niet aangevraagd? Dan kun je deze e-mail veilig negeren — er gebeurt niets.",
+            heading: t("mail.login.heading"),
+            bodyHtml: `<p style="margin:0 0 10px">${t("mail.login.body1")}</p><p style="margin:0">${t("mail.login.body2")}</p>`,
+            cta: { label: t("common.login"), href: link },
+            footnote: t("mail.login.footnote"),
+            locale,
+            t,
           }),
         }),
       });

@@ -4,7 +4,8 @@ import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
 import { parseCare, type CareItem } from "@/lib/care";
 import { getRecommendations, getOrderCrossSell, type ProductCardData } from "@/lib/catalog";
-import { sendOrderConfirmation } from "@/lib/email";
+import { sendOrderConfirmation, emailConfigured } from "@/lib/email";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n";
 import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
@@ -24,8 +25,22 @@ import { reserveOrderStock, releaseOrderHolds, renewOrderHolds, WEB_POOL, type R
 
 export type DeliveryMethod = "standard" | "express" | "pickup";
 
+/**
+ * Fout met een melding die de KLANT mag lezen (en die 'm verder helpt: code
+ * verwijderen, wagen verversen, ander land kiezen). Waarom een eigen klasse:
+ * de checkout-route toonde tot nu toe élke `e.message` één-op-één in de foutbalk,
+ * dus ook een rauwe Postgres-melding met kolomnamen. Met deze markering weet de
+ * route het verschil tussen "dit moet de klant zien" en "dit hoort in het log".
+ */
+export class CheckoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckoutError";
+  }
+}
+
 /** Gegooid wanneer de voorraad-gate een order weigert (net uitverkocht). */
-export class OutOfStockError extends Error {
+export class OutOfStockError extends CheckoutError {
   titles: string[];
   skus: string[];
   constructor(titles: string[], skus: string[] = []) {
@@ -35,6 +50,103 @@ export class OutOfStockError extends Error {
     this.skus = skus;
   }
 }
+
+/**
+ * Expliciete kolomlijsten voor de order-leespaden.
+ *
+ * Waarom niet `db.select().from(orders)`: drizzle schrijft bij een kale select
+ * ÁLLE kolommen uit het schema in de SQL. Loopt het schema één kolom voor op de
+ * database (nieuwe migratie nog niet gedraaid op prod — bewuste afspraak hier,
+ * builds migreren niet automatisch), dan faalt daarmee in één klap élk leespad:
+ * bevestigingsmail, fulfilment-planning, orderpagina en orderstatus. Met een
+ * vaste lijst kan een nieuwe schemakolom deze paden niet meer platleggen; wie de
+ * kolom nodig heeft, voegt 'm hier bewust toe.
+ */
+const orderColumns = {
+  id: orders.id,
+  orderNumber: orders.orderNumber,
+  status: orders.status,
+  customerId: orders.customerId,
+  accessToken: orders.accessToken,
+  email: orders.email,
+  firstName: orders.firstName,
+  lastName: orders.lastName,
+  phone: orders.phone,
+  street: orders.street,
+  houseNumber: orders.houseNumber,
+  postalCode: orders.postalCode,
+  city: orders.city,
+  country: orders.country,
+  locale: orders.locale,
+  companyName: orders.companyName,
+  vatNumber: orders.vatNumber,
+  deliveryMethod: orders.deliveryMethod,
+  pickupStore: orders.pickupStore,
+  soldByStore: orders.soldByStore,
+  voucherCode: orders.voucherCode,
+  discountCents: orders.discountCents,
+  giftcardCode: orders.giftcardCode,
+  giftcardCents: orders.giftcardCents,
+  subtotalCents: orders.subtotalCents,
+  shippingCents: orders.shippingCents,
+  totalCents: orders.totalCents,
+  currency: orders.currency,
+  molliePaymentId: orders.molliePaymentId,
+  paymentStatus: orders.paymentStatus,
+  paidAt: orders.paidAt,
+  srsPushedAt: orders.srsPushedAt,
+  fulfillmentPlan: orders.fulfillmentPlan,
+  fulfillmentStatus: orders.fulfillmentStatus,
+  confirmationSentAt: orders.confirmationSentAt,
+  createdAt: orders.createdAt,
+  updatedAt: orders.updatedAt,
+} as const;
+
+/** Alles wat de bevestigingsmail + de puntenbijschrijving nodig hebben — niet meer. */
+const orderMailColumns = {
+  id: orders.id,
+  orderNumber: orders.orderNumber,
+  email: orders.email,
+  firstName: orders.firstName,
+  street: orders.street,
+  houseNumber: orders.houseNumber,
+  postalCode: orders.postalCode,
+  city: orders.city,
+  subtotalCents: orders.subtotalCents,
+  shippingCents: orders.shippingCents,
+  discountCents: orders.discountCents,
+  giftcardCents: orders.giftcardCents,
+  totalCents: orders.totalCents,
+  locale: orders.locale,
+  customerId: orders.customerId,
+  status: orders.status,
+  paidAt: orders.paidAt,
+  createdAt: orders.createdAt,
+} as const;
+
+/** Alles wat het allocatieplan nodig heeft — niet meer. */
+const orderFulfillmentColumns = {
+  id: orders.id,
+  orderNumber: orders.orderNumber,
+  deliveryMethod: orders.deliveryMethod,
+  pickupStore: orders.pickupStore,
+  country: orders.country,
+  postalCode: orders.postalCode,
+} as const;
+
+const orderLineColumns = {
+  id: orderLines.id,
+  orderId: orderLines.orderId,
+  sku: orderLines.sku,
+  productHandle: orderLines.productHandle,
+  title: orderLines.title,
+  size: orderLines.size,
+  color: orderLines.color,
+  unitPriceCents: orderLines.unitPriceCents,
+  quantity: orderLines.quantity,
+  groupId: orderLines.groupId,
+  roleLabel: orderLines.roleLabel,
+} as const;
 
 export type CheckoutItem = {
   sku: string;
@@ -152,7 +264,12 @@ export async function createOrder(
   giftcardCode = "",
   pickupStore = "",
   soldByStore = "",
-  customerId: string | null = null
+  customerId: string | null = null,
+  // Taal van de klant op het moment van bestellen. Leggen we hier vast omdat de
+  // bevestigingsmail pas ná de betaling vertrekt (webhook) en de statusmails nog
+  // veel later uit het back-office — die kennen alléén de order, niet de sessie.
+  // Kassa-/winkelorders geven niets mee en blijven dus Nederlands.
+  locale: Locale = DEFAULT_LOCALE
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -164,12 +281,12 @@ export async function createOrder(
   const resolvedSkus = new Set(lines.map((l) => l.sku));
   const missingSkus = requestedSkus.filter((s) => !resolvedSkus.has(s));
   if (missingSkus.length) throw new OutOfStockError(missingSkus, missingSkus);
-  if (!lines.length) throw new Error("Geen geldige producten in de bestelling.");
+  if (!lines.length) throw new CheckoutError("Geen geldige producten in de bestelling.");
 
   // Onbekend land zou stil het NL-tarief krijgen — liever weigeren dan een
   // order aannemen die we niet tegen het juiste tarief kunnen verzenden.
   if (deliveryMethod !== "pickup" && contact.country && !isKnownCountry(contact.country)) {
-    throw new Error("We bezorgen (nog) niet in dit land. Kies een ander land of haal je bestelling op in de winkel.");
+    throw new CheckoutError("We bezorgen (nog) niet in dit land. Kies een ander land of haal je bestelling op in de winkel.");
   }
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
@@ -184,7 +301,7 @@ export async function createOrder(
     } else {
       // Voucher ongeldig geworden tussen 'toepassen' en 'betalen' → NIET stil doorgaan
       // voor het (hogere) bedrag zonder korting; de klant moet de wagen verversen.
-      throw new Error("De kortingscode is niet meer geldig — ververs je winkelwagen en probeer opnieuw.");
+      throw new CheckoutError("De kortingscode is niet meer geldig — ververs je winkelwagen en probeer opnieuw.");
     }
   }
   // Staffelkorting (instelbaar, default uit): vanaf N artikelen X% op 't subtotaal.
@@ -231,7 +348,7 @@ export async function createOrder(
       // Zelfde regel als de voucher hierboven: een bon die tussen 'toepassen'
       // en 'betalen' ongeldig werd of leeg raakte (saldo deelt met de kassa!)
       // mag NOOIT stil vervallen — anders int Mollie meer dan de knop beloofde.
-      throw new Error("De cadeaukaart is niet meer geldig of heeft geen saldo meer — verwijder 'm en probeer opnieuw.");
+      throw new CheckoutError("De cadeaukaart is niet meer geldig of heeft geen saldo meer — verwijder 'm en probeer opnieuw.");
     }
   }
   const totalCents = Math.max(0, totalBeforeGiftcard - giftcardCents);
@@ -254,6 +371,7 @@ export async function createOrder(
       postalCode: contact.postalCode.trim(),
       city: contact.city.trim(),
       country: (contact.country || "NL").trim(),
+      locale: isLocale(locale) ? locale : DEFAULT_LOCALE,
       companyName: (contact.companyName || "").trim(),
       vatNumber: (contact.vatNumber || "").trim(),
       deliveryMethod: method,
@@ -344,7 +462,7 @@ export async function createOrder(
     if (appliedCode && voucherConsumed) await releaseVoucher(appliedCode);
     await releaseOrderHolds(order.id);
     await db.delete(orders).where(eq(orders.id, order.id)); // cascade → orderLines
-    throw new Error(
+    throw new CheckoutError(
       !voucherConsumed
         ? "Deze kortingscode is net gebruikt of verlopen. Verwijder 'm en probeer opnieuw."
         : "Het cadeaubon-saldo is net gewijzigd. Probeer het opnieuw."
@@ -363,8 +481,7 @@ export async function finalizeGiftcardCoveredOrder(orderId: string): Promise<voi
   const synthetic = `gift-${orderId}`;
   await attachMolliePayment(orderId, synthetic);
   await applyPaymentStatus(synthetic, "paid");
-  await sendOrderConfirmationOnce(synthetic);
-  await planAndPushFulfillmentOnce(synthetic);
+  await confirmAndPlan(synthetic);
 }
 
 /**
@@ -376,11 +493,49 @@ export async function finalizeGiftcardCoveredOrder(orderId: string): Promise<voi
  * dubbeltellen in web-omzet).
  */
 export async function finalizeRegisterPaidOrder(orderId: string): Promise<void> {
+  await confirmAndPlan(await markRegisterPaid(orderId));
+}
+
+/**
+ * Alleen de administratieve helft van finalizeRegisterPaidOrder: order op betaald
+ * zetten en de synthetische betaalreferentie teruggeven. Apart, omdat een aanroeper
+ * soms iets tussen "betaald" en "bevestigen + inplannen" moet doen — de
+ * reserveringsconversie moet de reservering eerst afvinken, anders maakt een retry
+ * na een mislukte mail een tweede betaalde order.
+ */
+export async function markRegisterPaid(orderId: string): Promise<string> {
   const synthetic = `register-${orderId}`;
   await attachMolliePayment(orderId, synthetic);
   await applyPaymentStatus(synthetic, "paid");
-  await sendOrderConfirmationOnce(synthetic);
-  await planAndPushFulfillmentOnce(synthetic);
+  return synthetic;
+}
+
+/**
+ * Bevestigen én plannen na een geslaagde betaling — gebruikt door álle
+ * afrondpaden: de Mollie- en Worldline-webhooks, de Worldline-terugkeerpagina,
+ * en de paden zónder webhook (cadeaubon-order, kassa-order). De twee stappen
+ * staan bewust niet aan elkaar geketend: ze
+ * mogen elkaar niet gijzelen. Ligt de mailer plat, dan moet de order tóch
+ * ingepland worden (anders staat 'ie in geen enkele piklijst); mislukt het
+ * plannen, dan moet de klant z'n bevestiging tóch krijgen. Beide claims zijn
+ * na een fout weer vrijgegeven,
+ * dus een latere retry pakt het openstaande deel gewoon op. De eerste fout gaat
+ * daarna alsnog omhoog zodat de aanroeper 'm kan loggen.
+ */
+export async function confirmAndPlan(paymentRef: string): Promise<void> {
+  let eersteFout: unknown;
+  // Na elkaar (één rij, één schrijver tegelijk) maar niet aan elkaar geketend.
+  try {
+    await sendOrderConfirmationOnce(paymentRef);
+  } catch (e) {
+    eersteFout = e;
+  }
+  try {
+    await planAndPushFulfillmentOnce(paymentRef);
+  } catch (e) {
+    if (eersteFout === undefined) eersteFout = e;
+  }
+  if (eersteFout !== undefined) throw eersteFout;
 }
 
 /** Geeft de cadeaubon van een order terug wanneer de betaling mislukt/verloopt. */
@@ -521,6 +676,26 @@ export async function paymentRefForOrderNumber(orderNumber: string): Promise<str
  * Verstuurt de orderbevestiging precies één keer (idempotent t.o.v. dubbele
  * webhooks). Claimt eerst de mail via een conditionele UPDATE, daarna pas
  * versturen — zo wint bij een race maar één webhook-call.
+ *
+ * De claim is VRIJGEEFBAAR bij elke fout. Waarom dat moet: de claim zet
+ * confirmation_sent_at vóór er ook maar iets verstuurd is. Ging het daarna mis
+ * (db traag, Resend onbereikbaar, een kolom die nog niet bestaat), dan matchte
+ * elke volgende poging — óók Mollie's eigen retries — de `is null`-voorwaarde niet
+ * meer en keerde stil terug: de klant had betaald en kreeg NOOIT een bevestiging,
+ * ook niet nadat de storing voorbij was.
+ *
+ * Waarom deze volgorde geen dubbele mail kan veroorzaken:
+ *  1. Alles wat kán falen (order lezen, punten, regels, cross-sell, taalkeuze)
+ *     staat VÓÓR de mailoproep. Een fout daar bewijst dat er niets verstuurd is
+ *     → claim vrijgeven is veilig.
+ *  2. `sendOrderConfirmation` retourneert `false` alléén als de mailer zelf heeft
+ *     vastgesteld dat er niets de deur uit is (Resend antwoordde met een fout) →
+ *     ook dan veilig vrijgeven.
+ *  3. Gooit de mailoproep zelf (netwerkfout midden in het verzoek), dan is het
+ *     ONBEKEND of Resend 'm al aannam. Dán houden we de claim juist vast — liever
+ *     één handmatige herzending dan twee bevestigingen naar dezelfde klant. Het
+ *     luide log hieronder is dat herstelpad (ordernummer staat erbij).
+ * Na een geslaagde verzending draait er niets meer dat kan gooien.
  */
 export async function sendOrderConfirmationOnce(molliePaymentId: string): Promise<void> {
   const db = getDb();
@@ -538,23 +713,61 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   if (!claimed.length) return; // al verstuurd of (nog) niet betaald
 
   const orderId = claimed[0].id;
-  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  // Spaarpunten bijschrijven voor een ingelogde klant (gast-orders krijgen ze bij
-  // account-koppeling via claimGuestData). Idempotent + non-fataal — nooit de
-  // bevestiging blokkeren.
-  if (order?.customerId) {
-    try {
-      await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status), paidAt: order.paidAt, createdAt: order.createdAt });
-    } catch (e) {
-      console.warn("[order] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
-    }
-  }
-  const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
-  const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
-  const ok = await sendOrderConfirmation(order, lines, recs);
-  if (!ok) {
-    // Niet verstuurd → claim terugdraaien zodat een volgende webhook het opnieuw probeert.
+  // Geen mailkanaal (preview/dev zonder Resend-sleutel): claim meteen weer vrij en
+  // klaar. Zonder deze uitzondering zou de webhook eeuwig 500'en op iets wat een
+  // retry nooit oplost.
+  if (!emailConfigured()) {
     await db.update(orders).set({ confirmationSentAt: null }).where(eq(orders.id, orderId));
+    return;
+  }
+
+  // Zolang dit true is, is bewijsbaar dat er niets verstuurd is → claim mag terug.
+  let nietsVerstuurd = true;
+  try {
+    const [order] = await db.select(orderMailColumns).from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!order) throw new Error(`Order ${orderId} niet gevonden na claim.`);
+    // Spaarpunten bijschrijven voor een ingelogde klant (gast-orders krijgen ze bij
+    // account-koppeling via claimGuestData). Idempotent + non-fataal — nooit de
+    // bevestiging blokkeren.
+    if (order.customerId) {
+      try {
+        await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status), paidAt: order.paidAt, createdAt: order.createdAt });
+      } catch (e) {
+        console.warn("[order] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
+      }
+    }
+    const lines = await db.select(orderLineColumns).from(orderLines).where(eq(orderLines.orderId, orderId));
+    const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
+    // De webhook kent de klantsessie niet meer — de taal reist mee op de order.
+    const locale: Locale = isLocale(String(order.locale || "")) ? (order.locale as Locale) : DEFAULT_LOCALE;
+
+    nietsVerstuurd = false; // vanaf hier is verzending onzeker
+    const ok = await sendOrderConfirmation(order, lines, recs, locale);
+    if (!ok) {
+      // De mailer zegt zelf: niet verstuurd. Claim mag terug, en we gooien door
+      // zodat de betaalprovider het straks opnieuw aanbiedt.
+      nietsVerstuurd = true;
+      throw new Error(`Orderbevestiging ${order.orderNumber} niet geaccepteerd door de mailer.`);
+    }
+  } catch (e) {
+    if (nietsVerstuurd) {
+      // Lukt zelfs het vrijgeven niet (database plat), dan mag dát de oorspronkelijke
+      // fout niet verdringen — die zegt wat er écht aan de hand is.
+      await db
+        .update(orders)
+        .set({ confirmationSentAt: null })
+        .where(eq(orders.id, orderId))
+        .catch((vrijgaveFout) =>
+          console.error("[order] claim bevestiging vrijgeven mislukt; order-id:", orderId, vrijgaveFout),
+        );
+    } else {
+      console.error(
+        "[order] bevestiging ONZEKER — claim blijft staan om dubbele mail te voorkomen; order-id:",
+        orderId,
+        e
+      );
+    }
+    throw e; // webhook → 500 → betaalprovider probeert het opnieuw
   }
 }
 
@@ -579,10 +792,18 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
   if (!claimed.length) return; // al gepland of (nog) niet betaald
 
   const orderId = claimed[0].id;
-  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
 
+  // Álles ná de claim in de try. De select van order + regels stond hiervóór
+  // buiten de try: viel dáár iets om, dan bleef een betaalde order eeuwig op
+  // 'planning' hangen — nooit gealloceerd, in geen enkele piklijst, nooit
+  // verzonden. Plannen is puur intern en volledig herhaalbaar (geen mail, geen
+  // externe push), dus de claim mag bij ELKE fout terug naar 'pending': een
+  // dubbele poging levert hooguit hetzelfde plan opnieuw op.
   try {
+    const [order] = await db.select(orderFulfillmentColumns).from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!order) throw new Error(`Order ${orderId} niet gevonden na claim.`);
+    const lines = await db.select(orderLineColumns).from(orderLines).where(eq(orderLines.orderId, orderId));
+
     // Afhalen in winkel: geen allocatie/SRS — het plan is één zending op de
     // gekozen afhaalwinkel. Zo reserveert de core de voorraad dáár (kassa ziet 't)
     // en verschijnt de order als afhaalorder voor die winkel.
@@ -641,9 +862,17 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
       .where(eq(orders.id, orderId));
     await releaseOrderHolds(orderId); // plan staat → afgeleide reservering neemt over
   } catch (e) {
-    console.error("[fulfillment] plan/push faalde voor", order.orderNumber, e);
-    // Terug naar 'pending' zodat een volgende webhook het opnieuw probeert.
-    await db.update(orders).set({ fulfillmentStatus: "pending" }).where(eq(orders.id, orderId));
+    console.error("[fulfillment] plan/push faalde voor order-id", orderId, e);
+    // Terug naar 'pending' zodat een volgende poging het opnieuw probeert. Faalt
+    // zelfs dát (db plat), dan blijft 'planning' staan — daarom gooien we óók door:
+    // de webhook geeft 500 en de betaalprovider biedt het opnieuw aan, i.p.v. het
+    // probleem stil weg te slikken met een 200.
+    await db
+      .update(orders)
+      .set({ fulfillmentStatus: "pending" })
+      .where(eq(orders.id, orderId))
+      .catch((err) => console.error("[fulfillment] claim vrijgeven mislukt voor order-id", orderId, err));
+    throw e;
   }
 }
 
@@ -656,11 +885,28 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
     .update(orders)
     .set({ status, updatedAt: sql`now()` })
     .where(eq(orders.id, orderId))
-    .returning();
+    // Expliciete RETURNING-lijst (alleen wat de statusmelding nodig heeft): een kale
+    // `.returning()` noemt élke schemakolom en breekt dus mee met elke nieuwe kolom.
+    .returning({
+      orderNumber: orders.orderNumber,
+      email: orders.email,
+      firstName: orders.firstName,
+      phone: orders.phone,
+      accessToken: orders.accessToken,
+      locale: orders.locale,
+    });
   if (!order) return false;
   const { notifyOrderStatus } = await import("@/lib/order-notify");
   await notifyOrderStatus(
-    { orderNumber: order.orderNumber, email: order.email, firstName: order.firstName, phone: order.phone, accessToken: order.accessToken },
+    {
+      orderNumber: order.orderNumber,
+      email: order.email,
+      firstName: order.firstName,
+      phone: order.phone,
+      accessToken: order.accessToken,
+      // Statusmail in de taal waarin besteld is (zie orders.locale).
+      locale: order.locale,
+    },
     status
   );
   return true;
@@ -669,14 +915,14 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
 /** Admin: recente orders voor het beheeroverzicht. */
 export async function listRecentOrders(limit = 50) {
   const db = getDb();
-  return db.select().from(orders).orderBy(sql`created_at desc`).limit(limit);
+  return db.select(orderColumns).from(orders).orderBy(sql`created_at desc`).limit(limit);
 }
 
 /** Admin: operationele orders die nog actie vragen (excl. geïmporteerde historie). */
 export async function listOperationalOrders(limit = 40) {
   const db = getDb();
   return db
-    .select()
+    .select(orderColumns)
     .from(orders)
     .where(sql`status in ('paid','open','shipped','ready_pickup') and fulfillment_status <> 'imported'`)
     .orderBy(sql`created_at desc`)
@@ -685,10 +931,10 @@ export async function listOperationalOrders(limit = 40) {
 
 export async function getOrderByNumber(orderNumber: string) {
   const db = getDb();
-  const rows = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);
+  const rows = await db.select(orderColumns).from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);
   const order = rows[0];
   if (!order) return null;
-  const lines = await db.select().from(orderLines).where(eq(orderLines.orderId, order.id));
+  const lines = await db.select(orderLineColumns).from(orderLines).where(eq(orderLines.orderId, order.id));
   return { order, lines };
 }
 

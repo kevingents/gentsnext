@@ -1,6 +1,7 @@
 import { inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { priceHistory } from "@/db/schema";
+import { getSettings } from "@/lib/settings";
 
 /**
  * Prijsweergave volgens de Omnibus-richtlijn (Besluit prijsaanduiding, art. 5a):
@@ -42,18 +43,63 @@ export function tieredDiscountCents(itemCount: number, subtotalCents: number, cf
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Hoe lang een prijsvermindering "aangekondigd" mag blijven: standaard 30 dagen
+ * ná de ingangsdatum van de huidige (lagere) prijs. Daarna vervalt de
+ * doorgestreepte "van"-prijs en de sale-badge, óók als de prijs feitelijk
+ * verlaagd is.
+ *
+ * Waarom: de Omnibus-richtlijn gaat over het AANKONDIGEN van een prijsvermindering.
+ * Een prijs die al maanden de gewone verkoopprijs is, is geen aankondiging meer —
+ * dan is de oude prijs simpelweg niet langer relevant en zou een blijvende
+ * doorgestreepte prijs de klant een korting voorspiegelen die niet bestaat.
+ * Zonder deze grens bleef één prijsverlaging tot in lengte van jaren "SALE".
+ *
+ * Dit is de DEFAULT; de werkelijke grens staat als `saleAnnouncementDays` in de
+ * instellingen-store en is via /account/instellingen te bewerken — geen
+ * codewijziging + redeploy nodig. De 30 sluit bewust aan op het
+ * referentievenster hierboven zodat er één begrijpelijk getal in het spel is.
+ */
+export const DEFAULT_SALE_ANNOUNCEMENT_DAYS = 30;
+/** Grenzen voor de instelling: minstens één dag, hooguit twee jaar. */
+export const SALE_ANNOUNCEMENT_DAYS_MIN = 1;
+export const SALE_ANNOUNCEMENT_DAYS_MAX = 730;
+
+/**
+ * Onzin uit de instelling (0, negatief, 5000, leeg, tekst) mag de sale-weergave
+ * nooit kapotmaken: klem naar het toegestane bereik, val bij niet-getallen terug
+ * op de default. De API weigert zulke waarden al bij het opslaan; dit is het
+ * vangnet voor rijen die er ooit langs zijn gekomen.
+ */
+export function clampSaleAnnouncementDays(days: unknown): number {
+  const n = Math.round(Number(days));
+  if (!Number.isFinite(n)) return DEFAULT_SALE_ANNOUNCEMENT_DAYS;
+  return Math.max(SALE_ANNOUNCEMENT_DAYS_MIN, Math.min(SALE_ANNOUNCEMENT_DAYS_MAX, n));
+}
+
 type HistoryRow = { variantId: string; priceCents: number; validFrom: Date };
 
 /**
  * Berekent per variant de Omnibus-referentieprijs: de laagste prijs die gold
  * in de 30 dagen vóór de ingangsdatum van de huidige prijs. Retourneert alleen
- * een waarde als die referentie HOGER is dan de huidige prijs (= echte korting).
+ * een waarde als die referentie HOGER is dan de huidige prijs (= echte korting)
+ * ÉN de huidige prijs zelf nog geen `announcementDays` oud is.
  *
  * Opeenvolgende rijen met dezelfde prijs worden eerst samengevouwen, zodat een
  * herimport die een no-op-rij toevoegt het vensteranker (de ingangsdatum van
  * de huidige prijs) niet kan verschuiven.
+ *
+ * Blijft een PURE functie: `now` en `announcementDays` gaan erin, er wordt niets
+ * opgehaald. `now` is injecteerbaar zodat de rekenkern testbaar is zonder aan de
+ * klok te hoeven zitten; in productie blijft het gewoon "nu". De ingestelde
+ * termijn komt van getReferencePrices (die de instellingen leest).
  */
-export function computeReferencePrices(rows: HistoryRow[]): Map<string, number> {
+export function computeReferencePrices(
+  rows: HistoryRow[],
+  now: Date = new Date(),
+  announcementDays: number = DEFAULT_SALE_ANNOUNCEMENT_DAYS
+): Map<string, number> {
+  const announcementMs = clampSaleAnnouncementDays(announcementDays) * 24 * 60 * 60 * 1000;
   const byVariant = new Map<string, HistoryRow[]>();
   for (const row of rows) {
     const list = byVariant.get(row.variantId) || [];
@@ -75,6 +121,9 @@ export function computeReferencePrices(rows: HistoryRow[]): Map<string, number> 
 
     const current = collapsed[collapsed.length - 1];
     const windowEnd = current.validFrom.getTime();
+    // Aankondiging uitgewerkt: de huidige prijs geldt al langer dan de drempel en
+    // is daarmee gewoon de normale prijs geworden — geen "van"-prijs, geen badge.
+    if (now.getTime() - windowEnd > announcementMs) continue;
     const windowStart = windowEnd - THIRTY_DAYS_MS;
     let lowest: number | null = null;
     for (let i = 0; i < collapsed.length - 1; i++) {
@@ -95,17 +144,27 @@ export function computeReferencePrices(rows: HistoryRow[]): Map<string, number> 
  * Bewust ZONDER datumfilter: een prijsperiode die lang geleden begon kan het
  * 30-dagenvenster nog steeds raken, en prijsrijen per variant zijn schaars
  * (alleen echte prijswijzigingen) — volledig ophalen is correct én goedkoop.
+ *
+ * Dit is de plek waar de INGESTELDE sale-vervaltermijn de pure rekenkern in
+ * gaat. Bewust hier en niet bij de aanroepers (PDP-pagina, catalogus): die
+ * halen de instellingen elders in hun bestand op, in een andere Promise.all —
+ * de waarde daarvandaan doorgeven zou twee bestanden herbedraden voor één
+ * getal. getSettings() heeft een cache van 30 sec, dus dit kost geen extra
+ * DB-round-trip per productpagina.
  */
 export async function getReferencePrices(variantIds: string[]): Promise<Map<string, number>> {
   if (!variantIds.length) return new Map();
   const db = getDb();
-  const rows = await db
-    .select({
-      variantId: priceHistory.variantId,
-      priceCents: priceHistory.priceCents,
-      validFrom: priceHistory.validFrom,
-    })
-    .from(priceHistory)
-    .where(inArray(priceHistory.variantId, variantIds));
-  return computeReferencePrices(rows);
+  const [rows, settings] = await Promise.all([
+    db
+      .select({
+        variantId: priceHistory.variantId,
+        priceCents: priceHistory.priceCents,
+        validFrom: priceHistory.validFrom,
+      })
+      .from(priceHistory)
+      .where(inArray(priceHistory.variantId, variantIds)),
+    getSettings().catch(() => null), // instellingen weg → gewoon de default-termijn
+  ]);
+  return computeReferencePrices(rows, new Date(), settings?.saleAnnouncementDays);
 }

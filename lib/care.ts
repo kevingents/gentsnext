@@ -25,7 +25,24 @@ export type CareKey =
   | "dryflat" | "dryline" | "nowring"
   | "noiron" | "ironlow" | "ironmid"
   | "dryclean";
-export type CareItem = { key: CareKey; label: string };
+/**
+ * `label` = de Nederlandse brontekst (vangnet), `labelKey` = de sleutel in de
+ * vertaalrail. Het Onderhoud-blok stond onder een Engelse/Duitse kop nog vol
+ * Nederlandse labels; de UI rendert daarom via careLabel(item, t).
+ */
+export type CareItem = { key: CareKey; label: string; labelKey: string };
+
+/** Locale-gebonden vertaalfunctie (uit getT(locale) — de locale zit dus in `t`). */
+export type CareTranslate = (key: string) => string;
+
+/**
+ * t() geeft de sleutel zélf terug zolang die nog niet in de catalogus staat.
+ * In dat geval tonen we de Nederlandse brontekst i.p.v. "care.label.wash30".
+ */
+export function trOr(t: CareTranslate | undefined, key: string, nl: string): string {
+  const v = t?.(key);
+  return v && v !== key ? v : nl;
+}
 
 /** "Polyester 58%, Viscose 25%, Wol 15%" of "100% Katoen" → [{pct, material}]. */
 export function parseComposition(raw: string | undefined | null): Composition[] {
@@ -49,6 +66,35 @@ function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
+/**
+ * Vezelnamen uit SRS zijn Nederlands ("Katoen", "Scheerwol") en stonden zo ook
+ * onder de Engelse kop "Material". Alleen de namen die écht anders zijn in een
+ * andere taal staan hier; onbekende/samengestelde namen tonen we ongewijzigd.
+ */
+const MATERIAL_LABELS: Record<string, { key: string; nl: string }> = {
+  wol: { key: "material.wol", nl: "Wol" },
+  scheerwol: { key: "material.scheerwol", nl: "Scheerwol" },
+  lamswol: { key: "material.lamswol", nl: "Lamswol" },
+  merino: { key: "material.merino", nl: "Merino" },
+  kasjmier: { key: "material.kasjmier", nl: "Kasjmier" },
+  katoen: { key: "material.katoen", nl: "Katoen" },
+  zijde: { key: "material.zijde", nl: "Zijde" },
+  linnen: { key: "material.linnen", nl: "Linnen" },
+  leer: { key: "material.leer", nl: "Leer" },
+  leder: { key: "material.leder", nl: "Leder" },
+  suède: { key: "material.suede", nl: "Suède" },
+  suede: { key: "material.suede", nl: "Suède" },
+  elastaan: { key: "material.elastaan", nl: "Elastaan" },
+  acryl: { key: "material.acryl", nl: "Acryl" },
+  bamboe: { key: "material.bamboe", nl: "Bamboe" },
+};
+
+/** Vezelnaam in de taal van `t`; onbekende namen blijven staan zoals ze zijn. */
+export function materialLabel(name: string, t?: CareTranslate): string {
+  const hit = MATERIAL_LABELS[name.trim().toLowerCase()];
+  return hit ? trOr(t, hit.key, hit.nl) : name;
+}
+
 export type MaterialCat =
   | "wol" | "kasjmier" | "katoen" | "zijde" | "linnen" | "leer"
   | "polyester" | "viscose" | "elastaan" | "nylon" | "acryl" | "overig";
@@ -70,42 +116,71 @@ export function materialCategory(name: string): MaterialCat {
   return "overig";
 }
 
+/**
+ * Labeltekst per care-symbool met de bijbehorende sleutel in de vertaalrail.
+ * `easycare` deelt het strijk-icoon (ironlow) maar heeft een eigen tekst.
+ */
+const CARE_LABELS = {
+  handwash: { key: "care.label.handwash", nl: "Handwas" },
+  nowash: { key: "care.label.nowash", nl: "Niet wassen" },
+  wash60: { key: "care.label.wash60", nl: "Wassen 60°C" },
+  wash40: { key: "care.label.wash40", nl: "Wassen 40°C" },
+  wash30: { key: "care.label.wash30", nl: "Wassen 30°C" },
+  nobleach: { key: "care.label.nobleach", nl: "Niet bleken" },
+  notumble: { key: "care.label.notumble", nl: "Niet in de droger" },
+  tumblelow: { key: "care.label.tumblelow", nl: "Droger lage temp." },
+  dryflat: { key: "care.label.dryflat", nl: "Liggend drogen" },
+  dryline: { key: "care.label.dryline", nl: "Aan de lijn drogen" },
+  nowring: { key: "care.label.nowring", nl: "Niet uitknijpen" },
+  noiron: { key: "care.label.noiron", nl: "Niet strijken" },
+  ironmid: { key: "care.label.ironmid", nl: "Strijken middelhoog" },
+  ironlow: { key: "care.label.ironlow", nl: "Strijken lage temp." },
+  easycare: { key: "care.label.easycare", nl: "Strijkvrij — nauwelijks strijken" },
+  dryclean: { key: "care.label.dryclean", nl: "Professioneel reinigen" },
+} as const satisfies Record<string, { key: string; nl: string }>;
+type CareLabelId = keyof typeof CARE_LABELS;
+
+/** Vertaald label voor één care-item; valt terug op de NL-brontekst. */
+export function careLabel(item: CareItem, t?: CareTranslate): string {
+  return trOr(t, item.labelKey, item.label);
+}
+
 /** Leidt de belangrijkste care-symbolen af uit het wasvoorschrift + attributen. */
 export function parseCare(wasvoorschrift: string | undefined | null, attrs?: Record<string, unknown>): CareItem[] {
   const t = String(wasvoorschrift || "").toLowerCase();
   const items: CareItem[] = [];
-  const add = (key: CareKey, label: string) => {
-    if (!items.some((i) => i.key === key)) items.push({ key, label });
+  const add = (key: CareKey, id: CareLabelId) => {
+    if (!items.some((i) => i.key === key)) items.push({ key, label: CARE_LABELS[id].nl, labelKey: CARE_LABELS[id].key });
   };
   const has = (re: RegExp) => re.test(t);
   const drycleanOnly = has(/niet (in de )?(machine|hand)|was (leer|suède|suede) niet|stomerij|professioneel reinig|chemisch reinig/) && !has(/\b(30|40|60)\s*°/);
 
   // Wassen
-  if (has(/handwas|met de hand was|was.*met de hand/)) add("handwash", "Handwas");
-  else if (drycleanOnly) add("nowash", "Niet wassen");
-  else if (has(/\b60\s*°/)) add("wash60", "Wassen 60°C");
-  else if (has(/\b40\s*°/)) add("wash40", "Wassen 40°C");
-  else if (has(/\b30\s*°/)) add("wash30", "Wassen 30°C");
+  if (has(/handwas|met de hand was|was.*met de hand/)) add("handwash", "handwash");
+  else if (drycleanOnly) add("nowash", "nowash");
+  else if (has(/\b60\s*°/)) add("wash60", "wash60");
+  else if (has(/\b40\s*°/)) add("wash40", "wash40");
+  else if (has(/\b30\s*°/)) add("wash30", "wash30");
 
   // Bleken
-  if (has(/niet bleken|geen (chloor|bleek)|bleek niet|△\s*[x✕✗]/)) add("nobleach", "Niet bleken");
+  if (has(/niet bleken|geen (chloor|bleek)|bleek niet|△\s*[x✕✗]/)) add("nobleach", "nobleach");
 
   // Drogen (trommel)
-  if (has(/niet in de droger|geen (was)?droger|niet (machinaal|trommel) droog|◯\s*[x✕✗]|🌀\s*[x✕✗]/)) add("notumble", "Niet in de droger");
-  else if (has(/lage (temperatuur|stand).*droger|droger.*laag|trommeldrogen laag|drogen op lage/)) add("tumblelow", "Droger lage temp.");
+  if (has(/niet in de droger|geen (was)?droger|niet (machinaal|trommel) droog|◯\s*[x✕✗]|🌀\s*[x✕✗]/)) add("notumble", "notumble");
+  else if (has(/lage (temperatuur|stand).*droger|droger.*laag|trommeldrogen laag|drogen op lage/)) add("tumblelow", "tumblelow");
 
   // Drogen (vorm)
-  if (has(/plat (te )?drogen|liggend drogen|plat liggend|plat op/)) add("dryflat", "Liggend drogen");
-  else if (has(/aan de lijn|lijn drogen|hang.*drogen|aan de lucht drogen/)) add("dryline", "Aan de lijn drogen");
-  if (has(/niet (uit)?wringen|niet uitknijpen|niet hard uitknijpen/)) add("nowring", "Niet uitknijpen");
+  if (has(/plat (te )?drogen|liggend drogen|plat liggend|plat op/)) add("dryflat", "dryflat");
+  else if (has(/aan de lijn|lijn drogen|hang.*drogen|aan de lucht drogen/)) add("dryline", "dryline");
+  if (has(/niet (uit)?wringen|niet uitknijpen|niet hard uitknijpen/)) add("nowring", "nowring");
 
   // Strijken
-  if (has(/niet strijken|strijk.*niet|♨️?\s*[x✕✗]/)) add("noiron", "Niet strijken");
-  else if (has(/middel(warm|hoog|hoge)|150\s*°|2 stip/)) add("ironmid", "Strijken middelhoog");
-  else if (has(/lage temp.*strijk|strijk.*lage|1 stip|110\s*°|laag strijk/)) add("ironlow", "Strijken lage temp.");
+  if (has(/niet strijken|strijk.*niet|♨️?\s*[x✕✗]/)) add("noiron", "noiron");
+  else if (has(/middel(warm|hoog|hoge)|150\s*°|2 stip/)) add("ironmid", "ironmid");
+  else if (has(/lage temp.*strijk|strijk.*lage|1 stip|110\s*°|laag strijk/)) add("ironlow", "ironlow");
 
   // Stomerij
-  if (has(/stomerij|professioneel reinig|chemisch reinig|\bⓟ\b/)) add("dryclean", "Professioneel reinigen");
+  if (has(/stomerij|professioneel reinig|chemisch reinig|\bⓟ\b/)) add("dryclean", "dryclean");
 
   // Fallback als het wasvoorschrift geen symbolen oplevert: leid af uit materiaal + categorie.
   if (!items.length) {
@@ -113,19 +188,19 @@ export function parseCare(wasvoorschrift: string | undefined | null, attrs?: Rec
     const hg = String(attrs?.hoofdgroep_omschrijving ?? "").toLowerCase();
     const both = `${mat} ${hg}`;
     if (/leer|leder|suède|suede|nubuck/.test(mat)) {
-      add("nowash", "Niet wassen");
-      add("dryclean", "Professioneel reinigen");
+      add("nowash", "nowash");
+      add("dryclean", "dryclean");
     } else if (/pak|colbert|smoking|gilet|jacquet|rok|wol|kasjmier|zijde/.test(both)) {
-      add("dryclean", "Professioneel reinigen");
-      add("notumble", "Niet in de droger");
-      add("ironlow", "Strijken lage temp.");
+      add("dryclean", "dryclean");
+      add("notumble", "notumble");
+      add("ironlow", "ironlow");
     } else if (String(attrs?.strijkvrij ?? "").toLowerCase() === "ja") {
-      add("ironlow", "Strijkvrij — nauwelijks strijken");
-      add("wash30", "Wassen 30°C");
+      add("ironlow", "easycare");
+      add("wash30", "wash30");
     } else {
-      add("wash30", "Wassen 30°C");
-      add("nobleach", "Niet bleken");
-      add("ironlow", "Strijken lage temp.");
+      add("wash30", "wash30");
+      add("nobleach", "nobleach");
+      add("ironlow", "ironlow");
     }
   }
   return items.slice(0, 6);

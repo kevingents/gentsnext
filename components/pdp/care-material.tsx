@@ -1,5 +1,5 @@
-import type { CareItem, CareKey, Composition, MaterialCat } from "@/lib/care";
-import { materialCategory } from "@/lib/care";
+import type { CareItem, CareKey, CareTranslate, Composition, MaterialCat } from "@/lib/care";
+import { careLabel, materialCategory, materialLabel, trOr } from "@/lib/care";
 
 /* Standaard wasvoorschrift-symbolen als schone SVG-lijniconen (geen emoji). */
 const Slash = () => <line x1="4" y1="20" x2="20" y2="4" />;
@@ -69,7 +69,12 @@ function MaterialSymbol({ cat }: { cat: MaterialCat }) {
   }
 }
 
-export function MaterialBlock({ composition, fallback }: { composition: Composition[]; fallback?: string }) {
+/**
+ * `t` is optioneel zodat bestaande aanroepers (bedankpagina, pak-samensteller)
+ * blijven werken; geef 'm mee vanuit getT(locale) en de labels volgen de taal
+ * van de pagina in plaats van altijd Nederlands te zijn.
+ */
+export function MaterialBlock({ composition, fallback, t }: { composition: Composition[]; fallback?: string; t?: CareTranslate }) {
   const rows = composition.length
     ? composition
     : fallback
@@ -82,7 +87,7 @@ export function MaterialBlock({ composition, fallback }: { composition: Composit
         <li key={i} className="flex items-center gap-3">
           <MaterialSymbol cat={materialCategory(r.material)} />
           <span className="font-sans text-sm text-ink">
-            {composition.length ? <strong className="font-medium">{r.pct}%</strong> : null} {r.material}
+            {composition.length ? <strong className="font-medium">{r.pct}%</strong> : null} {materialLabel(r.material, t)}
           </span>
         </li>
       ))}
@@ -90,7 +95,7 @@ export function MaterialBlock({ composition, fallback }: { composition: Composit
   );
 }
 
-export function CareBlock({ items, prose }: { items: CareItem[]; prose: string[] }) {
+export function CareBlock({ items, prose, t }: { items: CareItem[]; prose: string[]; t?: CareTranslate }) {
   if (!items.length && !prose.length) return null;
   return (
     <div>
@@ -98,13 +103,15 @@ export function CareBlock({ items, prose }: { items: CareItem[]; prose: string[]
         {items.map((c) => (
           <li key={c.key} className="flex items-center gap-3">
             <CareSymbol k={c.key} />
-            <span className="font-sans text-sm text-ink">{c.label}</span>
+            <span className="font-sans text-sm text-ink">{careLabel(c, t)}</span>
           </li>
         ))}
       </ul>
       {prose.length ? (
         <details className="mt-4 border-t border-line pt-3">
-          <summary className="cursor-pointer list-none font-sans text-sm text-ink underline underline-offset-4">Meer informatie</summary>
+          <summary className="cursor-pointer list-none font-sans text-sm text-ink underline underline-offset-4">
+            {trOr(t, "pdp.care.moreinfo", "Meer informatie")}
+          </summary>
           <div className="mt-3 space-y-2 font-sans text-sm leading-relaxed text-ink-soft">
             {prose.slice(0, 6).map((p, i) => <p key={i}>{p}</p>)}
           </div>

@@ -1,6 +1,12 @@
 import { getSiteUrl } from "@/lib/site-url";
+import { getSettings } from "@/lib/settings";
+import { getSiteSettings } from "@/lib/site-settings";
+import { cutoffHourFor } from "@/lib/fulfillment-config";
 
-export const dynamic = "force-static";
+// Niet langer force-static: de besteldeadline komt uit de instellingen, dus de
+// tekst moet mee kunnen bewegen als Kevin die aanpast. Eén keer per uur
+// opnieuw opbouwen is ruim voldoende voor een crawler-document.
+export const revalidate = 3600;
 
 /**
  * llms.txt — gestructureerde sitebeschrijving voor AI-crawlers (Perplexity,
@@ -9,6 +15,14 @@ export const dynamic = "force-static";
  */
 export async function GET() {
   const url = getSiteUrl();
+  // Besteldeadline uit de instellingen i.p.v. een hardcoded "16:00" — anders
+  // gaat dit document z'n eigen leven leiden naast de rest van de site. Er zijn
+  // twee knoppen en we nemen bewust de vroegste: deliveryCutoffHour is wat we
+  // naar de klant communiceren (portal-instelbaar), cutoffHourFor is wat het
+  // magazijn operationeel haalt. Zo beloven we nooit later dan we waarmaken.
+  const [settings, site] = await Promise.all([getSettings(), getSiteSettings()]);
+  const cutoffHour = Math.min(site.deliveryCutoffHour, cutoffHourFor("99", settings)); // 99 = hoofdmagazijn, net als lib/fulfillment
+  const cutoff = `${String(cutoffHour).padStart(2, "0")}:00`;
   const body = `# GENTS Herenmode
 
 > Nederlandse specialist in herenmode voor formele momenten — pakken, overhemden, smoking, accessoires en schoenen. 19 fysieke winkels in Nederland en België, plus online via gents.nl. Tagline: "Suits You".
@@ -51,9 +65,9 @@ GENTS is dé Nederlandse formele-momenten-specialist. Wij verkopen pakken, colbe
 ## Service
 
 - 19 fysieke winkels in Nederland en België met persoonlijk advies
-- Gratis retour binnen 14 dagen
+- 14 dagen retourrecht — gratis bij tegoed of inleveren in de winkel; geld terug per post kost € 4,99
 - Gratis verzending vanaf €75
-- Voor 16:00 besteld = vandaag verzonden
+- Voor ${cutoff} besteld = vandaag verzonden
 - Veilig betalen met iDEAL
 - Maatadvies online en in elke winkel
 - Pasvorm-expertise voor pakken, colberts en overhemden

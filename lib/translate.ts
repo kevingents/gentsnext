@@ -193,9 +193,21 @@ export function ensureUi(locale: Locale) {
 export async function getUiMessages(locale: Locale): Promise<Record<string, string> | undefined> {
   if (locale === DEFAULT_LOCALE) return undefined;
   const store = await getTranslationStore(locale);
+  // Alleen vertalingen die nog bij de HUIDIGE Nederlandse tekst horen — dezelfde
+  // afweging als pickFreshTranslation voor campagnecontent. Wordt een NL-tekst
+  // gewijzigd, dan is de oude vertaling niet "iets beters dan niets": hij zegt
+  // letterlijk iets anders. Dat is precies misgegaan met de retourbelofte, waar
+  // /en nog "free returns" beloofde nadat het Nederlands die belofte introk.
+  // Tot de nachtcron de nieuwe tekst vertaalt tonen we liever de verse
+  // Nederlandse bron dan een onjuiste vertaling. Handmatig gecureerde entries
+  // (m) winnen altijd — die heeft iemand bewust zo gezet.
+  const bron = new Map(uiSourceKeys().map((e) => [e.key, e.source] as const));
   const out: Record<string, string> = {};
   for (const [k, val] of Object.entries(store)) {
-    if (k.startsWith("ui:") && val?.v) out[k.slice(3)] = val.v;
+    if (!k.startsWith("ui:") || !val?.v) continue;
+    const key = k.slice(3);
+    const source = bron.get(key);
+    if (val.m || (source !== undefined && val.h === hash(source))) out[key] = val.v;
   }
   return Object.keys(out).length ? out : undefined;
 }

@@ -1,6 +1,7 @@
 import { getSiteUrl } from "@/lib/site-url";
-import { emailConfigured, brandedEmailHtml } from "@/lib/email";
+import { emailConfigured, brandedEmailHtml, mailT } from "@/lib/email";
 import { sendWhatsAppText } from "@/lib/whatsapp";
+import { DEFAULT_LOCALE, isLocale, localizedPath, type Locale } from "@/lib/i18n";
 
 /**
  * Order-status-updates naar de klant via e-mail én WhatsApp. De
@@ -8,6 +9,10 @@ import { sendWhatsAppText } from "@/lib/whatsapp";
  * zitten de statusovergangen 'verzonden', 'klaar om af te halen', 'bezorgd'
  * (met review-uitnodiging) en 'terugbetaald'. WhatsApp en e-mail zijn env-gated
  * (zonder koppeling: stub-log).
+ *
+ * Taal: deze mails vertrekken uit het back-office, dagen na de bestelling — de
+ * enige betrouwbare bron voor de klanttaal is dan orders.locale, die de
+ * aanroeper meegeeft. Onbekend/leeg → Nederlands.
  */
 
 type OrderForNotify = {
@@ -16,39 +21,42 @@ type OrderForNotify = {
   firstName: string;
   phone: string;
   accessToken?: string | null;
+  /** Taal waarin besteld is (orders.locale); leeg/onbekend → nl. */
+  locale?: string | null;
 };
 
+type Tr = (key: string, params?: Record<string, string | number>) => string;
 type Ctx = { orderUrl: string; reviewUrl: string };
 type Msg = { subject: string; heading: string; text: string; ctaUrl: string; ctaLabel: string };
 
-const MESSAGES: Record<string, (o: OrderForNotify, c: Ctx) => Msg> = {
-  shipped: (o, c) => ({
-    subject: `Je GENTS-bestelling ${o.orderNumber} is verzonden`,
-    heading: "Je bestelling is onderweg",
-    text: `Hoi ${o.firstName || "daar"}, goed nieuws! Je bestelling ${o.orderNumber} is onderweg.`,
+const MESSAGES: Record<string, (o: OrderForNotify, c: Ctx, t: Tr) => Msg> = {
+  shipped: (o, c, t) => ({
+    subject: t("mail.status.shipped.subject", { orderNumber: o.orderNumber }),
+    heading: t("order.status.shippedTitle"),
+    text: t("mail.status.shipped.text", { name: o.firstName || t("mail.greeting.fallbackName"), orderNumber: o.orderNumber }),
     ctaUrl: c.orderUrl,
-    ctaLabel: "Volg je bestelling",
+    ctaLabel: t("order.track_order_title"),
   }),
-  ready_pickup: (o, c) => ({
-    subject: `Je GENTS-bestelling ${o.orderNumber} ligt klaar`,
-    heading: "Je bestelling ligt voor je klaar",
-    text: `Hoi ${o.firstName || "daar"}, je bestelling ${o.orderNumber} ligt klaar om af te halen in de winkel. Tot snel!`,
+  ready_pickup: (o, c, t) => ({
+    subject: t("mail.status.readyPickup.subject", { orderNumber: o.orderNumber }),
+    heading: t("order.status.readyPickupTitle"),
+    text: t("mail.status.readyPickup.text", { name: o.firstName || t("mail.greeting.fallbackName"), orderNumber: o.orderNumber }),
     ctaUrl: c.orderUrl,
-    ctaLabel: "Bekijk je bestelling",
+    ctaLabel: t("mail.status.viewOrder"),
   }),
-  delivered: (o, c) => ({
-    subject: "Hoe bevalt je GENTS-bestelling?",
-    heading: "Hoe bevalt je bestelling?",
-    text: `Hoi ${o.firstName || "daar"}, je bestelling ${o.orderNumber} is bezorgd. We zijn benieuwd wat je ervan vindt — een korte review helpt andere klanten enorm en kost je maar een minuutje.`,
+  delivered: (o, c, t) => ({
+    subject: t("mail.status.delivered.subject"),
+    heading: t("mail.status.delivered.heading"),
+    text: t("mail.status.delivered.text", { name: o.firstName || t("mail.greeting.fallbackName"), orderNumber: o.orderNumber }),
     ctaUrl: c.reviewUrl,
-    ctaLabel: "Schrijf een review",
+    ctaLabel: t("order.write_review"),
   }),
-  refunded: (o, c) => ({
-    subject: `Je GENTS-bestelling ${o.orderNumber} is terugbetaald`,
-    heading: "Je bestelling is terugbetaald",
-    text: `Hoi ${o.firstName || "daar"}, je betaling voor ${o.orderNumber} is terugbetaald. Vragen? We helpen je graag.`,
+  refunded: (o, c, t) => ({
+    subject: t("mail.status.refunded.subject", { orderNumber: o.orderNumber }),
+    heading: t("order.status.refundedTitle"),
+    text: t("mail.status.refunded.text", { name: o.firstName || t("mail.greeting.fallbackName"), orderNumber: o.orderNumber }),
     ctaUrl: c.orderUrl,
-    ctaLabel: "Bekijk je bestelling",
+    ctaLabel: t("mail.status.viewOrder"),
   }),
 };
 
@@ -56,12 +64,16 @@ export async function notifyOrderStatus(order: OrderForNotify, status: string): 
   const make = MESSAGES[status];
   if (!make) return;
   const base = getSiteUrl();
+  const locale: Locale = isLocale(String(order.locale || "")) ? (order.locale as Locale) : DEFAULT_LOCALE;
+  const t = await mailT(locale);
   const q = order.accessToken ? `?t=${order.accessToken}` : "";
+  // Links met locale-prefix (/en/bestelling/…), zodat de klant ook op de site
+  // in zijn eigen taal terechtkomt; nl blijft prefix-loos.
   const ctx: Ctx = {
-    orderUrl: `${base}/bestelling/${order.orderNumber}${q}`,
-    reviewUrl: `${base}/review/${order.orderNumber}${q}`,
+    orderUrl: `${base}${localizedPath(`/bestelling/${order.orderNumber}`, locale)}${q}`,
+    reviewUrl: `${base}${localizedPath(`/review/${order.orderNumber}`, locale)}${q}`,
   };
-  const { subject, heading, text, ctaUrl, ctaLabel } = make(order, ctx);
+  const { subject, heading, text, ctaUrl, ctaLabel } = make(order, ctx, t);
 
   // E-mail
   if (emailConfigured() && order.email) {
@@ -77,6 +89,8 @@ export async function notifyOrderStatus(order: OrderForNotify, status: string): 
             heading,
             bodyHtml: `<p style="margin:0">${text}</p>`,
             cta: { label: ctaLabel, href: ctaUrl },
+            locale,
+            t,
           }),
         }),
       });

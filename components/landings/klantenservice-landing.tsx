@@ -3,6 +3,8 @@ import { Accordion } from "@/components/pdp/accordion";
 import { ServiceAsk } from "@/components/service/service-ask";
 import { getLocale } from "@/lib/locale-server";
 import { t } from "@/lib/messages";
+import { formatEuro } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 
 const EMAIL = process.env.CONTACT_EMAIL || "klantenservice@gents.nl";
 const WHATSAPP = process.env.WHATSAPP_PHONE_NUMBER || process.env.WHATSAPP_PHONE || "";
@@ -17,6 +19,10 @@ function Icon({ d }: { d: string }) {
 
 export async function KlantenserviceLanding() {
   const locale = await getLocale();
+  // Bedenktijd + retourkosten uit de instellingen (Instellingen → returnConfig):
+  // de FAQ mag niet iets anders beloven dan de retourflow daadwerkelijk rekent.
+  const { returnConfig } = await getSettings();
+  const returnVars = { days: returnConfig.windowDays, amount: formatEuro(returnConfig.dhlReturnCostCents) };
   const FAQ = [
     {
       title: t("landing.klantenservice.faq.delivery", locale),
@@ -24,7 +30,7 @@ export async function KlantenserviceLanding() {
     },
     {
       title: t("landing.klantenservice.faq.returns", locale),
-      content: t("landing.klantenservice.faq.returnsBody", locale),
+      content: t("landing.klantenservice.faq.returnsBody", locale, returnVars),
     },
     {
       title: t("landing.klantenservice.faq.sizing", locale),
