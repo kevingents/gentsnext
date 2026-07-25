@@ -6,6 +6,7 @@ import { getT } from "@/lib/t-server";
 import { getSessionCustomer } from "@/lib/account";
 import { getReturnableOrder } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
+import { formatEuro } from "@/lib/format";
 import { getStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,11 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
   const t = await getT(locale);
   const orderNr = String(order || "").trim();
 
+  // Bedenktijd + retourkosten komen uit de instellingen (Instellingen-pagina), niet
+  // uit de tekst: wijzigt Kevin de knop, dan verandert de belofte op deze pagina mee.
+  const { returnConfig } = await getSettings();
+  const policyVars = { days: returnConfig.windowDays, amount: formatEuro(returnConfig.dhlReturnCostCents) };
+
   // Ingelogd + bestelnummer → direct de retourbare regels (sessie = bewijs, geen e-mail nodig).
   let prefill: React.ComponentProps<typeof RetourFlow>["prefill"] = null;
   if (orderNr) {
@@ -35,7 +41,6 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
     if (customer?.email) {
       const base = await getReturnableOrder(orderNr, customer.email);
       if (base.ok) {
-        const { returnConfig } = await getSettings();
         prefill = {
           orderNumber: base.orderNumber,
           email: customer.email,
@@ -53,7 +58,7 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
         <p className="label-brand">{t("footer.service")}</p>
         <h1 className="mt-2 text-display-md">{t("retourneren.title")}</h1>
         <p className="mt-3 font-sans text-ink-soft">
-          {t("retourneren.intro.part1")} <strong>{t("retourneren.intro.credit")}</strong> {t("retourneren.intro.part2")}<strong> {t("retourneren.intro.free")}</strong>. {t("retourneren.intro.part3")}
+          {t("retourneren.intro.part1", policyVars)} <strong>{t("retourneren.intro.credit")}</strong> {t("retourneren.intro.part2")}<strong> {t("retourneren.intro.free")}</strong>. {t("retourneren.intro.part3", policyVars)}
         </p>
         <div className="mt-8">
           <RetourFlow initialOrder={orderNr} prefill={prefill} stores={getStores().map((s) => s.title)} />

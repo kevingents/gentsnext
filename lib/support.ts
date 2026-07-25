@@ -1,7 +1,9 @@
 import { getDb } from "@/db";
 import { supportTickets } from "@/db/schema";
 import { emailConfigured } from "@/lib/email";
+import { formatEuro } from "@/lib/format";
 import { submitWebshopTicket } from "@/lib/helpdesk";
+import { getSettings, type Settings } from "@/lib/settings";
 import { formatOrderStatusContext, lookupOrderStatusForEmail } from "@/lib/support-orderdata";
 
 /**
@@ -12,29 +14,71 @@ import { formatOrderStatusContext, lookupOrderStatusForEmail } from "@/lib/suppo
  * OpenAI (OPENAI_API_KEY); zonder sleutel wordt elke vraag een ticket.
  */
 
-const KNOWLEDGE = `
+/**
+ * Feitenbank van de AI-klantenservice. Wordt opgebouwd uit de ECHTE instellingen
+ * (getSettings — de Instellingen-pagina in de tool), zodat een wijziging van de
+ * retourkosten, bedenktijd, verzendkosten, express-toeslag, levertijd of
+ * cadeaubon-grenzen meteen doorwerkt in wat de AI belooft. Alles wat hier staat
+ * moeten we ook echt waarmaken: dit is de enige bron voor het AI-antwoord én
+ * voor de interne notitie bij een escalatie.
+ *
+ * Vermaken staat er expliciet als BETAALDE service in: "broekpijp gratis
+ * innemen" stond hier ooit, en dat is pertinent onwaar (GENTS vermaakt niet
+ * gratis). Prijzen komen van de servicepagina (indicatief).
+ */
+/**
+ * Meest voorkomende vermaakprijzen — bron: de servicepagina (content, geen
+ * instelling). Indicatief; de winkel bepaalt de definitieve prijs. Verhuist naar
+ * de settings-store zodra vermaakprijzen in de tool beheerd worden.
+ */
+const VERMAAK_PRIJZEN = [
+  { wat: "broek korter/langer maken", cents: 1500 },
+  { wat: "broek smaller/wijder maken", cents: 1750 },
+  { wat: "broekspijp versmallen", cents: 2200 },
+  { wat: "colbert tailleren", cents: 2500 },
+  { wat: "colbertmouwen korter/langer maken", cents: 3000 },
+  { wat: "overhemd tailleren via coupenaden", cents: 1300 },
+];
+
+function buildKnowledge(s: Settings): string {
+  const r = s.returnConfig;
+  const g = s.giftcardConfig;
+  const giftcard = g.enabled
+    ? `
+CADEAUBONNEN:
+- Digitale cadeaubon, direct per e-mail bij de ontvanger. Bedrag van ${formatEuro(g.minCents)} tot ${formatEuro(g.maxCents)}, ${g.validityMonths} maanden geldig.
+- Te besteden op de hele collectie, online én in de winkel, en in meerdere keren tot het saldo op is. Verzilveren: code invullen bij het afrekenen onder "Cadeaubon".
+`
+    : "";
+  return `
 GENTS is dé Nederlandse herenmode-specialist voor formele momenten (pakken, overhemden, smoking, accessoires, schoenen). 19 winkels in NL en België + webshop.
 
 VERZENDING & LEVERTIJD:
-- We bezorgen op dit moment alleen binnen Nederland: € 3,95, gratis vanaf € 75. (Bestellen vanuit het buitenland kan niet; wel welkom in de winkels.)
+- We bezorgen op dit moment alleen binnen Nederland: ${formatEuro(s.shippingCents)}, gratis vanaf ${formatEuro(s.freeShippingCents)}. (Bestellen vanuit het buitenland kan niet; wel welkom in de winkels.)
 - Eén keer verzendkosten per bestelling, ook als er meerdere pakketten komen.
 - Voor 16:00 besteld op werkdagen = vaak dezelfde dag verzonden.
-- Standaard levertijd 2-3 werkdagen; vanuit ons magazijn vaak sneller (1-2 werkdagen).
-- Snellere levering (express) tegen € 1,50 toeslag, te kiezen bij het afrekenen.
+- Standaard levertijd ${s.standardMinDays}-${s.standardMaxDays} werkdagen; vanuit ons magazijn vaak sneller.
+- Snellere levering (express) tegen ${formatEuro(s.expressSurchargeCents)} toeslag, te kiezen bij het afrekenen.
 - Een bestelling die deels uit een winkel komt of gesplitst is, kan iets later aankomen.
 
 OPHALEN IN DE WINKEL (click & collect):
-- Veel artikelen zijn op voorraad in de winkels; je ziet per winkel of het er ligt en of de winkel open is.
+- Veel artikelen zijn op voorraad in de winkels; je ziet per winkel of het er ligt en of de winkel open is. Ophalen is gratis.
 
 RETOURNEREN:
-- Retour binnen 14 dagen: GRATIS bij een GENTS-tegoed (online én in de winkel te besteden) of bij inleveren in de winkel; bij geld terug via DHL € 4,99 retourkosten.
+- Retour binnen ${r.windowDays} dagen: GRATIS bij een GENTS-tegoed (online én in de winkel te besteden) of bij inleveren in de winkel; bij geld terug via DHL ${formatEuro(r.dhlReturnCostCents)} retourkosten.
+- Artikelen ongedragen en met kaartje retour. Vermaakte artikelen kunnen niet geretourneerd worden.
 
 BETALEN:
-- Veilig betalen met iDEAL (via Mollie).
-
+- Veilig betalen via Mollie: o.a. iDEAL, creditcard, PayPal en Bancontact. Een cadeaubon of GENTS-tegoed vul je bij het afrekenen in.
+${giftcard}
 MATEN & PASVORM:
 - Maatadvies online (/maatadvies) en in elke winkel. Maattabellen per categorie op de productpagina's.
-- Pakken/colberts: modern fit (net aangesloten) of slim fit (strakker). Broekpijp gratis innemen in de winkel.
+- Pakken/colberts: modern fit (net aangesloten) of slim fit (strakker).
+
+VERMAKEN (BETAALDE SERVICE):
+- Onze kleermakers maken broek, colbert, gilet of overhemd passend. Vermaken is een BETAALDE service — GENTS vermaakt NIET gratis, ook de broekpijp niet. Beloof nooit gratis vermaken.
+- Indicatieve prijzen: ${VERMAAK_PRIJZEN.map((v) => `${v.wat} ${formatEuro(v.cents)}`).join(" · ")}. Prijzen zijn indicatief en kunnen per kledingstuk en afwerking afwijken.
+- Passen gebeurt in de winkel; vraag ernaar bij het afhalen of bij een pasafspraak. Vermaakte artikelen kunnen niet geretourneerd worden.
 
 ACCOUNT:
 - Inloggen met een veilige login-link (geen wachtwoord). In je account zie je online- én winkelaankopen, spaarpunten, vouchers en je maatprofiel.
@@ -45,9 +89,10 @@ DRESSCODES:
 CONTACT:
 - Telefoon 085 115 50 42, of via de winkels. Voor zakelijke kleding en studentenverenigingen zijn er aparte pagina's.
 `;
+}
 
 /** Systeemprompt; met (geverifieerde) bestelgegevens erbij mag de AI ALLEEN die feiten noemen. */
-function buildSystem(orderContext: string): string {
+function buildSystem(orderContext: string, knowledge: string): string {
   const orderBlock = orderContext
     ? `
 
@@ -59,7 +104,7 @@ Voor vragen over bestelstatus, bezorging, retouren of terugbetalingen gebruik je
   return `Je bent de digitale klantenservice van GENTS Herenmode. Beantwoord de vraag van de klant kort, vriendelijk en correct in het Nederlands, UITSLUITEND op basis van de onderstaande kennisbank${orderContext ? " en de meegeleverde bestelgegevens" : ""}. Verzin niets. Kun je de vraag niet betrouwbaar beantwoorden (bv. over een specifieke bestelling waarvan je geen gegevens hebt, een klacht, of iets dat nergens in staat), zet dan "confident" op false. Antwoord ALLEEN met JSON: {"answer": "...", "confident": true|false}.
 
 KENNISBANK:
-${KNOWLEDGE}${orderBlock}`;
+${knowledge}${orderBlock}`;
 }
 
 type AiResult = { answer: string; confident: boolean };
@@ -200,7 +245,10 @@ export async function handleSupportQuestion(
     }
   }
 
-  const system = buildSystem(orderContext);
+  // Feitenbank uit de actuele instellingen (retourkosten/bedenktijd/verzending);
+  // getSettings valt bij een storing zelf terug op de defaults, dus dit kan niet
+  // de support-flow breken.
+  const system = buildSystem(orderContext, buildKnowledge(await getSettings()));
   const ai = (await askClaude(q, system)) || (await askOpenAI(q, system));
   let confident = Boolean(ai?.confident && ai.answer);
   let answer = confident

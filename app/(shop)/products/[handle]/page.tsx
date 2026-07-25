@@ -34,6 +34,7 @@ import { pickupInfoByCity } from "@/lib/stores";
 import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { estimateDelivery } from "@/lib/fulfillment";
 import { getReferencePrices } from "@/lib/pricing";
+import { formatEuro } from "@/lib/format";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { parseComposition, parseCare, careProse, stripSymbols } from "@/lib/care";
@@ -305,13 +306,14 @@ export default async function ProductPage({ params }: Props) {
       availability: anyInStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       // Prijsgeldigheid (voorkomt de veelvoorkomende GSC-waarschuwing "priceValidUntil").
       priceValidUntil: `${new Date().getFullYear() + 1}-12-31`,
-      // Retourbeleid (rich results) — 14 dagen, NL, per post; kosten voor de klant tenzij
-      // in de winkel / met GENTS-tegoed (bewust geen "gratis" claim in het algemene geval).
+      // Retourbeleid (rich results) — bedenktijd uit de instellingen, NL, per post;
+      // kosten voor de klant tenzij in de winkel / met GENTS-tegoed (bewust geen
+      // "gratis" claim in het algemene geval).
       hasMerchantReturnPolicy: {
         "@type": "MerchantReturnPolicy",
         applicableCountry: "NL",
         returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
-        merchantReturnDays: 14,
+        merchantReturnDays: settings.returnConfig.windowDays,
         returnMethod: "https://schema.org/ReturnByMail",
         returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
       },
@@ -371,10 +373,18 @@ export default async function ProductPage({ params }: Props) {
   const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
   const materiaal = String(attrs.materiaal ?? "").trim();
 
+  // Retourbelofte uit de instellingen (Instellingen → returnConfig) i.p.v.
+  // hardgecodeerd in de teksten: wijzigt de bedenktijd of de retourkosten, dan
+  // schuiven de trust-regel, de retour-accordeon en de FAQ vanzelf mee.
+  const returnVars = {
+    days: settings.returnConfig.windowDays,
+    amount: formatEuro(settings.returnConfig.dhlReturnCostCents),
+  };
+
   // Eén keer opbouwen in de taal van de pagina — het zichtbare blok én het
   // FAQPage-JSON-LD moeten dezelfde (vertaalde) tekst tonen, anders leest Google
   // Nederlandse vragen op een pagina met lang="en".
-  const faq = faqFor(hoofdgroep, t);
+  const faq = faqFor(hoofdgroep, t, returnVars);
 
   const accordionItems = [
     ...(descriptionHtml
@@ -417,7 +427,7 @@ export default async function ProductPage({ params }: Props) {
       title: t("pdp.accordion.returns"),
       content: (
         <div className="font-sans text-sm leading-relaxed text-ink-soft">
-          <p>{t("pdp.returns.freeNote")}</p>
+          <p>{t("pdp.returns.freeNote", returnVars)}</p>
           <p className="mt-2">
             {t("pdp.accordion.deliveryContent2")}{" "}
             <Link href="/maatadvies" className="text-ink underline underline-offset-4">
@@ -532,7 +542,7 @@ export default async function ProductPage({ params }: Props) {
                 <svg aria-hidden className="h-4 w-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-                {t(key)}
+                {t(key, returnVars)}
               </li>
             ))}
           </ul>

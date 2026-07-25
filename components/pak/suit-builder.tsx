@@ -108,15 +108,18 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
   const careItems = parseCare(String(attrs.wasvoorschrift ?? ""), attrs);
   const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
   const materiaal = String(attrs.materiaal ?? "").trim();
-  const specRows = ([["merk", "Merk"], ["pasvorm", "Pasvorm"], ["sluiting", "Sluiting"], ["boord", "Boord"], ["zakken", "Zakken"], ["seizoen", "Seizoen"]] as const)
-    .map(([k, l]) => ({ label: l, value: String(attrs[k] ?? "").trim() }))
+  // [attribuut-sleutel, message-key] — zelfde rail als de PDP (SPEC_LABELS).
+  const specRows = ([["merk", "pdp.specs.brand"], ["pasvorm", "pdp.specs.fit"], ["sluiting", "pdp.specs.closure"], ["boord", "pdp.specs.collar"], ["zakken", "pdp.specs.pockets"], ["seizoen", "pdp.specs.season"]] as const)
+    .map(([k, msgKey]) => ({ label: t(msgKey), value: String(attrs[k] ?? "").trim() }))
     .filter((s) => s.value);
+  // Koppen én inhoud via dezelfde vertaalrail als de productpagina — anders staat
+  // er op /en een Engelse kop met Nederlandse labels eronder.
   const detailItems = [
-    ...(composition.length || materiaal ? [{ title: "Materiaal", content: <MaterialBlock composition={composition} fallback={materiaal} /> }] : []),
-    ...(careItems.length ? [{ title: "Onderhoud", content: <CareBlock items={careItems} prose={careProseLines} /> }] : []),
+    ...(composition.length || materiaal ? [{ title: t("pdp.material"), content: <MaterialBlock composition={composition} fallback={materiaal} t={t} /> }] : []),
+    ...(careItems.length ? [{ title: t("pdp.accordion.care"), content: <CareBlock items={careItems} prose={careProseLines} t={t} /> }] : []),
     ...(specRows.length
       ? [{
-          title: "Pasvorm & details",
+          title: t("pdp.accordion.specs"),
           content: (
             <dl className="divide-y divide-line border-y border-line">
               {specRows.map((s) => (

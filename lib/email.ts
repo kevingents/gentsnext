@@ -9,10 +9,32 @@ import { getT } from "@/lib/t-server";
  * extra SDK: directe call naar de Resend API, net als de Mollie-client.
  * Afzender via RESEND_FROM (bv. "GENTS <bestellingen@gents.nl>").
  *
- * Taal: klant-mails volgen de taal waarin de klant de site gebruikte. De
- * teksten komen uit dezelfde vertaalrail als de site (getT → cron-store →
- * statische dict → NL), en het lang-attribuut van de mail loopt mee. Interne
- * notificaties (winkel/HQ) blijven bewust Nederlands.
+ * Taal: de vertaalrail ligt er (mailT/getT → cron-store → statische dict → NL,
+ * plus `locale` naar shell/brandedEmailHtml voor het lang-attribuut en de
+ * footer), maar hij is nog niet overal aangesloten. Stand van zaken:
+ *
+ * WEL in de taal van de klant:
+ *  - orderbevestiging (sendOrderConfirmation, orders.locale)
+ *  - order-statusmails (lib/order-notify)
+ *  - inlog-/magic-link-mail (app/api/account/login)
+ *  - welkomstkorting-mail (app/api/welcome-discount)
+ *  - afspraakbevestiging (sendAppointmentConfirmation — de route levert de
+ *    teksten al vertaald aan)
+ *
+ * NOG hardgecodeerd Nederlands (ook voor een /en- of /de-klant):
+ *  - cadeaubon-mail (sendGiftcardEmail)
+ *  - welkomstmail bij een nieuw account (sendWelcomeEmail)
+ *  - profiel-afronden-incentive (sendProfileCompletionIncentiveEmail)
+ *  - reserveringsbevestiging (sendReserveringEmail)
+ *  - nieuwsbrief-bevestiging (sendNewsletterConfirmation)
+ *  - conceptbestelling vanaf de kassa (sendConceptOrderMail)
+ *  - retour aangemeld (sendReturnRegistered)
+ *  - retour verwerkt/terugbetaald (sendReturnRefunded)
+ * Buiten dit bestand geldt hetzelfde voor de terug-op-voorraad- en
+ * alternatief-mail (lib/stock-notify): die gebruiken brandedEmailHtml zónder
+ * `t`/`locale`.
+ *
+ * Interne notificaties (winkel/HQ) blijven bewust Nederlands.
  */
 
 export function emailConfigured(): boolean {

@@ -1,3 +1,5 @@
+import { interpolate } from "@/lib/messages";
+
 /**
  * Vaste FAQ-blokken per hoofdgroep — verlaagt twijfel op de PDP.
  *
@@ -13,15 +15,17 @@
 export type PdpFaq = { q: string; a: string };
 
 /** Locale-gebonden vertaalfunctie (uit getT(locale) — de locale zit dus in `t`). */
-export type FaqTranslate = (key: string) => string;
+export type FaqTranslate = (key: string, params?: Record<string, string | number>) => string;
 
 /** `key` = sleutel-voorvoegsel in de vertaalrail; er horen een `.q` en een `.a` bij. */
 type FaqSource = { key: string; q: string; a: string };
 
 /** t() valt terug op de sleutel als die (nog) niet bestaat — dan de NL-bron tonen. */
-function trOr(t: FaqTranslate | undefined, key: string, nl: string): string {
-  const v = t?.(key);
-  return v && v !== key ? v : nl;
+function trOr(t: FaqTranslate | undefined, key: string, nl: string, vars?: Record<string, string | number>): string {
+  const v = t?.(key, vars);
+  // Ook de NL-vangnettekst krijgt zijn {placeholders} ingevuld — anders zou er
+  // letterlijk "{days} dagen" staan zodra een sleutel nog niet in de catalogus zit.
+  return v && v !== key ? v : interpolate(nl, vars);
 }
 
 const COMMON: FaqSource[] = [
@@ -30,8 +34,9 @@ const COMMON: FaqSource[] = [
     q: "Hoe werkt retourneren?",
     // Let op: geen "gratis en volledig bedrag terug" meer — dat botste met de
     // echte voorwaarde die elders op deze pagina staat (tegoed/winkel = gratis,
-    // geld terug = € 4,99 retourkosten).
-    a: "Je hebt 14 dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze 19 winkels in, dan is retourneren gratis; wil je het bedrag terug op je rekening, dan rekenen we € 4,99 retourkosten.",
+    // geld terug = retourkosten). Bedenktijd en bedrag komen als {days}/{amount}
+    // uit returnConfig (Instellingen), niet uit deze tekst.
+    a: "Je hebt {days} dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze 19 winkels in, dan is retourneren gratis; wil je het bedrag terug op je rekening, dan rekenen we {amount} retourkosten.",
   },
   {
     key: "pdp.faq.common.delivery",
@@ -106,12 +111,13 @@ const BY_HG: Record<string, FaqSource[]> = {
 /**
  * FAQ voor één hoofdgroep, in de taal van `t`. Geef altijd de t uit
  * `getT(locale)` mee — anders staat het blok (en het JSON-LD) weer in het
- * Nederlands op /en /de /fr /es.
+ * Nederlands op /en /de /fr /es. `vars` vult de {placeholders} (bv. de
+ * bedenktijd en retourkosten uit de instellingen).
  */
-export function faqFor(hoofdgroep: string, t?: FaqTranslate): PdpFaq[] {
+export function faqFor(hoofdgroep: string, t?: FaqTranslate, vars?: Record<string, string | number>): PdpFaq[] {
   const src = BY_HG[hoofdgroep] || COMMON;
   return src.map((f) => ({
-    q: trOr(t, `${f.key}.q`, f.q),
-    a: trOr(t, `${f.key}.a`, f.a),
+    q: trOr(t, `${f.key}.q`, f.q, vars),
+    a: trOr(t, `${f.key}.a`, f.a, vars),
   }));
 }

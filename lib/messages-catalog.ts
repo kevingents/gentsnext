@@ -678,7 +678,10 @@ export const SITE_CATALOG: Record<string, string> = {
   "order.expected_delivery": "Verwachte bezorging rond",
   "order.find_store": "Vind een winkel",
   "order.fit_question": "Past iets niet helemaal?",
-  "order.free_return": "gratis binnen 14 dagen",
+  // Geen onvoorwaardelijke "gratis binnen 14 dagen" meer: gratis is de retour
+  // alleen bij een tegoed of inleveren in de winkel. De renderplek (de
+  // bestelpagina) geeft geen params mee, dus hier bewust zonder {placeholder}.
+  "order.free_return": "gratis met een GENTS-tegoed of in de winkel; bij geld terug per post € 4,99 retourkosten",
   "order.from_locations": "Je bestelling komt uit",
   "order.from_store": "Onze winkel in",
   "order.from_warehouse": "Vanuit ons magazijn",
@@ -843,7 +846,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.read_how_to_wear": "Lees hoe je dit draagt",
   // Stond hier onvoorwaardelijk ("gratis … volledige bedrag terug") terwijl de
   // regel eronder in dezelfde accordeon de échte voorwaarde noemt.
-  "pdp.returns.freeNote": "Niet helemaal goed? Je hebt 14 dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze winkels in, dan is retourneren gratis; bij geld terug op je rekening rekenen we € 4,99 retourkosten.",
+  // {days}/{amount} uit returnConfig (Instellingen); de PDP geeft ze mee aan t().
+  "pdp.returns.freeNote": "Niet helemaal goed? Je hebt {days} dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze winkels in, dan is retourneren gratis; bij geld terug op je rekening rekenen we {amount} retourkosten.",
   "pdp.return_policy": "Binnen 14 dagen retourneren: gratis met een GENTS-tegoed of in de winkel; bij geld terug € 4,99 retourkosten. Ophalen in één van onze 19 winkels kan ook.",
   "pdp.season": "Seizoen",
   "pdp.share.copied": "Link gekopieerd",
@@ -903,7 +907,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.trust_advice": "Persoonlijk advies in 19 winkels",
   "pdp.trust_alteration": "Vermaakservice in onze winkels",
   "pdp.trust_payment": "Veilig betalen met iDEAL",
-  "pdp.trust_return": "14 dagen retourrecht — gratis met tegoed of in de winkel",
+  // {days} uit returnConfig (Instellingen); de PDP geeft de params mee aan t().
+  "pdp.trust_return": "{days} dagen retourrecht — gratis met tegoed of in de winkel",
   "pdp.trust.alterationService": "Vermaakservice in onze winkels",
   "pdp.trust.freeReturn": "14 dagen retourrecht — gratis met tegoed of in de winkel",
   "pdp.trust.note": "14 dagen retourrecht — gratis met tegoed. Veilig afrekenen met o.a. iDEAL.",
@@ -969,9 +974,12 @@ export const SITE_CATALOG: Record<string, string> = {
   "puntenClaim.toShop": "Naar de winkel",
   "retourneren.intro.credit": "tegoed/omruilen",
   "retourneren.intro.free": "gratis",
-  "retourneren.intro.part1": "Niet helemaal goed? Je hebt 14 dagen bedenktijd. Kies",
+  // {days}/{amount} komen uit returnConfig (Instellingen) — de retourpagina geeft
+  // ze mee aan t(). De oude motivering "(gelijk aan de heenzending, € 4,99)" was
+  // onjuist: de heenzending is € 3,95.
+  "retourneren.intro.part1": "Niet helemaal goed? Je hebt {days} dagen bedenktijd. Kies",
   "retourneren.intro.part2": "en je retour is",
-  "retourneren.intro.part3": "Bij geld terug rekenen we de retourkosten (gelijk aan de heenzending, € 4,99). Inleveren kan met een DHL-retourlabel of in een GENTS-winkel.",
+  "retourneren.intro.part3": "Bij geld terug rekenen we {amount} retourkosten. Inleveren kan met een DHL-retourlabel of in een GENTS-winkel.",
   "retourneren.title": "Retourneren",
   "review.back_home": "Terug naar home",
   "review.intro": "Je review helpt andere klanten de juiste keuze en maat te vinden. Het kost een minuutje — bedankt!",
@@ -1129,7 +1137,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "landing.klantenservice.contact.visit": "Kom langs",
   "landing.klantenservice.contact.visitSub": "Persoonlijk advies in 19 winkels",
   "landing.klantenservice.faq.deliveryBody": "We bezorgen binnen Nederland met DHL in 1–3 werkdagen: € 3,95, en gratis vanaf € 75. Staat een artikel op voorraad en bestel je vóór 16:00? Dan ligt het vaak de volgende werkdag al bij je op de mat. Liever zelf ophalen? Dat kan gratis in één van onze 19 winkels.",
-  "landing.klantenservice.faq.returnsBody": "Niet helemaal goed? Je hebt 14 dagen bedenktijd. Meld je retour aan via ons retourportaal: kies je een GENTS-tegoed, dan is retourneren gratis en krijg je direct een DHL-retourlabel; wil je het bedrag terug op je rekening, dan rekenen we € 4,99 retourkosten. Inleveren in één van onze 19 winkels is altijd gratis. Stuur het artikel ongedragen en met kaartje terug; zodra we je retour ontvangen, handelen we het binnen enkele werkdagen af.",
+  // {days}/{amount} uit returnConfig (Instellingen); de klantenservice-landing geeft ze mee aan t().
+  "landing.klantenservice.faq.returnsBody": "Niet helemaal goed? Je hebt {days} dagen bedenktijd. Meld je retour aan via ons retourportaal: kies je een GENTS-tegoed, dan is retourneren gratis en krijg je direct een DHL-retourlabel; wil je het bedrag terug op je rekening, dan rekenen we {amount} retourkosten. Inleveren in één van onze 19 winkels is altijd gratis. Stuur het artikel ongedragen en met kaartje terug; zodra we je retour ontvangen, handelen we het binnen enkele werkdagen af.",
   "landing.klantenservice.faq.sizingBody": "Twijfel je over je maat? Gebruik ons maatadvies (30 sec.) voor een persoonlijk advies, of kom langs in de winkel — onze stylisten meten je graag op. Zo bestel je in één keer raak en voorkom je retour.",
   "landing.klantenservice.faq.paymentBody": "Je betaalt veilig met o.a. iDEAL. Al je gegevens gaan versleuteld over een beveiligde verbinding. Je betaalt pas bij het afrekenen; achteraf betalen volgt binnenkort.",
   "landing.klantenservice.faq.change": "Bestelling wijzigen of annuleren",
@@ -1459,8 +1468,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "mail.welcome.footnote": "Eenmalig te gebruiken en {days} dagen geldig.",
   // — PDP-FAQ (lib/pdp-faq) — ook de bron van het FAQPage-JSON-LD —
   "pdp.faq.common.returns.q": "Hoe werkt retourneren?",
+  // {days}/{amount} uit returnConfig (Instellingen); de PDP geeft ze mee via faqFor().
   "pdp.faq.common.returns.a":
-    "Je hebt 14 dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze 19 winkels in, dan is retourneren gratis; wil je het bedrag terug op je rekening, dan rekenen we € 4,99 retourkosten.",
+    "Je hebt {days} dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze 19 winkels in, dan is retourneren gratis; wil je het bedrag terug op je rekening, dan rekenen we {amount} retourkosten.",
   "pdp.faq.common.delivery.q": "Wanneer is mijn bestelling in huis?",
   "pdp.faq.common.delivery.a":
     "Vóór 16:00 besteld is doorgaans de volgende werkdag in huis. Op werkdagen verzenden we dagelijks; bestellingen in het weekend gaan op maandag de deur uit.",

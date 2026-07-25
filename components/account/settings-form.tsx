@@ -18,6 +18,7 @@ type Settings = {
   expressTransitDays: number;
   retailSafetyStock: number;
   warehouseSafetyStock: number;
+  saleAnnouncementDays: number;
   protectUnderstockedRetail: boolean;
   searchSynonyms: string;
   modelLook: {
@@ -42,14 +43,23 @@ type Settings = {
   };
 };
 
-/** Groepen velden — euro's tonen we in euro (×100 bij opslaan). */
-const SECTIONS: { title: string; desc?: string; fields: { key: keyof Settings; label: string; kind: "euro" | "uur" | "dagen" | "stuks" }[] }[] = [
+/** Groepen velden — euro's tonen we in euro (×100 bij opslaan).
+ *  `min`/`max` zijn optioneel; zonder waarde geldt min 0 en geen maximum. */
+const SECTIONS: { title: string; desc?: string; fields: { key: keyof Settings; label: string; kind: "euro" | "uur" | "dagen" | "stuks"; min?: number; max?: number }[] }[] = [
   {
     title: "Verzendkosten",
     fields: [
       { key: "freeShippingCents", label: "Gratis verzending vanaf", kind: "euro" },
       { key: "shippingCents", label: "Verzendkosten onder drempel", kind: "euro" },
       { key: "expressSurchargeCents", label: "Toeslag snellere levering", kind: "euro" },
+    ],
+  },
+  {
+    title: "Prijzen & sale",
+    desc:
+      "Hoe lang een prijsverlaging nog als sale telt. Zo veel dagen ná de verlaging tonen we de oude prijs doorgestreept en de sale-badge; daarna is de lagere prijs gewoon de normale prijs en verdwijnen streep en badge. Korter = sale-badges verdwijnen sneller, langer = ze blijven langer staan. Wat er doorgestreept staat verandert hier niet: dat is en blijft de laagste prijs uit de 30 dagen vóór de verlaging (wettelijk verplicht).",
+    fields: [
+      { key: "saleAnnouncementDays", label: "Sale tonen tot ... dagen na de prijsverlaging", kind: "dagen", min: 1, max: 730 },
     ],
   },
   {
@@ -177,7 +187,8 @@ export function SettingsForm({ initial }: { initial: Settings }) {
                     <input
                       type="number"
                       step={f.kind === "euro" ? "0.01" : "1"}
-                      min="0"
+                      min={f.min ?? 0}
+                      max={f.max}
                       defaultValue={display}
                       onChange={(e) => setField(f.key, e.target.value, f.kind)}
                       className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"

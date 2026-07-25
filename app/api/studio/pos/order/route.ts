@@ -84,13 +84,21 @@ export async function POST(req: Request) {
   // Aan de kassa afgerekend (contant/pin) → geen betaallink; betaald markeren +
   // inplannen voor fulfilment uit het bron-filiaal. De omzet zit in de kassa-verkoop.
   if (body?.paymentMode === "register") {
-    await finalizeRegisterPaidOrder(order.id);
+    // De klant heeft al betaald en de order staat er. Faalt de bevestigingsmail of
+    // het inplannen, dan mag de kassa géén fout tonen — de verkoper kan er niets
+    // mee en zou de bestelling nog eens aanslaan. Wel luid loggen: beide stappen
+    // hebben hun eigen claim en zijn later opnieuw aan te bieden.
+    await finalizeRegisterPaidOrder(order.id).catch((e) =>
+      console.error("[pos-order] bevestigen/inplannen mislukt na kassabetaling:", order.orderNumber, e),
+    );
     return NextResponse.json({ ok: true, orderNumber: order.orderNumber, paid: true, registerPaid: true, confirmUrl, totalCents: order.totalCents });
   }
 
   // Volledig met cadeaubon/voucher gedekt → geen betaling nodig.
   if (order.totalCents === 0) {
-    await finalizeGiftcardCoveredOrder(order.id);
+    await finalizeGiftcardCoveredOrder(order.id).catch((e) =>
+      console.error("[pos-order] bevestigen/inplannen mislukt na cadeaubon-dekking:", order.orderNumber, e),
+    );
     return NextResponse.json({ ok: true, orderNumber: order.orderNumber, paid: true, checkoutUrl: confirmUrl });
   }
   if (!mollieConfigured()) {

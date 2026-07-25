@@ -493,10 +493,21 @@ export async function finalizeGiftcardCoveredOrder(orderId: string): Promise<voi
  * dubbeltellen in web-omzet).
  */
 export async function finalizeRegisterPaidOrder(orderId: string): Promise<void> {
+  await confirmAndPlan(await markRegisterPaid(orderId));
+}
+
+/**
+ * Alleen de administratieve helft van finalizeRegisterPaidOrder: order op betaald
+ * zetten en de synthetische betaalreferentie teruggeven. Apart, omdat een aanroeper
+ * soms iets tussen "betaald" en "bevestigen + inplannen" moet doen — de
+ * reserveringsconversie moet de reservering eerst afvinken, anders maakt een retry
+ * na een mislukte mail een tweede betaalde order.
+ */
+export async function markRegisterPaid(orderId: string): Promise<string> {
   const synthetic = `register-${orderId}`;
   await attachMolliePayment(orderId, synthetic);
   await applyPaymentStatus(synthetic, "paid");
-  await confirmAndPlan(synthetic);
+  return synthetic;
 }
 
 /**
