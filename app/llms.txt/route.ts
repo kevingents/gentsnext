@@ -65,7 +65,7 @@ GENTS is dé Nederlandse formele-momenten-specialist. Wij verkopen pakken, colbe
 ## Service
 
 - 19 fysieke winkels in Nederland en België met persoonlijk advies
-- Gratis retour binnen 14 dagen
+- 14 dagen retourrecht — gratis bij tegoed of inleveren in de winkel; geld terug per post kost € 4,99
 - Gratis verzending vanaf €75
 - Voor ${cutoff} besteld = vandaag verzonden
 - Veilig betalen met iDEAL

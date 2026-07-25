@@ -58,7 +58,8 @@ export const SITE_SETTINGS: SiteSettings = {
   usps: [
     "Formele-momenten specialist",
     "Betaalbare luxe",
-    "Gratis retour binnen 14 dagen",
+    // Neutraal: gratis is de retour alleen bij tegoed of inleveren in de winkel.
+    "14 dagen retourrecht",
     "Persoonlijk advies in 19 winkels",
   ],
   freeShippingCents: 7500,

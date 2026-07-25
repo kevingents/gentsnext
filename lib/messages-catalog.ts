@@ -518,7 +518,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "home.trustBlock.dresscodeDesc": "Black tie, gala, bruiloft? Onze stylisten leggen elke dresscode uit.",
   "home.trustBlock.dresscodeLink": "Naar de gids",
   "home.trustBlock.dresscodeTitle": "Dresscode-expertise",
-  "home.trustBlock.returnDesc": "Niet goed? Retourneer eenvoudig — gratis binnen Nederland.",
+  // "gratis binnen Nederland" klopte niet: gratis is het alleen bij een tegoed
+  // of inleveren in de winkel (zie lib/returns).
+  "home.trustBlock.returnDesc": "Niet goed? Retourneer eenvoudig — gratis met tegoed of in de winkel.",
   "home.trustBlock.returnLink": "Hoe het werkt",
   "home.trustBlock.returnTitle": "14 dagen retourrecht",
   "home.trustBlock.storesDesc": "Persoonlijk advies, pasvorm-expertise en het complete assortiment — kom langs.",
@@ -839,7 +841,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.pockets": "Zakken",
   "pdp.price.reference": "Doorgestreepte prijs: laagste prijs in de 30 dagen voor de korting.",
   "pdp.read_how_to_wear": "Lees hoe je dit draagt",
-  "pdp.returns.freeNote": "Niet helemaal goed? Retourneer gratis binnen 14 dagen — per post of in één van onze winkels. Je krijgt het volledige bedrag terug.",
+  // Stond hier onvoorwaardelijk ("gratis … volledige bedrag terug") terwijl de
+  // regel eronder in dezelfde accordeon de échte voorwaarde noemt.
+  "pdp.returns.freeNote": "Niet helemaal goed? Je hebt 14 dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze winkels in, dan is retourneren gratis; bij geld terug op je rekening rekenen we € 4,99 retourkosten.",
   "pdp.return_policy": "Binnen 14 dagen retourneren: gratis met een GENTS-tegoed of in de winkel; bij geld terug € 4,99 retourkosten. Ophalen in één van onze 19 winkels kan ook.",
   "pdp.season": "Seizoen",
   "pdp.share.copied": "Link gekopieerd",
@@ -1411,4 +1415,114 @@ export const SITE_CATALOG: Record<string, string> = {
   "help.order.return": "Retour",
   "help.order.refund": "Terugbetaling",
   "help.order.track": "Volg je bestelling",
+  // — Transactionele mail (lib/email, lib/order-notify) —
+  // Klantmails volgen de taal van de klant; zonder deze bron zou de cron ze
+  // nooit zien en bleef elke mail Nederlands (of erger: de sleutelnaam).
+  "mail.line.size": "maat {size}",
+  "mail.footer.pricesInclVat": "Alle prijzen incl. btw",
+  "mail.footer.usps": "Persoonlijk advies in 19 winkels · 14 dagen retourrecht · alle prijzen incl. btw",
+  "mail.order.subject": "Je GENTS-bestelling {orderNumber} is bevestigd",
+  "mail.order.heading": "Bedankt voor je bestelling, {name}",
+  "mail.order.headingNoName": "Bedankt voor je bestelling",
+  "mail.order.intro": "We hebben je betaling ontvangen en gaan voor je aan de slag. Hieronder vind je je bestelling.",
+  "mail.order.remaining": "Nog te betalen",
+  "mail.order.points": "Je spaart {points} punten met deze bestelling",
+  "mail.order.pointsBody":
+    "Bekijk en verzilver ze in je {link}. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.",
+  "mail.order.accountLink": "GENTS-account",
+  "mail.order.returnNote":
+    "Niet helemaal tevreden? Je hebt 14 dagen bedenktijd. Retourneren is gratis met een GENTS-tegoed of als je het in de winkel inlevert; wil je het bedrag terug op je rekening, dan rekenen we € 4,99 retourkosten.",
+  "mail.order.questions": "Vragen? Antwoord op deze mail of bezoek {link}.",
+  "mail.login.subject": "Je inloglink voor GENTS",
+  "mail.login.heading": "Inloggen bij GENTS",
+  "mail.login.body1": "Klik op de knop hieronder om in te loggen op je account. De link is 30 minuten geldig en werkt één keer.",
+  "mail.login.body2": "Zo heb je je bestellingen, bewaarde maten, spaarpunten en favorieten meteen bij de hand.",
+  "mail.login.footnote": "Heb je dit niet aangevraagd? Dan kun je deze e-mail veilig negeren — er gebeurt niets.",
+  "mail.greeting.fallbackName": "daar",
+  "mail.status.viewOrder": "Bekijk je bestelling",
+  "mail.status.shipped.subject": "Je GENTS-bestelling {orderNumber} is verzonden",
+  "mail.status.shipped.text": "Hoi {name}, goed nieuws! Je bestelling {orderNumber} is onderweg.",
+  "mail.status.readyPickup.subject": "Je GENTS-bestelling {orderNumber} ligt klaar",
+  "mail.status.readyPickup.text": "Hoi {name}, je bestelling {orderNumber} ligt klaar om af te halen in de winkel. Tot snel!",
+  "mail.status.delivered.subject": "Hoe bevalt je GENTS-bestelling?",
+  "mail.status.delivered.heading": "Hoe bevalt je bestelling?",
+  "mail.status.delivered.text":
+    "Hoi {name}, je bestelling {orderNumber} is bezorgd. We zijn benieuwd wat je ervan vindt — een korte review helpt andere klanten enorm en kost je maar een minuutje.",
+  "mail.status.refunded.subject": "Je GENTS-bestelling {orderNumber} is terugbetaald",
+  "mail.status.refunded.text": "Hoi {name}, je betaling voor {orderNumber} is terugbetaald. Vragen? We helpen je graag.",
+  // — Welkomstkorting-mail (/api/welcome-discount) —
+  "mail.welcome.subject": "Je GENTS-welkomstkorting: {percent}% met code {code}",
+  "mail.welcome.heading": "Je welkomstkorting staat klaar",
+  "mail.welcome.intro": "Bedankt voor je inschrijving. Met deze code krijg je <strong>{percent}% korting</strong> op je volgende bestelling:",
+  "mail.welcome.useNote": "Vul 'm bij het afrekenen in onder “Kortingscode”.",
+  "mail.welcome.cta": "Begin met shoppen",
+  "mail.welcome.footnote": "Eenmalig te gebruiken en {days} dagen geldig.",
+  // — PDP-FAQ (lib/pdp-faq) — ook de bron van het FAQPage-JSON-LD —
+  "pdp.faq.common.returns.q": "Hoe werkt retourneren?",
+  "pdp.faq.common.returns.a":
+    "Je hebt 14 dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze 19 winkels in, dan is retourneren gratis; wil je het bedrag terug op je rekening, dan rekenen we € 4,99 retourkosten.",
+  "pdp.faq.common.delivery.q": "Wanneer is mijn bestelling in huis?",
+  "pdp.faq.common.delivery.a":
+    "Vóór 16:00 besteld is doorgaans de volgende werkdag in huis. Op werkdagen verzenden we dagelijks; bestellingen in het weekend gaan op maandag de deur uit.",
+  "pdp.faq.common.fitting.q": "Kan ik in een winkel terecht voor pasadvies?",
+  "pdp.faq.common.fitting.a":
+    "Zeker. Onze stylisten staan in al onze 19 winkels voor je klaar — vrijblijvend en zonder afspraak. Voor pakken en bruiloften adviseren we wel een afspraak te maken.",
+  "pdp.faq.suits.fit.q": "Past dit pak slim of modern fit?",
+  "pdp.faq.suits.fit.a":
+    "Modern fit valt nét aangesloten zonder ergens te trekken. Slim fit is strakker (vooral op borst en taille). Twijfel je? Onze pasvorm-uitleg en maatadvies helpen je in een paar klikken.",
+  "pdp.faq.suits.hem.q": "Kan ik de pijp laten innemen?",
+  "pdp.faq.suits.hem.a":
+    "Ja — in onze winkels nemen we de broekpijp voor je op met onze vermaakservice. Vraag ernaar bij het afhalen of bij je pasafspraak.",
+  "pdp.faq.jackets.size.q": "Hoe meet ik mijn colbertmaat?",
+  "pdp.faq.jackets.size.a":
+    "Colbertmaat = borstomvang / 2 (in cm). Onze maatadvies-tool rekent het automatisch om uit lengte en gewicht.",
+  "pdp.faq.jackets.separate.q": "Kan ik dit colbert los van een broek dragen?",
+  "pdp.faq.jackets.separate.a":
+    "Absoluut — alle Mix & Match-colberts zijn ontworpen om los of in een pak gedragen te worden. Combineer met een nette chino voor een smart-casual look.",
+  "pdp.faq.shirts.noniron.q": "Is dit overhemd strijkvrij?",
+  "pdp.faq.shirts.noniron.a":
+    "Veel van onze overhemden zijn strijkvrij of easycare-behandeld. Kijk bij Specificaties op deze pagina voor de exacte stof- en onderhoudsinformatie.",
+  "pdp.faq.shirts.collar.q": "Hoe zit de boordmaat?",
+  "pdp.faq.shirts.collar.a":
+    "Onze boordmaten lopen van 37/38 (S) tot 49/50 (4XL). De maat is de halsomvang in cm. Voor langere mannen bieden we de 7-uitvoering met extra mouw- en lijflengte.",
+  "pdp.faq.tuxedo.shoes.q": "Welke schoenen draag ik bij een smoking?",
+  "pdp.faq.tuxedo.shoes.a":
+    "Klassiek: zwarte lakschoenen of suède loafers in zwart. Bij een dinnerjacket kan een suède gespschoen ook — onze etiquette-pagina legt het uit.",
+  "pdp.faq.shoes.sizing.q": "Vallen deze schoenen normaal qua maat?",
+  "pdp.faq.shoes.sizing.a":
+    "Onze schoenmaten volgen de standaard Europese maatvoering. Tussen twee maten in? Kies in de regel de grootste, vooral bij leren modellen.",
+  // — PDP Onderhoud + Materiaal (lib/care) —
+  "care.label.handwash": "Handwas",
+  "care.label.nowash": "Niet wassen",
+  "care.label.wash60": "Wassen 60°C",
+  "care.label.wash40": "Wassen 40°C",
+  "care.label.wash30": "Wassen 30°C",
+  "care.label.nobleach": "Niet bleken",
+  "care.label.notumble": "Niet in de droger",
+  "care.label.tumblelow": "Droger lage temp.",
+  "care.label.dryflat": "Liggend drogen",
+  "care.label.dryline": "Aan de lijn drogen",
+  "care.label.nowring": "Niet uitknijpen",
+  "care.label.noiron": "Niet strijken",
+  "care.label.ironmid": "Strijken middelhoog",
+  "care.label.ironlow": "Strijken lage temp.",
+  "care.label.easycare": "Strijkvrij — nauwelijks strijken",
+  "care.label.dryclean": "Professioneel reinigen",
+  "material.wol": "Wol",
+  "material.scheerwol": "Scheerwol",
+  "material.lamswol": "Lamswol",
+  "material.merino": "Merino",
+  "material.kasjmier": "Kasjmier",
+  "material.katoen": "Katoen",
+  "material.zijde": "Zijde",
+  "material.linnen": "Linnen",
+  "material.leer": "Leer",
+  "material.leder": "Leder",
+  "material.suede": "Suède",
+  "material.elastaan": "Elastaan",
+  "material.acryl": "Acryl",
+  "material.bamboe": "Bamboe",
+  // — Welkomstpopup: varianten die na de review bijkwamen —
+  "welcome.discountSubtitleNext": "op je volgende bestelling",
+  "welcome.codeNoteMailed": "We hebben de code ook naar je gemaild. Plak 'm in je winkelwagen bij het afrekenen. 30 dagen geldig.",
 };

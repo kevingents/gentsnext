@@ -291,8 +291,9 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
           {allChosen ? t("pak.builder.addToCart") : t("pak.builder.chooseSizes")}
         </button>
         <p className="mt-3 font-sans text-xs text-muted">
-          Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.
-          Gratis retour binnen 14 dagen; veilig afrekenen met o.a. iDEAL.
+          Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.{" "}
+          {/* Niet meer onvoorwaardelijk "gratis retour": dat is het alleen bij tegoed of in de winkel. */}
+          {t("pdp.fineprint")}
         </p>
 
         {/* Levertijd — onder de bestelknop (zoals gevraagd). */}

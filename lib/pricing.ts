@@ -42,18 +42,39 @@ export function tieredDiscountCents(itemCount: number, subtotalCents: number, cf
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Hoe lang een prijsvermindering "aangekondigd" mag blijven: 30 dagen ná de
+ * ingangsdatum van de huidige (lagere) prijs. Daarna vervalt de doorgestreepte
+ * "van"-prijs en de sale-badge, óók als de prijs feitelijk verlaagd is.
+ *
+ * Waarom: de Omnibus-richtlijn gaat over het AANKONDIGEN van een prijsvermindering.
+ * Een prijs die al maanden de gewone verkoopprijs is, is geen aankondiging meer —
+ * dan is de oude prijs simpelweg niet langer relevant en zou een blijvende
+ * doorgestreepte prijs de klant een korting voorspiegelen die niet bestaat.
+ * Zonder deze grens bleef één prijsverlaging tot in lengte van jaren "SALE".
+ *
+ * Kevin kan deze grens hier aanpassen (in dagen); de 30 sluit bewust aan op het
+ * referentievenster hierboven zodat er één begrijpelijk getal in het spel is.
+ */
+const SALE_ANNOUNCEMENT_DAYS = 30;
+const SALE_ANNOUNCEMENT_MS = SALE_ANNOUNCEMENT_DAYS * 24 * 60 * 60 * 1000;
+
 type HistoryRow = { variantId: string; priceCents: number; validFrom: Date };
 
 /**
  * Berekent per variant de Omnibus-referentieprijs: de laagste prijs die gold
  * in de 30 dagen vóór de ingangsdatum van de huidige prijs. Retourneert alleen
- * een waarde als die referentie HOGER is dan de huidige prijs (= echte korting).
+ * een waarde als die referentie HOGER is dan de huidige prijs (= echte korting)
+ * ÉN de huidige prijs zelf nog geen `SALE_ANNOUNCEMENT_DAYS` oud is.
  *
  * Opeenvolgende rijen met dezelfde prijs worden eerst samengevouwen, zodat een
  * herimport die een no-op-rij toevoegt het vensteranker (de ingangsdatum van
  * de huidige prijs) niet kan verschuiven.
+ *
+ * `now` is injecteerbaar zodat de rekenkern testbaar is zonder aan de klok te
+ * hoeven zitten; in productie blijft het gewoon "nu".
  */
-export function computeReferencePrices(rows: HistoryRow[]): Map<string, number> {
+export function computeReferencePrices(rows: HistoryRow[], now: Date = new Date()): Map<string, number> {
   const byVariant = new Map<string, HistoryRow[]>();
   for (const row of rows) {
     const list = byVariant.get(row.variantId) || [];
@@ -75,6 +96,9 @@ export function computeReferencePrices(rows: HistoryRow[]): Map<string, number> 
 
     const current = collapsed[collapsed.length - 1];
     const windowEnd = current.validFrom.getTime();
+    // Aankondiging uitgewerkt: de huidige prijs geldt al langer dan de drempel en
+    // is daarmee gewoon de normale prijs geworden — geen "van"-prijs, geen badge.
+    if (now.getTime() - windowEnd > SALE_ANNOUNCEMENT_MS) continue;
     const windowStart = windowEnd - THIRTY_DAYS_MS;
     let lowest: number | null = null;
     for (let i = 0; i < collapsed.length - 1; i++) {

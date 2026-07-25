@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Retourneren — GENTS",
-    description: "Iets retourneren? Start hier of vanuit je bestelling. Kies een DHL-retourlabel of inleveren in de winkel, en geld terug of GENTS-tegoed (gratis retour).",
+    // "(gratis retour)" stond hier los achter de keuze en las als een
+    // onvoorwaardelijke belofte — gratis is het alleen bij tegoed of in de winkel.
+    description: "Iets retourneren? Start hier of vanuit je bestelling. Kies een DHL-retourlabel of inleveren in de winkel, en geld terug of GENTS-tegoed — met tegoed of in de winkel is retourneren gratis.",
     alternates: await localeAlternates("/retourneren"),
     // Geen expliciete index:true meer — dan volgt de pagina de site-brede
     // SITE_INDEXABLE-gate (robots.txt) i.p.v. die te forceren tijdens pre-launch.

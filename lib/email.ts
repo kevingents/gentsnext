@@ -1,7 +1,7 @@
 import { getSiteUrl } from "@/lib/site-url";
 import { formatEuro as euro } from "@/lib/format";
 import { DEFAULT_LOCALE, localizedPath, type Locale } from "@/lib/i18n";
-import { interpolate, t as tStatic } from "@/lib/messages";
+import { t as tStatic } from "@/lib/messages";
 import { getT } from "@/lib/t-server";
 
 /**
@@ -23,56 +23,12 @@ export function emailConfigured(): boolean {
 type Tr = (key: string, params?: Record<string, string | number>) => string;
 
 /**
- * NL-brontekst van de mail-sleutels. Vangnet: `t()` geeft de sleutelnaam terug
- * zolang een sleutel nog niet in de centrale catalogus staat — dan zou er
- * letterlijk "mail.order.intro" in een klantmail belanden. Deze map houdt de
- * mail in dat geval gewoon Nederlands (= het gedrag van vóór deze wijziging).
- * Zodra de sleutels in lib/messages staan wint de catalogus en is dit dood hout.
+ * Nederlandse vertaler — voor mails die bewust NL blijven (interne notificaties).
+ * De NL-brontekst van alle `mail.*`-sleutels staat in lib/messages-catalog, dus
+ * in dezelfde bron als de rest van de site: alleen dán ziet de vertaal-cron ze
+ * en krijgt een /en- of /de-klant zijn mail in de eigen taal.
  */
-const MAIL_NL: Record<string, string> = {
-  "mail.line.size": "maat {size}",
-  "mail.footer.pricesInclVat": "Alle prijzen incl. btw",
-  "mail.footer.usps": "Persoonlijk advies in 19 winkels · gratis retour binnen 14 dagen · alle prijzen incl. btw",
-  "mail.order.subject": "Je GENTS-bestelling {orderNumber} is bevestigd",
-  "mail.order.heading": "Bedankt voor je bestelling, {name}",
-  "mail.order.headingNoName": "Bedankt voor je bestelling",
-  "mail.order.intro": "We hebben je betaling ontvangen en gaan voor je aan de slag. Hieronder vind je je bestelling.",
-  "mail.order.remaining": "Nog te betalen",
-  "mail.order.points": "Je spaart {points} punten met deze bestelling",
-  "mail.order.pointsBody":
-    "Bekijk en verzilver ze in je {link}. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.",
-  "mail.order.accountLink": "GENTS-account",
-  "mail.order.returnNote": "Niet helemaal tevreden? Je hebt 14 dagen bedenktijd en retourneert gratis.",
-  "mail.order.questions": "Vragen? Antwoord op deze mail of bezoek {link}.",
-  "mail.login.subject": "Je inloglink voor GENTS",
-  "mail.login.heading": "Inloggen bij GENTS",
-  "mail.login.body1": "Klik op de knop hieronder om in te loggen op je account. De link is 30 minuten geldig en werkt één keer.",
-  "mail.login.body2": "Zo heb je je bestellingen, bewaarde maten, spaarpunten en favorieten meteen bij de hand.",
-  "mail.login.footnote": "Heb je dit niet aangevraagd? Dan kun je deze e-mail veilig negeren — er gebeurt niets.",
-  "mail.greeting.fallbackName": "daar",
-  "mail.status.viewOrder": "Bekijk je bestelling",
-  "mail.status.shipped.subject": "Je GENTS-bestelling {orderNumber} is verzonden",
-  "mail.status.shipped.text": "Hoi {name}, goed nieuws! Je bestelling {orderNumber} is onderweg.",
-  "mail.status.readyPickup.subject": "Je GENTS-bestelling {orderNumber} ligt klaar",
-  "mail.status.readyPickup.text": "Hoi {name}, je bestelling {orderNumber} ligt klaar om af te halen in de winkel. Tot snel!",
-  "mail.status.delivered.subject": "Hoe bevalt je GENTS-bestelling?",
-  "mail.status.delivered.heading": "Hoe bevalt je bestelling?",
-  "mail.status.delivered.text":
-    "Hoi {name}, je bestelling {orderNumber} is bezorgd. We zijn benieuwd wat je ervan vindt — een korte review helpt andere klanten enorm en kost je maar een minuutje.",
-  "mail.status.refunded.subject": "Je GENTS-bestelling {orderNumber} is terugbetaald",
-  "mail.status.refunded.text": "Hoi {name}, je betaling voor {orderNumber} is terugbetaald. Vragen? We helpen je graag.",
-};
-
-/** Legt het NL-vangnet onder een vertaler (zie MAIL_NL). */
-function withFallback(tr: Tr): Tr {
-  return (key, params) => {
-    const v = tr(key, params);
-    return v === key && MAIL_NL[key] ? interpolate(MAIL_NL[key], params) : v;
-  };
-}
-
-/** Nederlandse vertaler — voor mails die bewust NL blijven (interne notificaties). */
-const nlT: Tr = withFallback((key, params) => tStatic(key, DEFAULT_LOCALE, params));
+const nlT: Tr = (key, params) => tStatic(key, DEFAULT_LOCALE, params);
 
 /**
  * Vertaler voor een klantmail. Leest óók de cron-vertalingen (dezelfde bron als
@@ -82,7 +38,7 @@ const nlT: Tr = withFallback((key, params) => tStatic(key, DEFAULT_LOCALE, param
 export async function mailT(locale: Locale): Promise<Tr> {
   if (locale === DEFAULT_LOCALE) return nlT;
   try {
-    return withFallback(await getT(locale));
+    return await getT(locale);
   } catch {
     return nlT;
   }
@@ -383,7 +339,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
       <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:0"><strong>Handig om te weten</strong></p>
       <ul style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:6px 0 0;padding-left:18px">
         <li>Bewaar je maten en we vullen ze automatisch in — <a href="${site}/maatadvies" style="color:#0A0A0A">doe het maatadvies</a>.</li>
-        <li>Gratis retour binnen 14 dagen, ook in onze winkels.</li>
+        <li>14 dagen retourrecht — gratis met een GENTS-tegoed of in één van onze winkels.</li>
         <li>Persoonlijk advies in 19 winkels door heel Nederland.</li>
       </ul>
     </td></tr>

@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getMolliePayment, mollieConfigured } from "@/lib/mollie";
 import {
   applyPaymentStatus,
-  sendOrderConfirmationOnce,
-  planAndPushFulfillmentOnce,
+  confirmAndPlan,
   releaseOrderGiftcard,
 } from "@/lib/orders";
 import { applyGiftcardPaymentStatus } from "@/lib/giftcards";
@@ -57,9 +56,11 @@ export async function POST(req: Request) {
 
     await applyPaymentStatus(payment.id, payment.status);
     if (payment.status === "paid" || payment.status === "authorized") {
-      await sendOrderConfirmationOnce(payment.id);
-      // Allocatie (magazijn-eerst, minimaal splitsen) + SRS-weborder-push.
-      await planAndPushFulfillmentOnce(payment.id);
+      // Bevestigingsmail + allocatie (magazijn-eerst, minimaal splitsen), maar
+      // niet aan elkaar geketend: ligt de mailer plat, dan moet de order tóch
+      // ingepland worden — anders staat een betaalde bestelling in geen enkele
+      // piklijst zolang de storing duurt.
+      await confirmAndPlan(payment.id);
     } else if (["canceled", "expired", "failed"].includes(payment.status)) {
       // Mislukte betaling → een ingezette cadeaubon weer vrijgeven.
       await releaseOrderGiftcard(payment.id);

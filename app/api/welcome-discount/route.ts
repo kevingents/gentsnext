@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { createWelcomeVoucher } from "@/lib/vouchers";
 import { getSettings } from "@/lib/settings";
-import { brandedEmailHtml, emailConfigured } from "@/lib/email";
+import { brandedEmailHtml, emailConfigured, mailT } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
+import { getLocale } from "@/lib/locale-server";
+import { localizedPath, type Locale } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -16,18 +18,26 @@ const VALID_DAYS = 30;
  * weg. Best-effort en env-gated (zonder Resend-config gebeurt er niets); het
  * resultaat gaat terug naar de popup, zodat die alleen "we hebben 'm gemaild"
  * zegt als dat ook echt gebeurd is.
+ *
+ * Taal: dezelfde rail als de inlogmail — teksten via mailT(locale) en de locale
+ * door aan brandedEmailHtml, zodat een /en- of /de-bezoeker geen Nederlandse
+ * mail met lang="nl" krijgt. De middleware slaat /api over, dus getLocale()
+ * leest hier de locale-cookie die diezelfde middleware op elke pagina zet.
  */
-async function mailWelcomeCode(email: string, code: string): Promise<boolean> {
+async function mailWelcomeCode(email: string, code: string, locale: Locale): Promise<boolean> {
   if (!emailConfigured()) return false;
   const site = getSiteUrl();
+  const t = await mailT(locale);
   const html = brandedEmailHtml({
-    heading: "Je welkomstkorting staat klaar",
+    heading: t("mail.welcome.heading"),
     bodyHtml: `
-      <p style="margin:0 0 14px">Bedankt voor je inschrijving. Met deze code krijg je <strong>${PERCENT_OFF}% korting</strong> op je volgende bestelling:</p>
+      <p style="margin:0 0 14px">${t("mail.welcome.intro", { percent: PERCENT_OFF })}</p>
       <div style="display:inline-block;background:#F6F5F2;border:1px solid #E6E4DF;color:#111111;font:700 20px 'Courier New',monospace;letter-spacing:2px;padding:12px 20px">${code}</div>
-      <p style="margin:14px 0 0">Vul 'm bij het afrekenen in onder “Kortingscode”.</p>`,
-    cta: { label: "Begin met shoppen", href: site },
-    footnote: `Eenmalig te gebruiken en ${VALID_DAYS} dagen geldig.`,
+      <p style="margin:14px 0 0">${t("mail.welcome.useNote")}</p>`,
+    cta: { label: t("mail.welcome.cta"), href: `${site}${localizedPath("/", locale)}` },
+    footnote: t("mail.welcome.footnote", { days: VALID_DAYS }),
+    locale,
+    t,
   });
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -36,7 +46,7 @@ async function mailWelcomeCode(email: string, code: string): Promise<boolean> {
       body: JSON.stringify({
         from: process.env.RESEND_FROM,
         to: [email],
-        subject: `Je GENTS-welkomstkorting: ${PERCENT_OFF}% met code ${code}`,
+        subject: t("mail.welcome.subject", { percent: PERCENT_OFF, code }),
         html,
       }),
     });
@@ -84,7 +94,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const mailed = await mailWelcomeCode(email, code);
+  const mailed = await mailWelcomeCode(email, code, await getLocale());
 
   await getSettings(); // warmt cache; geen verdere actie
   return NextResponse.json({ ok: true, code, percentOff: PERCENT_OFF, mailed });

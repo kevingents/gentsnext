@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getWorldlineCheckoutStatus } from "@/lib/worldline";
 import {
   applyPaymentStatus,
-  sendOrderConfirmationOnce,
-  planAndPushFulfillmentOnce,
+  confirmAndPlan,
   releaseOrderGiftcard,
   paymentRefForOrderNumber,
 } from "@/lib/orders";
@@ -32,8 +31,8 @@ export async function GET(req: Request) {
       const status = await getWorldlineCheckoutStatus(ref);
       await applyPaymentStatus(ref, status.canonical);
       if (status.canonical === "paid") {
-        await sendOrderConfirmationOnce(ref);
-        await planAndPushFulfillmentOnce(ref);
+        // Zie de Mollie-webhook: mail en inplannen mogen elkaar niet gijzelen.
+        await confirmAndPlan(ref);
       } else if (["canceled", "expired", "failed"].includes(status.canonical)) {
         await releaseOrderGiftcard(ref);
       }

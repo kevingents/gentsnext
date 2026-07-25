@@ -5,6 +5,7 @@ import {
   finalizeGiftcardCoveredOrder,
   voidUnpaidOrder,
   OutOfStockError,
+  CheckoutError,
   type CheckoutItem,
   type DeliveryMethod,
 } from "@/lib/orders";
@@ -105,7 +106,14 @@ export async function POST(req: Request) {
     if (e instanceof OutOfStockError) {
       return NextResponse.json({ ok: false, error: e.message, unavailableSkus: e.skus }, { status: 409 });
     }
-    return bad(e instanceof Error ? e.message : "Bestelling kon niet worden aangemaakt.");
+    // Alleen een bewust voor de klant geschreven melding (CheckoutError) mag door.
+    // Al het andere is techniek: een rauwe `e.message` zette hier tot nu toe een
+    // Postgres-fout mét kolomnamen in de foutbalk van de afrekenpagina — dat helpt
+    // de klant niet en geeft onnodig prijs hoe de database eruitziet. Het échte
+    // probleem hoort in het serverlog (Vercel runtime errors).
+    if (e instanceof CheckoutError) return bad(e.message);
+    console.error("[checkout] order aanmaken faalde:", e);
+    return bad("Er ging iets mis bij het aanmaken van je bestelling. Probeer het opnieuw of neem contact met ons op.");
   }
   // Prijs-guard: de betaalknop toonde het client-totaal (localStorage-prijzen);
   // de server herprijst uit de DB. Wijkt dat af (sale gestart/afgelopen sinds
@@ -200,8 +208,11 @@ export async function POST(req: Request) {
     // Betaalprovider gooide (API-fout/timeout) → geen bruikbare betaling; order terugdraaien
     // zodat verbruikte voucher/cadeaubon + voorraad-holds direct vrijkomen.
     await voidUnpaidOrder(order.id).catch((err) => console.error("[checkout] void na provider-fout:", err));
+    // Zelfde regel als hierboven: de rauwe provider-melding (API-veldnamen, HTTP-body
+    // van Mollie/Worldline) is niets voor de klant. Log 'm, toon een bruikbare zin.
+    console.error("[checkout] betaling starten faalde bij provider:", e);
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "Betaling starten mislukte." },
+      { ok: false, error: "Het betaalscherm kon niet worden geopend. Probeer het zo nog eens — je bestelling is niet verwerkt." },
       { status: 502 }
     );
   }
