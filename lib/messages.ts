@@ -81,6 +81,18 @@ const nl: Dict = {
   "checkout.country": "Land",
   "checkout.shipping_rate_free_from": "Verzendkosten {amount} — gratis vanaf {threshold}",
   "checkout.shipping_rate_flat": "Verzendkosten {amount}",
+  "order.status.shippedTitle": "Je bestelling is onderweg",
+  "order.status.shippedBody": "We hebben je pakket aan DHL meegegeven. Je hoort het zodra het bezorgd is.",
+  "order.status.readyPickupTitle": "Je bestelling ligt klaar",
+  "order.status.readyPickupBody": "Je kunt 'm ophalen bij {store}. Neem je bevestiging of ordernummer mee.",
+  "order.status.deliveredTitle": "Je bestelling is bezorgd",
+  "order.status.deliveredBody": "Veel plezier ermee. Past iets niet? Je hebt 14 dagen bedenktijd.",
+  "order.status.deliveredStepBody": "Bezorgd. Past iets niet? Meld je retour aan via het retourportaal.",
+  "order.status.packedDone": "Ingepakt en verzonden.",
+  "order.status.pickupStepTitle": "Ophalen in de winkel",
+  "order.status.refundedEyebrow": "Terugbetaald",
+  "order.status.refundedTitle": "Deze bestelling is terugbetaald",
+  "order.status.refundedBody": "Het bedrag staat binnen enkele werkdagen op je rekening of als tegoed klaar. Vragen? Onze klantenservice helpt je graag.",
 };
 
 const en: Dict = {
@@ -156,6 +168,18 @@ const en: Dict = {
   "checkout.country": "Country",
   "checkout.shipping_rate_free_from": "Shipping {amount} — free from {threshold}",
   "checkout.shipping_rate_flat": "Shipping {amount}",
+  "order.status.shippedTitle": "Your order is on its way",
+  "order.status.shippedBody": "We handed your parcel to DHL. We'll let you know once it's delivered.",
+  "order.status.readyPickupTitle": "Your order is ready",
+  "order.status.readyPickupBody": "You can collect it at {store}. Bring your confirmation or order number.",
+  "order.status.deliveredTitle": "Your order has been delivered",
+  "order.status.deliveredBody": "Enjoy. Doesn't something fit? You have 14 days to decide.",
+  "order.status.deliveredStepBody": "Delivered. Doesn't something fit? Register your return in the returns portal.",
+  "order.status.packedDone": "Packed and shipped.",
+  "order.status.pickupStepTitle": "Collect in store",
+  "order.status.refundedEyebrow": "Refunded",
+  "order.status.refundedTitle": "This order has been refunded",
+  "order.status.refundedBody": "The amount will be back on your account within a few working days, or is ready as store credit. Questions? Our customer service is happy to help.",
 };
 
 const de: Dict = {

@@ -94,7 +94,16 @@ export default async function OrderPage({ params, searchParams }: Props) {
   if (!data) notFound();
   const { order, lines } = data;
 
-  const paid = order.status === "paid";
+  // De pagina toonde ná verzending niets meer (alleen 'paid' had een weergave):
+  // shipped/ready_pickup/delivered/refunded vielen door alle takken heen.
+  const shipped = order.status === "shipped";
+  const readyPickup = order.status === "ready_pickup";
+  const delivered = order.status === "delivered";
+  const refunded = order.status === "refunded";
+  const isPickup = order.deliveryMethod === "pickup";
+  // 'paid' = de volledige bevestigingsweergave; die tonen we ook in elke
+  // latere fase, met de stappen aangevinkt tot waar de bestelling nu staat.
+  const paid = ["paid", "shipped", "ready_pickup", "delivered"].includes(order.status);
   const pending = order.status === "open";
   const failed = ["failed", "expired", "canceled"].includes(order.status);
 
@@ -129,19 +138,46 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {paid ? (
         <>
           <p className="label-brand">{order.firstName ? t("order.thanks_name", { name: order.firstName }) : t("order.thanks")}</p>
-          <h1 className="mt-2 text-display-md">{t("order.confirmed_title")}</h1>
+          <h1 className="mt-2 text-display-md">
+            {delivered
+              ? t("order.status.deliveredTitle")
+              : readyPickup
+                ? t("order.status.readyPickupTitle")
+                : shipped
+                  ? t("order.status.shippedTitle")
+                  : t("order.confirmed_title")}
+          </h1>
           <p className="mt-3 font-sans text-ink-soft">
-            {t("order.confirmation_sent")} {order.email}.
+            {delivered
+              ? t("order.status.deliveredBody")
+              : readyPickup
+                ? t("order.status.readyPickupBody", { store: order.pickupStore || "" })
+                : shipped
+                  ? t("order.status.shippedBody")
+                  : <>{t("order.confirmation_sent")} {order.email}.</>}
           </p>
-          {/* Stappenplan — wat er nu gebeurt (Coolblue-stijl). */}
+          {/* Stappenplan — vinkjes lopen mee met de echte orderstatus. */}
           <section className="mt-8 rounded-card border border-line bg-surface/50 p-5">
             <p className="label-brand">{t("order.what_happens_next")}</p>
             <ol className="mt-4 space-y-4">
               <Step done title={t("order.step_payment_received")} body={<>{t("order.confirmation_details")} <span className="text-ink">{order.email}</span>.</>} />
-              <Step title={t("order.step_prepare")} body={sourceSentence(plan, t)} />
               <Step
-                title={isExpress ? t("order.step_express") : t("order.step_delivered")}
-                body={deliveryDate ? <>{t("order.expected_delivery")} <span className="text-ink">{fmtDate(deliveryDate, locale)}</span>. {t("order.not_home_note")}</> : t("order.delivery_asap")}
+                done={shipped || readyPickup || delivered}
+                title={t("order.step_prepare")}
+                body={shipped || readyPickup || delivered ? t("order.status.packedDone") : sourceSentence(plan, t)}
+              />
+              <Step
+                done={delivered}
+                title={isPickup ? t("order.status.pickupStepTitle") : isExpress ? t("order.step_express") : t("order.step_delivered")}
+                body={
+                  delivered
+                    ? t("order.status.deliveredStepBody")
+                    : readyPickup
+                      ? t("order.status.readyPickupBody", { store: order.pickupStore || "" })
+                      : deliveryDate
+                        ? <>{t("order.expected_delivery")} <span className="text-ink">{fmtDate(deliveryDate, locale)}</span>. {t("order.not_home_note")}</>
+                        : t("order.delivery_asap")
+                }
               />
             </ol>
           </section>
@@ -154,6 +190,12 @@ export default async function OrderPage({ params, searchParams }: Props) {
             {t("order.processing_note")}
           </p>
           <OrderStatusPoller orderNumber={order.orderNumber} token={token} />
+        </>
+      ) : refunded ? (
+        <>
+          <p className="label-brand">{t("order.status.refundedEyebrow")}</p>
+          <h1 className="mt-2 text-display-md">{t("order.status.refundedTitle")}</h1>
+          <p className="mt-3 font-sans text-ink-soft">{t("order.status.refundedBody")}</p>
         </>
       ) : failed ? (
         <>
