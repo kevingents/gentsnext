@@ -5,6 +5,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers } from "@/db/schema";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { BackofficeShell, Kpi, Section, euro } from "@/components/account/report-ui";
 import { ImportStorePurchasesButton } from "@/components/account/import-store-purchases-button";
 
@@ -19,13 +21,8 @@ type Props = { params: Promise<{ id: string }> };
 export default async function KlantDetailPage({ params }: Props) {
   const admin = await getSessionCustomer();
   if (!admin) redirect("/account/login");
-  if (!admin.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug</Link>
-      </div>
-    );
+  if (!can(admin, "klanten")) {
+    return <GeenToegang permission="klanten" />;
   }
 
   const { id } = await params;

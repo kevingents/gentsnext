@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { products, productSizeMedia } from "@/db/schema";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
-/** Admin: grote-maat-foto per product instellen (of verwijderen). */
+/** Recht "presentatie": grote-maat-foto per product instellen (of verwijderen). */
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer?.isAdmin) return NextResponse.json({ ok: false, error: "geen beheerrechten" }, { status: 403 });
+  if (!(await requirePermission("presentatie"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Presentatie nodig." }, { status: 403 });
+  }
 
   let body: { handle?: string; kind?: string; threshold?: string; url?: string; alt?: string; remove?: boolean };
   try {

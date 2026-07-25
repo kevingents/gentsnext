@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { getAllMerchandisingPins } from "@/lib/merchandising";
 import { getPinSinceMap, listPinContexts, resolvePinItems, type PinItem } from "@/lib/merchandising-admin";
 import { MerchandisingEditor } from "@/components/account/merchandising-editor";
@@ -19,14 +20,8 @@ export default async function MerchandisingPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
 
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <p className="mt-3 font-sans text-ink-soft">Deze pagina is alleen voor beheerders.</p>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug naar mijn account</Link>
-      </div>
-    );
+  if (!can(customer, "presentatie")) {
+    return <GeenToegang permission="presentatie" />;
   }
 
   const [allPins, since] = await Promise.all([getAllMerchandisingPins(), getPinSinceMap()]);

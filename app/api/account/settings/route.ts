@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { updateSettings, type Settings } from "@/lib/settings";
 import { DAYS } from "@/lib/stores";
 
@@ -12,11 +12,11 @@ const NUM_FIELDS: (keyof Settings)[] = [
   "retailSafetyStock", "warehouseSafetyStock",
 ];
 
-/** Werkt de centrale instellingen bij — alleen voor beheerders. */
+/** Werkt de centrale instellingen bij — recht "instellingen". */
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "niet ingelogd" }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "geen beheerrechten" }, { status: 403 });
+  if (!(await requirePermission("instellingen"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Instellingen nodig." }, { status: 403 });
+  }
 
   let body: Record<string, unknown>;
   try {

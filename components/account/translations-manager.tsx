@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { btnPrimary, btnSecondary, fieldClass } from "@/components/account/report-ui";
+import { btnPrimary, btnSecondary, fieldClass } from "@/components/account/ui-classes";
 
 /**
  * Vertalingen beheren (Site-studio). Per taal alle Nederlandse bronteksten met

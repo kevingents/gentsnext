@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { searchProducts } from "@/lib/catalog";
 import { pinKey, type PinContextKind } from "@/lib/merchandising";
 import {
@@ -21,20 +21,20 @@ export const dynamic = "force-dynamic";
  * GET  ?handles=a,b&kind&slug  → controle: doen deze pins daar iets?
  * POST { kind, slug, handles[] } → de pins van één context (over)schrijven.
  *
- * Alleen voor ingelogde beheerders.
+ * Alleen met het recht "presentatie".
  */
 
 const MAX_PINS = 24;
 
-async function denyIfNotAdmin(): Promise<NextResponse | null> {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen beheerrechten." }, { status: 403 });
+async function denyZonderRecht(): Promise<NextResponse | null> {
+  if (!(await requirePermission("presentatie"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Presentatie nodig." }, { status: 403 });
+  }
   return null;
 }
 
 export async function GET(req: Request) {
-  const denied = await denyIfNotAdmin();
+  const denied = await denyZonderRecht();
   if (denied) return denied;
 
   const params = new URL(req.url).searchParams;
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await denyIfNotAdmin();
+  const denied = await denyZonderRecht();
   if (denied) return denied;
 
   let body: { kind?: unknown; slug?: unknown; handles?: unknown };

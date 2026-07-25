@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { getAllSeoOverrides, setSeoOverride, deleteSeoOverride, hasSeoOverride } from "@/lib/seo-overrides";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * SEO-overrides beheren vanuit de Site-studio (/account/seo) — alleen voor
- * beheerders die in de winkel zelf ingelogd zijn. De portal gebruikt hiervoor
+ * SEO-overrides beheren vanuit de Site-studio (/account/seo) — alleen met het
+ * recht "vindbaarheid", ingelogd in de winkel zelf. De portal gebruikt hiervoor
  * app/api/studio/site/seo (token); deze route is de eigen-account-kant.
  *
  * POST { path, title?, description?, noindex?, originalPath? } → toevoegen/bijwerken
@@ -17,9 +17,9 @@ export const runtime = "nodejs";
  * op 200 en de omschrijving op 320 tekens en ruimt lege regels op).
  */
 async function guard() {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen beheerrechten." }, { status: 403 });
+  if (!(await requirePermission("vindbaarheid"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Vindbaarheid nodig." }, { status: 403 });
+  }
   return null;
 }
 

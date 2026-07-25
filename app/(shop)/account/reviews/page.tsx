@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { listReviewsForModeration } from "@/lib/reviews-db";
 import { ReviewsModeration } from "@/components/account/reviews-moderation";
 import { BackofficeShell } from "@/components/account/report-ui";
@@ -12,15 +13,8 @@ export const metadata: Metadata = { title: "Reviews", robots: { index: false, fo
 export default async function ReviewsAdminPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">
-          ← Terug
-        </Link>
-      </div>
-    );
+  if (!can(customer, "presentatie")) {
+    return <GeenToegang permission="presentatie" />;
   }
 
   const pending = await listReviewsForModeration("pending", 200);
@@ -32,7 +26,10 @@ export default async function ReviewsAdminPage() {
     title: r.title,
     body: r.body,
     fit: r.fit,
-    email: r.email,
+    // Modereren kan zonder het adres van de schrijver; dat is een klantgegeven.
+    // Wie ook het recht "klanten" heeft ziet het wél — handig om een review aan
+    // een bestelling te koppelen. De rest krijgt het niet eens mee naar de browser.
+    email: can(customer, "klanten") ? r.email : "",
     createdAt: r.createdAt.toISOString(),
   }));
 

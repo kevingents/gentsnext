@@ -1,15 +1,16 @@
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { exportOrders, exportCustomers } from "@/lib/reports";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Admin-only CSV-export van orders of klanten. Respecteert dezelfde filters als
+ * CSV-export van orders of klanten (recht "klanten"). Respecteert dezelfde filters als
  * het overzicht (q/status/channel/from/to). Excel-vriendelijk (BOM + puntkomma).
  */
 export async function GET(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer?.isAdmin) return new Response("Geen toegang", { status: 403 });
+  if (!(await requirePermission("klanten"))) {
+    return new Response("Geen toegang: hiervoor heb je het werkgebied Klantgegevens nodig.", { status: 403 });
+  }
 
   const url = new URL(req.url);
   const type = url.searchParams.get("type") === "customers" ? "customers" : "orders";

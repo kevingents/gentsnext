@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { getDashboard } from "@/lib/analytics";
 import { getNavInsights } from "@/lib/nav-insights";
 import { getProductsByHandles } from "@/lib/catalog";
@@ -13,13 +15,8 @@ export const metadata: Metadata = { title: "Analytics", robots: { index: false, 
 export default async function AnalyticsPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug</Link>
-      </div>
-    );
+  if (!can(customer, "meten")) {
+    return <GeenToegang permission="meten" />;
   }
 
   const [d, nav] = await Promise.all([getDashboard(30), getNavInsights(30)]);

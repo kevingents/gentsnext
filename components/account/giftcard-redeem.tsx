@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatEuro } from "@/lib/pricing";
-import { btnPrimary, btnSecondary } from "@/components/account/report-ui";
+import { btnPrimary, btnSecondary } from "@/components/account/ui-classes";
 
 type Tx = { deltaCents: number; reason: string; orderNumber: string; at: string };
 type Info = {

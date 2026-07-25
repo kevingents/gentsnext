@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { setReviewStatus } from "@/lib/reviews-db";
 
 export const dynamic = "force-dynamic";
@@ -7,9 +7,8 @@ export const dynamic = "force-dynamic";
 const ALLOWED = new Set(["published", "rejected", "pending"]);
 
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer?.isAdmin) {
-    return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("presentatie"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Presentatie nodig." }, { status: 403 });
   }
   let body: any;
   try {

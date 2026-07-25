@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { parseRange, getKpis, topProducts, revenueByCategory, topCustomers, voucherGiftcardImpact, newsletterStats, reviewStats, retentionReport, returnsReport } from "@/lib/reports";
 import { BackofficeShell, Section, RangeForm, euro } from "@/components/account/report-ui";
 
@@ -13,19 +15,19 @@ type Props = { searchParams: Promise<{ from?: string; to?: string }> };
 export default async function RapportagesPage({ searchParams }: Props) {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug</Link>
-      </div>
-    );
+  if (!can(customer, "meten")) {
+    return <GeenToegang permission="meten" />;
   }
 
+  // De rapportage zelf is een cijferpagina ("meten"), maar de top-50 klanten is
+  // geen cijfer: dat zijn namen, e-mailadressen en wat iemand persoonlijk
+  // besteed heeft — dezelfde bron als /account/klanten. Die sectie hangt dus aan
+  // het recht "klanten", en zonder dat recht halen we de gegevens niet eens op.
+  const magKlanten = can(customer, "klanten");
   const sp = await searchParams;
   const r = parseRange(sp);
   const [kpi, prods, cats, custs, promo, news, reviews, retention, returns] = await Promise.all([
-    getKpis(r), topProducts(r, 50), revenueByCategory(r), topCustomers(50), voucherGiftcardImpact(r), newsletterStats(), reviewStats(), retentionReport(), returnsReport(r),
+    getKpis(r), topProducts(r, 50), revenueByCategory(r), magKlanten ? topCustomers(50) : Promise.resolve([]), voucherGiftcardImpact(r), newsletterStats(), reviewStats(), retentionReport(), returnsReport(r),
   ]);
 
   const onlineAov = kpi.orders ? Math.round(kpi.revenueCents / kpi.orders) : 0;
@@ -113,7 +115,7 @@ export default async function RapportagesPage({ searchParams }: Props) {
         </Section>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <div className={`mt-5 grid gap-5 ${magKlanten ? "lg:grid-cols-2" : ""}`}>
         <Section title="Top 50 producten (omzet)">
           <div className="max-h-[28rem] overflow-y-auto">
             <table className="w-full border-collapse font-sans text-sm">
@@ -128,19 +130,21 @@ export default async function RapportagesPage({ searchParams }: Props) {
           </div>
         </Section>
 
-        <Section title="Top 50 klanten (besteed, all-time)">
-          <div className="max-h-[28rem] overflow-y-auto">
-            <table className="w-full border-collapse font-sans text-sm">
-              <thead className="sticky top-0 bg-canvas"><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted"><th className="py-1.5 pr-2">Klant</th><th className="py-1.5 text-right">Orders</th><th className="py-1.5 pl-2 text-right">Besteed</th></tr></thead>
-              <tbody>
-                {custs.map((c) => (
-                  <tr key={c.id} className="border-b border-line/60"><td className="py-1.5 pr-2"><Link href={`/account/klanten/${c.id}`} className="block max-w-[16rem] truncate hover:underline">{c.name || c.email}</Link></td><td className="py-1.5 text-right tabular-nums">{c.orders}</td><td className="py-1.5 pl-2 text-right tabular-nums">{euro(c.spentCents)}</td></tr>
-                ))}
-                {!custs.length ? <tr><td colSpan={3} className="py-4 text-center text-muted">Geen klanten.</td></tr> : null}
-              </tbody>
-            </table>
-          </div>
-        </Section>
+        {magKlanten ? (
+          <Section title="Top 50 klanten (besteed, all-time)">
+            <div className="max-h-[28rem] overflow-y-auto">
+              <table className="w-full border-collapse font-sans text-sm">
+                <thead className="sticky top-0 bg-canvas"><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted"><th className="py-1.5 pr-2">Klant</th><th className="py-1.5 text-right">Orders</th><th className="py-1.5 pl-2 text-right">Besteed</th></tr></thead>
+                <tbody>
+                  {custs.map((c) => (
+                    <tr key={c.id} className="border-b border-line/60"><td className="py-1.5 pr-2"><Link href={`/account/klanten/${c.id}`} className="block max-w-[16rem] truncate hover:underline">{c.name || c.email}</Link></td><td className="py-1.5 text-right tabular-nums">{c.orders}</td><td className="py-1.5 pl-2 text-right tabular-nums">{euro(c.spentCents)}</td></tr>
+                  ))}
+                  {!custs.length ? <tr><td colSpan={3} className="py-4 text-center text-muted">Geen klanten.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        ) : null}
       </div>
     </BackofficeShell>
   );

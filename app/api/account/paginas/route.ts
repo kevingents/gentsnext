@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { getStorePages, saveStorePages, type StorePage } from "@/lib/content-pages";
 import { reservedPageSlugs } from "@/lib/reserved-page-slugs";
 import { CONFLICT_MESSAGE, docVersion } from "@/lib/content-version";
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
  * Content-pagina's vanuit de Site-studio in de webshop zelf (/account/paginas).
  *   GET  → huidige pagina's + versiestempel.
  *   POST { items, version } → de complete lijst opslaan (gesaneerd). Weglaten = verwijderen.
- * Auth: ingelogde beheerder (sessie). Bewust NIET de studio-token-route — die is
+ * Auth: ingelogde medewerker met het recht "content". Bewust NIET de studio-token-route — die is
  * voor de portal.
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
@@ -59,9 +59,9 @@ function sanitize(input: unknown, prev: StorePage[]): StorePage[] {
 }
 
 async function guard() {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("content"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Content nodig." }, { status: 403 });
+  }
   return null;
 }
 

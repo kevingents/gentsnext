@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { getMenu } from "@/lib/menu-server";
 import { setContentDoc } from "@/lib/content-store";
 import { CONFLICT_MESSAGE, docVersion } from "@/lib/content-version";
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  * Hoofdmenu vanuit de Site-studio in de webshop zelf (/account/menu).
  *   GET  → het huidige menu (eigen content-doc of de MAIN_MENU-seed) + versiestempel.
  *   POST { items, version } → het complete menu opslaan in content:menu (gesaneerd).
- * Auth: ingelogde beheerder (sessie). Bewust NIET de studio-token-route.
+ * Auth: ingelogde medewerker met het recht "content". Bewust NIET de studio-token-route.
  */
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 /** Alleen veilige link-schemes toestaan (stored-XSS-preventie op de publieke site). */
@@ -63,9 +63,9 @@ function sanitize(input: unknown): MenuItem[] {
 }
 
 async function guard() {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("content"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Content nodig." }, { status: 403 });
+  }
   return null;
 }
 
