@@ -37,7 +37,12 @@ type Address = {
 type Customer = {
   id: string; email: string; firstName: string; lastName: string; phone: string;
   loyaltyPoints: number; sizeProfile: Record<string, string>; marketingOptIn: boolean;
-  isAdmin?: boolean;
+  /** Heeft deze persoon toegang tot de studio (beheerder of een rol)? */
+  isStaff?: boolean;
+  /** De werkgebieden waar hij in mag — bepaalt welke snelkoppelingen we tonen. */
+  permissions?: string[];
+  /** Eerste studiopagina waar hij in mag; altijd zichtbaar als vangnet. */
+  studioHref?: string | null;
 };
 type ReturnRow = {
   id: string; orderNumber: string; status: string; method: "dhl" | "store"; refundType: "money" | "credit";
@@ -85,6 +90,8 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
   const t = useT();
   const [tab, setTab] = useState<TabKey>("overzicht");
   const name = customer.firstName || customer.email.split("@")[0];
+  // Alleen presentatie: de pagina achter de link controleert zelf opnieuw.
+  const mag = (recht: string) => (customer.permissions ?? []).includes(recht);
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
@@ -94,14 +101,15 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
           <h1 className="mt-2 text-display-md">{t("account.hello", { name })}</h1>
         </div>
         <div className="flex items-center gap-4">
-          {customer.isAdmin ? (
+          {customer.isStaff ? (
             <>
-              <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.statistics")}</a>
-              <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.orders")}</a>
-              <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.customers")}</a>
-              <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reports")}</a>
-              <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reviews")}</a>
-              <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.settings")}</a>
+              {mag("meten") ? <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.statistics")}</a> : null}
+              {mag("operatie") ? <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.orders")}</a> : null}
+              {mag("klanten") ? <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.customers")}</a> : null}
+              {mag("meten") ? <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reports")}</a> : null}
+              {mag("presentatie") ? <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reviews")}</a> : null}
+              {mag("instellingen") ? <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.settings")}</a> : null}
+              {customer.studioHref ? <a href={customer.studioHref} className="font-sans text-sm text-ink underline hover:text-ink">Site-studio</a> : null}
             </>
           ) : null}
           <form action="/api/account/logout" method="post">

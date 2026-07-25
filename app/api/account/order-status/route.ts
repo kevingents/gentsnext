@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { updateOrderStatus } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 
-/** Admin: order-status wijzigen + klant informeren. */
+/** Recht "operatie": order-status wijzigen + klant informeren. */
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer?.isAdmin) return NextResponse.json({ ok: false, error: "geen beheerrechten" }, { status: 403 });
+  if (!(await requirePermission("operatie"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Operatie nodig." }, { status: 403 });
+  }
   let body: { orderId?: string; status?: string };
   try {
     body = await req.json();

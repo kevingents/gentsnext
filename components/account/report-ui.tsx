@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { getSessionCustomer } from "@/lib/account";
+import { can, permissionForRoute } from "@/lib/permissions";
+import { fieldClass, btnPrimary, btnSecondary } from "@/components/account/ui-classes";
 import { formatEuro } from "@/lib/pricing";
 
 /** Back-office in de portal-huisstijl: navy sidebar + cream content + witte cards. */
@@ -70,6 +73,7 @@ const NAV_GROUPS: { title: string; items: { href: string; label: string; icon: s
     items: [
       { href: "/account/instellingen", label: "Instellingen", icon: "gear" },
       { href: "/account/cadeaubonnen", label: "Cadeaubonnen", icon: "gift" },
+      { href: "/account/team", label: "Team & rechten", icon: "users" },
     ],
   },
   {
@@ -82,7 +86,6 @@ const NAV_GROUPS: { title: string; items: { href: string; label: string; icon: s
     ],
   },
 ];
-const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 function NavIcon({ name }: { name: string }) {
   return (
@@ -92,7 +95,16 @@ function NavIcon({ name }: { name: string }) {
   );
 }
 
-export function BackofficeShell({ active, title, children }: { active: string; title: string; children: React.ReactNode }) {
+export async function BackofficeShell({ active, title, children }: { active: string; title: string; children: React.ReactNode }) {
+  // Het menu toont alléén werkgebieden waar deze medewerker recht op heeft —
+  // een link die tóch op "geen toegang" uitkomt is verwarrend, en een menu is
+  // ook informatie ("kennelijk bestaat er een klantenoverzicht"). De pagina
+  // zelf blijft onafhankelijk controleren; dit is presentatie, geen beveiliging.
+  const customer = await getSessionCustomer().catch(() => null);
+  const groups = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((n) => can(customer, permissionForRoute(n.href))),
+  })).filter((g) => g.items.length);
   return (
     <div className="min-h-screen bg-pcream font-sans text-pnavy">
       <div className="mx-auto flex max-w-[100rem] gap-6 px-4 py-6">
@@ -107,7 +119,7 @@ export function BackofficeShell({ active, title, children }: { active: string; t
               </div>
             </div>
             <nav className="space-y-3">
-              {NAV_GROUPS.map((g) => (
+              {groups.map((g) => (
                 <div key={g.title} className="space-y-0.5">
                   <p className="px-3 pb-1 text-[10px] uppercase tracking-wider text-cream/40">{g.title}</p>
                   {g.items.map((n) => {
@@ -132,7 +144,7 @@ export function BackofficeShell({ active, title, children }: { active: string; t
           <h1 className="mb-1 text-2xl font-semibold text-pnavy">{title}</h1>
           {/* Mobiele nav */}
           <nav className="mb-5 flex gap-1 overflow-x-auto lg:hidden">
-            {NAV.map((n) => (
+            {groups.flatMap((g) => g.items).map((n) => (
               <Link key={n.href} href={n.href} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${active === n.href ? "bg-pnavy text-cream" : "bg-white text-pslate hover:text-pnavy"}`}>{n.label}</Link>
             ))}
           </nav>
@@ -207,10 +219,8 @@ export function DayBars({ data }: { data: { day: string; revenueCents: number; o
   );
 }
 
-const FIELD = "border border-pnavy-100 bg-white px-2.5 py-1.5 text-sm text-pnavy focus:border-pnavy-600 focus:outline-none";
-export const fieldClass = FIELD;
-export const btnPrimary = "inline-flex items-center justify-center rounded-lg bg-pnavy px-4 py-2 text-sm font-medium text-cream transition-colors hover:bg-pnavy-700";
-export const btnSecondary = "inline-flex items-center justify-center rounded-lg border border-pnavy-100 bg-white px-4 py-2 text-sm font-medium text-pnavy transition-colors hover:bg-pnavy-50";
+const FIELD = fieldClass;
+export { fieldClass, btnPrimary, btnSecondary };
 
 export function RangeForm({ from, to, action }: { from: Date; to: Date; action: string }) {
   const fmt = (d: Date) => d.toISOString().slice(0, 10);

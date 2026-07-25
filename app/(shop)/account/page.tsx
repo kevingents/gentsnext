@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
+import { isStaff, permissionsOf, firstAllowedRoute } from "@/lib/permissions";
 import { getNewArrivalsInSize, getRecommendedFromHistory } from "@/lib/catalog";
 import { walletConfigured } from "@/lib/apple-wallet";
 import { ProfileClient } from "@/components/account/profile-client";
@@ -33,7 +34,15 @@ export default async function AccountPage() {
     loyaltyPoints: data.pointsBalance,
     sizeProfile: (customer.sizeProfile ?? {}) as Record<string, string>,
     marketingOptIn: customer.marketingOptIn,
-    isAdmin: customer.isAdmin,
+    // Snelkoppelingen naar de studio: iedereen met minstens één recht ziet ze,
+    // niet alleen beheerders. Welke links precies volgt uit de rechten — een
+    // link naar iets waar je toch niet in mag is alleen maar verwarrend.
+    isStaff: isStaff(customer),
+    permissions: permissionsOf(customer),
+    // Altijd één ingang naar de studio, ook voor iemand die geen van de vaste
+    // snelkoppelingen mag zien (een redacteur bijvoorbeeld) — anders staat hij
+    // met rechten en al voor een dichte deur.
+    studioHref: firstAllowedRoute(customer),
   };
 
   return <ProfileClient customer={safeCustomer} data={safe} walletEnabled={walletConfigured()} />;

@@ -2,16 +2,17 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers } from "@/db/schema";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { importStorePurchases } from "@/lib/srs-store-import";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Admin: importeert de winkelaankopen van één klant uit SRS (omnichannel). */
+/** Recht "klanten": importeert de winkelaankopen van één klant uit SRS (omnichannel). */
 export async function POST(req: Request) {
-  const admin = await getSessionCustomer();
-  if (!admin?.isAdmin) return NextResponse.json({ ok: false, error: "geen toegang" }, { status: 403 });
+  if (!(await requirePermission("klanten"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Klantgegevens nodig." }, { status: 403 });
+  }
 
   let body: Record<string, unknown> = {};
   try {

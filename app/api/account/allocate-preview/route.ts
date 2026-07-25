@@ -2,19 +2,20 @@ import { NextResponse } from "next/server";
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { products, productVariants } from "@/db/schema";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { allocateOrder } from "@/lib/fulfillment";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Admin: preview van de SRS-allocatie. Geef SKU's (regel per regel, optioneel
+ * Recht "operatie": preview van de SRS-allocatie. Geef SKU's (regel per regel, optioneel
  * "sku aantal") → toont waar de order heen zou gaan (welke filialen/magazijn,
  * splitsing, levertijd, tekorten) ZONDER iets naar SRS te pushen.
  */
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer?.isAdmin) return NextResponse.json({ ok: false, error: "geen toegang" }, { status: 403 });
+  if (!(await requirePermission("operatie"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Operatie nodig." }, { status: 403 });
+  }
 
   let body: any;
   try {

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { listCustomers } from "@/lib/reports";
 import { BackofficeShell, Section, euro, fieldClass, btnSecondary } from "@/components/account/report-ui";
 
@@ -13,13 +15,8 @@ type Props = { searchParams: Promise<{ q?: string; sort?: string; page?: string 
 export default async function KlantenPage({ searchParams }: Props) {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug</Link>
-      </div>
-    );
+  if (!can(customer, "klanten")) {
+    return <GeenToegang permission="klanten" />;
   }
 
   const sp = await searchParams;

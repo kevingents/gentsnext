@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { DEFAULT_LOCALE, isLocale, LOCALES, type Locale } from "@/lib/i18n";
 import {
   getTranslationStore,
@@ -21,7 +21,7 @@ export const maxDuration = 300;
 
 /**
  * Vertalingen-beheer in de winkel zelf (Site-studio → Vindbaarheid → Vertalingen).
- * Zelfde werk als het portal-venster, maar met de gewone beheerders-sessie:
+ * Zelfde werk als het portal-venster, maar met de gewone winkelsessie (recht "vindbaarheid"):
  *
  *   GET  ?locale=en&ns=ui&q=zoek&open=1&page=2 → { ok, rows, total, stats }
  *   POST { locale, ns, key, value }            → handmatige override (cron blijft eraf)
@@ -36,9 +36,9 @@ export const maxDuration = 300;
 const PAGE_SIZE = 50;
 
 async function guard(): Promise<NextResponse | null> {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "niet ingelogd" }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "geen beheerrechten" }, { status: 403 });
+  if (!(await requirePermission("vindbaarheid"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Vindbaarheid nodig." }, { status: 403 });
+  }
   return null;
 }
 

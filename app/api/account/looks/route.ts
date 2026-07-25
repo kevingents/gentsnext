@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { saveLook, deleteStoredLook, getManagedLooks, type StoredLook } from "@/lib/looks";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /**
  * Looks opslaan/verwijderen vanuit de Site-studio (/account/looks).
- * Alleen voor ingelogde beheerders — de portal gebruikt zijn eigen
+ * Alleen met het recht "content" — de portal gebruikt zijn eigen
  * token-endpoint onder /api/studio. De opslag zelf zit in lib/looks.
  *
  * POST { action:"save", look, create? } → opslaan/publiceren (status in de look);
@@ -54,9 +54,9 @@ function sanitizeLook(input: unknown): StoredLook | null {
 }
 
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("content"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Content nodig." }, { status: 403 });
+  }
 
   let body: { action?: unknown; look?: unknown; slug?: unknown; create?: unknown };
   try {

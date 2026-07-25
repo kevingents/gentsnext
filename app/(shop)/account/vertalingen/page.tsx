@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { BackofficeShell } from "@/components/account/report-ui";
 import { DEFAULT_LOCALE, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { getTranslationStore, toTranslationRow, hasTranslationProvider, type TranslationRow } from "@/lib/translate";
@@ -22,14 +23,8 @@ export default async function VertalingenPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
 
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <p className="mt-3 font-sans text-ink-soft">Deze pagina is alleen voor beheerders.</p>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug naar mijn account</Link>
-      </div>
-    );
+  if (!can(customer, "vindbaarheid")) {
+    return <GeenToegang permission="vindbaarheid" />;
   }
 
   const targets = LOCALES.filter((l) => l !== DEFAULT_LOCALE);

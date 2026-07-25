@@ -3,6 +3,8 @@ import { ORDER_STATUS_NL } from "@/lib/order-status";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionCustomer } from "@/lib/account";
+import { can } from "@/lib/permissions";
+import { GeenToegang } from "@/components/account/geen-toegang";
 import { listOperationalOrders } from "@/lib/orders";
 import type { FulfillmentPlan } from "@/lib/fulfillment";
 import { listOrders } from "@/lib/reports";
@@ -28,13 +30,8 @@ function routeSummary(plan: FulfillmentPlan | null): string {
 export default async function OrdersPage({ searchParams }: Props) {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
-  if (!customer.isAdmin) {
-    return (
-      <div className="mx-auto max-w-page px-gutter py-16">
-        <h1 className="text-display-md">Geen toegang</h1>
-        <Link href="/account" className="mt-6 inline-block font-sans text-sm text-ink underline">← Terug</Link>
-      </div>
-    );
+  if (!can(customer, "operatie")) {
+    return <GeenToegang permission="operatie" />;
   }
 
   const sp = await searchParams;

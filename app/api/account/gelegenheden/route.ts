@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { setContentDoc } from "@/lib/content-store";
 import { getOccasions, type Occasion } from "@/lib/occasions-server";
 import { CONFLICT_MESSAGE, docVersion } from "@/lib/content-version";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 /**
  * Gelegenheden opslaan vanuit de Site-studio (/account/gelegenheden).
- * Alleen voor ingelogde beheerders; de opslag zelf is de gedeelde content-store
+ * Alleen met het recht "content"; de opslag zelf is de gedeelde content-store
  * (content:occasions), die de tegels op /gelegenheden voedt.
  *   GET  → huidige tegels + versiestempel.
  *   POST { items, version } → de complete lijst opslaan (gesaneerd).
@@ -55,9 +55,9 @@ function sanitize(input: unknown): Occasion[] {
 }
 
 async function guard() {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("content"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Content nodig." }, { status: 403 });
+  }
   return null;
 }
 

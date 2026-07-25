@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { generateBlogPost, deleteBlogPost, type BlogSection } from "@/lib/blog";
 import { updateBlogPost } from "@/lib/blog-admin";
 
@@ -9,8 +9,8 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /**
- * Stijlgids-beheer vanuit de Site-studio (/account/blog). Alleen voor ingelogde
- * beheerders; de portal heeft zijn eigen token-endpoint onder /api/studio.
+ * Stijlgids-beheer vanuit de Site-studio (/account/blog). Alleen voor wie het
+ * recht "content" heeft; de portal heeft zijn eigen token-endpoint onder /api/studio.
  *
  * POST { action:"generate", topicKey? } → nieuw artikel laten schrijven
  *      { action:"update", slug, ... }   → titel/intro/secties bijwerken
@@ -31,9 +31,9 @@ function sanitizeSections(input: unknown): BlogSection[] {
 }
 
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("content"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Content nodig." }, { status: 403 });
+  }
 
   let body: Record<string, unknown>;
   try {

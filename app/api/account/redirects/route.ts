@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { listRedirects, upsertRedirect, deleteRedirect, setRedirectActive } from "@/lib/redirects-admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Redirects beheren vanuit de Site-studio (/account/redirects) — alleen voor
- * beheerders die in de winkel zelf ingelogd zijn. De portal gebruikt hiervoor
+ * Redirects beheren vanuit de Site-studio (/account/redirects) — alleen met het
+ * recht "vindbaarheid", ingelogd in de winkel zelf. De portal gebruikt hiervoor
  * app/api/studio/site/redirects (token); deze route is de eigen-account-kant.
  *
  * GET                                                  → lijst
@@ -16,9 +16,9 @@ export const runtime = "nodejs";
  * POST { action:"toggle", source, active }             → aan/uit
  */
 async function guard() {
-  const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ ok: false, error: "Niet ingelogd." }, { status: 401 });
-  if (!customer.isAdmin) return NextResponse.json({ ok: false, error: "Geen beheerrechten." }, { status: 403 });
+  if (!(await requirePermission("vindbaarheid"))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang: hiervoor heb je het werkgebied Vindbaarheid nodig." }, { status: 403 });
+  }
   return null;
 }
 

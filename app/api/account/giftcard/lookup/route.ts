@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSessionCustomer } from "@/lib/account";
+import { requirePermission } from "@/lib/permissions";
 import { lookupGiftcardForStaff } from "@/lib/giftcards";
 
 export const dynamic = "force-dynamic";
 
-/** Cadeaubon opzoeken voor de balie/kassa — alleen voor admins. */
+/** Cadeaubon opzoeken voor de balie/kassa — recht "operatie". */
 export async function POST(req: Request) {
-  const customer = await getSessionCustomer();
-  if (!customer?.isAdmin) return NextResponse.json({ error: "Geen toegang." }, { status: 403 });
+  if (!(await requirePermission("operatie"))) {
+    return NextResponse.json({ error: "Geen toegang: hiervoor heb je het werkgebied Operatie nodig." }, { status: 403 });
+  }
   let body: any;
   try {
     body = await req.json();
