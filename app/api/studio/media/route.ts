@@ -22,15 +22,18 @@ export const maxDuration = 30;
  * de portal het headless kan ophalen. Zonder token én zonder admin → 403.
  *
  * Query:
- *   type        model | sfeer | detail | video  (alleen die asset-soort)
+ *   type        packshot | ai-packshot | model | sfeer | detail | video
  *   hoofdgroep  exacte hoofdgroep-omschrijving
  *   new         '1' = alleen nieuwe collectie
+ *   website     '1' = alleen producten die NU op de website staan, '0' = alleen
+ *               producten die er niet op staan, leeg = allebei
  *   q           vrije zoekterm (titel / handle / hoofdgroep)
  */
 
-type AssetType = "packshot" | "model" | "sfeer" | "detail" | "video";
+type AssetType = "packshot" | "ai-packshot" | "model" | "sfeer" | "detail" | "video";
 const TYPE_LABEL: Record<AssetType, string> = {
   packshot: "Productfoto",
+  "ai-packshot": "AI-packshot",
   model: "Modelfoto",
   sfeer: "Sfeerbeeld",
   detail: "Detailfoto",
@@ -61,6 +64,10 @@ export async function GET(req: Request) {
   const fType = (sp.get("type") || "").trim() as AssetType | "";
   const fHg = (sp.get("hoofdgroep") || "").trim();
   const onlyNew = sp.get("new") === "1";
+  // "Staat dit product nu op de website?" — dat is méér dan status='active': de
+  // winkel eist ook een foto, voorraad en dat het de groeps-primaire is. Een
+  // product kan dus actief zijn en toch nergens te vinden.
+  const fWebsite = (sp.get("website") || "").trim(); // "1" | "0" | ""
   const q = (sp.get("q") || "").trim().toLowerCase();
 
   const newColl = onlyNew ? sql`and ${newCollectionCond}` : sql``;
@@ -80,6 +87,8 @@ export async function GET(req: Request) {
       det: string;
       vid: string;
       packshot: string;
+      packshot_ai: boolean;
+      op_website: boolean;
     }>(sql`
       select p.handle, p.title,
         p.attributes->>'hoofdgroep_omschrijving' hoofdgroep,
@@ -87,18 +96,31 @@ export async function GET(req: Request) {
         p.model_image_url m1, p.model_image_url2 m2,
         p.lifestyle_image_url l1, p.lifestyle_image_url2 l2, p.lifestyle_image_url3 l3,
         p.detail_image_url det, p.model_video_url vid,
-        (select url from product_images pi where pi.product_id=p.id order by position limit 1) packshot
+        (select url from product_images pi where pi.product_id=p.id order by position limit 1) packshot,
+        -- Is de eerste productfoto door AI verzonnen? Dan is het geen echte
+        -- productfoto en moet je 'm apart kunnen vinden (en weghalen).
+        coalesce((select pi.source='ai-packshot' from product_images pi
+                  where pi.product_id=p.id order by pi.position limit 1), false) packshot_ai,
+        -- Exact de voorwaarden die de winkel zelf stelt (zie lib/catalog.ts).
+        (p.status='active' and p.has_image and p.in_stock and p.is_group_primary) op_website
       from products p
       where p.status='active' and p.is_group_primary
         and (p.model_image_url<>'' or p.model_image_url2<>'' or p.lifestyle_image_url<>''
           or p.lifestyle_image_url2<>'' or p.lifestyle_image_url3<>''
-          or p.detail_image_url<>'' or p.model_video_url<>'')
+          or p.detail_image_url<>'' or p.model_video_url<>''
+          -- Ook producten wier énige beeld een AI-packshot is: die stonden hier
+          -- niet in, terwijl dat juist het beeld is dat je wilt kunnen vinden.
+          or exists (select 1 from product_images pi
+                     where pi.product_id=p.id and pi.source='ai-packshot'))
         ${newColl}
       order by p.stock_qty desc nulls last, p.title`)
   ).rows;
 
   const base = getSiteUrl();
-  const counts: Record<AssetType, number> = { packshot: 0, model: 0, sfeer: 0, detail: 0, video: 0 };
+  const counts: Record<AssetType, number> = { packshot: 0, "ai-packshot": 0, model: 0, sfeer: 0, detail: 0, video: 0 };
+  // Hoeveel van de getoonde producten staan wel/niet op de website.
+  let opWebsiteWel = 0;
+  let opWebsiteNiet = 0;
   const hgMap = new Map<string, number>();
   const items: Array<{
     productId: string;
@@ -106,6 +128,8 @@ export async function GET(req: Request) {
     title: string;
     hoofdgroep: string;
     seizoen: string;
+    /** Staat dit product nu daadwerkelijk op de website? (actief + foto + voorraad + primair) */
+    opWebsite: boolean;
     url: string;
     image: string;
     assets: { type: AssetType; url: string; label: string }[];
@@ -121,7 +145,7 @@ export async function GET(req: Request) {
     const push = (type: AssetType, url: string, label: string) => {
       if (url && url.trim()) assets.push({ type, url, label });
     };
-    push("packshot", r.packshot, "Productfoto");
+    push(r.packshot_ai ? "ai-packshot" : "packshot", r.packshot, r.packshot_ai ? "AI-packshot (geen echte foto)" : "Productfoto");
     push("model", r.m1, "Modelfoto");
     push("model", r.m2, "Modelfoto 2");
     push("sfeer", r.l1, "Sfeerbeeld 1");
@@ -133,6 +157,8 @@ export async function GET(req: Request) {
     if (fType) assets = assets.filter((a) => a.type === fType);
     if (!assets.length) continue;
 
+    if (fWebsite === "1" && !r.op_website) continue;
+    if (fWebsite === "0" && r.op_website) continue;
     if (fHg && hoofdgroep !== fHg) continue;
     if (q) {
       const hay = `${r.title} ${r.handle} ${hoofdgroep}`.toLowerCase();
@@ -150,12 +176,15 @@ export async function GET(req: Request) {
       assets.find((a) => a.type === "detail")?.url ||
       "";
 
+    if (r.op_website) opWebsiteWel++; else opWebsiteNiet++;
     items.push({
       productId: r.handle,
       handle: r.handle,
       title: (r.title || "").trim() || r.handle,
       hoofdgroep,
       seizoen: (r.seizoen || "").trim(),
+      /** Staat dit product nu daadwerkelijk op de website? (actief + foto + voorraad + primair) */
+      opWebsite: r.op_website,
       url: `${base}/products/${r.handle}`,
       image: thumb,
       assets,
@@ -172,8 +201,11 @@ export async function GET(req: Request) {
     ok: true,
     generatedAt: new Date().toISOString(),
     total: items.length,
-    assetsTotal: counts.packshot + counts.model + counts.sfeer + counts.detail + counts.video,
+    assetsTotal: counts.packshot + counts["ai-packshot"] + counts.model + counts.sfeer + counts.detail + counts.video,
     counts,
+    /** Verdeling van de getoonde producten over wel/niet op de website — zodat de
+     *  beeldbank kan laten zien hoeveel er achter het filter zitten. */
+    website: { opWebsite: opWebsiteWel, nietOpWebsite: opWebsiteNiet },
     hoofdgroepen,
     items,
     // Handige platte lijst van álle (gefilterde) URL's — voor "download alles als ZIP".
