@@ -197,7 +197,10 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {/* Kleur */}
       {facets.colors.length > 0 ? (
         <FilterGroup title={t("plp.filters.color")} defaultOpen>
-          <div className="flex flex-wrap gap-2">
+          {/* Vast raster van twee gelijke kolommen. Met flex-wrap kreeg elke chip
+              zijn eigen breedte naar gelang de kleurnaam, waardoor de rechterrand
+              rafelde en de aantallen nergens onder elkaar stonden. */}
+          <div className="grid grid-cols-2 gap-2">
             {facets.colors.map((c) => {
               const sw = colorSwatch(c.label);
               const active = selection.colors.includes(c.key);
@@ -210,17 +213,22 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                   title={`${c.label} (${c.count})`}
                   // Selectie via ring + vetgedrukt label — niet alléén randkleur (duidelijk
                   // voor kleurenblinde gebruikers).
-                  className={`flex min-h-11 items-center gap-2 border px-2.5 py-1.5 font-sans text-xs transition-colors lg:min-h-0 ${
+                  className={`flex min-h-11 w-full items-center gap-1.5 border px-1.5 py-1.5 font-sans text-xs transition-colors lg:min-h-0 ${
                     active ? "border-ink ring-1 ring-ink font-medium" : "border-line hover:border-muted"
                   }`}
                 >
                   <span
                     aria-hidden
-                    className="h-4 w-4 rounded-full border border-line"
+                    className="h-3.5 w-3.5 shrink-0 rounded-full border border-line"
                     style={{ background: sw.gradient ?? sw.hex }}
                   />
-                  {c.label}
-                  <span className="text-muted">{c.count}</span>
+                  {/* Krappe binnenruimte zodat ook de langste kleurnaam
+                      ("Multikleur") heel past. Lukt het toch niet, dan kort de naam
+                      in (…) in plaats van de chip breder te maken — de titel toont
+                      de volledige naam. Het aantal staat met ml-auto tegen de
+                      rechterrand, zodat de cijfers in beide kolommen uitlijnen. */}
+                  <span className="min-w-0 truncate">{c.label}</span>
+                  <span className="ml-auto shrink-0 text-[0.7rem] text-muted">{c.count}</span>
                 </button>
               );
             })}

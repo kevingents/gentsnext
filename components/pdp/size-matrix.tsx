@@ -62,6 +62,7 @@ export function SizeMatrix({
   // Platte, horizontale rij maatknoppen. `display` bepaalt de knoptekst —
   // onder de "Mouwlengte 7"-tab tonen we de kale lettermaat (S i.p.v. S7):
   // de tab zegt de mouwlengte al, dubbel labelen was verwarrend.
+  // Het aantal kolommen volgt uit het aantal maten (zie kolommenVoor onderaan).
   const flatRow = (list: BuySize[], display: (size: string) => string = sizeToken) => {
     const num = (s: string) => parseInt(sizeToken(s), 10);
     const allNumeric = list.every((s) => !Number.isNaN(num(s.size)));
@@ -74,7 +75,15 @@ export function SizeMatrix({
     // + klein belletje voor uitverkocht (geen "Uitverkocht"-woord per tegel; de
     // hint-regel eronder legt het belletje uit), rood puntje voor bijna-op.
     return (
-      <ul className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+      <ul
+        className="mt-2 grid gap-2 [grid-template-columns:repeat(var(--maat-kolommen-m),minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--maat-kolommen),minmax(0,1fr))]"
+        style={
+          {
+            "--maat-kolommen-m": kolommenVoor(sorted.length, 5),
+            "--maat-kolommen": kolommenVoor(sorted.length, 8),
+          } as React.CSSProperties
+        }
+      >
         {sorted.map((s) => {
           const out = s.known && s.qty <= 0;
           const low = !out && s.known && s.qty > 0 && s.qty <= 3;
@@ -186,4 +195,20 @@ function GroupedSizes({
       {flatRow(list, display)}
     </div>
   );
+}
+
+/**
+ * Hoeveel maatknoppen naast elkaar. Vast aantal kolommen liet bij 7 maten één
+ * knop verweesd op een tweede regel achter ("S M L XL XXL 3XL" + "4XL"), wat
+ * zowel rommelig oogt als onnodig hoog is.
+ *
+ * Passen alle maten binnen `max`, dan komen ze op één regel. Zo niet, dan
+ * verdelen we ze gelijk over het minimale aantal regels — 12 maten worden 6+6,
+ * niet 8+4. `max` verschilt per scherm (mobiel smaller) zodat een knop nooit te
+ * klein wordt om te raken.
+ */
+function kolommenVoor(aantal: number, max: number): number {
+  if (aantal <= 1) return 1;
+  if (aantal <= max) return aantal;
+  return Math.ceil(aantal / Math.ceil(aantal / max));
 }
