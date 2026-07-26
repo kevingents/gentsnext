@@ -49,6 +49,15 @@ export type Settings = {
   modelLook: {
     enabled: boolean;
     minStock: number; // drempel "goed op voorraad" voor de slimme look-substitutie
+    /**
+     * Staan de bijpassende artikelen (broek, schoenen, riem) ook écht op de
+     * modelfoto? Nu niet: de foto toont alleen het product zelf op een
+     * basismodel, de rest wordt erbij gezocht. Daarom krijgen die geen cijfer
+     * in de foto maar een "past hierbij"-rij ernaast. Zodra de modelfoto's
+     * opnieuw gegenereerd zijn mét de echte look-artikelen, zet je dit aan en
+     * springen de cijfers terug het beeld in.
+     */
+    hotspotsInBeeld: boolean;
     items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
   };
   // Cadeaubonnen: aan/uit, voorgestelde bedragen, grenzen voor een vrij bedrag,
@@ -153,6 +162,7 @@ export const DEFAULT_SETTINGS: Settings = {
   modelLook: {
     enabled: true,
     minStock: 8,
+    hotspotsInBeeld: false,
     items: [
       { handle: "overhemd-nos-wit", label: "Overhemd", hoofdgroep: "Overhemden", x: 50, y: 21 },
       { handle: "pantalon-stretchkatoen-zand", label: "Pantalon", hoofdgroep: "Broeken", x: 50, y: 71 },

@@ -24,6 +24,7 @@ type Settings = {
   modelLook: {
     enabled: boolean;
     minStock: number;
+    hotspotsInBeeld: boolean;
     items: { handle: string; label: string; hoofdgroep: string; x: number; y: number }[];
   };
   giftcardConfig: {
@@ -284,7 +285,22 @@ export function SettingsForm({ initial }: { initial: Settings }) {
             />
             <span className="font-sans text-sm text-muted">stuks</span>
           </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={s.modelLook.hotspotsInBeeld}
+              onChange={(e) => setS((p) => ({ ...p, modelLook: { ...p.modelLook, hotspotsInBeeld: e.target.checked } }))}
+              className="accent-ink"
+            />
+            <span className="font-sans text-sm">Bijpassende artikelen staan écht op de modelfoto</span>
+          </label>
         </div>
+        <p className="mb-3 font-sans text-xs text-muted">
+          Zet die laatste alleen aan als de modelfoto&apos;s opnieuw zijn gegenereerd mét de
+          bijpassende broek, schoenen en riem erop. Staat hij uit, dan krijgt alleen het
+          product zelf een cijfer in de foto en staan de rest eronder als &quot;past hierbij&quot; —
+          een cijfer op een broek die niet in beeld is, belooft iets wat de foto niet waarmaakt.
+        </p>
         <p className="mb-3 font-sans text-xs text-muted">
           Stukken onder deze drempel worden automatisch vervangen door een ruim
           leverbaar alternatief van dezelfde rol, in een passende kleur.
