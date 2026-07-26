@@ -12,8 +12,10 @@ type SizeMedia = { threshold: string; url: string; alt: string };
 type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contain?: boolean };
 
 /**
- * Mr Marvis-stijl galerij: alle productfoto's in een 2-koloms grid ("2 om 2"),
- * klik op een foto voor een schermvullende zoom (lightbox). De grote-maat-foto
+ * Mr Marvis-stijl galerij: alle productfoto's in een 2-koloms grid ("2 om 2") —
+ * bij maar één of twee beelden juist op volle kolombreedte onder elkaar, zodat er
+ * geen lege rastercel of dode witruimte overblijft. Klik op een foto voor een
+ * schermvullende zoom (lightbox). De grote-maat-foto
  * wordt vooraan gezet zodra een maat ≥ drempel gekozen is. Een (AI-)productvideo
  * leidt — autoplay/gedempt/loop in het raster, met geluid in de lightbox.
  */
@@ -50,6 +52,14 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
     ...images.map((img, i) => ({ url: img.url, alt: altFor(img.alt, i), contain: img.contain })),
   ];
   const firstImageIdx = shots.findIndex((s) => !s.video);
+  // Weinig beelden (1 of 2) → vanaf tablet/desktop op VOLLE kolombreedte in één
+  // kolom. Anders blijft de galerij laag terwijl de koopkolom ernaast doorloopt:
+  // dat gaf een grote dode witruimte links (en bij precies 1 beeld een lege
+  // rastercel). Bij 3+ beelden blijft het vertrouwde 2-koloms raster staan.
+  // Mobiel (de swipe-rail onder sm) verandert niets.
+  // De grote-maat-foto telt bewust NIET mee: die komt er pas bij zodra de klant
+  // een grote maat kiest, en anders zou de galerij op dat moment omklappen.
+  const wide = shots.length - (showLarge ? 1 : 0) <= 2;
 
   const close = useCallback(() => setLightbox(null), []);
   const step = useCallback(
@@ -84,7 +94,7 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
       <div
         ref={sliderRef}
         onScroll={onSliderScroll}
-        className="flex snap-x snap-mandatory overflow-x-auto [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible"
+        className={`flex snap-x snap-mandatory overflow-x-auto [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:gap-3 sm:overflow-visible ${wide ? "sm:grid-cols-1" : "sm:grid-cols-2"}`}
       >
         {shots.map((shot, i) => (
           <div
@@ -109,7 +119,7 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
                 alt={shot.alt}
                 fill
                 priority={i === firstImageIdx}
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 30vw"
+                sizes={wide ? "(max-width: 1024px) 100vw, 60vw" : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 30vw"}
                 className={`transition-transform duration-300 group-hover:scale-[1.03] ${shot.contain ? "object-contain" : "object-cover"}`}
               />
             )}

@@ -1,4 +1,4 @@
-import { sizeRowLabel } from "@/lib/size-taxonomy";
+import { sizeRowLabel, sizeFacetFor, sizeFacetKey } from "@/lib/size-taxonomy";
 
 /**
  * "Shop in jouw maat" — koppelt de in het profiel opgeslagen maten aan een
@@ -13,14 +13,25 @@ import { sizeRowLabel } from "@/lib/size-taxonomy";
 export type SizeCategory = "suit" | "trouser" | "shirt" | "shoe";
 type SizeField = "colbert" | "broek" | "overhemd" | "schoen";
 
-const RULES: { cat: SizeCategory; field: SizeField; re: RegExp }[] = [
-  { cat: "shoe", field: "schoen", re: /schoen|shoe|loafer|sneaker|veter|laars|laarz|instap|mocassin|boot/i },
-  { cat: "shirt", field: "overhemd", re: /overhemd|^shirts?$/i },
-  { cat: "trouser", field: "broek", re: /broek|pantalon|chino|jeans/i },
-  { cat: "suit", field: "colbert", re: /colbert|gilet|blazer|smoking|pak/i },
+const RULES: { cat: SizeCategory; field: SizeField; re: RegExp; family: string }[] = [
+  { cat: "shoe", field: "schoen", re: /schoen|shoe|loafer|sneaker|veter|laars|laarz|instap|mocassin|boot/i, family: "schoenen" },
+  { cat: "shirt", field: "overhemd", re: /overhemd|^shirts?$/i, family: "overhemden" },
+  { cat: "trouser", field: "broek", re: /broek|pantalon|chino|jeans/i, family: "broeken" },
+  { cat: "suit", field: "colbert", re: /colbert|gilet|blazer|smoking|pak/i, family: "colberts" },
 ];
 
-export type MySize = { category: SizeCategory; field: SizeField; raw: string; row: string };
+export type MySize = {
+  category: SizeCategory;
+  field: SizeField;
+  raw: string;
+  row: string;
+  /**
+   * De PLP-facetwaarde inclusief matensysteem (`sc.43`, `bo.41`, `kl.M/L`) —
+   * dit is waar de "Shop in jouw maat"-knop op selecteert. Zonder systeem zou
+   * schoenmaat 43 op de overhemden-boordmaat 43 matchen.
+   */
+  facet: string;
+};
 
 /** Welke maat-categorie hoort bij deze hoofdgroep (of null). */
 export function sizeCategoryFor(hoofdgroep: string): SizeCategory | null {
@@ -57,5 +68,14 @@ export function resolveMySize(hoofdgroep: string, profile: unknown): MySize | nu
   if (!rule) return null;
   const raw = String((profile as Record<string, unknown>)[rule.field] ?? "").trim();
   if (!raw) return null;
-  return { category: rule.cat, field: rule.field, raw, row: sizeRowLabel(raw) };
+  // De facetwaarde bepalen we via de familie die bij deze maatcategorie hoort —
+  // exact dezelfde route als de facetten zelf (lib/catalog), dus ze matchen.
+  const hit = sizeFacetFor(rule.family, raw);
+  return {
+    category: rule.cat,
+    field: rule.field,
+    raw,
+    row: sizeRowLabel(raw),
+    facet: hit ? sizeFacetKey(hit) : "",
+  };
 }
