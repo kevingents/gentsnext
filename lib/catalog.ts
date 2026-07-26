@@ -131,7 +131,7 @@ async function buildProductCards(
   const ids = base.map((p) => p.id);
   if (!ids.length) return [];
 
-  const [images, variants, prodMeta] = await Promise.all([
+  const [images, variants, prodMeta, kleurTelling] = await Promise.all([
     db
       .select({
         productId: productImages.productId,
@@ -166,9 +166,25 @@ async function buildProductCards(
       })
       .from(products)
       .where(inArray(products.id, ids)),
+    // Hoeveel kleuren de klant hier ÉCHT kan kiezen. De opgeslagen
+    // group_color_count telt alle groepsleden, ook die zonder foto (en dus nooit
+    // toonbaar) en ook dubbele invoer met dezelfde kleurnaam. Daardoor beloofde
+    // een kaartje "In 3 kleuren" terwijl er op de productpagina niets te kiezen
+    // viel. Daarom hier tellen wat er werkelijk staat: verschillende kleurnamen
+    // onder de leden die actief zijn, een foto hebben en op voorraad liggen.
+    db.execute<{ id: string; n: number }>(sql`
+      select p.id, count(distinct lower(s.variant_color_label))::int as n
+      from products p
+      join products s on s.variant_group_key = p.variant_group_key
+      where p.id in (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
+        and coalesce(p.variant_group_key, '') <> ''
+        and s.status = 'active' and s.has_image = true and s.in_stock = true
+        and coalesce(s.variant_color_label, '') <> ''
+      group by p.id
+    `),
   ]);
 
-  const colorCount = new Map(prodMeta.map((m) => [m.id, m.groupColorCount]));
+  const colorCount = new Map<string, number>(kleurTelling.rows.map((r) => [r.id, Number(r.n) || 0]));
   const colorLabel = new Map(prodMeta.map((m) => [m.id, m.variantColorLabel]));
   const stockQtyById = new Map(prodMeta.map((m) => [m.id, m.stockQty]));
   // Hover-beeld: modelfoto wint, anders sfeerbeeld. Leeg = geen swap.
