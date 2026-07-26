@@ -10,13 +10,18 @@ import { useT } from "@/components/i18n/locale-provider";
 import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import { SortSelect } from "@/components/plp/sort-select";
 import { track } from "@/lib/track-client";
+import { SIZE_SYSTEM_ORDER, sizeSystemKey, type SizeSystem } from "@/lib/size-taxonomy";
 
 type Props = {
   facets: Facets;
   selection: PlpSelection;
   total: number;
-  /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
-  mySize?: { row: string; raw: string } | null;
+  /**
+   * Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw
+   * maat). `facet` is de facetwaarde mét matensysteem, `row` de kale
+   * lettermaat-rij (nog gebruikt voor de ranking).
+   */
+  mySize?: { row: string; raw: string; facet: string } | null;
   /** Actieve sortering — de sticky pil belooft "Filter & sorteer", dus de mobiele
       drawer moet óók een sorteer-keuze bevatten. */
   sort?: ProductSort;
@@ -78,8 +83,15 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
 
   // "Shop in jouw maat": alleen tonen als de bewaarde maat hier ook echt
   // bestaat (in de facetten van deze categorie).
-  const myFacet = mySize ? facets.sizes.find((s) => s.value === mySize.row) : null;
-  const myActive = Boolean(myFacet && selection.sizes.length === 1 && selection.sizes[0] === mySize!.row);
+  const myFacet = mySize?.facet ? facets.sizes.find((s) => s.value === mySize.facet) : null;
+  const myActive = Boolean(myFacet && selection.sizes.length === 1 && selection.sizes[0] === mySize!.facet);
+
+  // Maten gegroepeerd per matensysteem, in de vaste weergavevolgorde. Staat er
+  // maar één systeem in deze resultatenset? Dan zijn subkopjes alleen ruis.
+  const sizeGroups = SIZE_SYSTEM_ORDER
+    .map((system) => ({ system, items: facets.sizes.filter((s) => s.system === system) }))
+    .filter((g) => g.items.length > 0);
+  const showSizeHeadings = sizeGroups.length > 1;
 
   function apply(next: Partial<PlpSelection>) {
     const merged: PlpSelection = { ...selection, ...next, page: 1 };
@@ -109,7 +121,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {myFacet && mySize ? (
         <button
           type="button"
-          onClick={() => apply({ sizes: myActive ? [] : [mySize.row] })}
+          onClick={() => apply({ sizes: myActive ? [] : [mySize.facet] })}
           aria-pressed={myActive}
           className={`mb-4 flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors ${
             myActive ? "border-ink bg-ink text-canvas" : "border-ink bg-canvas hover:bg-surface"
@@ -128,6 +140,47 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
             {myActive ? t("plp.filters.clear") : t("plp.filters.show")}
           </span>
         </button>
+      ) : null}
+
+      {/* Maat staat bewust bovenaan en open: is het er niet in jouw maat, dan
+          doet de rest er niet toe. Binnen de groep staan de maten per
+          matensysteem (kleding · boordmaat · schoen · riem · …), want die
+          getallen betekenen per systeem iets anders. */}
+      {facets.sizes.length > 0 ? (
+        <FilterGroup title={t("plp.filters.size")} defaultOpen>
+          <div className="space-y-3">
+            {sizeGroups.map((g) => (
+              <div key={g.system}>
+                {/* "Eén maat" spreekt als chip al voor zichzelf — een kopje
+                    erboven zou letterlijk hetzelfde woord herhalen. */}
+                {showSizeHeadings && g.system !== "eenmaat" ? (
+                  <p className="mb-1.5 font-sans text-[11px] uppercase tracking-wide text-muted">
+                    {t(sizeSystemKey(g.system as SizeSystem))}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {g.items.map((s) => {
+                    const active = selection.sizes.includes(s.value);
+                    return (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => { trackFilter("maat", s.value, !selection.sizes.includes(s.value)); apply({ sizes: toggle(selection.sizes, s.value) }); }}
+                        aria-pressed={active}
+                        title={`${s.label} (${s.count})`}
+                        className={`min-h-11 min-w-[3rem] border px-2 py-1.5 text-center font-sans text-xs transition-colors lg:min-h-0 ${
+                          active ? "border-ink bg-ink text-canvas" : "border-line hover:border-muted"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </FilterGroup>
       ) : null}
 
       {/* Type (subgroep) — bv. Chino/Pantalon/Lange mouw/2-delig */}
@@ -168,31 +221,6 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
                   />
                   {c.label}
                   <span className="text-muted">{c.count}</span>
-                </button>
-              );
-            })}
-          </div>
-        </FilterGroup>
-      ) : null}
-
-      {/* Maat (lettermaat-buckets) */}
-      {facets.sizes.length > 0 ? (
-        <FilterGroup title={t("plp.filters.size")}>
-          <div className="flex flex-wrap gap-2">
-            {facets.sizes.map((s) => {
-              const active = selection.sizes.includes(s.value);
-              return (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => { trackFilter("maat", s.value, !selection.sizes.includes(s.value)); apply({ sizes: toggle(selection.sizes, s.value) }); }}
-                  aria-pressed={active}
-                  title={`${s.label} (${s.count})`}
-                  className={`min-h-11 min-w-[3rem] border px-2 py-1.5 text-center font-sans text-xs transition-colors lg:min-h-0 ${
-                    active ? "border-ink bg-ink text-canvas" : "border-line hover:border-muted"
-                  }`}
-                >
-                  {s.label}
                 </button>
               );
             })}

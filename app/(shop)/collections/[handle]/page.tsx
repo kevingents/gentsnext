@@ -76,7 +76,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   // Shop in jouw maat: leid de categorie af uit de collectie-naam (gemengde
   // collecties matchen niet → geen chip).
   const my = resolveMySize(`${collection.handle} ${collection.title}`, sessionCustomer?.sizeProfile);
-  const mySize = my ? { row: my.row, raw: my.raw } : null;
+  // facet = maat mét matensysteem (`kl.M/L`, `sc.43`) — waar het maatfilter op
+  // selecteert; row blijft de kale rij voor de ranking.
+  const mySize = my ? { row: my.row, raw: my.raw, facet: my.facet } : null;
   // Gemengde collectie → boost op álle bewaarde maten (een schoen matcht nooit een
   // colbert-bucket, dus dat is veilig). Smaak + pins alleen op de default.
   const isDefault = sel.sort === "aanbevolen";
@@ -134,7 +136,9 @@ export default async function CollectionPage({ params, searchParams }: Props) {
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
         {/* Sidebar / mobiele drawer */}
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
+        {/* Zie de categoriepagina: eigen schuifbalk, anders is het onderste deel
+            van een lange filterlijst pas bereikbaar ná alle producten. */}
+        <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
           <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} />
         </aside>
 

@@ -44,6 +44,17 @@ const nl: Dict = {
   "plp.sort.prijs-af": "Prijs aflopend",
   "plp.sort.naam": "Naam (A–Z)",
   "plp.badge.sale": "Sale",
+  // Subkopjes in het maatfilter: lettermaten, boordmaten, schoen- en riemmaten
+  // door elkaar in één rij was onleesbaar — en "41" betekent per matensysteem
+  // iets heel anders. Zie lib/size-taxonomy.
+  "plp.filters.sizeSystem.kleding": "Kleding",
+  "plp.filters.sizeSystem.boord": "Boordmaat",
+  "plp.filters.sizeSystem.confectie": "Confectie",
+  "plp.filters.sizeSystem.schoen": "Schoenen",
+  "plp.filters.sizeSystem.riem": "Riemen",
+  "plp.filters.sizeSystem.sok": "Sokken",
+  "plp.filters.sizeSystem.eenmaat": "Eén maat",
+  "plp.filters.sizeSystem.overig": "Overig",
   // Reserveer-om-te-passen (PDP Click&Collect-modal)
   "reserve.intro": "Gratis en vrijblijvend: reserveer om te passen — we leggen 'm voor je klaar in de winkel.",
   "reserve.cta": "Leg voor mij klaar",

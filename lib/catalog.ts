@@ -20,7 +20,20 @@ import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { NEW_COLLECTION_HANDLE } from "@/lib/new-collection";
 import { mySizeBuckets } from "@/lib/size-match";
-import { rowSortIndex, rowDisplayLabel, sizeRowLabel } from "@/lib/size-taxonomy";
+import {
+  rowSortIndex,
+  rowDisplayLabel,
+  sizeToken,
+  sizeFacetFor,
+  sizeFacetKey,
+  sizeFilterBranches,
+  compareSizeValues,
+  SIZE_SYSTEM_ORDER,
+  SIZE_FAMILY_NAMES,
+  SIZE_FAMILY_TITLE_PATTERNS,
+  CLOTHING_ROW_PAIRS,
+  type SizeSystem,
+} from "@/lib/size-taxonomy";
 import { MATERIAL_BUCKETS, PATTERN_BUCKETS, bucketsFor, sqlPatternFor, normalizeType, expandType, LOOSE_MIN_COUNT, type FacetBucket } from "@/lib/facet-taxonomy";
 import { isSizeToken, expandSynonyms, parseSynonyms } from "@/lib/search-helpers";
 import { getSettings } from "@/lib/settings";
@@ -444,7 +457,12 @@ export type Facets = {
   seasons: { value: string; label?: string; count: number }[];
   ironFreeCount: number;
   colors: { key: ColorFamily; label: string; hex: string; count: number }[];
-  sizes: { value: string; label: string; count: number }[];
+  /**
+   * Maten met hun matensysteem: `value` draagt het systeem mee (`sc.41` =
+   * schoenmaat 41, `bo.41` = boordmaat 41), `label` is wat de klant ziet.
+   * Gesorteerd op systeem (SIZE_SYSTEM_ORDER) en daarbinnen op maat.
+   */
+  sizes: { value: string; label: string; count: number; system: SizeSystem }[];
   fits: { value: string; label?: string; count: number }[];
   priceMinCents: number;
   priceMaxCents: number;
@@ -601,6 +619,76 @@ function inList(col: SQL, values: string[]): SQL {
   )})`;
 }
 
+/* ─────────────────────── Maat: systeem uit het product ────────────────────
+ *
+ * Schoenmaat 41 en overhemd-boordmaat 41 zijn hetzelfde getal maar een heel
+ * andere maat. Welk matensysteem geldt, leest het PRODUCT ons voor: de
+ * hoofdgroep. Alleen als die leeg is (losse Shopify-producten zonder
+ * SRS-velden) vallen we terug op de titel. Zie lib/size-taxonomy.
+ */
+const SIZE_FAM_SQL: SQL = sql`(case
+  when coalesce(${products.attributes} ->> 'hoofdgroep_omschrijving', '') <> ''
+    then lower(${products.attributes} ->> 'hoofdgroep_omschrijving')
+  ${sql.join(
+    SIZE_FAMILY_TITLE_PATTERNS.map(
+      (p) => sql`when (${products.title} || ' ' || coalesce(${products.attributes} ->> 'title_tag', '')) ~* ${p.sql} then ${p.family}::text`
+    ),
+    sql` `
+  )}
+  else '' end)`;
+
+/** Maat-token van een variant: eerste woord, hoofdletters ("L 41/42" → "L"). */
+const SIZE_TOKEN_SQL: SQL = sql`upper(split_part(btrim(coalesce(nullif(v.size, ''), v.size_label, '')), ' ', 1))`;
+
+/**
+ * Token → lettermaat-rij als VALUES-lijst, uitsluitend om de TELLING te
+ * ontdubbelen: een pantalon met maat 52 (regular) én 102 (lang) staat één keer
+ * in de rij "L". De indeling zelf gebeurt in TS (sizeFacetFor) — dit is puur
+ * een groepeersleutel.
+ */
+const SIZE_ROWMAP_SQL: SQL = sql`(values ${sql.join(
+  CLOTHING_ROW_PAIRS.map(([tok, row]) => sql`(${tok}::text, ${row}::text)`),
+  sql`, `
+)}) rm(tok, row)`;
+
+function famClassCondition(famClass: string): SQL | null {
+  if (famClass === "alle") return null;
+  if (famClass === "rest") {
+    const alle = Object.values(SIZE_FAMILY_NAMES).flat();
+    return sql`${SIZE_FAM_SQL} not in (${sqlInList(alle)})`;
+  }
+  const namen = SIZE_FAMILY_NAMES[famClass as keyof typeof SIZE_FAMILY_NAMES] ?? [];
+  return sql`${SIZE_FAM_SQL} in (${sqlInList(namen)})`;
+}
+
+/**
+ * Filterconditie voor de gekozen maten (binnen de variant-EXISTS).
+ *
+ * Nieuwe waarden dragen hun systeem mee (`sc.41`) en filteren dus óók op de
+ * productfamilie. Een KALE waarde (`maat=41`, `maat=M/L`) is een oude,
+ * gedeelde of gebookmarkte link: die laten we bewust alles met die maat zien —
+ * over alle systemen heen — zodat er geen dode links ontstaan.
+ */
+function sizeCondition(values: string[]): SQL {
+  const ors: SQL[] = [];
+  for (const value of values) {
+    const branches = sizeFilterBranches(value);
+    if (!branches) {
+      ors.push(sql`(v.size_label = ${value} or ${SIZE_TOKEN_SQL} = ${sizeToken(value)})`);
+      continue;
+    }
+    for (const b of branches) {
+      const tokens = b.tokens.length === 1
+        ? sql`${SIZE_TOKEN_SQL} = ${b.tokens[0]}`
+        : sql`${SIZE_TOKEN_SQL} in (${sqlInList(b.tokens)})`;
+      const fam = famClassCondition(b.famClass);
+      ors.push(fam ? sql`(${fam} and ${tokens})` : tokens);
+    }
+  }
+  // Geen enkele bruikbare waarde → niets tonen (de klant vroeg wél om een maat).
+  return ors.length ? sql`(${sql.join(ors, sql` or `)})` : sql`false`;
+}
+
 /**
  * Variant-niveau EXISTS — één variant moet aan álle gekozen variant-filters
  * voldoen ÉN op voorraad zijn. Filter je op maat S, dan zie je geen producten
@@ -614,7 +702,7 @@ function variantExists(f: ProductFilters): SQL | null {
     active = true;
   }
   if (f.sizes?.length) {
-    parts.push(inList(sql`v.size_label`, f.sizes));
+    parts.push(sizeCondition(f.sizes));
     active = true;
   }
   if (typeof f.priceMinCents === "number") {
@@ -861,16 +949,25 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
       union all select 'strijkvrij', ''::text, count(*)::int from ctxp where attributes->>'strijkvrij' = 'Ja'
       union all select 'effen', ''::text, count(*)::int from ctxp where coalesce(trim(attributes->>'print_design'),'') = ''
     `),
-    db.execute<{ facet: string; v: string | null; n: number }>(sql`
+    // `fam` = de productfamilie die het matensysteem bepaalt; `tok` = de rauwe
+    // maat (eerste woord). Bewust NIET op het opgeslagen size_label groeperen:
+    // dat collapst schoenmaat 46 naar "S" en boordmaat 41 naar "L".
+    db.execute<{ facet: string; v: string | null; fam: string | null; n: number }>(sql`
       with ctxv as materialized (
-        select ${products.id} as id, v.color_family, v.size_label, v.stock_qty, v.price_cents
+        select ${products.id} as id, v.color_family, v.stock_qty, v.price_cents,
+               ${SIZE_FAM_SQL} as fam, ${SIZE_TOKEN_SQL} as tok
         from ${products} join ${productVariants} v on v.product_id = ${products.id}
         where ${ctx}
       )
-      select 'color' as facet, color_family as v, count(distinct id)::int as n from ctxv where color_family <> '' and stock_qty > 0 group by color_family
-      union all select 'size', size_label, count(distinct id)::int from ctxv where size_label <> '' and stock_qty > 0 group by size_label
-      union all select 'price_lo', ''::text, coalesce(min(price_cents),0)::int from ctxv
-      union all select 'price_hi', ''::text, coalesce(max(price_cents),0)::int from ctxv
+      select 'color' as facet, color_family as v, ''::text as fam, count(distinct id)::int as n from ctxv where color_family <> '' and stock_qty > 0 group by color_family
+      union all select 'size', min(c.tok), c.fam, count(distinct c.id)::int
+        from ctxv c left join ${SIZE_ROWMAP_SQL} on rm.tok = c.tok
+        where c.tok <> '' and c.stock_qty > 0
+        -- Groeperen op de lettermaat-rij ontdubbelt regular/long/short; de
+        -- cijfer-vlag houdt boordmaat 44 los van lettermaat XS bij overhemden.
+        group by c.fam, coalesce(rm.row, c.tok), (c.tok ~ '^[0-9]')
+      union all select 'price_lo', ''::text, ''::text, coalesce(min(price_cents),0)::int from ctxv
+      union all select 'price_hi', ''::text, ''::text, coalesce(max(price_cents),0)::int from ctxv
     `),
   ]);
 
@@ -881,17 +978,27 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   const colorCount = new Map(of(vRows, "color").map((r) => [r.v ?? "", r.n]));
   const colors = COLOR_FAMILIES.filter((c) => colorCount.has(c.key)).map((c) => ({ ...c, count: colorCount.get(c.key) ?? 0 }));
 
-  // Lettermaat-buckets (XS/M/L/…) in natuurlijke volgorde.
-  const sizeAcc = new Map<string, number>();
-  for (const r of of(vRows, "size")) {
-    // Hergroeperen op lettermaat: de opgeslagen size_label dateert van de
-    // import, dus losse boordmaten (36/39/41) stonden náást XS/M/L.
-    const bucket = sizeRowLabel(r.v ?? "") || (r.v ?? "");
-    if (bucket) sizeAcc.set(bucket, (sizeAcc.get(bucket) ?? 0) + r.n);
+  // Maten per MATENSYSTEEM (kleding / boordmaat / schoen / riem / …). Het
+  // systeem komt uit het product, niet uit het getal — anders levert filteren
+  // op "41" overhemden mét schoenen op.
+  const sizeAcc = new Map<string, { system: SizeSystem; value: string; count: number }>();
+  for (const r of vRows.filter((x) => x.facet === "size")) {
+    const hit = sizeFacetFor(r.fam ?? "", r.v ?? "");
+    if (!hit) continue;
+    const key = sizeFacetKey(hit);
+    const cur = sizeAcc.get(key);
+    // Optellen over families/tokens die op dezelfde facet-waarde uitkomen
+    // (bv. colbert 48 en trui M → beide "kleding · M").
+    if (cur) cur.count += r.n;
+    else sizeAcc.set(key, { system: hit.system, value: hit.value, count: r.n });
   }
   const sizes = [...sizeAcc]
-    .map(([value, count]) => ({ value, label: rowDisplayLabel(value), count }))
-    .sort((a, b) => rowSortIndex(a.value) - rowSortIndex(b.value));
+    .sort(
+      ([, a], [, b]) =>
+        SIZE_SYSTEM_ORDER.indexOf(a.system) - SIZE_SYSTEM_ORDER.indexOf(b.system) ||
+        compareSizeValues(a.value, b.value)
+    )
+    .map(([key, x]) => ({ value: key, label: rowDisplayLabel(x.value), count: x.count, system: x.system }));
 
   const fits = of(pRows, "pasvorm").map((r) => ({ value: r.v ?? "", count: r.n })).sort((a, b) => b.count - a.count);
 
@@ -949,7 +1056,8 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
  */
 const _facetsCached = unstable_cache(
   (collectionId: string, category: string) => getFacetsUncached({ collectionId: collectionId || undefined, category: category || undefined }),
-  ["plp-facets-v2"],
+  // v3: maat-facetten dragen nu hun matensysteem mee (sc.41 ≠ bo.41).
+  ["plp-facets-v3"],
   { revalidate: 180 },
 );
 export function getFacets(f: ProductFilters): Promise<Facets> {

@@ -60,7 +60,9 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   ]);
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
   const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);
-  const mySize = my ? { row: my.row, raw: my.raw } : null;
+  // facet = maat mét matensysteem (`kl.M/L`, `sc.43`) — dat is de waarde waarop
+  // het maatfilter selecteert; row blijft de kale rij voor de ranking.
+  const mySize = my ? { row: my.row, raw: my.raw, facet: my.facet } : null;
   // Personalisatie + merchandising-pins alleen op de default ("Aanbevolen").
   const isDefault = sel.sort === "aanbevolen";
   const [tasteCats, pinnedHandles] = await Promise.all([
@@ -110,7 +112,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       </div>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
+        {/* Het filter scrolt mee tot het vastplakt, en krijgt daarna een eigen
+            schuifbalk. Zonder die maximumhoogte bleef een lange filterlijst
+            onderaan buiten beeld hangen: je kon er pas bij nadat je langs álle
+            producten had gescrold. */}
+        <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
           <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} />
         </aside>
 

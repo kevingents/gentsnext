@@ -487,8 +487,13 @@ export default async function ProductPage({ params }: Props) {
       </nav>
 
       <PdpSizeProvider>
-      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
-        <div>
+      {/* Drie blokken in één raster. Mobiel (één kolom) is de volgorde gewoon de
+          DOM-volgorde: galerij → kopen → details. Vanaf lg zetten we ze op vaste
+          plaatsen: galerij linksboven, details er direct onder, koopkolom rechts
+          over beide rijen. Zo sluiten de details aan op de galerij en blijft de
+          koopkolom bovenaan meelopen. */}
+      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-12 lg:gap-y-10">
+        <div className="lg:col-start-1 lg:row-start-1">
           <Gallery
             images={[
               // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
@@ -510,7 +515,7 @@ export default async function ProductPage({ params }: Props) {
           ) : null}
         </div>
 
-        <div className="lg:sticky lg:top-24 lg:self-start">
+        <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-24 lg:self-start">
           <BuyBox
             title={product.title}
             vendor={String(attrs.merk || product.vendor || "")}
@@ -546,10 +551,15 @@ export default async function ProductPage({ params }: Props) {
               </li>
             ))}
           </ul>
+        </div>
 
-          <div className="mt-8">
-            <Accordion items={accordionItems} />
-          </div>
+        {/* Productdetails horen onder de galerij, niet naast de koopknop: de
+            koopkolom loopt mee (sticky) en werd met de uitklapper zo hoog dat hij
+            niet meer op één scherm paste, terwijl de ruimte onder een korte
+            galerij leeg bleef. Rechts blijft alleen wat bij de koopbeslissing
+            hoort; delen hoort bij de details en verhuist mee. */}
+        <div className="lg:col-start-1 lg:row-start-2">
+          <Accordion items={accordionItems} />
           <ShareRow title={product.title} />
         </div>
       </div>
