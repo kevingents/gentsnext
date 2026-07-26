@@ -612,6 +612,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "looks.shopTheLook.chooseSizeBtn": "Kies maat",
   "looks.shopTheLook.hotspotLabel": "bekijk en kies maat",
   "looks.shopTheLook.instruction": "Tik op een cijfer om het artikel te shoppen",
+  // Kopje boven de artikelen die niet op de foto staan maar er wél bij passen.
+  "looks.shopTheLook.alsoFits": "Past hierbij",
   "looks.shopTheLook.moodImage": "sfeerbeeld",
   "looks.shopTheLook.sizeDrawerTitle": "Kies je maat",
   "looks.shopTheLook.sizeLabel": "Maat",

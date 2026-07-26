@@ -239,7 +239,14 @@ export async function smartModelLook(
   for (const it of modelLook.items || []) if (it.handle) prefByHg.set(it.hoofdgroep, it.handle);
 
   const exclude = new Set<string>([target.handle]);
-  const hotspots: Hotspot[] = [{ x: 50, y: TARGET_Y[target.hoofdgroep] ?? 36, handle: target.handle, label: "Dit item" }];
+  // Alleen DIT product staat echt op de modelfoto (de FASHN-pipeline zet het op
+  // een basismodel). Alles wat hieronder wordt bijgezocht is styling-advies, geen
+  // weergave van het beeld — vandaar inBeeld: false, tenzij de foto's opnieuw
+  // gegenereerd zijn mét de echte look-artikelen (instelling hotspotsInBeeld).
+  const echtInBeeld = modelLook.hotspotsInBeeld === true;
+  const hotspots: Hotspot[] = [
+    { x: 50, y: TARGET_Y[target.hoofdgroep] ?? 36, handle: target.handle, label: "Dit item", inBeeld: true },
+  ];
   let shoeFam: Family | null = null;
 
   for (const role of roles) {
@@ -259,7 +266,7 @@ export async function smartModelLook(
     exclude.add(chosen.handle);
     if (role === "shoes") shoeFam = chosen.fam;
     const pos = ROLE_POS[role];
-    hotspots.push({ x: pos.x, y: pos.y, handle: chosen.handle, label: pos.label });
+    hotspots.push({ x: pos.x, y: pos.y, handle: chosen.handle, label: pos.label, inBeeld: echtInBeeld });
   }
 
   if (hotspots.length < 2) return null;

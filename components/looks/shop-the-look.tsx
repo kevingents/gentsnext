@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import type { ResolvedLook, LookBuyData } from "@/lib/looks";
 import { useCart } from "@/components/cart/cart-context";
@@ -44,6 +44,14 @@ export function ShopTheLook({
   useModalA11y(drawerPanelRef, { onClose: () => setSizeDrawer(null), active: sizeDrawer !== null });
 
   const items = look.products.filter((h) => h.product);
+  // Alleen artikelen die écht op de foto staan krijgen een cijfer in het beeld.
+  // Op een productpagina is dat alleen het product zelf; de bijpassende broek,
+  // schoenen en riem zijn styling-advies en staan ernaast als "past hierbij".
+  // Bij de gecureerde looks is alles in beeld (inBeeld leeg = ja), dus daar
+  // verandert er niets.
+  const inBeeld = items.filter((h) => h.inBeeld !== false);
+  const erbij = items.filter((h) => h.inBeeld === false);
+  const nummerVan = (h: (typeof items)[number]) => inBeeld.indexOf(h) + 1;
 
   function focusItem(i: number) {
     setActive(i);
@@ -97,7 +105,7 @@ export function ShopTheLook({
       <div className="space-y-3">
       <div className={`relative ${aspectClass} overflow-hidden rounded-card bg-surface`}>
         <Image src={look.image} alt={look.title} fill priority sizes="(max-width:1024px) 100vw, 50vw" className="object-cover" />
-        {items.map((h) => {
+        {inBeeld.map((h) => {
           const i = look.products.indexOf(h);
           return (
             <button
@@ -115,7 +123,7 @@ export function ShopTheLook({
                   active === i ? "scale-125 bg-ink" : "bg-ink/80 group-hover:scale-110"
                 }`}
               >
-                {items.indexOf(h) + 1}
+                {nummerVan(h)}
               </span>
               <span className="pointer-events-none absolute left-1/2 top-9 hidden -translate-x-1/2 whitespace-nowrap rounded-card bg-ink px-2 py-1 font-sans text-[0.65rem] text-canvas group-hover:block">
                 {h.label || h.product!.title}
@@ -123,9 +131,12 @@ export function ShopTheLook({
             </button>
           );
         })}
-        <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-canvas/85 px-3 py-1 font-sans text-[0.7rem] text-ink-soft shadow-pop">
-          {t("looks.shopTheLook.instruction")}
-        </span>
+        {/* Bij één enkel cijfer is "tik op een cijfer" meer verwarrend dan nuttig. */}
+        {inBeeld.length > 1 ? (
+          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-canvas/85 px-3 py-1 font-sans text-[0.7rem] text-ink-soft shadow-pop">
+            {t("looks.shopTheLook.instruction")}
+          </span>
+        ) : null}
       </div>
 
       {/* Sfeerbeelden onder de hoofdfoto */}
@@ -147,23 +158,39 @@ export function ShopTheLook({
         {look.subtitle ? <p className="mt-1 font-sans text-sm text-ink-soft">{look.subtitle}</p> : null}
 
         <ul className="mt-6">
-          {items.map((h) => {
+          {[...inBeeld, ...erbij].map((h, rij) => {
             const i = look.products.indexOf(h);
             const data = buy?.[h.handle];
-            const num = items.indexOf(h) + 1;
+            const opDeFoto = h.inBeeld !== false;
+            const num = nummerVan(h);
+            // Kopje precies één keer, vlak vóór het eerste artikel dat niet op de
+            // foto staat. Zo is meteen duidelijk waar het beeld ophoudt en het
+            // stijladvies begint.
+            const kopje = !opDeFoto && rij === inBeeld.length;
             const sel = picked[i];
             const selSize = data?.sizes.find((s) => s.size === sel);
             const price = formatEuro(selSize?.priceCents ?? h.product!.minPriceCents);
             return (
+              <Fragment key={i}>
+              {kopje ? (
+                <li className="pb-2 pt-6">
+                  <p className="font-sans text-[0.65rem] uppercase tracking-[0.14em] text-muted">
+                    {t("looks.shopTheLook.alsoFits")}
+                  </p>
+                </li>
+              ) : null}
               <li
-                key={i}
                 ref={(el) => { cardRefs.current[i] = el; }}
                 onMouseEnter={() => setActive(i)}
                 className={`group flex items-start gap-4 border-b border-line py-4 transition-colors first:border-t last:border-b-0 ${active === i ? "bg-surface/70" : ""}`}
               >
                 <Link href={`/products/${h.product!.handle}`} className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-card bg-surface">
                   {h.product!.imageUrl ? <Image src={h.product!.imageUrl} alt={h.product!.title} fill sizes="72px" className="object-cover transition-transform duration-500 group-hover:scale-[1.04]" /> : null}
-                  <span className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/85 font-sans text-[0.6rem] font-medium text-canvas">{num}</span>
+                  {/* Cijfer alleen bij artikelen die ook echt in de foto staan —
+                      anders verwijst het naar een plek in het beeld die er niet is. */}
+                  {opDeFoto ? (
+                    <span className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/85 font-sans text-[0.6rem] font-medium text-canvas">{num}</span>
+                  ) : null}
                 </Link>
 
                 <div className="min-w-0 flex-1">
@@ -206,6 +233,7 @@ export function ShopTheLook({
                   )}
                 </div>
               </li>
+              </Fragment>
             );
           })}
         </ul>

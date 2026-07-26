@@ -85,6 +85,10 @@ export async function POST(req: Request) {
     patch.modelLook = {
       enabled: ml.enabled !== false,
       minStock: Math.max(0, Math.round(Number((ml as { minStock?: unknown }).minStock) || 8)),
+      // Bewust standaard UIT: pas aanzetten als de modelfoto's opnieuw gegenereerd
+      // zijn mét de echte broek/schoenen/riem erop. Zolang dat niet zo is, zou een
+      // cijfer in het beeld naar een artikel wijzen dat er niet staat.
+      hotspotsInBeeld: (ml as { hotspotsInBeeld?: unknown }).hotspotsInBeeld === true,
       items,
     };
   }

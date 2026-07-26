@@ -15,7 +15,22 @@ import { availableForSkus } from "@/lib/stock-reservations";
  * LOOKS hieronder als basis. Hotspot-posities zijn percentages op de foto.
  */
 
-export type Hotspot = { x: number; y: number; handle: string; label?: string };
+export type Hotspot = {
+  x: number;
+  y: number;
+  handle: string;
+  label?: string;
+  /**
+   * Zit dit artikel écht op de foto? Bij de gecureerde looks hieronder is dat
+   * altijd zo (die zijn als geheel gestyled en gefotografeerd), dus leeg =
+   * ja. Op een productpagina ligt het anders: daar staat alléén het product
+   * zelf op het model (via de FASHN-pipeline), en zijn de bijpassende broek,
+   * schoenen en riem er achteraf bij gezocht. Die krijgen inBeeld: false en
+   * dus géén cijfer in de foto — een cijfer op een broek die er niet is, is
+   * een belofte die het beeld niet waarmaakt.
+   */
+  inBeeld?: boolean;
+};
 export type Look = {
   slug: string;
   title: string;
@@ -365,15 +380,20 @@ export function buildModelLook(
   const base = (modelLook.items || []).filter(
     (it) => it.handle && it.handle !== p.handle && it.hoofdgroep !== p.hoofdgroep,
   );
+  // Alleen het product zelf staat op de modelfoto; de vaste basisartikelen uit de
+  // instellingen zijn styling-advies. Zie de toelichting bij Hotspot.inBeeld.
+  const echtInBeeld = modelLook.hotspotsInBeeld === true;
   const hotspots: Hotspot[] = [
-    { x: 50, y, handle: p.handle, label: "Dit item" },
-    ...base.map((it) => ({ x: it.x, y: it.y, handle: it.handle, label: it.label })),
+    { x: 50, y, handle: p.handle, label: "Dit item", inBeeld: true },
+    ...base.map((it) => ({ x: it.x, y: it.y, handle: it.handle, label: it.label, inBeeld: echtInBeeld })),
   ];
   if (hotspots.length < 2) return null; // alleen het item zelf is geen "look"
   return {
     slug: p.handle,
     title: "Compleet de look",
-    subtitle: "Zo style je dit item — shop de volledige outfit van het model.",
+    subtitle: echtInBeeld
+      ? "Zo style je dit item — shop de volledige outfit van het model."
+      : "Zo style je dit item — bijpassend gekozen uit onze collectie.",
     occasion: "Shop de look",
     image: p.modelImageUrl,
     hotspots,
@@ -394,12 +414,15 @@ export function buildSuitLook(opts: {
   shirtHandle?: string;
   shoesHandle?: string;
 }): Look {
+  // Colbert, gilet en broek ZIJN het pak op de foto (zelfde stof, zelfde beeld).
+  // Het overhemd en de schoenen komen uit de vaste basisartikelen: die zijn erbij
+  // gekozen, niet gefotografeerd — dus geen cijfer in het beeld.
   const hotspots: Hotspot[] = [];
-  if (opts.shirtHandle) hotspots.push({ x: 50, y: 24, handle: opts.shirtHandle, label: "Overhemd" });
+  if (opts.shirtHandle) hotspots.push({ x: 50, y: 24, handle: opts.shirtHandle, label: "Overhemd", inBeeld: false });
   if (opts.colbertHandle) hotspots.push({ x: 50, y: 34, handle: opts.colbertHandle, label: "Colbert" });
   if (opts.giletHandle) hotspots.push({ x: 50, y: 48, handle: opts.giletHandle, label: "Gilet" });
   if (opts.broekHandle) hotspots.push({ x: 50, y: 72, handle: opts.broekHandle, label: "Pantalon" });
-  if (opts.shoesHandle) hotspots.push({ x: 50, y: 93, handle: opts.shoesHandle, label: "Schoenen" });
+  if (opts.shoesHandle) hotspots.push({ x: 50, y: 93, handle: opts.shoesHandle, label: "Schoenen", inBeeld: false });
   return {
     slug: opts.currentHandle,
     title: "Stel dit pak samen",
