@@ -94,6 +94,28 @@ function normalize(name: string): string {
   return String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * "Donker"/"licht" in de naam meenemen in de tint van de familie-terugval.
+ * Zonder dit kregen "Blue", "Dark Blue" en "Light Blue" exact dezelfde kleur,
+ * en dan zijn drie swatches naast elkaar niet uit elkaar te houden. Geldt
+ * alléén voor de heuristiek — namen die we exact kennen houden hun
+ * zorgvuldig gekozen hex.
+ */
+function metTint(hex: string, naam: string): string {
+  const donker = /\b(donker|dark|deep)\b/.test(naam);
+  const licht = /\b(licht|light|pale)\b/.test(naam);
+  if (!donker && !licht) return hex;
+  const f = donker ? 0.72 : 1.28;
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const num = parseInt(m[1], 16);
+  const kanaal = (shift: number) => {
+    const v = Math.round(((num >> shift) & 0xff) * f);
+    return Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0");
+  };
+  return `#${kanaal(16)}${kanaal(8)}${kanaal(0)}`;
+}
+
 export function colorSwatch(name: string): Swatch {
   const n = normalize(name);
   if (!n) return { hex: "#C9C7C2", family: "grijs" };
@@ -104,6 +126,17 @@ export function colorSwatch(name: string): Swatch {
     if (MAP[word]) return MAP[word];
   }
   // Familie-heuristiek op substring.
+  //
+  // Ook ENGELSE termen: de kleurnamen komen niet alleen uit onze eigen velden
+  // maar ook uit het Shopify-metafield met de kleurvarianten, en daar staan ze
+  // vaak in het Engels ("Gold Brown", "Off White", "Dark Green"). Zonder deze
+  // regels vielen die allemaal terug op dezelfde neutrale grijstint, waardoor
+  // de kleurbalk op de productpagina één egale grijze streep werd in plaats van
+  // negen te onderscheiden kleuren.
+  //
+  // VOLGORDE TELT: de eerste treffer wint. Daarom staat "brown" vóór "gold"
+  // (een "Gold Brown" is een bruin, geen goud) en "light"/"dark" doen niet mee —
+  // die zeggen alleen iets over de tint, niet over de familie.
   const families: [string, ColorFamily, string][] = [
     ["blauw", "blauw", "#2F4A6B"],
     ["grijs", "grijs", "#8B8B8B"],
@@ -115,9 +148,34 @@ export function colorSwatch(name: string): Swatch {
     ["beige", "beige", "#D6C7A8"],
     ["roze", "roze", "#D7A3AE"],
     ["paars", "paars", "#5E3B6E"],
+    // Engelse varianten
+    ["brown", "bruin", "#6B4A2F"],
+    ["black", "zwart", "#141414"],
+    ["charcoal", "grijs", "#3A3A3A"],
+    ["off white", "wit", "#F2EFE9"],
+    ["offwhite", "wit", "#F2EFE9"],
+    ["ivory", "wit", "#F5F1E6"],
+    ["cream", "beige", "#EFE6D2"],
+    ["white", "wit", "#FAFAF7"],
+    ["grey", "grijs", "#8B8B8B"],
+    ["gray", "grijs", "#8B8B8B"],
+    ["silver", "grijs", "#C0C0C0"],
+    ["olive", "groen", "#5A5B3C"],
+    ["green", "groen", "#3E5240"],
+    ["blue", "blauw", "#2F4A6B"],
+    ["burgundy", "rood", "#5C1F2B"],
+    ["wine", "rood", "#5C1F2B"],
+    ["red", "rood", "#8E2B2B"],
+    ["pink", "roze", "#D7A3AE"],
+    ["purple", "paars", "#5E3B6E"],
+    ["gold", "beige", "#C9A227"],
+    ["sand", "beige", "#D9C9A8"],
+    ["taupe", "beige", "#B3A392"],
+    ["yellow", "beige", "#D9B740"],
+    ["orange", "rood", "#C4622D"],
   ];
   for (const [needle, family, hex] of families) {
-    if (n.includes(needle)) return { hex, family };
+    if (n.includes(needle)) return { hex: metTint(hex, n), family };
   }
   return { hex: "#C9C7C2", family: "grijs" };
 }
