@@ -43,6 +43,22 @@ export const products = pgTable(
     /** Bevroren Shopify-GID (gid://shopify/Product/...) — migratie & feeds. */
     shopifyProductId: text("shopify_product_id"),
     /**
+     * SRS-eigen sleutel voor het PIM. Een product = artikelnummer + kleur (dat is wat
+     * de klant als één product ziet, met een maatboog eronder); een variant daaronder
+     * is een barcode. Vervangt shopify_product_id als identiteit zodra de SRS-import
+     * de bron is — daarom additief aangelegd, niet als vervanging.
+     */
+    srsArtikelNummer: text("srs_artikel_nummer").notNull().default(""),
+    srsKleurId: text("srs_kleur_id").notNull().default(""),
+    /**
+     * Welke velden zijn met de hand gezet en mogen door een SRS-import NIET
+     * overschreven worden. Zonder deze scheiding wist elke import de verrijking —
+     * precies wat eerder gebeurde toen her-import de onzin-omschrijvingen terugzette.
+     */
+    handmatigeVelden: jsonb("handmatige_velden").notNull().default([]),
+    /** Laatste keer dat dit product in de SRS-feed voorkwam (verdwenen = opgeruimd?). */
+    srsGezienOp: timestamp("srs_gezien_op", { withTimezone: true }),
+    /**
      * Vrije attributen: SRSERP-productmetafields (subgroep, hoofdgroep,
      * materiaal, pasvorm, ...) plus migratie-restanten (_collectionTitles,
      * _videos). Sleutels volgen de oude metafield-keys.
@@ -108,9 +124,22 @@ export const productVariants = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "cascade" }),
+    /**
+     * DE join-sleutel naar de voorraad: srs_stock matcht hierop, nergens anders op.
+     * Bij een SRS-gevoede catalogus is dit het SRS-barcodenummer (29000...).
+     */
     sku: text("sku").notNull().default(""),
-    /** EAN/barcode — de join-sleutel naar SRS-voorraad (SFTP: sku_code). */
+    /**
+     * LET OP — dit veld heet 'barcode' maar bevat sinds de Shopify-import de EAN van
+     * de LEVERANCIER, een heel ander nummer dan de SRS-code. Op productie: 16.514 van
+     * de varianten hebben barcode ≠ sku, en dáárvan matcht er nul op srs_stock terwijl
+     * 7.558 wél op sku matchen. Elke voorraad-lookup die 'barcode || sku' als sleutel
+     * gebruikt, zoekt dus op een nummer dat de voorraadbron niet kent.
+     * De leveranciers-EAN verhuist naar supplier_ean zodra de SRS-import draait.
+     */
     barcode: text("barcode").notNull().default(""),
+    /** EAN van de leverancier — informatief, NOOIT als voorraad-sleutel gebruiken. */
+    supplierEan: text("supplier_ean").notNull().default(""),
     position: integer("position").notNull().default(0),
     size: text("size").notNull().default(""),
     /** Lettermaat-bucket (XS/M/L/…) voor het maatfilter — afgeleid van size. */
