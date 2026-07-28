@@ -1405,3 +1405,41 @@ export const receivingDiscrepancies = pgTable(
     uniqueIndex("recdisc_uq").on(t.shipmentId, t.stockKey, t.code),
   ],
 );
+
+/**
+ * Portal-gebruik: wie opent welke portal-pagina, hoe vaak.
+ *
+ * De portal heeft 196 pagina's en tot nu toe géén enkele meting — "dit gebruiken
+ * we niet" was daardoor altijd een gevoel. Voor het opschonen rond de SRS-exit is
+ * dat te weinig: één verkeerd weggegooid scherm is een afdeling die vastloopt.
+ *
+ * Bewust GEAGGREGEERD per dag i.p.v. een regel per klik: dat houdt de tabel klein
+ * (196 pagina's × ~40 medewerkers × 1 rij/dag) en is precies genoeg om "wordt dit
+ * nog gebruikt, en door wie" te beantwoorden. Geen IP, geen user-agent, geen
+ * query-parameters — alleen het pad.
+ */
+export const portalUsage = pgTable(
+  "portal_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Kalenderdag (UTC) — samen met pad + gebruiker de unieke sleutel. */
+    dag: date("dag").notNull(),
+    /** Route zonder query, bv. "/voorraad-drift". */
+    pad: text("pad").notNull(),
+    /** SRS personnelId of office userId. Leeg bij kiosk-sessies. */
+    gebruikerId: text("gebruiker_id").notNull().default(""),
+    gebruikerNaam: text("gebruiker_naam").notNull().default(""),
+    /** 'personnel' | 'office' | 'kiosk' — onderscheidt winkel van kantoor. */
+    soort: text("soort").notNull().default(""),
+    /** Winkel/afdeling waaronder de gebruiker werkte, voor "welke winkel mist dit". */
+    winkel: text("winkel").notNull().default(""),
+    aantal: integer("aantal").notNull().default(1),
+    laatstOp: timestamp("laatst_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Eén rij per gebruiker per pagina per dag; de teller loopt op via upsert.
+    uniqueIndex("portal_usage_uq").on(t.dag, t.pad, t.gebruikerId),
+    index("portal_usage_pad_idx").on(t.pad),
+    index("portal_usage_dag_idx").on(t.dag),
+  ],
+);

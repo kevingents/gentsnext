@@ -316,6 +316,13 @@
       "when": 1785260705284,
       "tag": "0044_srs-eigen-sleutels",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1785264063468,
+      "tag": "0045_portal-gebruiksmeting",
+      "breakpoints": true
     }
   ]
 }
