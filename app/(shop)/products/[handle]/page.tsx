@@ -219,8 +219,21 @@ export default async function ProductPage({ params }: Props) {
   // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde
   // tekst — maar alleen op NL: de override is Nederlands, en op /en /de wint
   // de vertaalde omschrijving uit product_translations (via getProductByHandle).
+  // De rijke omschrijving stond er al, maar werd nooit getoond. `description_html`
+  // is een one-liner (gemeten: 1.462 producten, gemiddeld 84 tekens), terwijl het
+  // metafield long_deescription op 1.446 producten staat met gemiddeld 379 tekens
+  // geschreven HTML — en tot nu toe alleen als boolean `hasLongDescription` werd
+  // gebruikt. Alleen op NL: die tekst is Nederlands en heeft geen vertaling, dus
+  // op /en /de /fr /es blijft de vertaalde korte tekst staan.
+  const langeOmschrijving = (() => {
+    const attrs = (product.attributes ?? {}) as Record<string, unknown>;
+    // Het thema gebruikt historisch de typo-sleutel `long_deescription`; beide tellen.
+    const raw = attrs["long_deescription"] ?? attrs["long_description"];
+    const tekst = typeof raw === "string" ? raw.trim() : "";
+    return tekst.length > String(product.descriptionHtml || "").trim().length ? tekst : "";
+  })();
   const descriptionHtml = locale === DEFAULT_LOCALE
-    ? contentOverride?.descriptionHtml || product.descriptionHtml
+    ? contentOverride?.descriptionHtml || langeOmschrijving || product.descriptionHtml
     : product.descriptionHtml;
   // Eigen (native) reviews hebben voorrang op het legacy Judge.me-aggregaat.
   const displayRating = reviewSummary ? { value: reviewSummary.value, count: reviewSummary.count } : rating;
