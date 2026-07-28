@@ -38,11 +38,16 @@ async function resolveCode(code: string): Promise<ScanMeta | null> {
   const c = String(code || "").trim();
   if (!c) return null;
   const db = getDb();
+  // Hoofdletterongevoelig en spatie-tolerant matchen: een handscanner levert soms een
+  // afwijkende schrijfwijze, en artikelnummers in de catalogus zijn niet uniform.
+  // Barcode gaat vóór sku, zodat een code die bij het ene artikel de barcode en bij
+  // het andere de sku is niet willekeurig uitpakt (limit 1 zonder order was arbitrair).
   const rows = await db.execute<{ sku: string; barcode: string; title: string; size: string; color: string; img: string | null }>(sql`
     select v.sku, v.barcode, p.title, v.size, v.color,
       coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
     from product_variants v join products p on p.id = v.product_id
-    where v.barcode = ${c} or v.sku = ${c}
+    where lower(trim(v.barcode)) = lower(${c}) or lower(trim(v.sku)) = lower(${c})
+    order by (lower(trim(v.barcode)) = lower(${c})) desc, v.id asc
     limit 1`);
   const r = rows.rows[0];
   if (!r) return null;
@@ -145,8 +150,14 @@ export async function scanInventory(input: { sessionId: string; code: string; qt
   const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
 
   // Verwachte voorraad bij de eerste observatie = SRS-baseline + kassa-delta (fysiek).
-  const breakdown = await availableBreakdown(session.location, [meta.stockKey]);
-  const b = breakdown.get(meta.stockKey);
+  // LET OP het sleutelverschil: stockKey is bewust `barcode || sku` — die sleutel deelt
+  // de telling met reserveringen, paspop en goederenontvangst. De VOORRAADBRON
+  // (srs_stock) kent echter alleen de SRS-sku; `product_variants.barcode` is de EAN van
+  // de leverancier en komt in srs_stock niet voor. Op de stockKey zoeken gaf daarom
+  // structureel "systeem 0" voor elk artikel met een eigen leveranciers-barcode.
+  const voorraadSleutel = String(meta.sku || meta.barcode || "").trim();
+  const breakdown = await availableBreakdown(session.location, [voorraadSleutel]);
+  const b = breakdown.get(voorraadSleutel);
   const expected = b ? Math.max(0, b.baseline + b.posDelta) : 0;
 
   // ATOMAIRE upsert: bij +1-scannen telt de DB zelf op (scanned_qty + qty) zodat
