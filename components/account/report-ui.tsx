@@ -65,6 +65,7 @@ const NAV_GROUPS: { title: string; items: { href: string; label: string; icon: s
     items: [
       { href: "/account/merchandising", label: "Uitgelicht", icon: "pin" },
       { href: "/account/productmedia", label: "Productmedia", icon: "image" },
+      { href: "/account/beeldstatus", label: "Beeldstatus", icon: "chart" },
       { href: "/account/reviews", label: "Reviews", icon: "star" },
     ],
   },

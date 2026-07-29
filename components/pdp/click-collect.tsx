@@ -17,9 +17,13 @@ export function ClickAndCollect({
   branches,
   reserve,
   myStore,
+  size,
 }: {
   branches: Branch[];
   reserve?: { handle: string; sku: string };
+  /** De gekozen maat — dan meldt de regel dat het om DIE maat gaat, want dit
+   *  blok verving het losse voorraadkader boven de maatkiezer. */
+  size?: string;
   /** Winkelnaam van "mijn winkel" (server-side uit cookie/profiel). */
   myStore?: string | null;
 }) {
@@ -107,7 +111,8 @@ export function ClickAndCollect({
               <span className="inline-flex items-center gap-1.5 text-xs text-success">
                 <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
                 <span>
-                  {t("clickCollect.available")} {available.length} {available.length === 1 ? t("clickCollect.storeSingular") : t("clickCollect.storePlural")}
+                  {size ? t("clickCollect.forSize", { size }) : t("clickCollect.available")} {available.length}{" "}
+                  {available.length === 1 ? t("clickCollect.storeSingular") : t("clickCollect.storePlural")}
                   {openNow > 0 ? <span className="text-muted"> · {openNow} {t("clickCollect.openNow")}</span> : null}
                 </span>
               </span>

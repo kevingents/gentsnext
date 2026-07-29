@@ -174,15 +174,27 @@ export function BuyBox({
     () => active?.sizes.find((s) => s.size === size) ?? null,
     [active, size]
   );
-  // Omnichannel-USP: aantal winkels met voorraad — voor de gekozen maat als er
-  // een gekozen is, anders over alle maten van deze kleur ("kies je maat om te
-  // zien welke"). Zichtbaar vanaf de eerste scroll, niet pas na een maatklik.
+  // Omnichannel-USP: aantal winkels met voorraad over ALLE maten van deze kleur.
+  // Bewust niet per gekozen maat: het kader hieronder rendert alleen zónder
+  // maatkeuze (daarna neemt "Passen & afhalen" het over), dus een per-maat-tak
+  // hier was dode code.
   const storeCount = useMemo(() => {
     const set = new Set<string>();
-    const src = selectedSize ? [selectedSize] : active?.sizes ?? [];
-    for (const s of src) for (const b of s.branches ?? []) if (b.qty > 0) set.add(b.store);
+    for (const s of active?.sizes ?? []) for (const b of s.branches ?? []) if (b.qty > 0) set.add(b.store);
     return set.size;
-  }, [active, selectedSize]);
+  }, [active]);
+  // Deze maten worden ná hydratie automatisch voorgeselecteerd (één maat, of de
+  // opgeslagen maat van de klant). Het winkelkader zou dan server-side gerenderd
+  // worden en client-side meteen weer verdwijnen — een zichtbare flits plus een
+  // layout-sprong. Server en client kunnen dit allebei uit de props afleiden,
+  // dus verbergen we het kader dan van meet af aan.
+  const zalAutoSelecteren =
+    singleSize ||
+    Boolean(
+      mySize &&
+        active &&
+        active.sizes.some((s) => (!s.known || s.qty > 0) && (s.size === mySize || sizeRowLabel(s.size) === myBucket)),
+    );
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? `${t("product.from")} ` : "") + formatEuro(priceCents);
   // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
@@ -285,17 +297,21 @@ export function BuyBox({
         </p>
       ) : null}
 
-      {/* Omnichannel-USP: winkelvoorraad zichtbaar vanaf de eerste scroll. */}
-      {hasStock && !oneSize && storeCount > 0 ? (
+      {/* Omnichannel-USP: winkelvoorraad zichtbaar vanaf de eerste scroll —
+          maar ALLEEN zolang er nog geen maat gekozen is. Daarna vertelt de
+          "Passen & afhalen"-regel onder de bestelknop precies hetzelfde, en die
+          kun je ook aanklikken. Twee keer hetzelfde aantal winkels boven elkaar
+          las als twee verschillende feiten. Bij een maat die automatisch
+          voorgeselecteerd gaat worden renderen we 'm ook niet (zie
+          zalAutoSelecteren) — anders flitst het kader op en verdwijnt weer. */}
+      {hasStock && !oneSize && storeCount > 0 && !selectedSize && !zalAutoSelecteren ? (
         <div className="mt-6 flex items-start gap-2.5 rounded-card border border-line px-3 py-2.5">
           <StoreIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink" />
           <p className="font-sans text-sm">
             <span className="font-medium text-ink">
-              {selectedSize
-                ? t(storeCount === 1 ? "pdp.storeStock.mineOne" : "pdp.storeStock.mine", { count: storeCount })
-                : t(storeCount === 1 ? "pdp.storeStock.anyOne" : "pdp.storeStock.any", { count: storeCount })}
+              {t(storeCount === 1 ? "pdp.storeStock.anyOne" : "pdp.storeStock.any", { count: storeCount })}
             </span>
-            {!selectedSize ? <span className="block text-xs text-muted">{t("pdp.storeStock.hint")}</span> : null}
+            <span className="block text-xs text-muted">{t("pdp.storeStock.hint")}</span>
           </p>
         </div>
       ) : null}
@@ -467,10 +483,22 @@ export function BuyBox({
           // key per sku: maatwissel = verse component-staat (geen oude
           // bevestiging/fout van een andere maat).
           key={selectedSize.sku || selectedSize.size}
+          // Bij écht one-size geen maat meesturen — "Maat One ligt in 5 winkels"
+          // is onzin voor een accessoire; de generieke regel volstaat dan.
+          size={oneSize ? undefined : selectedSize.size}
           branches={selectedSize.branches}
           myStore={myStore}
           reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
         />
+      ) : null}
+      {/* De gekozen maat ligt in geen enkele winkel terwijl andere maten dat wél
+          doen: dan verdween hierboven het winkelkader en rendert ClickAndCollect
+          niets — de omnichannel-boodschap loste stil op. Zeg het dan gewoon. */}
+      {selectedSize && !oneSize && !soldOut && storeCount > 0 && !(selectedSize.branches ?? []).some((b) => b.qty > 0) ? (
+        <p className="mt-3 flex items-start gap-2 font-sans text-xs text-muted">
+          <StoreIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          {t("pdp.storeStock.sizeNone", { size: selectedSize.size })}
+        </p>
       ) : null}
 
       {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is

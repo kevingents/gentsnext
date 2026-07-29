@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 import { getSessionCustomer } from "@/lib/account";
+import { OP_WEBSITE_SQL } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
         having count(*) > 1
       )
       select d.sku, d.aantal, p.handle, p.title, v.size, v.color, v.barcode,
-        (p.status = 'active' and p.has_image and p.in_stock and p.is_group_primary) op_website,
+        (${sql.raw(OP_WEBSITE_SQL)}) op_website,
         p.attributes ->> 'hoofdgroep_omschrijving' hoofdgroep
       from dubbel d
       join product_variants v on v.sku = d.sku
