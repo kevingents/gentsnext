@@ -210,11 +210,25 @@ export async function claimReceiptPoints(input: { saleId: string; token: string;
   if (!sale) return { ok: false, error: "Bon niet gevonden." };
   const s = sale as { cancelled?: boolean; customerId?: string; total?: number };
   if (s.cancelled) return { ok: false, error: "Deze bon is geannuleerd." };
-  // Alleen weigeren als de bon bij een ÁNDERE klant hoort. Hoort 'ie al bij DEZE klant
-  // (kassa-verkoop op naam), dan mag die z'n bon-punten alsnog in Neon claimen — creditOnce
-  // is idempotent op (customerId, 'pos_receipt', saleId), dus nooit dubbel.
   if (String(s.customerId || "") && String(s.customerId) !== customerId) {
     return { ok: false, error: "Deze bon hoort bij een andere klant." };
+  }
+  /* Hoort de bon al bij DEZE klant, dan is 't een kassa-verkoop op naam en heeft de
+     kassa de punten al toegekend — in het loyalty-grootboek van storegents
+     (api/store/pos-sale.js: earnLoyalty bij elke sale.customerId). Hier nogmaals
+     boeken levert dezelfde euro twee keer punten op, in twee verschillende
+     grootboeken. `creditOnce` is namelijk idempotent BINNEN Neon, en weet niets van
+     wat de kassa in de blob deed.
+     Zolang die twee grootboeken niet samengevoegd zijn, is niet-boeken het enige
+     juiste antwoord. De QR-claim op de bon blijft wél werken waarvoor hij bedoeld is:
+     een ANONIEME bon aan een account koppelen. */
+  if (String(s.customerId || "") === customerId) {
+    return {
+      ok: true,
+      points: 0,
+      alreadyClaimed: true,
+      balance: await ledgerBalance(customerId),
+    };
   }
   const points = pointsForCents(Math.round((Number(s.total) || 0) * 100));
   const saleDate = (sale as { createdAt?: string }).createdAt ? new Date(String((sale as { createdAt?: string }).createdAt)) : null;
