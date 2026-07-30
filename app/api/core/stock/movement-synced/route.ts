@@ -18,16 +18,22 @@ export async function POST(req: Request) {
   if (!(await coreAuth(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { ref?: string };
+  let body: { ref?: string; channel?: string };
   try {
-    body = (await req.json()) as { ref?: string };
+    body = (await req.json()) as { ref?: string; channel?: string };
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 });
   }
   const ref = String(body?.ref || "").trim();
   if (!ref) return NextResponse.json({ ok: false, error: "ref vereist." }, { status: 400 });
+  // Het kanaal moet meekomen: transfers/ontvangsten boeken op 'transfer'/'inbound',
+  // en een markering op het verkeerde kanaal is een stille no-op — met dubbeltelling
+  // bij de eerstvolgende baseline-sync als gevolg. Default 'pos' (verkopen).
+  const channel = (["pos", "inbound", "transfer"] as const).includes(body?.channel as "pos")
+    ? (body!.channel as "pos" | "inbound" | "transfer")
+    : "pos";
   try {
-    await markMovementsSrsPosted(ref);
+    await markMovementsSrsPosted(ref, channel);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
