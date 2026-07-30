@@ -164,6 +164,7 @@ export const ROUTE_PERMISSION: Record<string, Permission> = {
   "/account/redirects": "vindbaarheid",
   "/account/merchandising": "presentatie",
   "/account/productmedia": "presentatie",
+  "/account/beeldstatus": "presentatie",
   "/account/reviews": "presentatie",
   "/account/orders": "operatie",
   "/account/fulfilment": "operatie",

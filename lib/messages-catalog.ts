@@ -332,6 +332,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "checkout.welcome_back": "Welkom terug.",
   "checkout.withdrawal_note": "(14 dagen bedenktijd).",
   "clickCollect.available": "Af te halen in",
+  // Met een gekozen maat: die maat benoemen, want dit blok verving het losse
+  // voorraadkader boven de maatkiezer.
+  "clickCollect.forSize": "Maat {size} ligt in",
   "clickCollect.modal.inStock": "Op voorraad",
   "clickCollect.modal.note": "Reservering en ophaal volgt in de checkout-fase. Bel ondertussen direct voor zekerheid.",
   "clickCollect.modal.outOfStock": "Niet op voorraad",
@@ -880,9 +883,11 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.freeShip.from": "Gratis verzending vanaf {amount}",
   "pdp.storeStock.any": "Ook op voorraad in {count} winkels",
   "pdp.storeStock.anyOne": "Ook op voorraad in 1 winkel",
-  "pdp.storeStock.mine": "Jouw maat ligt in {count} winkels op voorraad",
-  "pdp.storeStock.mineOne": "Jouw maat ligt in 1 winkel op voorraad",
+  // mine/mineOne zijn vervallen: het winkelkader rendert alleen nog zónder
+  // maatkeuze (daarna neemt "Passen & afhalen" het over), dus de per-maat-tekst
+  // was onbereikbaar en werd voor niets in vier talen vertaald.
   "pdp.storeStock.hint": "Kies je maat om te zien welke.",
+  "pdp.storeStock.sizeNone": "Maat {size} ligt momenteel in geen enkele winkel.",
   "pdp.specs.brand": "Merk",
   "pdp.specs.closure": "Sluiting",
   "pdp.specs.collar": "Boord",

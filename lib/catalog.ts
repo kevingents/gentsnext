@@ -38,6 +38,17 @@ import { MATERIAL_BUCKETS, PATTERN_BUCKETS, bucketsFor, sqlPatternFor, normalize
 import { isSizeToken, expandSynonyms, parseSynonyms } from "@/lib/search-helpers";
 import { getSettings } from "@/lib/settings";
 
+/**
+ * HET zichtbaarheidscriterium van de winkel, als SQL-fragment op tabel-alias `p`.
+ * Rapportages die "staat dit online?" naast de catalogus leggen (beeldstatus,
+ * eigen-beeld, dubbele-skus) moeten dít gebruiken — een hand-gekopieerde variant
+ * gaat stil uit de pas lopen zodra hier een voorwaarde bij komt, en dan liegt
+ * het rapport precies op het punt waarvoor het bestaat.
+ * (De query-builder-condities verderop in dit bestand zeggen inhoudelijk
+ * hetzelfde; bij een wijziging horen beide tegelijk aangepast te worden.)
+ */
+export const OP_WEBSITE_SQL = "p.status = 'active' and p.has_image and p.in_stock and p.is_group_primary";
+
 /** Leeslaag voor de storefront — alle catalogus-queries op één plek. */
 
 /**

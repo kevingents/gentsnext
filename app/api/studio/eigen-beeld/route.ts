@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 import { getSessionCustomer } from "@/lib/account";
+import { OP_WEBSITE_SQL } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -82,7 +83,7 @@ export async function GET(req: Request) {
       select p.handle, p.title,
         p.attributes ->> 'hoofdgroep_omschrijving' hoofdgroep,
         p.attributes ->> 'merk' merk,
-        (p.status = 'active' and p.has_image and p.in_stock and p.is_group_primary) op_website,
+        (${sql.raw(OP_WEBSITE_SQL)}) op_website,
         p.stock_qty,
         (select min(v.price_cents) from product_variants v where v.product_id = p.id) prijs_cent,
         b.aantal_fotos, b.eerste_foto
@@ -95,7 +96,7 @@ export async function GET(req: Request) {
         and coalesce(p.lifestyle_image_url2, '') = ''
         and coalesce(p.lifestyle_image_url3, '') = ''
         and coalesce(p.detail_image_url, '') = ''
-        ${alles ? sql`` : sql`and p.status = 'active' and p.has_image and p.in_stock and p.is_group_primary`}
+        ${alles ? sql`` : sql`and ${sql.raw(OP_WEBSITE_SQL)}`}
       order by (coalesce(p.stock_qty, 0) *
                 coalesce((select min(v.price_cents) from product_variants v where v.product_id = p.id), 0)) desc,
                coalesce(p.stock_qty, 0) desc

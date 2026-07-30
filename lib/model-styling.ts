@@ -70,6 +70,40 @@ function rolesFor(hg: string, formality: Formality): Role[] {
   }
 }
 
+/**
+ * Wat de MODELFOTO al laat zien, per productsoort. Afgeleid uit de prompts
+ * waarmee die foto's gemaakt worden (scripts/generate-model-photos.ts): bij een
+ * broek staat er letterlijk "with a tucked shirt and shoes", dus die twee staan
+ * gegarandeerd op het beeld. Dat script valideert bij het opstarten dat zijn
+ * prompt-teksten nog met deze map overeenkomen — loopt de prompt voor, dan
+ * faalt de generator hard in plaats van dat de site stilletjes het beeld
+ * tegenspreekt.
+ *
+ * Waarom dit ertoe doet: een suggestie voor iets wat al op de foto staat mag
+ * het beeld niet tegenspreken. Het model draagt cognac loafers en ernaast een
+ * zwarte derby voorstellen — dan klopt het advies misschien, maar de klant ziet
+ * iets anders dan hij leest. De foto-styling is echter DETERMINISTISCH
+ * (modelStylePrompt, verderop in dit bestand): altijd een wit kraag-overhemd,
+ * schoenen volgens colorPlan-pref[0], broek "matching" of neutraal. Voor een
+ * in-beeld-rol vergrendelen we daarom het kleurplan op precies die styling
+ * (fotoPlanFor) — de suggestie ís dan wat de klant ziet. Vinden we binnen dat
+ * smalle plan niets op voorraad, dan liever géén hotspot dan een tegenspraak.
+ * Zie ook Hotspot.inBeeld in lib/looks.ts.
+ */
+export const AL_IN_BEELD: Record<string, Role[]> = {
+  Pakken: ["shirt", "shoes"],
+  Colberts: ["shirt", "trousers", "shoes"],
+  Gilets: ["shirt", "trousers", "shoes"],
+  Jassen: ["trousers", "shoes"],
+  Broeken: ["shirt", "shoes"],
+  Overhemden: ["trousers"],
+  Truien: ["trousers"],
+  Vesten: ["shirt", "trousers"],
+  "Polo-shirts": ["trousers"],
+  "T-Shirts": ["trousers"],
+  Schoenen: ["trousers"],
+};
+
 const COLOR_WORDS: [RegExp, Family][] = [
   [/lakschoen|lak\b|patent/, "black"],
   [/zwart|black/, "black"],
@@ -152,8 +186,10 @@ function colorPlan(role: Role, formality: Formality, targetFam: Family): { pref:
   }
 }
 
-function pick(cands: Cand[], plan: { pref: Family[]; forbid: Family[]; patent?: boolean }, exclude: Set<string>): Cand | null {
-  const usable = cands.filter((c) => !exclude.has(c.handle) && !plan.forbid.includes(c.fam));
+function pick(cands: Cand[], plan: { pref: Family[]; forbid: Family[]; patent?: boolean }, exclude: Set<string>, strikt = false): Cand | null {
+  // strikt = foto-vergrendeld: alléén de pref-kleuren zijn toegestaan, want de
+  // suggestie moet tonen wat er op de modelfoto staat.
+  const usable = cands.filter((c) => !exclude.has(c.handle) && !plan.forbid.includes(c.fam) && (!strikt || plan.pref.includes(c.fam)));
   const rank = (c: Cand) => {
     let i = plan.pref.indexOf(c.fam);
     if (i < 0) i = plan.pref.length + 1;
@@ -162,9 +198,43 @@ function pick(cands: Cand[], plan: { pref: Family[]; forbid: Family[]; patent?: 
   };
   const sorted = usable.sort((a, b) => rank(a) - rank(b) || b.qty - a.qty);
   if (sorted.length) return sorted[0];
+  // Foto-vergrendeld en niets binnen het plan → liever geen suggestie dan een
+  // artikel dat vloekt met wat de klant op de foto ziet.
+  if (strikt) return null;
   // laatste redmiddel: hoogste voorraad binnen de rol, kleur niet ideaal maar wél leverbaar
   const fallback = cands.filter((c) => !exclude.has(c.handle)).sort((a, b) => b.qty - a.qty);
   return fallback[0] ?? null;
+}
+
+/**
+ * Het kleurplan voor een rol die AL OP DE MODELFOTO staat: precies de styling
+ * waarmee die foto gegenereerd is (spiegel van modelStylePrompt + de
+ * STYLE-prompts in scripts/generate-model-photos.ts). Wordt strikt toegepast:
+ * buiten dit plan kiezen zou de foto tegenspreken.
+ */
+function fotoPlanFor(role: Role, hoofdgroep: string, formality: Formality, targetFam: Family): { pref: Family[]; forbid: Family[]; patent?: boolean } | null {
+  switch (role) {
+    case "shirt":
+      // De prompt zegt altijd "a crisp white collared dress shirt".
+      return { pref: ["white"], forbid: [] };
+    case "shoes": {
+      // Zelfde beslisregel als modelStylePrompt: black-tie → zwarte lak, anders
+      // pref[0] van het gewone schoenenplan (cognac/bruin bij warme kleuren, zwart bij koel).
+      if (formality === "black-tie") return { pref: ["black"], forbid: [], patent: true };
+      const top = colorPlan("shoes", formality, targetFam).pref[0];
+      return top === "brown" || top === "tan" ? { pref: ["brown", "tan"], forbid: [] } : { pref: ["black"], forbid: [] };
+    }
+    case "trousers":
+      // Colberts/Gilets-prompt zegt "with matching trousers" → de kleur van het
+      // kledingstuk zelf. Overige prompts ("neat/well-fitted trousers") tonen een
+      // neutrale nette broek — grijs/navy/antraciet/beige.
+      return hoofdgroep === "Colberts" || hoofdgroep === "Gilets"
+        ? { pref: [targetFam], forbid: [] }
+        : { pref: ["grey", "navy", "charcoal", "beige"], forbid: [] };
+    default:
+      // Rol staat op de foto maar zonder vaste stijl in de prompt → gewone plan.
+      return null;
+  }
 }
 
 /**
@@ -214,6 +284,11 @@ export async function smartModelLook(
   const ownRoles = (Object.keys(HG_FOR_ROLE) as Role[]).filter((r) => HG_FOR_ROLE[r].includes(target.hoofdgroep));
   roles = roles.filter((r) => !ownRoles.includes(r));
   if (!roles.length) return null;
+  // Rollen die al op de modelfoto staan worden NIET geschrapt maar kleur-
+  // vergrendeld op de foto-styling (fotoPlanFor) — schrappen liet de hele
+  // sectie verdwijnen op jassen/gilets en maakte pakken afhankelijk van één
+  // dassen-voorraadje. Zie het commentaar bij AL_IN_BEELD.
+  const inBeeld = AL_IN_BEELD[target.hoofdgroep] ?? [];
 
   // Eén query: alle in-aanmerking-komende hoofdgroepen, ruim op voorraad.
   const hgs = [...new Set(roles.flatMap((r) => HG_FOR_ROLE[r]))];
@@ -254,14 +329,19 @@ export async function smartModelLook(
     const pool = byHg(hg);
     let plan = colorPlan(role, formality, targetFam);
     if (role === "belt" && shoeFam) plan = { pref: [shoeFam, "brown", "black"], forbid: ["white", "pink"] };
-    // Schoen-PDP: de studiofoto toont een neutrale grijze broek → kies die ook,
-    // niet een van de schoenkleur afgeleide zand-broek (anders ≠ het model).
-    if (target.hoofdgroep === "Schoenen" && role === "trousers") plan = { pref: ["grey", "navy", "charcoal", "beige"], forbid: [] };
+    // Staat deze rol al op de modelfoto? Dan het plan vergrendelen op de
+    // foto-styling — behálve als de foto's opnieuw gegenereerd zijn mét de
+    // echte look-artikelen (hotspotsInBeeld): dan tonen de admin-items het
+    // beeld al en zou de vergrendeling ze juist wegdrukken.
+    const fotoLock = !echtInBeeld && inBeeld.includes(role) ? fotoPlanFor(role, target.hoofdgroep, formality, targetFam) : null;
+    if (fotoLock) plan = fotoLock;
 
-    // Admin-voorkeur respecteren als die ruim op voorraad is én niet verboden.
+    // Admin-voorkeur respecteren als die ruim op voorraad is én binnen het plan valt.
     const prefHandle = prefByHg.get(hg[0]);
-    const pref = prefHandle ? pool.find((c) => c.handle === prefHandle && !plan.forbid.includes(c.fam)) : undefined;
-    const chosen = pref ?? pick(pool, plan, exclude);
+    const pref = prefHandle
+      ? pool.find((c) => c.handle === prefHandle && !plan.forbid.includes(c.fam) && (!fotoLock || plan.pref.includes(c.fam)))
+      : undefined;
+    const chosen = pref ?? pick(pool, plan, exclude, !!fotoLock);
     if (!chosen) continue;
     exclude.add(chosen.handle);
     if (role === "shoes") shoeFam = chosen.fam;

@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
-import { modelStylePrompt } from "@/lib/model-styling";
+import { modelStylePrompt, AL_IN_BEELD } from "@/lib/model-styling";
 import { getModelLearnings, modelLearningsBlock } from "@/lib/model-learnings";
 
 /**
@@ -73,6 +73,39 @@ const STYLE: Record<string, { garment: (s: StyleParts) => string; frame: Frame }
   "T-Shirts": { garment: () => "Male model wearing THIS t-shirt, styled casually with neat trousers.", frame: "upper" },
   Schoenen: { garment: () => "Male model wearing THESE shoes with well-fitted trousers.", frame: "lower" },
 };
+
+/* Drift-slot: AL_IN_BEELD (waarop de site shop-de-look-suggesties kleur-
+   vergrendelt) moet exact beschrijven wat deze STYLE-prompts tonen. We renderen
+   elke prompt met marker-woorden en vergelijken. Wijzigt iemand een prompt
+   (bv. een riem erbij bij Broeken) zonder AL_IN_BEELD aan te passen, dan faalt
+   dit script hier hard — in plaats van dat de site stilletjes artikelen gaat
+   voorstellen die vloeken met wat er op de foto staat. */
+{
+  const ROLE_WORDS: Record<string, RegExp> = { shirt: /shirt/, trousers: /trousers/, shoes: /shoes|footwear/ };
+  // Eigen-categorie-woorden niet meetellen: "THESE trousers" bij Broeken en
+  // "THIS polo shirt" bij Polo-shirts zijn het product zelf, niet de styling.
+  const OWN_WORD: Record<string, string> = {
+    Broeken: "trousers",
+    Schoenen: "shoes",
+    Overhemden: "shirt",
+    "Polo-shirts": "shirt",
+    "T-Shirts": "shirt",
+  };
+  for (const [cat, def] of Object.entries(STYLE)) {
+    const txt = def.garment({ shirt: "shirt", shoes: "shoes" }).toLowerCase();
+    const zichtbaar = Object.entries(ROLE_WORDS)
+      .filter(([rol, re]) => re.test(txt) && OWN_WORD[cat] !== rol)
+      .map(([rol]) => rol)
+      .sort();
+    const verwacht = [...(AL_IN_BEELD[cat] ?? [])].sort();
+    if (zichtbaar.join(",") !== verwacht.join(",")) {
+      throw new Error(
+        `STYLE-prompt van "${cat}" toont [${zichtbaar.join(", ")}] maar AL_IN_BEELD zegt [${verwacht.join(", ")}]. ` +
+          `Pas lib/model-styling.ts AL_IN_BEELD aan (of de prompt), anders spreken de shop-de-look-suggesties de foto tegen.`,
+      );
+    }
+  }
+}
 
 /**
  * Bouwt de prompt: kleur-bewuste styling (warm pak → cognac/bruine schoenen,

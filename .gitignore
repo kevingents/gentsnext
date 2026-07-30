@@ -35,3 +35,6 @@ Thumbs.db
 
 # Lokale Claude Code-config (machine-specifiek)
 .claude/
+
+# Sessie-scratch van AI-audits hoort in de scratchpad, niet in de repo
+.tmpaudit/
