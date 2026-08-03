@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   const like = `%${qLower}%`;
   const rowCap = Math.min(limit * 6, 120); // variant-rijen; frontend groepeert per artikel+kleur
 
-  const rows = await getDb().execute<{
+  type Rij = {
     product_id: string;
     handle: string;
     title: string;
@@ -46,19 +46,54 @@ export async function POST(req: Request) {
     size: string;
     color: string;
     price_cents: number;
+    variant_id: string;
     shopify_variant_id: string | null;
     srs_artikel_id: string;
     img: string | null;
-  }>(sql`
-    select v.product_id, p.handle, p.title, v.barcode, v.sku, v.size, v.color, v.price_cents,
-      v.shopify_variant_id, v.srs_artikel_id,
-      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img,
+  };
+  const kolommen = sql`v.product_id, p.handle, p.title, v.barcode, v.sku, v.size, v.color, v.price_cents,
+      v.id as variant_id, v.shopify_variant_id, v.srs_artikel_id,
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img`;
+
+  /* Cijfer-zoekopdrachten zijn codes (sku, barcode, SRS-artikelnummer), nooit
+     titelwoorden. Een aparte, kale code-tak voorkomt twee problemen die de
+     kassa echt voelde: (1) tussentijdse aanslagen ("00", "000", …) deden een
+     contains-scan die vrijwel élke barcode raakt — daarom voelde zoeken op
+     bv. 00004483 juist trager; (2) het SRS-artikelnummer werd helemaal niet
+     doorzocht. Artikelnummers matchen voorloopnul-tolerant (00004483 = 4483);
+     nullif vangt de all-nullen-query af zodat die niet elk leeg veld matcht. */
+  const isCijfers = /^\d+$/.test(qLower);
+  if (isCijfers && qLower.length < 4) return NextResponse.json({ ok: true, results: [] });
+
+  const rows = isCijfers
+    ? await getDb().execute<Rij>(sql`
+    select ${kolommen},
+      case
+        when lower(coalesce(v.sku, '')) = ${qLower} or lower(coalesce(v.barcode, '')) = ${qLower} then 1.0
+        when nullif(ltrim(coalesce(v.srs_artikel_id, ''), '0'), '') = nullif(ltrim(${qLower}, '0'), '') then 0.98
+        when coalesce(v.sku, '') like ${qLower + "%"} then 0.9
+        when coalesce(v.barcode, '') like ${like} then 0.85
+        else 0.8
+      end as score
+    from product_variants v
+    join products p on p.id = v.product_id
+    where p.status = 'active' and (
+      coalesce(v.sku, '') like ${qLower + "%"}
+      or nullif(ltrim(coalesce(v.srs_artikel_id, ''), '0'), '') = nullif(ltrim(${qLower}, '0'), '')
+      or coalesce(v.barcode, '') = ${qLower}
+      or (${qLower.length >= 6} and (coalesce(v.barcode, '') like ${like} or coalesce(v.sku, '') like ${like}))
+    )
+    order by score desc, p.title asc, v.size asc
+    limit ${rowCap}`)
+    : await getDb().execute<Rij>(sql`
+    select ${kolommen},
       greatest(
         word_similarity(${qLower}, lower(p.title)),
         case
           when lower(coalesce(v.sku, '')) = ${qLower} or lower(coalesce(v.barcode, '')) = ${qLower} then 1.0
           when lower(coalesce(v.sku, '')) like ${like} or lower(coalesce(v.barcode, '')) like ${like} then 0.95
           when lower(p.title) like ${like} then 0.9
+          when lower(coalesce(v.srs_artikel_id, '')) like ${like} then 0.7
           when lower(coalesce(v.color, '')) like ${like} then 0.5
           else 0
         end
@@ -70,6 +105,7 @@ export async function POST(req: Request) {
       or lower(p.title) like ${like}
       or lower(coalesce(v.sku, '')) like ${like}
       or lower(coalesce(v.barcode, '')) like ${like}
+      or lower(coalesce(v.srs_artikel_id, '')) like ${like}
       or lower(coalesce(v.color, '')) like ${like}
     )
     order by score desc, p.title asc, v.size asc
@@ -85,13 +121,17 @@ export async function POST(req: Request) {
     color: r.color || "",
     size: r.size || "",
     price: ((Number(r.price_cents) || 0) / 100).toFixed(2),
-    variantId: r.shopify_variant_id || "",
+    /* Neon-variant-id als vangnet: article-stock sleutelt zijn antwoord op deze
+       waarde en slaat hits zónder id helemaal over — een Neon-native artikel
+       (geen Shopify-verleden) zou anders eeuwig "Voorraad laden…" tonen. */
+    variantId: r.shopify_variant_id || r.variant_id || "",
     image: r.img || "",
     images: r.img ? [r.img] : [],
     productUrl: r.handle ? `/product/${r.handle}` : "",
-    totalPieces: 0,
-    branchCount: 0,
-    branches: [] as unknown[],
+    /* GEEN branches/totalPieces hier — voorraad is op dit punt ONBEKEND, niet
+       nul. Een lege branches-lijst las de kassa als "bekend: 0" en toonde
+       seconden lang een vals rood "Niet op voorraad" tot de async voorraad-
+       lader klaar was. Weglaten = de kassa toont "Voorraad laden…". */
   }));
 
   return NextResponse.json({ ok: true, results });
