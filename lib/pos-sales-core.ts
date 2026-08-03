@@ -172,13 +172,19 @@ export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: stri
   const db = getDb();
   const [r] = await db.select().from(posSales).where(eq(posSales.id, String(id))).limit(1);
   if (!r) return null;
-  const sale = rowToSale(r) as Sale & { srsPostStatus?: string };
+  const sale = rowToSale(r) as Sale & { srsPostStatus?: string; srsPostAttempts?: number };
   if (sale.srsPosted && sale.srsPostStatus === "posted") return sale;
   const status = String(opts.status || "posted");
   const next: Sale = {
     ...sale, srsPosted: status === "posted", srsPostStatus: status, srsPostedAt: new Date().toISOString(),
-    srsRef: String(opts.srsRef || ""), srsCredSource: String(opts.credSource || ""), srsPostError: String(opts.error || ""),
-  };
+    // srsRef nooit WISSEN bij een latere mislukte poging: het gereserveerde bonnr
+    // is precies wat een herpost door de sweep ontdubbelbaar maakt.
+    srsRef: String(opts.srsRef || "") || String((sale as { srsRef?: string }).srsRef || ""),
+    srsCredSource: String(opts.credSource || ""), srsPostError: String(opts.error || ""),
+    // Pogingteller — spiegelt de blob-store; de sweep leest Neon-first en strandt
+    // een record na te veel mislukte pogingen i.p.v. eeuwig budget te verbranden.
+    srsPostAttempts: status === "failed" ? (Number(sale.srsPostAttempts) || 0) + 1 : (Number(sale.srsPostAttempts) || 0),
+  } as Sale;
   await db.update(posSales).set({ srsPosted: status === "posted", data: next }).where(eq(posSales.id, String(id)));
   return next;
 }
