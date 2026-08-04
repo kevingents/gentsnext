@@ -31,6 +31,20 @@ function colsFromSale(sale: Sale) {
   };
 }
 
+/** Alle retour-records voor één originele bon — voor de over-retour-guard aan de
+ *  kassa. Neon is hier de consistente bron: de blob kan per serverless-instantie
+ *  achterlopen (read-after-write), waardoor een nét verwerkte retour daar nog
+ *  onzichtbaar is en dezelfde bon dubbel geretourneerd kon worden. */
+export async function listRetourenByOrigCore(origSaleId: string): Promise<Sale[]> {
+  const id = String(origSaleId || "").trim();
+  if (!id) return [];
+  const db = getDb();
+  const rows = await db.select().from(posSales)
+    .where(sql`${posSales.data} ->> 'origSaleId' = ${id} and ${posSales.data} ->> 'kind' = 'retour'`)
+    .limit(100);
+  return rows.map(rowToSale);
+}
+
 /** Leg een verkoop vast. Idempotent op client_ref → dezelfde bon boekt nooit dubbel. */
 export async function recordPosSaleCore(sale: Sale): Promise<{ ok: boolean; sale?: Sale; deduped?: boolean; error?: string }> {
   if (!sale?.id || !sale?.store) return { ok: false, error: "Ongeldige verkoop (id + store vereist)." };

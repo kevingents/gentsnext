@@ -3,7 +3,7 @@ import { coreAuth } from "@/lib/store-core-token";
 import {
   recordPosSaleCore, listPosSalesCore, listUnpostedPosSalesCore, getPosSaleCore,
   findSaleByClientRefCore, cancelPosSaleCore, markPosSaleSrsPostedCore, listPosSalesByRangeCore,
-  listPosSalesByCustomerCore, assignCustomerToSaleCore,
+  listPosSalesByCustomerCore, assignCustomerToSaleCore, listRetourenByOrigCore,
 } from "@/lib/pos-sales-core";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,8 @@ export async function POST(req: Request) {
         const s = await findSaleByClientRefCore(String(b.clientRef || ""));
         return NextResponse.json({ ok: !!s, sale: s });
       }
+      case "retouren-by-orig":
+        return NextResponse.json({ ok: true, sales: await listRetourenByOrigCore(String(b.id || "")) });
       case "cancel": {
         const s = await cancelPosSaleCore(String(b.id || ""), b.actor || {});
         return NextResponse.json({ ok: !!s, sale: s });
