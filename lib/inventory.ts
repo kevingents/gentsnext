@@ -221,6 +221,92 @@ export async function listSessionsForReview(limit = 50) {
   return out;
 }
 
+/** HISTORIE: álle tellingen over alle winkels (Rick, 5 aug: "historisch opslaan
+ *  zodat altijd kan worden teruggezocht welke artikelen zijn gescand"). De
+ *  review-lijst toont enkel wat nog goedgekeurd moet worden — na goedkeuring
+ *  verdween een telling uit beeld terwijl de data gewoon bewaard bleef. Filters:
+ *  winkel, status, type. Per sessie een variantie-samenvatting, zodat het
+ *  overzicht zonder detail-call bruikbaar is. */
+export async function listInventoryHistory(input: { location?: string; status?: string; type?: string; limit?: number } = {}) {
+  const db = getDb();
+  const lim = Math.max(1, Math.min(200, Number(input.limit) || 60));
+  const filters = [];
+  if (input.location) filters.push(eq(inventorySessions.location, input.location));
+  if (input.status) filters.push(eq(inventorySessions.status, input.status));
+  if (input.type) filters.push(eq(inventorySessions.type, input.type));
+  const rows = await db
+    .select().from(inventorySessions)
+    .where(filters.length ? and(...filters) : undefined)
+    .orderBy(desc(inventorySessions.createdAt))
+    .limit(lim);
+  if (!rows.length) return [];
+
+  /* Samenvatting per sessie in ÉÉN query (niet per sessie een losse call zoals
+     listSessionsForReview: bij 60 sessies zijn dat 60 rondjes naar Neon). */
+  const ids = rows.map((r) => r.id);
+  const agg = await db.execute<{ session_id: string; items: number; scanned: number; surplus: number; shortage: number; variance: number }>(sql`
+    select session_id,
+           count(*)::int items,
+           coalesce(sum(scanned_qty), 0)::int scanned,
+           count(*) filter (where scanned_qty > expected_qty)::int surplus,
+           count(*) filter (where scanned_qty < expected_qty)::int shortage,
+           coalesce(sum(scanned_qty - expected_qty), 0)::int variance
+    from inventory_counts
+    where session_id in (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)})
+    group by session_id`);
+  const bySession = new Map(agg.rows.map((r) => [String(r.session_id), r]));
+  return rows.map((s) => {
+    const a = bySession.get(s.id);
+    return {
+      session: s,
+      items: Number(a?.items) || 0,
+      totalScanned: Number(a?.scanned) || 0,
+      surplus: Number(a?.surplus) || 0,
+      shortage: Number(a?.shortage) || 0,
+      totalVariance: Number(a?.variance) || 0,
+    };
+  });
+}
+
+/** ZOEKEN over alle tellingen op artikelnummer / artikel-ID / barcode / titel
+ *  (Rick: "was dit artikel aanwezig tijdens de inventarisatie?"). Geeft per
+ *  treffer de sessie erbij: winkel, datum, type — zodat direct zichtbaar is
+ *  hoeveel stuks wanneer geteld zijn. Nieuwste telling eerst. */
+export async function searchInventoryCounts(input: { q: string; location?: string; limit?: number }) {
+  const q = String(input.q || "").trim();
+  if (q.length < 2) return [];
+  const db = getDb();
+  const lim = Math.max(1, Math.min(200, Number(input.limit) || 50));
+  const like = `%${q.toLowerCase()}%`;
+  const rows = await db.execute<{
+    stock_key: string; sku: string; barcode: string; title: string; size: string; color: string;
+    scanned_qty: number; expected_qty: number; last_scanned_at: string;
+    session_id: string; location: string; type: string; section: string; status: string; created_at: string; completed_at: string | null;
+  }>(sql`
+    select c.stock_key, c.sku, c.barcode, c.title, c.size, c.color,
+           c.scanned_qty, c.expected_qty, c.last_scanned_at,
+           s.id session_id, s.location, s.type, s.section, s.status, s.created_at, s.completed_at
+    from inventory_counts c
+    join inventory_sessions s on s.id = c.session_id
+    where (lower(c.sku) like ${like} or lower(c.barcode) like ${like}
+           or lower(c.stock_key) like ${like} or lower(c.title) like ${like})
+      ${input.location ? sql`and s.location = ${input.location}` : sql``}
+    order by coalesce(s.completed_at, s.created_at) desc
+    limit ${lim}`);
+  return rows.rows.map((r) => ({
+    sku: r.sku, barcode: r.barcode, stockKey: r.stock_key,
+    title: r.title, size: r.size, color: r.color,
+    scannedQty: Number(r.scanned_qty) || 0,
+    expectedQty: Number(r.expected_qty) || 0,
+    variance: (Number(r.scanned_qty) || 0) - (Number(r.expected_qty) || 0),
+    lastScannedAt: r.last_scanned_at,
+    session: {
+      id: r.session_id, location: r.location, type: r.type, section: r.section,
+      status: r.status, createdAt: r.created_at, completedAt: r.completed_at,
+    },
+  }));
+}
+
 export async function completeInventorySession(sessionId: string, completedBy?: string) {
   const db = getDb();
   const [session] = await db.select().from(inventorySessions).where(eq(inventorySessions.id, sessionId)).limit(1);

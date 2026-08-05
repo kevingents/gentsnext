@@ -4,7 +4,7 @@ import {
   startInventorySession, prepareInventorySession, startPreparedSession,
   scanInventory, deleteInventoryCount, getInventorySession,
   listInventorySessions, listSessionsForReview, completeInventorySession, applyInventoryVariances,
-  listProductGroups,
+  listProductGroups, listInventoryHistory, searchInventoryCounts,
 } from "@/lib/inventory";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +19,13 @@ export const runtime = "nodejs";
  *   { action: "list", location, limit? }           → sessions
  *   { action: "complete", sessionId, completedBy? }→ summary
  *   { action: "apply", sessionId }                 → varianties als correctie boeken
+ *   { action: "history", location?, status?, type?, limit? } → alle tellingen + samenvatting
+ *   { action: "search-counts", q, location?, limit? }        → per artikel: wanneer/hoeveel geteld
  */
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; location?: string; type?: string; section?: string; note?: string; startedBy?: string; sessionId?: string; code?: string; qty?: number; mode?: string; stockKey?: string; completedBy?: string; approvedBy?: string; status?: string; limit?: number; scope?: string; scopeValues?: unknown[]; scopeSkus?: { sku?: string; barcode?: string; expected?: number; title?: string; size?: string; color?: string; imageUrl?: string }[]; skuExpected?: { sku: string; expected: number }[]; assignedBy?: string };
+  let b: { action?: string; location?: string; type?: string; section?: string; note?: string; startedBy?: string; sessionId?: string; code?: string; qty?: number; mode?: string; stockKey?: string; completedBy?: string; approvedBy?: string; status?: string; limit?: number; scope?: string; scopeValues?: unknown[]; scopeSkus?: { sku?: string; barcode?: string; expected?: number; title?: string; size?: string; color?: string; imageUrl?: string }[]; skuExpected?: { sku: string; expected: number }[]; assignedBy?: string; q?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -63,6 +65,13 @@ export async function POST(req: Request) {
       }
       case "review-list": {
         return NextResponse.json({ ok: true, reviews: await listSessionsForReview(b.limit) });
+      }
+      case "history": {
+        return NextResponse.json({ ok: true, sessions: await listInventoryHistory({ location: b.location, status: b.status, type: b.type, limit: b.limit }) });
+      }
+      case "search-counts": {
+        if (!b.q || String(b.q).trim().length < 2) return NextResponse.json({ ok: false, error: "Zoekterm van minstens 2 tekens vereist." }, { status: 400 });
+        return NextResponse.json({ ok: true, hits: await searchInventoryCounts({ q: String(b.q), location: b.location, limit: b.limit }) });
       }
       case "groups": {
         return NextResponse.json({ ok: true, groups: await listProductGroups() });
