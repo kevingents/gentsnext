@@ -16,6 +16,9 @@ import { newCollectionCond } from "@/lib/new-collection";
  *   npm run gen:lifestyle -- 40 country   (Truien/Jassen/Vesten — ruig Schotland)
  *   npm run gen:lifestyle -- 320 stad     (Overhemden/Broeken/T-Shirts — smart-casual stad)
  *   npm run gen:lifestyle -- 20 student   (rok/jacquet — fatbike Amsterdam/Leiden)
+ *
+ * Extra vlaggen: "variants" (ook niet-primaire kleurvarianten), "only=<handle-deel>"
+ * (alleen matchende handles), bijv.: … 10 stad variants only=slimfit-bamboe
  */
 
 const API = "https://api.fashn.ai/v1";
@@ -130,6 +133,8 @@ async function main() {
   const phase = (process.argv[3] || "trouw").trim();
   const redo = process.argv.includes("redo"); // overschrijf bestaande slots i.p.v. alleen lege vullen
   const onlyNew = process.argv.includes("new"); // alleen nieuwe collectie
+  const variants = process.argv.includes("variants"); // ook niet-primaire kleurvarianten (kost credits per kleur)
+  const only = (process.argv.find((a) => a.startsWith("only=")) || "").slice(5); // handle-filter, bijv. only=slimfit-bamboe
   const isStudent = phase === "student";
   const cats = PHASES[phase] || (CAT[phase] ? [phase] : Object.keys(CAT));
   const db = getDb();
@@ -137,7 +142,9 @@ async function main() {
   // Normaal: alleen producten met ≥1 leeg slot. Redo: alle producten (overschrijf alles).
   const emptySlot = sql`and (p.lifestyle_image_url='' or p.lifestyle_image_url2='' or p.lifestyle_image_url3='')`;
   const newColl = onlyNew ? sql`and ${newCollectionCond}` : sql``;
-  const base = sql`p.status='active' and p.has_image and p.in_stock and p.is_group_primary ${redo ? sql`` : emptySlot} ${newColl}`;
+  const primary = variants ? sql`` : sql`and p.is_group_primary`;
+  const onlyCond = only ? sql`and p.handle like ${`%${only}%`}` : sql``;
+  const base = sql`p.status='active' and p.has_image and p.in_stock ${primary} ${redo ? sql`` : emptySlot} ${newColl} ${onlyCond}`;
   const filter = isStudent
     ? sql`(lower(p.handle) like '%rok%' or lower(p.title) like '%rokkostuum%' or lower(p.title) like '%rokjas%' or lower(p.handle) like 'jacquet%' or lower(p.title) like '%jacquet%')`
     : sql`p.attributes->>'hoofdgroep_omschrijving' in (${sql.join(cats.map((c) => sql`${c}`), sql`, `)})`;
