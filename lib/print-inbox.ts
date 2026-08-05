@@ -34,10 +34,14 @@ function toJob(r: typeof storePrintJobs.$inferSelect): PrintJob {
 }
 
 /** Zet een print-opdracht in de wachtrij. Idempotent op (store, ref, type) als er een ref is
- *  (dubbel-aanvragen queuet niet dubbel; re-queue reset 'm naar pending). */
+ *  (dubbel-aanvragen queuet niet dubbel; re-queue reset 'm naar pending).
+ *  mode 'once' = alléén enqueuen als deze (store, ref, type) er nog NOOIT was: een al
+ *  geprinte job blijft geprint. Voor bewakers die herhaald draaien (keukenbon: de
+ *  store-orders-poll ziet dezelfde open order elke minuut — die mag maar 1× uit de
+ *  printer rollen, niet bij elke poll opnieuw). */
 export async function enqueuePrintJob(input: {
-  store: string; type?: string; ref?: string; payload?: unknown; createdBy?: string;
-}): Promise<{ ok: boolean; job?: PrintJob; error?: string }> {
+  store: string; type?: string; ref?: string; payload?: unknown; createdBy?: string; mode?: "once";
+}): Promise<{ ok: boolean; job?: PrintJob; deduped?: boolean; error?: string }> {
   const store = norm(input.store);
   if (!store) return { ok: false, error: "store vereist." };
   const db = getDb();
@@ -50,6 +54,17 @@ export async function enqueuePrintJob(input: {
     status: "pending",
   };
   if (values.ref) {
+    if (input.mode === "once") {
+      const rows = await db
+        .insert(storePrintJobs)
+        .values(values)
+        .onConflictDoNothing({
+          target: [storePrintJobs.store, storePrintJobs.ref, storePrintJobs.type],
+          targetWhere: sql`ref <> ''`,
+        })
+        .returning();
+      return rows[0] ? { ok: true, job: toJob(rows[0]) } : { ok: true, deduped: true };
+    }
     const [row] = await db
       .insert(storePrintJobs)
       .values(values)
