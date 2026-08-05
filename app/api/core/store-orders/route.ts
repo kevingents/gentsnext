@@ -5,6 +5,7 @@ import { sql, inArray } from "drizzle-orm";
 import { orderLines } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
 import { computePickDeadline, branchIdForStoreName } from "@/lib/fulfillment-config";
+import { enqueuePrintJob } from "@/lib/print-inbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -134,6 +135,33 @@ export async function POST(req: Request) {
           totalCents: r.total_cents, items, parts,
           isRepeatCustomer: isRepeat, pickByLabel: dl.pickByLabel, overdue: dl.overdue, soon: dl.soon,
         });
+      }
+
+      /* KEUKENBON (Kevin, 5 aug: "elke order uit de bonprinter, net als in een
+         restaurantkeuken"): élke order die deze winkel raakt krijgt éénmalig een
+         print-job in de winkel-inbox; de kassa pollt die en print automatisch.
+         mode 'once' = een al geprinte bon komt nooit opnieuw uit de printer,
+         ook al blijft de order open in deze lijst. Alleen orders die nog actie
+         vragen (status 'paid'); een klaargezette afhaalorder is al gepickt.
+         Fout in het queuen mag de orders-lijst nooit breken. */
+      if (r.status === "paid") {
+        try {
+          await enqueuePrintJob({
+            store: location,
+            type: "order",
+            ref: `ORD-${r.order_number}`,
+            mode: "once",
+            payload: {
+              soort: r.delivery_method === "pickup" ? "afhaal" : "weborder",
+              orderNumber: r.order_number,
+              customer,
+              totalCents: Number(r.total_cents) || 0,
+              pickByLabel: dl.pickByLabel,
+              items: items.map((it) => ({ title: it.title, sku: it.sku, qty: it.qty, size: it.size, color: it.color })),
+            },
+            createdBy: "store-orders",
+          });
+        } catch { /* best-effort */ }
       }
     }
 
