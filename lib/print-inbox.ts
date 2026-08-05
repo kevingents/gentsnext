@@ -60,7 +60,7 @@ export async function enqueuePrintJob(input: {
         .values(values)
         .onConflictDoNothing({
           target: [storePrintJobs.store, storePrintJobs.ref, storePrintJobs.type],
-          targetWhere: sql`ref <> ''`,
+          where: sql`ref <> ''`,
         })
         .returning();
       return rows[0] ? { ok: true, job: toJob(rows[0]) } : { ok: true, deduped: true };
