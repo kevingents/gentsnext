@@ -78,6 +78,39 @@ export async function createPosCustomer(input: { email: string; firstName?: stri
   return created;
 }
 
+/** Klantgegevens bijwerken vanaf de kassa (Kevin 5 aug: "klantgegevens kunnen
+ *  aanpassen (wel loggen)" — het audit-log schrijft de storegents-kant, op naam
+ *  van de kassier). Alleen meegegeven velden wijzigen; e-mail moet geldig zijn
+ *  en mag niet botsen met een andere klant. Retourneert previous + updated
+ *  zodat de aanroeper het verschil kan loggen. */
+export async function updatePosCustomer(customerId: string, input: { firstName?: string; lastName?: string; email?: string; phone?: string }) {
+  const db = getDb();
+  const id = String(customerId || "").trim();
+  if (!id) throw new Error("customerId vereist.");
+  const [existing] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+  if (!existing) throw new Error("Klant niet gevonden.");
+
+  const patch: Partial<typeof customers.$inferInsert> = {};
+  if (input.firstName !== undefined) patch.firstName = String(input.firstName).trim();
+  if (input.lastName !== undefined) patch.lastName = String(input.lastName).trim();
+  if (input.phone !== undefined) patch.phone = String(input.phone).trim();
+  if (input.email !== undefined) {
+    const email = String(input.email).trim().toLowerCase();
+    if (!/.+@.+\..+/.test(email)) throw new Error("Geldig e-mailadres vereist.");
+    if (email !== existing.email) {
+      const [inUse] = await db.select({ id: customers.id }).from(customers).where(eq(customers.email, email)).limit(1);
+      if (inUse && inUse.id !== id) throw new Error("Dit e-mailadres hoort al bij een andere klant.");
+      patch.email = email;
+    }
+  }
+
+  const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter((k) => patch[k] !== (existing as Record<string, unknown>)[k as string]);
+  if (!changed.length) return { previous: existing, updated: existing, changed: [] as string[] };
+  patch.updatedAt = new Date();
+  const [updated] = await db.update(customers).set(patch).where(eq(customers.id, id)).returning();
+  return { previous: existing, updated, changed: changed as string[] };
+}
+
 /* ── "Rond je profiel af voor +50 punten" ── */
 const PROFILE_BONUS_POINTS = 50;
 

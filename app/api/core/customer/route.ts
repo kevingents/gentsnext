@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { createPosCustomer } from "@/lib/account";
+import { createPosCustomer, updatePosCustomer } from "@/lib/account";
 import { listOrdersByCustomerCore } from "@/lib/orders";
 import { listPosSalesByCustomerCore } from "@/lib/pos-sales-core";
 
@@ -12,6 +12,8 @@ export const runtime = "nodejs";
  *
  *   create   { email, firstName?, lastName?, phone? }
  *     → { ok, customer:{ customerId, email, name, firstName, lastName, phone } }
+ *   update   { customerId, firstName?, lastName?, email?, phone? }  (kassa-correctie)
+ *     → { ok, customer:{…}, changed:[velden], previous:{…} }   — de aanroeper logt
  *   overview { customerId?, email?, limit? }   (omnichannel-historie voor het klant-paneel)
  *     → { ok, orders:[…online…], sales:[…kassa-bonnen…] }
  */
@@ -28,6 +30,21 @@ export async function POST(req: Request) {
       const name = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
       return NextResponse.json({
         ok: true,
+        customer: { customerId: c.id, email: c.email, name, firstName: c.firstName || "", lastName: c.lastName || "", phone: c.phone || "" },
+      });
+    }
+    if (action === "update") {
+      const r = await updatePosCustomer(String(b.customerId || ""), {
+        firstName: b.firstName, lastName: b.lastName, email: b.email, phone: b.phone,
+      });
+      const c = r.updated;
+      const name = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
+      return NextResponse.json({
+        ok: true,
+        changed: r.changed,
+        /* previous alléén van de gewijzigde velden: genoeg voor een audit-regel
+           "van X naar Y", zonder het hele klantrecord terug te sturen. */
+        previous: Object.fromEntries(r.changed.map((k) => [k, (r.previous as unknown as Record<string, unknown>)[k] ?? ""])),
         customer: { customerId: c.id, email: c.email, name, firstName: c.firstName || "", lastName: c.lastName || "", phone: c.phone || "" },
       });
     }
