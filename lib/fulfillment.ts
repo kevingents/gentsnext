@@ -406,6 +406,13 @@ export type DeliveryEstimate = {
   standard: DeliveryOption;
   /** Express alleen aanwezig als het écht eerder is dan standaard. */
   express: DeliveryOption | null;
+  /**
+   * Bezorgdag per sku, ALLEEN gevuld als niet alles op dezelfde dag aankomt.
+   * Een gesplitste order komt in meerdere zendingen; de winkelwagen kan er dan
+   * per artikel bij zetten wanneer dát deel er is, in plaats van één datum te
+   * tonen die voor de helft van de artikelen niet klopt.
+   */
+  perSku?: { sku: string; dateLabel: string }[];
 };
 
 /** Volgende bezorgdag-offset (kalenderdagen) na 'startK', n leverdagen verder (ma–za, geen feestdag NL). */
@@ -570,5 +577,30 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
     ? S.promiseBeforeCutoff(cutoffHour, standard.dateLabel)
     : S.promiseAfter(standard.dateLabel);
 
-  return { inStock: plan.fullyAllocated, fromWarehouseOnly, isSplit, hasStoreSource, promise, cutoffHour, note, standard, express };
+  /* Per zending de eigen bezorgdag. Bij een split komt het magazijn-deel vaak
+     eerder dan het winkel-deel; dan is één datum voor de hele order misleidend.
+     Alleen meesturen als de dagen echt verschillen — anders is het ruis. */
+  const perSku: { sku: string; dateLabel: string }[] = [];
+  if (plan.shipments.length > 1) {
+    for (const s of plan.shipments) {
+      const transit = settings.warehouseTransitDays + (s.isWarehouse ? 0 : settings.storeExtraDays);
+      const k = addDeliveryDays(n, s.dispatchInDays, transit + (s.isWarehouse ? 0 : 1), settings.extraClosureDates);
+      const label = dayLabel(n, k, S);
+      for (const l of s.lines) if (l.sku) perSku.push({ sku: l.sku, dateLabel: label });
+    }
+  }
+  const verschillendeDagen = new Set(perSku.map((p) => p.dateLabel)).size > 1;
+
+  return {
+    inStock: plan.fullyAllocated,
+    fromWarehouseOnly,
+    isSplit,
+    hasStoreSource,
+    promise,
+    cutoffHour,
+    note,
+    standard,
+    express,
+    perSku: verschillendeDagen ? perSku : undefined,
+  };
 }
