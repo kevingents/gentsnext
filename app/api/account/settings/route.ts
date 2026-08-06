@@ -10,7 +10,7 @@ const NUM_FIELDS: (keyof Settings)[] = [
   "freeShippingCents", "shippingCents", "expressSurchargeCents",
   "warehouseCutoffHour", "storeCutoffHour",
   "standardMinDays", "standardMaxDays", "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
-  "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock",
+  "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock", "pakbon",
 ];
 
 /** Werkt de centrale instellingen bij — recht "instellingen". */
