@@ -38,3 +38,6 @@ Thumbs.db
 
 # Sessie-scratch van AI-audits hoort in de scratchpad, niet in de repo
 .tmpaudit/
+
+# Wegwerp-probes van analyse-sessies
+scripts/_probe*.ts
