@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; store?: string; type?: string; ref?: string; payload?: unknown; createdBy?: string; id?: string; limit?: number };
+  let b: { action?: string; store?: string; type?: string; ref?: string; payload?: unknown; createdBy?: string; id?: string; limit?: number; mode?: string };
   try {
     b = (await req.json()) as typeof b;
   } catch {
@@ -25,7 +25,9 @@ export async function POST(req: Request) {
   try {
     switch (action) {
       case "enqueue":
-        return NextResponse.json(await enqueuePrintJob({ store: String(b.store || ""), type: b.type, ref: b.ref, payload: b.payload, createdBy: b.createdBy }));
+        /* mode 'once' (dedup op store+ref+type) ook via de bridge beschikbaar —
+           de SRS-weborder-keukenbon (storegents-cron) leunt hierop. */
+        return NextResponse.json(await enqueuePrintJob({ store: String(b.store || ""), type: b.type, ref: b.ref, payload: b.payload, createdBy: b.createdBy, mode: b.mode === "once" ? "once" : undefined }));
       case "pending":
         return NextResponse.json({ ok: true, jobs: await pendingPrintJobs(String(b.store || ""), b.limit) });
       case "ack":
