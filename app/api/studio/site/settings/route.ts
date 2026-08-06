@@ -27,7 +27,7 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
     "warehouseCutoffHour", "storeCutoffHour",
     "standardMinDays", "standardMaxDays",
     "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
-    "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock",
+    "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock", "pakbon",
   ];
   for (const f of intFields) {
     if (b[f] !== undefined && Number.isFinite(Number(b[f]))) {

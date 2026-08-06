@@ -72,5 +72,27 @@ export async function POST(req: Request) {
        zitten?"). Alfabetisch, ontdubbeld: twee winkels in één stad hoeven daar
        niet twee keer te staan. */
     steden: [...new Set(winkels.map((s) => String(s.city || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "nl")),
+    /* De pakbontekst zoals in de portal ingesteld. De plaatshouders vullen we
+       hier al in — de kassa hoeft dan niets meer te weten van retourregels of
+       winkelaantallen, die krijgt kant-en-klare regels. */
+    pakbon: (() => {
+      const p = settings.pakbon;
+      const steden = [...new Set(winkels.map((s) => String(s.city || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "nl"));
+      const vul = (t: string) =>
+        String(t ?? "")
+          .replaceAll("{dagen}", String(r.windowDays))
+          .replaceAll("{retourkosten}", `€ ${(Number(r.dhlReturnCostCents) / 100).toFixed(2).replace(".", ",")}`)
+          .replaceAll("{winkels}", String(winkels.length))
+          .replaceAll("{steden}", steden.join(" · "))
+          .trim();
+      return {
+        dankTekst: vul(p.dankTekst),
+        retourKop: vul(p.retourKop),
+        retourRegels: (p.retourRegels || []).map(vul).filter(Boolean),
+        tweedeKop: vul(p.tweedeKop),
+        tweedeRegels: (p.tweedeRegels || []).map(vul).filter(Boolean),
+        toonSteden: p.toonSteden !== false,
+      };
+    })(),
   });
 }

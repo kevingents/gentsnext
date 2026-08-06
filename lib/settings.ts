@@ -98,6 +98,20 @@ export type Settings = {
     signalMinRatePct: number;
     signalFastDays: number;
   };
+  /* PAKBON — de tekst die de klant in de doos vindt. In de tool aanpasbaar
+     (Kevin, 6 aug: "wij moeten zelf de pakbon kunnen aanpassen in de portal"),
+     want dit is marketingtekst en geen code: een formulering die op de winkel-
+     vloer scheef blijkt te staan moet je zonder release kunnen rechtzetten.
+     Plaatshouders die de kassa invult: {dagen} {retourkosten} {winkels} {steden}.
+     Lege lijst/tekst = die regel valt weg op de pakbon. */
+  pakbon: {
+    dankTekst: string;
+    retourKop: string;
+    retourRegels: string[];
+    tweedeKop: string;
+    tweedeRegels: string[];
+    toonSteden: boolean;
+  };
   // Spaarpunten: na hoeveel dagen na BETALING verdiende punten besteedbaar worden
   // (vesting). Dekt de retourperiode, zodat een retour binnen het venster geen
   // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
@@ -188,6 +202,26 @@ export const DEFAULT_SETTINGS: Settings = {
   // import terug zou een cyclus geven waarbij DEFAULT_SETTINGS bij module-init
   // een half-geladen constante ziet.
   saleAnnouncementDays: num(process.env.GENTS_SALE_ANNOUNCEMENT_DAYS, 30),
+  pakbon: {
+    dankTekst: "Bedankt voor je bestelling. Hieronder zie je wat er in dit pakket zit, en wat je kunt doen als iets niet klopt of niet past.",
+    retourKop: "RUILEN OF RETOURNEREN",
+    retourRegels: [
+      "Je hebt {dagen} dagen bedenktijd.",
+      "Gratis retour met een GENTS-tegoed, of lever het in",
+      "bij een van onze {winkels} winkels.",
+      "Wil je het bedrag op je rekening terug? Dan houden",
+      "we {retourkosten} retourkosten in.",
+      "Regel het op gents.nl/retourneren en leg deze",
+      "pakbon bij je retourzending.",
+    ],
+    tweedeKop: "VERMAAKSERVICE",
+    tweedeRegels: [
+      "Net niet de juiste pasvorm? In onze winkels maken",
+      "we mouwen, pijpen en taille passend met onze",
+      "vermaakservice. Kom gerust even langs.",
+    ],
+    toonSteden: true,
+  },
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
     dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 499), // S-pakket heenzending, ex toeslagen (eigen DHL-contract)
