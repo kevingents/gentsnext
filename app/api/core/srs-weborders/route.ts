@@ -4,6 +4,8 @@ import { getDb } from "@/db";
 import { sql, inArray } from "drizzle-orm";
 import { orderLines } from "@/db/schema";
 import { storeShipments } from "@/lib/split-fulfilment";
+import { availableInStore } from "@/lib/store-core";
+import { WAREHOUSE_BRANCHES } from "@/lib/fulfillment-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,8 +83,15 @@ export async function GET(req: Request) {
         and srs_pushed_at is null
         and delivery_method <> 'pickup'
         and fulfillment_plan is not null
-        and created_at >= ${since.toISOString()}
-      order by created_at asc
+        /* 'planned' sluit twee valkuilen uit: geïmporteerde Shopify-historie
+           (fulfillment_status 'imported', 35k orders) en orders die op 'review'
+           staan omdat er een tekort was. Alleen een schoon, volledig plan mag
+           het magazijn in. */
+        and fulfillment_status = 'planned'
+        /* Op BETAALmoment filteren, niet op besteldatum: een order die lang open
+           stond en nu pas betaald wordt hoort er wél bij. */
+        and coalesce(paid_at, created_at) >= ${since.toISOString()}
+      order by coalesce(paid_at, created_at) asc
       limit ${limit}
     `);
 
@@ -122,6 +131,21 @@ export async function GET(req: Request) {
       }
     }
 
+    /* Voorraadcheck vlak vóór het pushen. Het allocatieplan is gemaakt op de
+       SRS-baseline, die achterloopt op kassaverkopen en andere web-orders. Zo kan
+       een tweede order op hetzelfde laatste stuk worden toegewezen — en een push
+       maakt die dubbele toewijzing hard in SRS (dubbele afboeking; één klant
+       hoort dagen later dat het toch niet kan).
+       LET OP bij het lezen van availableInStore: die trekt de web-reserveringen
+       van álle lopende orders af, dus óók die van de order die we nu bekijken.
+       Een gezonde order komt daardoor op 0 uit, niet op zijn eigen aantal. Een
+       NEGATIEVE waarde is het echte alarm: er is meer gereserveerd dan er ligt. */
+    const magazijnLocatie = matched.find((m) => m.ship.store)?.ship.store || WAREHOUSE_BRANCHES[0];
+    const magazijnSkus = [...new Set(matched.flatMap((m) => (m.ship.lines || []).map((l) => l.sku || "").filter(Boolean)))];
+    const beschikbaar = magazijnSkus.length
+      ? await availableInStore(magazijnLocatie, magazijnSkus).catch(() => new Map<string, number>())
+      : new Map<string, number>();
+
     const orders = matched.map(({ r, ship, storeParts }) => {
       const lines = (ship.lines || [])
         .filter((l) => l.sku)
@@ -137,6 +161,12 @@ export async function GET(req: Request) {
           };
         });
       const linesCents = lines.reduce((n, l) => n + l.unitPriceCents * l.qty, 0);
+      const tekorten: { sku: string; nodig: number; tekort: number }[] = [];
+      for (const l of lines) {
+        const k = l.sku.toLowerCase();
+        const rest = Number(beschikbaar.get(k) ?? beschikbaar.get(l.sku) ?? 0);
+        if (rest < 0) tekorten.push({ sku: l.sku, nodig: l.qty, tekort: Math.abs(rest) });
+      }
       /* Verzendkosten alleen meesturen als de HELE order uit het magazijn komt —
          anders zou een gesplitste order de verzendkosten dubbel in SRS zetten. */
       const shippingCents = storeParts === 0 ? Number(r.shipping_cents) || 0 : 0;
@@ -170,6 +200,10 @@ export async function GET(req: Request) {
         isPartial: storeParts > 0,
         storeParts,
         orderTotalCents: Number(r.total_cents) || 0,
+        /* false = niet pushen; het magazijn heeft dit (volgens de verse telling)
+           niet meer liggen. */
+        stockOk: tekorten.length === 0,
+        tekorten,
       };
     });
 
