@@ -30,7 +30,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "keys vereist." }, { status: 400 });
   }
   try {
-    const byBranch = await availableByBranch(keys);
+    /* WINKEL-KANAAL: dit endpoint bedient de kassa en de scanner, dus zonder de
+       web-veiligheidsmarge (Kevin, 6 aug: "mag eraf voor winkels onderling").
+       De verkoper staat bij het rek; de marge beschermt de webshop tegen
+       misteltellingen, niet iemand met het artikel in z'n handen. Meteen ook de
+       telling: die meet tegen dit getal en telde de marge er eerder bovenop. */
+    const byBranch = await availableByBranch(keys, { channel: "store" });
     const items: Record<string, ReturnType<typeof toRows>> = {};
     for (const [k, list] of byBranch) items[k] = toRows(list);
     return NextResponse.json({ ok: true, items });

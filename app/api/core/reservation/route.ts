@@ -41,7 +41,10 @@ export async function POST(req: Request) {
     switch (action) {
       case "create": {
         if (!b.location) return NextResponse.json({ ok: false, error: "location vereist." }, { status: 400 });
-        const r = await createReservation({ location: b.location, customer: b.customer || {}, lines: b.lines || [], reason: b.reason, note: b.note, createdBy: b.createdBy });
+        /* Winkel-kanaal: dit endpoint IS de kassa ("vraag aan" / apart leggen).
+           Zonder web-veiligheidsmarge, anders kan de winkel het laatste stuk dat
+           ze in handen heeft niet apart leggen (Kevin, 6 aug). */
+        const r = await createReservation({ location: b.location, customer: b.customer || {}, lines: b.lines || [], reason: b.reason, note: b.note, createdBy: b.createdBy, channel: "store" });
         if (!r.ok || !r.reservation) return NextResponse.json(r, { status: 400 });
         const res = r.reservation;
         let mailed = false;

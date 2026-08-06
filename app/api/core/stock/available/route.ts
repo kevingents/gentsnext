@@ -29,7 +29,12 @@ export async function POST(req: Request) {
   }
   try {
     // Breakdown (kassa-weergave) + platte 'available' (gate/back-compat) uit één bron.
-    const bd = await availableBreakdown(location, keys);
+    /* WINKEL-KANAAL: dit endpoint bedient de kassa en de scanner, dus zonder de
+       web-veiligheidsmarge (Kevin, 6 aug: "mag eraf voor winkels onderling").
+       De verkoper staat bij het rek; de marge beschermt de webshop tegen
+       misteltellingen, niet iemand met het artikel in z'n handen. Meteen ook de
+       telling: die meet tegen dit getal en telde de marge er eerder bovenop. */
+    const bd = await availableBreakdown(location, keys, { channel: "store" });
     const available: Record<string, number> = {};
     const breakdown: Record<string, { baseline: number; posDelta: number; webReserved: number; safety: number; available: number }> = {};
     for (const [k, v] of bd) {
