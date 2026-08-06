@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { schoonPakbon } from "@/lib/pakbon-instelling";
 import { adminOrToken } from "@/lib/studio-token";
 import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
@@ -27,7 +28,7 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
     "warehouseCutoffHour", "storeCutoffHour",
     "standardMinDays", "standardMaxDays",
     "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
-    "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock", "pakbon",
+    "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock",
   ];
   for (const f of intFields) {
     if (b[f] !== undefined && Number.isFinite(Number(b[f]))) {
@@ -37,6 +38,9 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
   }
+  /* Pakbontekst: geen getal maar een blok teksten — eigen sanitizer. */
+  const pakbon = schoonPakbon(b.pakbon);
+  if (pakbon) out.pakbon = pakbon;
   // Winkel-notificatie-adressen (o.a. afspraak-meldingen): beheerbaar via de
   // portal-studio i.p.v. env — zonder deze whitelist-entry was storeEmails
   // nergens te schrijven en viel elke winkelmelding terug op het centrale adres.
