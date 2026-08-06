@@ -1443,3 +1443,94 @@ export const portalUsage = pgTable(
     index("portal_usage_dag_idx").on(t.dag),
   ],
 );
+
+/* ── Students-acties (verenigingskorting aan de kassa) ────────────────────────
+ *
+ * Kevin/Remy, 6 aug: Remy maakt in de portal een actie, hangt er een vereniging
+ * en één of alle winkels aan, kiest welke producten meedoen (of alles) en een
+ * kortingspercentage. De winkel klikt de actie aan de kassa aan, scant, en alleen
+ * de deelnemende producten krijgen korting. Een klant is verplicht — die wordt
+ * aan de vereniging gekoppeld, zodat Remy per vereniging ziet wie wat kocht.
+ *
+ * Waarom in Neon en niet als blob-config: hier hangen VERKOOPCIJFERS aan (Remy
+ * moet erop kunnen rapporteren) en de kassa moet de actielijst per winkel snel
+ * en betrouwbaar kunnen ophalen.
+ */
+export const studentActies = pgTable(
+  "student_acties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    naam: text("naam").notNull(),
+    /** Studentenvereniging waarvoor de actie geldt. */
+    vereniging: text("vereniging").notNull(),
+    /** Lege lijst = ALLE winkels; anders exact deze winkelnamen. */
+    winkels: jsonb("winkels").notNull().default([]),
+    /** Lege lijst = ALLE producten; anders deze sku's/barcodes. */
+    producten: jsonb("producten").notNull().default([]),
+    /** Kortingspercentage (0-100) op de deelnemende regels. */
+    kortingPct: integer("korting_pct").notNull().default(0),
+    /** Geldigheid; leeg = geen begrenzing aan die kant. */
+    vanaf: date("vanaf"),
+    tot: date("tot"),
+    actief: boolean("actief").notNull().default(true),
+    aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("student_acties_actief_idx").on(t.actief),
+    index("student_acties_vereniging_idx").on(t.vereniging),
+  ],
+);
+
+/** Eén rij per kassabon die onder een actie is afgerekend — de bron voor Remy's overzicht. */
+export const studentActieVerkopen = pgTable(
+  "student_actie_verkopen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actieId: uuid("actie_id").notNull(),
+    /** Snapshot: een actie kan later hernoemd worden, de historie moet kloppen. */
+    actieNaam: text("actie_naam").notNull().default(""),
+    vereniging: text("vereniging").notNull().default(""),
+    store: text("store").notNull(),
+    /** Kassabon waar dit bij hoort (pos_sales.id) — idempotentie-sleutel. */
+    saleId: text("sale_id").notNull().default(""),
+    klantNaam: text("klant_naam").notNull().default(""),
+    klantEmail: text("klant_email").notNull().default(""),
+    klantId: text("klant_id").notNull().default(""),
+    /** Regels mét korting: [{ sku, title, qty, priceCent, kortingCent }]. */
+    regels: jsonb("regels").notNull().default([]),
+    kortingCent: integer("korting_cent").notNull().default(0),
+    omzetCent: integer("omzet_cent").notNull().default(0),
+    kassier: text("kassier").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Eén registratie per bon: een herhaalde melding mag niet dubbel tellen.
+    uniqueIndex("student_verkopen_sale_uq").on(t.saleId),
+    index("student_verkopen_actie_idx").on(t.actieId),
+    index("student_verkopen_vereniging_idx").on(t.vereniging),
+  ],
+);
+
+/** Klant ↔ vereniging: wie hoort bij welke vereniging (Kevin: "deze klant is dan
+ *  ook gekoppeld aan de vereniging"). Sleutel is het e-mailadres — dat heeft elke
+ *  kassaklant, een klantnummer niet altijd. */
+export const studentLeden = pgTable(
+  "student_leden",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    klantEmail: text("klant_email").notNull(),
+    klantNaam: text("klant_naam").notNull().default(""),
+    klantId: text("klant_id").notNull().default(""),
+    vereniging: text("vereniging").notNull(),
+    /** Waar de koppeling vandaan komt (eerste actie waarin de klant meedeed). */
+    bronActieId: uuid("bron_actie_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("student_leden_email_uq").on(t.klantEmail),
+    index("student_leden_vereniging_idx").on(t.vereniging),
+  ],
+);
