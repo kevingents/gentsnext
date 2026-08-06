@@ -130,7 +130,13 @@ export async function requeuePrintJob(store: string, ref: string): Promise<{ ok:
   const db = getDb();
   const rows = await db
     .update(storePrintJobs)
-    .set({ status: "pending", printedAt: null })
+    /* createdAt MEE verversen. Opnieuw in de wachtrij zetten betekent dat dit
+       vanaf nu een nieuwe opdracht is — en de uitlevering laat alles ouder dan
+       24 uur vervallen (zie pendingPrintJobs). Zonder deze regel bleef de
+       oorspronkelijke datum staan: een herprint van een order van gisteren
+       kwam er STIL niet uit, terwijl de kassa "staat klaar voor de printer"
+       meldde en de eerstvolgende poll 'm meteen weer op 'expired' zette. */
+    .set({ status: "pending", printedAt: null, createdAt: new Date() })
     .where(and(eq(storePrintJobs.store, s), eq(storePrintJobs.ref, r)))
     .returning({ id: storePrintJobs.id });
   return { ok: rows.length > 0, count: rows.length };
