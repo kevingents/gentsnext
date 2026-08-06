@@ -182,18 +182,21 @@ export async function cancelPosSaleCore(id: string, actor: { name?: string } = {
 }
 
 /** Markeer (deels) verrekend naar SRS. Idempotent: 'posted' niet nog eens. */
-export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: string; credSource?: string; status?: string; error?: string } = {}): Promise<Sale | null> {
+export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: string; credSource?: string; status?: string; error?: string; force?: boolean } = {}): Promise<Sale | null> {
   const db = getDb();
   const [r] = await db.select().from(posSales).where(eq(posSales.id, String(id))).limit(1);
   if (!r) return null;
   const sale = rowToSale(r) as Sale & { srsPostStatus?: string; srsPostAttempts?: number };
-  if (sale.srsPosted && sale.srsPostStatus === "posted") return sale;
+  /* force = bonnummer-botsing herstellen (Rotterdam 6 aug): een 'posted'-markering
+     met een nummer dat in SRS door een ándere bon bezet blijkt, moet overschreven
+     kunnen worden met het nieuwe, wél geldige nummer. */
+  if (!opts.force && sale.srsPosted && sale.srsPostStatus === "posted") return sale;
   const status = String(opts.status || "posted");
   const next: Sale = {
     ...sale, srsPosted: status === "posted", srsPostStatus: status, srsPostedAt: new Date().toISOString(),
     // srsRef nooit WISSEN bij een latere mislukte poging: het gereserveerde bonnr
     // is precies wat een herpost door de sweep ontdubbelbaar maakt.
-    srsRef: String(opts.srsRef || "") || String((sale as { srsRef?: string }).srsRef || ""),
+    srsRef: opts.force ? String(opts.srsRef || "") : (String(opts.srsRef || "") || String((sale as { srsRef?: string }).srsRef || "")),
     srsCredSource: String(opts.credSource || ""), srsPostError: String(opts.error || ""),
     // Pogingteller — spiegelt de blob-store; de sweep leest Neon-first en strandt
     // een record na te veel mislukte pogingen i.p.v. eeuwig budget te verbranden.
