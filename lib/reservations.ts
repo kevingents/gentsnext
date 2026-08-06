@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { reservations } from "@/db/schema";
 import { reserveOrderStock, releaseOrderHolds } from "@/lib/store-reserve";
 import { availableInStore } from "@/lib/store-core";
+import type { StockChannel } from "@/lib/fulfillment-config";
 import { createOrder, markRegisterPaid, confirmAndPlan, paymentRefForOrderNumber, type CheckoutContact, type CheckoutItem } from "@/lib/orders";
 import { getReservationHoldDays } from "@/lib/reservation-config";
 
@@ -39,6 +40,10 @@ export async function createReservation(input: {
   customer: { customerId?: string; email?: string; name?: string; phone?: string };
   lines: ReservationLine[];
   reason?: string; note?: string; createdBy?: string;
+  /* "store" = de winkel legt zelf iets apart (kassa / "vraag aan"): dan telt de
+     web-veiligheidsmarge niet mee. Default blijft "web" voor de publieke
+     reserveer-om-te-passen-flow. */
+  channel?: StockChannel;
 }): Promise<{ ok: boolean; reservation?: typeof reservations.$inferSelect; failed?: string[]; error?: string }> {
   const db = getDb();
   const location = String(input.location || "").trim();
@@ -48,7 +53,7 @@ export async function createReservation(input: {
 
   // Netto beschikbaar per stockKey in deze winkel = gross voor de hold-gate.
   const keys = [...new Set(lines.map((l) => l.stockKey))];
-  const avail = await availableInStore(location, keys);
+  const avail = await availableInStore(location, keys, { channel: input.channel === "store" ? "store" : "web" });
 
   const holdTtlMin = (await getReservationHoldDays()) * 24 * 60; // instelbaar (default 7 dagen)
   const validUntil = new Date(Date.now() + holdTtlMin * 60_000);
@@ -240,7 +245,12 @@ export async function convertReservationToOrder(reservationId: string): Promise<
 
   let order;
   try {
-    order = await createOrder(contact, items, "pickup", "", "", r.location);
+    /* ALTIJD het winkel-kanaal (review 6 aug, blokkerend): deze stukken liggen
+       al fysiek apart onder een hold van deze reservering. Rekenden we hier met
+       de web-marge, dan kon een reservering die met marge 0 was aangemaakt bij de
+       omzetting alsnog geweigerd worden - de klant heeft dan wel betaald en er
+       ontstaat geen order. */
+    order = await createOrder(contact, items, "pickup", "", "", r.location, "", null, undefined, { channel: "store" });
   } catch (e) {
     // Order aanmaken faalde → claim teruggeven zodat een volgende webhook/retry het
     // opnieuw kan proberen (anders blijft de reservering voorgoed op "converting" staan).

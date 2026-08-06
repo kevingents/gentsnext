@@ -70,7 +70,11 @@ export async function POST(req: Request) {
 
   let order;
   try {
-    order = await createOrder(c as never, items, deliveryMethod, "", "", pickupStore, storeName);
+    /* WINKEL-KANAAL: dit is de kassa ("Bestel voor klant"). Bij AFHALEN telt de
+       veiligheidsmarge niet mee - de verkoper staat bij het rek (Kevin, 6 aug).
+       Bij BEZORGEN blijft de marge staan: dat loopt uit dezelfde online-pool als
+       de webshop en mag een echte webklant niet wegdrukken. */
+    order = await createOrder(c as never, items, deliveryMethod, "", "", pickupStore, storeName, null, undefined, { channel: "store" });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Bestelling mislukt." }, { status: 400 });
   }

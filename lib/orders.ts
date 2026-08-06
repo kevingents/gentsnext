@@ -16,6 +16,7 @@ import { tieredDiscountCents } from "@/lib/pricing";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
 import { availableInStore } from "@/lib/store-core";
+import type { StockChannel } from "@/lib/fulfillment-config";
 import { reserveOrderStock, releaseOrderHolds, renewOrderHolds, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
 
 /**
@@ -269,10 +270,18 @@ export async function createOrder(
   // bevestigingsmail pas ná de betaling vertrekt (webhook) en de statusmails nog
   // veel later uit het back-office — die kennen alléén de order, niet de sessie.
   // Kassa-/winkelorders geven niets mee en blijven dus Nederlands.
-  locale: Locale = DEFAULT_LOCALE
+  locale: Locale = DEFAULT_LOCALE,
+  /* Verkoopkanaal (Kevin, 6 aug: "veiligheidsmarge mag eraf voor winkels
+     onderling"). BEWUST alleen van invloed op de AFHAAL-tak hieronder: bij
+     afhalen claimt de winkel een stuk uit haar eigen rek, dat is winkel-
+     onderling verkeer. De bezorg-tak deelt de online-pool met de webshop —
+     zou de kassa daar zonder marge claimen, dan kan een echte webklant een
+     "niet meer op voorraad" krijgen terwijl de PDP nog voorraad toont. */
+  opts: { channel?: StockChannel } = {}
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
+  const kanaal: StockChannel = opts.channel === "store" ? "store" : "web";
   const lines = await resolveLines(items);
   // Een tussentijds gearchiveerd/onbekend product mag NIET stil uit de order vallen
   // (anders betaalt de klant voor de rest zonder het te weten): afwijzen mét de SKU's
@@ -394,7 +403,7 @@ export async function createOrder(
   const skuList = [...new Set(lines.map((l) => l.sku).filter(Boolean))];
   const grossBySku = new Map<string, number>();
   if (isPickup) {
-    const avail = await availableInStore(pickupStore.trim(), skuList);
+    const avail = await availableInStore(pickupStore.trim(), skuList, { channel: kanaal });
     for (const s of skuList) grossBySku.set(s, avail.get(s) ?? 0);
   } else {
     // Online-pool: availableForSkus trekt de actieve winkel-holds (onbetaalde

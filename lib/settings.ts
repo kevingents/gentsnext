@@ -36,6 +36,11 @@ export type Settings = {
   // Voorraad-bescherming
   retailSafetyStock: number;
   warehouseSafetyStock: number;
+  /* Marge voor het WINKEL-kanaal (kassa/winkels onderling). Los van de web-marge:
+     de web-marge beschermt tegen verkopen aan een klant die het schap niet ziet;
+     een verkoper in de winkel heeft het artikel in z'n handen. Kevin, 6 aug:
+     "mag eraf voor winkels onderling". Default 0. */
+  storeChannelSafetyStock: number;
   protectUnderstockedRetail: boolean;
   // Doorloop/overstock-routing: verzend bij voorkeur uit een winkel die ruim boven
   // z'n ideaal zit (trage/oude schapvoorraad eerst weg). minSurplus = drempel in
@@ -156,6 +161,7 @@ export const DEFAULT_SETTINGS: Settings = {
   expressTransitDays: 1,
   retailSafetyStock: num(process.env.GENTS_RETAIL_SAFETY_STOCK, 2),
   warehouseSafetyStock: num(process.env.GENTS_WAREHOUSE_SAFETY_STOCK, 0),
+  storeChannelSafetyStock: num(process.env.GENTS_STORE_CHANNEL_SAFETY_STOCK, 0),
   protectUnderstockedRetail: (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0",
   routeOverstockFirst: { enabled: false, minSurplus: 3 },
   searchSynonyms: DEFAULT_SYNONYMS,
