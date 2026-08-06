@@ -45,6 +45,17 @@ export type CreateAppointmentInput = {
   phone?: string;
   wensen?: string;
   locale?: string;
+  /* De WINKEL plant zelf in (Kevin, 6 aug: "afspraken nu ook zelf een afspraak
+     erin kunnen zetten met bevestiging naar de klant"). Twee verschillen met een
+     aanvraag via gents.nl:
+      - vandaag mag ook. Een klant die aan de balie staat maakt een afspraak voor
+        vanmiddag; de "vanaf morgen"-regel is er om online-aanvragen te spreiden,
+        niet om de winkel tegen te houden.
+      - de afspraak staat meteen VAST (status 'bevestigd'), want er is net met de
+        klant over gesproken — geen tweede bevestigingsronde. */
+  viaWinkel?: boolean;
+  /* Wie 'm inplande, voor het winkeloverzicht. */
+  ingepland_door?: string;
 };
 
 export type CreateAppointmentResult =
@@ -70,11 +81,18 @@ export async function createAppointment(input: CreateAppointmentInput): Promise<
   const preferredDate = String(input.preferredDate || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(preferredDate)) return { ok: false, error: "Ongeldige datum." };
   const today = todayAmsterdam();
-  const min = addDays(today, 1);
+  const viaWinkel = input.viaWinkel === true;
+  // De winkel mag vandaag inplannen; online-aanvragen blijven vanaf morgen.
+  const min = viaWinkel ? today : addDays(today, 1);
   const max = addDays(today, MAX_DAYS_AHEAD);
   // Stringvergelijking werkt voor yyyy-mm-dd; geen Date-parsing (tijdzone-vrij).
   if (preferredDate < min || preferredDate > max) {
-    return { ok: false, error: "Kies een datum vanaf morgen, maximaal 90 dagen vooruit." };
+    return {
+      ok: false,
+      error: viaWinkel
+        ? "Kies een datum vanaf vandaag, maximaal 90 dagen vooruit."
+        : "Kies een datum vanaf morgen, maximaal 90 dagen vooruit.",
+    };
   }
 
   const dagdeel = (String(input.dagdeel || "").trim() || "geen-voorkeur") as Dagdeel;
@@ -92,7 +110,12 @@ export async function createAppointment(input: CreateAppointmentInput): Promise<
   const db = getDb();
   const rows = await db
     .insert(appointments)
-    .values({ type, store: store.title, preferredDate, dagdeel, name, email, phone, wensen, locale })
+    .values({
+      type, store: store.title, preferredDate, dagdeel, name, email, phone, wensen, locale,
+      /* Door de winkel ingepland = al afgestemd met de klant, dus meteen
+         bevestigd. Een online aanvraag blijft 'nieuw' tot de winkel 'm oppakt. */
+      ...(viaWinkel ? { status: "bevestigd" } : {}),
+    })
     .returning({ id: appointments.id });
   return { ok: true, id: rows[0].id, type, store: store.title, preferredDate, dagdeel };
 }
