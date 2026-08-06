@@ -277,11 +277,18 @@ export async function createOrder(
      onderling verkeer. De bezorg-tak deelt de online-pool met de webshop —
      zou de kassa daar zonder marge claimen, dan kan een echte webklant een
      "niet meer op voorraad" krijgen terwijl de PDP nog voorraad toont. */
-  opts: { channel?: StockChannel } = {}
+  opts: { channel?: StockChannel; voorverkoop?: boolean } = {}
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
   const kanaal: StockChannel = opts.channel === "store" ? "store" : "web";
+  /* VOORVERKOOP (Kevin/Rick): de klant betaalt nu voor iets dat de winkel NOG NIET
+     heeft — een backorder. De anti-oversell-gate hoort daar niet: die weigert
+     precies wat voorverkoop bedoelt (baseline 0). We slaan de voorraadclaim dus
+     over in plaats van 'm te forceren; er wordt dan ook geen stuk geblokkeerd dat
+     een andere klant nog gewoon kan kopen. Supply chain krijgt een melding
+     (api/store/voorverkoop-melding) zodat er besteld wordt. */
+  const isVoorverkoop = opts.voorverkoop === true;
   const lines = await resolveLines(items);
   // Een tussentijds gearchiveerd/onbekend product mag NIET stil uit de order vallen
   // (anders betaalt de klant voor de rest zonder het te weten): afwijzen mét de SKU's
@@ -420,7 +427,9 @@ export async function createOrder(
     qty: l.quantity,
     gross: grossBySku.get(l.sku) ?? 0,
   }));
-  const reservation = await reserveOrderStock(order.id, requests);
+  const reservation = isVoorverkoop
+    ? { ok: true as const, failed: [] as string[] }
+    : await reserveOrderStock(order.id, requests);
   if (!reservation.ok) {
     // Niet leverbaar → order weer weg (nog geen voucher/cadeaubon verzilverd).
     await db.delete(orders).where(eq(orders.id, order.id));
