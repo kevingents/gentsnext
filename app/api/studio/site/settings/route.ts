@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
 import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
+import { isFulfillable } from "@/lib/fulfillment-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +29,7 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
     "standardMinDays", "standardMaxDays",
     "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
     "retailSafetyStock", "warehouseSafetyStock",
+    "storeHandoverMinutes",
   ];
   for (const f of intFields) {
     if (b[f] !== undefined && Number.isFinite(Number(b[f]))) {
@@ -36,6 +38,29 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   }
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
+  }
+  if (b.dispatchOnSunday !== undefined) out.dispatchOnSunday = Boolean(b.dispatchOnSunday);
+  if (b.dispatchOnSaturdayStores !== undefined) out.dispatchOnSaturdayStores = Boolean(b.dispatchOnSaturdayStores);
+  /* Tijdelijk gepauzeerde filialen: alleen bestaande filiaalnummers, zodat een
+     typefout niet stilletjes niets doet (of erger: alles doorlaat). */
+  if (Array.isArray(b.pausedBranchIds)) {
+    out.pausedBranchIds = [...new Set(
+      b.pausedBranchIds.map((v) => String(v).trim()).filter((v) => v && isFulfillable(v)),
+    )];
+  }
+  /* Extra verzendvrije dagen: strikt yyyy-mm-dd, en alleen dit en volgend jaar —
+     een tikfout als "20026-01-02" hoort niet stil in de kalender te belanden. */
+  if (Array.isArray(b.extraClosureDates)) {
+    const nu = new Date().getUTCFullYear();
+    out.extraClosureDates = [...new Set(
+      b.extraClosureDates
+        .map((v) => String(v).trim())
+        .filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)))
+        .filter((v) => {
+          const j = Number(v.slice(0, 4));
+          return j >= nu && j <= nu + 2;
+        }),
+    )].sort();
   }
   // Winkel-notificatie-adressen (o.a. afspraak-meldingen): beheerbaar via de
   // portal-studio i.p.v. env — zonder deze whitelist-entry was storeEmails

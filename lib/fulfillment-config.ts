@@ -37,13 +37,89 @@ export function branchCountry(branchId: string): string {
   return COUNTRY_OF_BRANCH[branchId] || "NL";
 }
 
-/** Feestdagen NL+BE (yyyy-mm-dd) waarop NIET verzonden wordt. */
-export const SHIPPING_HOLIDAYS: Record<string, Set<string>> = {
-  NL: new Set(["2026-01-01", "2026-04-03", "2026-04-06", "2026-04-27", "2026-05-14", "2026-05-25", "2026-12-25", "2026-12-26"]),
-  BE: new Set(["2026-01-01", "2026-04-06", "2026-05-01", "2026-05-14", "2026-05-25", "2026-07-21", "2026-08-15", "2026-11-01", "2026-11-11", "2026-12-25"]),
-};
-export function isHoliday(branchId: string, isoDate: string): boolean {
-  return SHIPPING_HOLIDAYS[branchCountry(branchId)]?.has(isoDate) ?? false;
+/* ── Feestdagen ───────────────────────────────────────────────────────────
+ * Berekend per jaar, niet als handmatige lijst. Een vaste lijst dekte alleen
+ * 2026; vanaf 1 januari 2027 zou isHoliday() overal false geven — stil, zonder
+ * fout — en zou de site levering beloven op Nieuwjaarsdag en Eerste Kerstdag.
+ * De paasgebonden dagen komen uit de Meeus/Butcher-formule (Gregoriaans).
+ */
+
+const isoDay = (y: number, m: number, d: number) =>
+  `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** Eerste Paasdag (Gregoriaans) — Meeus/Butcher. */
+function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function plusDays(base: Date, n: number): string {
+  const d = new Date(base.getTime() + n * 86400000);
+  return isoDay(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+/** Verzendvrije feestdagen voor één jaar en land (yyyy-mm-dd). */
+export function holidaysForYear(year: number, country: string): Set<string> {
+  const pasen = easterSunday(year);
+  const gedeeld = [
+    isoDay(year, 1, 1), // Nieuwjaarsdag
+    plusDays(pasen, 1), // Tweede Paasdag
+    plusDays(pasen, 39), // Hemelvaartsdag
+    plusDays(pasen, 50), // Tweede Pinksterdag
+    isoDay(year, 12, 25), // Eerste Kerstdag
+  ];
+  if (String(country).toUpperCase() === "BE") {
+    return new Set([
+      ...gedeeld,
+      isoDay(year, 5, 1), // Dag van de Arbeid
+      isoDay(year, 7, 21), // Nationale feestdag
+      isoDay(year, 8, 15), // O.-L.-V. Hemelvaart
+      isoDay(year, 11, 1), // Allerheiligen
+      isoDay(year, 11, 11), // Wapenstilstand
+    ]);
+  }
+  return new Set([
+    ...gedeeld,
+    plusDays(pasen, -2), // Goede Vrijdag (veel vervoerders rijden beperkt)
+    isoDay(year, 4, 27), // Koningsdag
+    isoDay(year, 12, 26), // Tweede Kerstdag
+  ]);
+}
+
+const _holidayCache = new Map<string, Set<string>>();
+function holidaysCached(year: number, country: string): Set<string> {
+  const k = `${year}|${country}`;
+  let s = _holidayCache.get(k);
+  if (!s) {
+    s = holidaysForYear(year, country);
+    _holidayCache.set(k, s);
+  }
+  return s;
+}
+
+/**
+ * Verzendvrije dag? Feestdag van het land van dit filiaal, of een extra
+ * sluitingsdag die in de instellingen is opgegeven (vakantiesluiting,
+ * verbouwing, personeelsdag) — die gelden voor álle filialen.
+ */
+export function isHoliday(branchId: string, isoDate: string, extraClosures?: readonly string[]): boolean {
+  if (extraClosures?.length && extraClosures.includes(isoDate)) return true;
+  const year = Number(String(isoDate).slice(0, 4));
+  if (!Number.isFinite(year)) return false;
+  return holidaysCached(year, branchCountry(branchId)).has(isoDate);
 }
 
 export function isWarehouse(branchId: string): boolean {
