@@ -95,6 +95,9 @@ function isoAtOffset(base: { y: number; m: number; d: number }, k: number): stri
   return `${dt.getUTCFullYear()}-${mm}-${dd}`;
 }
 
+/** "Geen verzenddag gevonden binnen de horizon" — een vlag, geen aantal dagen. */
+export const DISPATCH_UNKNOWN = 99;
+
 function dispatchInfo(branchId: string, settings: Settings) {
   const n = nowNL();
   for (let k = 0; k < 9; k++) {
@@ -106,7 +109,10 @@ function dispatchInfo(branchId: string, settings: Settings) {
     if (k === 0 && n.minutes >= effectiveCutoffHour(branchId, day, settings) * 60) continue;
     return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day, dispatchInDays: k };
   }
-  return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: 9 };
+  /* Sentinel: binnen 9 dagen geen verzenddag gevonden (lange sluiting, feestdagen-
+     cluster). DISPATCH_UNKNOWN is GEEN echte 9 dagen — estimateDelivery mag er
+     dus nooit een harde leverdatum uit rekenen. */
+  return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: DISPATCH_UNKNOWN };
 }
 
 /* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
@@ -180,6 +186,10 @@ function makeComparator(country: string, settings: Settings) {
   const minSurplus = Math.max(1, settings.routeOverstockFirst?.minSurplus ?? 3);
   return (a: Branch, b: Branch): number => {
     if (a.canDispatchToday !== b.canDispatchToday) return a.canDispatchToday ? -1 : 1;
+    /* Niet alleen "vandaag ja/nee": sinds gesloten dagen echt meetellen kunnen
+       twee kandidaten 1, 2 of zelfs 9 dagen uit elkaar liggen. Zonder deze regel
+       won puur het filiaalnummer en beloofde de site onnodig een latere levering. */
+    if (a.dispatchInDays !== b.dispatchInDays) return a.dispatchInDays - b.dispatchInDays;
     const aSame = a.country === cc, bSame = b.country === cc;
     if (aSame !== bSame) return aSame ? -1 : 1;
     // Doorloop leegruimen: een winkel die ruim boven ideaal zit (≥ minSurplus) eerst
@@ -511,6 +521,10 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
 
   const n = nowNL();
   const maxDispatch = Math.max(...plan.shipments.map((s) => s.dispatchInDays));
+  /* Geen verzenddag binnen de horizon (lange bedrijfssluiting, feestdagencluster):
+     dan is er geen eerlijke datum te noemen. Liever géén belofte dan een
+     verzonnen datum ~2 weken vooruit die als hard toegezegd oogt. */
+  if (maxDispatch >= DISPATCH_UNKNOWN) return null;
   const isSplit = plan.splitCount > 1;
   const hasStoreSource = plan.shipments.some((s) => !s.isWarehouse);
   const fromWarehouseOnly = !isSplit && !hasStoreSource;

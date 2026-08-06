@@ -546,7 +546,6 @@ export default async function ProductPage({ params }: Props) {
             colorSiblings={colorSiblings}
             deliveryPromise={delivery?.promise ?? null}
             deliveryNote={delivery?.note ?? null}
-            cutoffHour={delivery?.cutoffHour ?? 16}
             mySize={mySize?.raw ?? null}
             fitNote={String(attrs.pasvorm ?? "").trim() || null}
             freeShipThresholdCents={settings.freeShippingCents}

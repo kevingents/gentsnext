@@ -158,10 +158,14 @@ export const DEFAULT_SETTINGS: Settings = {
   // landen staan in lib/shipping-zones.
   shippingCents: num(process.env.GENTS_SHIPPING_CENTS, 395),
   expressSurchargeCents: num(process.env.GENTS_EXPRESS_SURCHARGE_CENTS, 150),
-  // Basisuur = "einde dag" (geen vroege cutoff); de bindende cutoff zit in de
-  // per-weekdag-override hieronder (magazijn vrijdag 16:00, winkels vrijdag 17:00).
-  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 23),
-  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 23),
+  /* Basisuur = het laatste moment dat een pakket nog dezelfde dag aan de
+     vervoerder wordt meegegeven. Stond op 23 ("einde dag"), maar dat beloofde
+     's avonds same-day-verzending terwijl er niets meer vertrok — op koopavond
+     zelfs tot 21:00, want de winkel was dan nog open. 17 is een veilige
+     aanname; zet hier het échte ophaalmoment neer (per filiaal kan via
+     branchCutoffs, per weekdag via de overrides hieronder). */
+  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 17),
+  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 17),
   branchCutoffs: {},
   warehouseCutoffByDay: { vrijdag: 16 },
   storeCutoffByDay: { vrijdag: 17 },

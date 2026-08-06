@@ -51,7 +51,11 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   /* Extra verzendvrije dagen: strikt yyyy-mm-dd, en alleen dit en volgend jaar —
      een tikfout als "20026-01-02" hoort niet stil in de kalender te belanden. */
   if (Array.isArray(b.extraClosureDates)) {
-    const nu = new Date().getUTCFullYear();
+    /* Amsterdams jaar, niet UTC: in het eerste uur van 1 januari staat UTC nog
+       in het oude jaar en zou een geldige sluitingsdag stil weggefilterd worden. */
+    const nu = Number(
+      new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", year: "numeric" }).format(new Date()),
+    );
     out.extraClosureDates = [...new Set(
       b.extraClosureDates
         .map((v) => String(v).trim())

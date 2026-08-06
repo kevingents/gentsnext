@@ -60,12 +60,19 @@ export function isOpenOnDay(hours: Record<string, string> | undefined, dayName: 
   return parseRange(hours?.[dayName] || "") !== null;
 }
 
-/** Sluitingsuur (0-24) op deze weekdag, of null als de winkel dan dicht is.
- *  Naar boven afgerond op het hele uur ná sluiting is fout — we ronden NAAR
- *  BENEDEN, zodat 17:30 een cutoff van 17 geeft en niet 18. */
-export function closingHourOnDay(hours: Record<string, string> | undefined, dayName: string): number | null {
+/** Sluitingstijd in MINUTEN na middernacht, of null als de winkel dan dicht is.
+ *  Minuten en niet uren, zodat een marge ervan afgetrokken kan worden vóór er
+ *  afgerond wordt — anders kost een marge van een half uur bij een winkel die om
+ *  17:30 sluit een vol uur cutoff. */
+export function closingMinutesOnDay(hours: Record<string, string> | undefined, dayName: string): number | null {
   const r = parseRange(hours?.[dayName] || "");
-  return r ? Math.floor(r[1] / 60) : null;
+  return r ? r[1] : null;
+}
+
+/** Sluitingsuur (0-24), naar beneden afgerond: 17:30 → 17, nooit 18. */
+export function closingHourOnDay(hours: Record<string, string> | undefined, dayName: string): number | null {
+  const m = closingMinutesOnDay(hours, dayName);
+  return m == null ? null : Math.floor(m / 60);
 }
 
 /** Open op dit moment? + de dag en tijden van vandaag. */

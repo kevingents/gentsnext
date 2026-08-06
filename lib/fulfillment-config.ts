@@ -1,5 +1,5 @@
 import type { Settings } from "@/lib/settings";
-import { getStores, isOpenOnDay, closingHourOnDay } from "@/lib/stores";
+import { getStores, isOpenOnDay, closingMinutesOnDay } from "@/lib/stores";
 
 /**
  * Fulfilment-classificatie — WELKE filialen mogen leveren en hoe ze
@@ -204,10 +204,13 @@ export function isDispatchDay(branchId: string, dayName: string, isoDate: string
 export function effectiveCutoffHour(branchId: string, dayName: string, s: Settings): number {
   const ingesteld = cutoffHourFor(branchId, s, dayName);
   if (isWarehouse(branchId)) return ingesteld;
-  const sluit = closingHourOnDay(hoursForBranch(branchId), dayName);
-  if (sluit == null) return ingesteld;
+  const sluitMin = closingMinutesOnDay(hoursForBranch(branchId), dayName);
+  if (sluitMin == null) return ingesteld;
+  /* In MINUTEN rekenen en pas aan het eind afronden. Eerst het sluitingsuur
+     afronden en er daarna hele uren marge vanaf trekken kostte bij een winkel
+     die om 17:30 sluit een vol uur extra (17:30 − 30 min gaf 16:00 i.p.v. 17:00). */
   const marge = Math.max(0, Math.round(Number(s.storeHandoverMinutes) || 0));
-  return Math.max(0, Math.min(ingesteld, sluit - Math.ceil(marge / 60)));
+  return Math.max(0, Math.min(ingesteld, Math.floor((sluitMin - marge) / 60)));
 }
 
 function isShipDay(branchId: string, y: number, mo: number, da: number, s: Settings): boolean {
