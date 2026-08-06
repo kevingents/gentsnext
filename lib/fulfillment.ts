@@ -6,9 +6,9 @@ import {
   branchPriority,
   branchCountry,
   safetyStockFor,
-  cutoffHourFor,
   isHoliday,
-  BRANCH_CITY,
+  isDispatchDay,
+  effectiveCutoffHour,
 } from "@/lib/fulfillment-config";
 import { getSettings, type Settings } from "@/lib/settings";
 import { type Locale } from "@/lib/i18n";
@@ -95,24 +95,15 @@ function isoAtOffset(base: { y: number; m: number; d: number }, k: number): stri
   return `${dt.getUTCFullYear()}-${mm}-${dd}`;
 }
 
-function openOn(branchId: string, dayName: string, isoDate: string, hoursByCity: Map<string, Record<string, string>>): boolean {
-  if (isHoliday(branchId, isoDate)) return false;
-  if (isWarehouse(branchId)) return dayName !== "zaterdag" && dayName !== "zondag";
-  const city = BRANCH_CITY[branchId];
-  const hours = city ? hoursByCity.get(city.toLowerCase()) : undefined;
-  if (!hours) return dayName !== "zaterdag" && dayName !== "zondag";
-  return Boolean((hours[dayName] || "").trim());
-}
-
-function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>, settings: Settings) {
+function dispatchInfo(branchId: string, settings: Settings) {
   const n = nowNL();
-  // Cutoff van vandaag (per-weekdag, bv. magazijn vrijdag 16:00).
-  const cutoff = cutoffHourFor(branchId, settings, DAYS[n.dayIndex]);
   for (let k = 0; k < 9; k++) {
     const day = DAYS[(n.dayIndex + k) % 7];
     const iso = isoAtOffset(n, k);
-    if (!openOn(branchId, day, iso, hoursByCity)) continue;
-    if (k === 0 && n.minutes >= cutoff * 60) continue;
+    // isDispatchDay + effectiveCutoffHour zijn gedeeld met de pick-deadline die
+    // de winkel ziet — één waarheid, anders wijkt de belofte af van de werklijst.
+    if (!isDispatchDay(branchId, day, iso, settings)) continue;
+    if (k === 0 && n.minutes >= effectiveCutoffHour(branchId, day, settings) * 60) continue;
     return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day, dispatchInDays: k };
   }
   return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: 9 };
@@ -124,12 +115,18 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
 
+  /* Tijdelijk gepauzeerde filialen (verbouwing, vakantiesluiting, onderbezetting)
+     krijgen géén orders. Zonder deze knop bleef de instroom doorlopen tot iemand
+     elke order handmatig als niet-leverbaar meldde. */
+  const gepauzeerd = new Set((settings.pausedBranchIds || []).map(String));
+
   const byBranch = new Map<string, { store: string; avail: Map<string, number>; surplus: number }>();
   for (const sku of skus) {
     const entry = stock.get(sku);
     if (!entry) continue;
     for (const b of entry.byBranch) {
       if (!isFulfillable(b.branchId)) continue;
+      if (gepauzeerd.has(String(b.branchId))) continue;
       // Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
       if (settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0) continue;
       const net = b.qty - safetyStockFor(b.branchId, settings);
@@ -149,7 +146,7 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
 
   const branches: Branch[] = [];
   for (const [branchId, rec] of byBranch) {
-    const d = dispatchInfo(branchId, hoursByCity, settings);
+    const d = dispatchInfo(branchId, settings);
     branches.push({
       branchId,
       store: rec.store,
@@ -402,15 +399,22 @@ export type DeliveryEstimate = {
 };
 
 /** Volgende bezorgdag-offset (kalenderdagen) na 'startK', n leverdagen verder (ma–za, geen feestdag NL). */
-function addDeliveryDays(base: { dayIndex: number; y: number; m: number; d: number }, startK: number, n: number): number {
+function addDeliveryDays(
+  base: { dayIndex: number; y: number; m: number; d: number },
+  startK: number,
+  n: number,
+  extraClosures?: readonly string[],
+): number {
   let k = startK;
   let added = 0;
-  while (added < n) {
+  // Harde bovengrens: zonder deze zou een (foutieve) eindeloze reeks vrije dagen
+  // de lus laten vastlopen in een request.
+  while (added < n && k < startK + 60) {
     k++;
     const day = DAYS[(base.dayIndex + k) % 7];
     const iso = isoAtOffset(base, k);
     if (day === "zondag") continue; // bezorgers leveren ma–za
-    if (isHoliday("99", iso)) continue; // NL-feestdag
+    if (isHoliday("99", iso, extraClosures)) continue; // NL-feestdag of bedrijfssluiting
     added++;
   }
   return k;
@@ -513,11 +517,11 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
 
   // Standaard transit: magazijn = snel (warehouseTransitDays); winkel/split = +extra.
   const stdTransit = settings.warehouseTransitDays + (fromWarehouseOnly ? 0 : settings.storeExtraDays);
-  const stdMinK = addDeliveryDays(n, maxDispatch, stdTransit);
-  const stdMaxK = addDeliveryDays(n, maxDispatch, stdTransit + 1);
+  const stdMinK = addDeliveryDays(n, maxDispatch, stdTransit, settings.extraClosureDates);
+  const stdMaxK = addDeliveryDays(n, maxDispatch, stdTransit + 1, settings.extraClosureDates);
 
   // Express: snelste werkdag na verzending.
-  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays);
+  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays, settings.extraClosureDates);
   const stdShownK = fromWarehouseOnly ? stdMinK : stdMaxK;
 
   const standard: DeliveryOption = {
@@ -538,13 +542,15 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
 
   const note = isSplit ? S.noteSplit : hasStoreSource ? S.noteStore : null;
 
-  // Cutoff van vandaag, per-weekdag, van het filiaal/de filialen die vandaag
-  // verzenden (bv. magazijn vrijdag 16:00) — niet langer het basisuur.
+  // Cutoff van vandaag van het filiaal/de filialen die vandaag verzenden. Via
+  // dezelfde effectieve berekening als de allocatie (dus nooit later dan de
+  // sluitingstijd van die winkel), anders telt de PDP af naar 23:00 terwijl de
+  // deur om 17:30 dichtgaat.
   const today = DAYS[n.dayIndex];
   const todayShips = plan.shipments.filter((s) => s.dispatchInDays === 0);
   const cutoffHour = todayShips.length
-    ? Math.min(...todayShips.map((s) => cutoffHourFor(s.branchId, settings, today)))
-    : cutoffHourFor("99", settings, today);
+    ? Math.min(...todayShips.map((s) => effectiveCutoffHour(s.branchId, today, settings)))
+    : effectiveCutoffHour("99", today, settings);
   const beforeCutoff = maxDispatch === 0;
   const promise = beforeCutoff
     ? S.promiseBeforeCutoff(cutoffHour, standard.dateLabel)

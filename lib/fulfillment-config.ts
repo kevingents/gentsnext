@@ -1,4 +1,5 @@
 import type { Settings } from "@/lib/settings";
+import { getStores, isOpenOnDay, closingHourOnDay } from "@/lib/stores";
 
 /**
  * Fulfilment-classificatie — WELKE filialen mogen leveren en hoe ze
@@ -37,13 +38,89 @@ export function branchCountry(branchId: string): string {
   return COUNTRY_OF_BRANCH[branchId] || "NL";
 }
 
-/** Feestdagen NL+BE (yyyy-mm-dd) waarop NIET verzonden wordt. */
-export const SHIPPING_HOLIDAYS: Record<string, Set<string>> = {
-  NL: new Set(["2026-01-01", "2026-04-03", "2026-04-06", "2026-04-27", "2026-05-14", "2026-05-25", "2026-12-25", "2026-12-26"]),
-  BE: new Set(["2026-01-01", "2026-04-06", "2026-05-01", "2026-05-14", "2026-05-25", "2026-07-21", "2026-08-15", "2026-11-01", "2026-11-11", "2026-12-25"]),
-};
-export function isHoliday(branchId: string, isoDate: string): boolean {
-  return SHIPPING_HOLIDAYS[branchCountry(branchId)]?.has(isoDate) ?? false;
+/* ── Feestdagen ───────────────────────────────────────────────────────────
+ * Berekend per jaar, niet als handmatige lijst. Een vaste lijst dekte alleen
+ * 2026; vanaf 1 januari 2027 zou isHoliday() overal false geven — stil, zonder
+ * fout — en zou de site levering beloven op Nieuwjaarsdag en Eerste Kerstdag.
+ * De paasgebonden dagen komen uit de Meeus/Butcher-formule (Gregoriaans).
+ */
+
+const isoDay = (y: number, m: number, d: number) =>
+  `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** Eerste Paasdag (Gregoriaans) — Meeus/Butcher. */
+function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function plusDays(base: Date, n: number): string {
+  const d = new Date(base.getTime() + n * 86400000);
+  return isoDay(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+/** Verzendvrije feestdagen voor één jaar en land (yyyy-mm-dd). */
+export function holidaysForYear(year: number, country: string): Set<string> {
+  const pasen = easterSunday(year);
+  const gedeeld = [
+    isoDay(year, 1, 1), // Nieuwjaarsdag
+    plusDays(pasen, 1), // Tweede Paasdag
+    plusDays(pasen, 39), // Hemelvaartsdag
+    plusDays(pasen, 50), // Tweede Pinksterdag
+    isoDay(year, 12, 25), // Eerste Kerstdag
+  ];
+  if (String(country).toUpperCase() === "BE") {
+    return new Set([
+      ...gedeeld,
+      isoDay(year, 5, 1), // Dag van de Arbeid
+      isoDay(year, 7, 21), // Nationale feestdag
+      isoDay(year, 8, 15), // O.-L.-V. Hemelvaart
+      isoDay(year, 11, 1), // Allerheiligen
+      isoDay(year, 11, 11), // Wapenstilstand
+    ]);
+  }
+  return new Set([
+    ...gedeeld,
+    plusDays(pasen, -2), // Goede Vrijdag (veel vervoerders rijden beperkt)
+    isoDay(year, 4, 27), // Koningsdag
+    isoDay(year, 12, 26), // Tweede Kerstdag
+  ]);
+}
+
+const _holidayCache = new Map<string, Set<string>>();
+function holidaysCached(year: number, country: string): Set<string> {
+  const k = `${year}|${country}`;
+  let s = _holidayCache.get(k);
+  if (!s) {
+    s = holidaysForYear(year, country);
+    _holidayCache.set(k, s);
+  }
+  return s;
+}
+
+/**
+ * Verzendvrije dag? Feestdag van het land van dit filiaal, of een extra
+ * sluitingsdag die in de instellingen is opgegeven (vakantiesluiting,
+ * verbouwing, personeelsdag) — die gelden voor álle filialen.
+ */
+export function isHoliday(branchId: string, isoDate: string, extraClosures?: readonly string[]): boolean {
+  if (extraClosures?.length && extraClosures.includes(isoDate)) return true;
+  const year = Number(String(isoDate).slice(0, 4));
+  if (!Number.isFinite(year)) return false;
+  return holidaysCached(year, branchCountry(branchId)).has(isoDate);
 }
 
 export function isWarehouse(branchId: string): boolean {
@@ -88,11 +165,55 @@ function amsterdamParts(d: Date): { y: number; mo: number; da: number; h: number
   return { y: +p.year, mo: +p.month, da: +p.day, h: +p.hour === 24 ? 0 : +p.hour, mi: +p.minute, dayName: String(p.weekday || "").toLowerCase() };
 }
 
-function isShipDay(branchId: string, y: number, mo: number, da: number): boolean {
+const WEEKDAGEN = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
+
+/** Openingstijden per stad — stores.json is statisch, dus één keer opbouwen. */
+let _hoursByCity: Map<string, Record<string, string>> | null = null;
+function hoursForBranch(branchId: string): Record<string, string> | undefined {
+  if (!_hoursByCity) {
+    _hoursByCity = new Map();
+    for (const s of getStores()) _hoursByCity.set(s.city.toLowerCase(), s.hours);
+  }
+  const city = BRANCH_CITY[branchId];
+  return city ? _hoursByCity.get(city.toLowerCase()) : undefined;
+}
+
+/**
+ * Kan dit filiaal op deze dag een pakket de deur uit doen? ÉÉN definitie voor de
+ * allocatie (welke winkel krijgt de order + wat beloven we de klant) én de
+ * pick-deadline die de winkel ziet. Liepen die uiteen, dan kreeg de klant
+ * "zaterdag verzonden" terwijl de winkellijst "uiterlijk maandag" toonde.
+ */
+export function isDispatchDay(branchId: string, dayName: string, isoDate: string, s: Settings): boolean {
+  if (isHoliday(branchId, isoDate, s.extraClosureDates)) return false;
+  if (dayName === "zondag" && !s.dispatchOnSunday) return false;
+  if (isWarehouse(branchId)) return dayName !== "zaterdag" && dayName !== "zondag";
+  if (dayName === "zaterdag" && !s.dispatchOnSaturdayStores) return false;
+  const hours = hoursForBranch(branchId);
+  // Onbekende stad → geen openingstijden bekend; val terug op werkdagen.
+  if (!hours) return dayName !== "zaterdag" && dayName !== "zondag";
+  return isOpenOnDay(hours, dayName);
+}
+
+/**
+ * Effectieve cutoff (uur) — de ingestelde cutoff, maar voor een winkel nooit
+ * later dan haar sluitingstijd min de overdrachtsmarge. Met de basiscutoff van
+ * 23:00 beloofde de site anders 's avonds "vandaag verzonden" voor een winkel
+ * die om 17:30 dichtging, precies in de piek-besteluren.
+ */
+export function effectiveCutoffHour(branchId: string, dayName: string, s: Settings): number {
+  const ingesteld = cutoffHourFor(branchId, s, dayName);
+  if (isWarehouse(branchId)) return ingesteld;
+  const sluit = closingHourOnDay(hoursForBranch(branchId), dayName);
+  if (sluit == null) return ingesteld;
+  const marge = Math.max(0, Math.round(Number(s.storeHandoverMinutes) || 0));
+  return Math.max(0, Math.min(ingesteld, sluit - Math.ceil(marge / 60)));
+}
+
+function isShipDay(branchId: string, y: number, mo: number, da: number, s: Settings): boolean {
   const dow = new Date(Date.UTC(y, mo - 1, da, 12)).getUTCDay(); // 0=zo, 6=za
-  if (dow === 0 || dow === 6) return false;
   const iso = `${y}-${String(mo).padStart(2, "0")}-${String(da).padStart(2, "0")}`;
-  return !isHoliday(branchId, iso);
+  return isDispatchDay(branchId, WEEKDAGEN[dow], iso, s);
 }
 
 /**
@@ -105,18 +226,21 @@ const SOON_WINDOW_MIN = 120;
 
 export function computePickDeadline(createdAt: Date, branchId: string, s: Settings, now: Date): { pickByLabel: string; overdue: boolean; soon: boolean; sameDay: boolean } {
   const c = amsterdamParts(createdAt);
-  const cutoff = cutoffHourFor(branchId, s, c.dayName);
+  /* Zelfde cutoff als de allocatie gebruikte toen de klant z'n belofte kreeg —
+     anders toont de winkellijst "uiterlijk 23:00" terwijl de site 17:00 beloofde. */
   let y = c.y, mo = c.mo, da = c.da;
-  // Ná de cutoff besteld → schuif naar de volgende dag.
-  if (c.h >= cutoff) {
+  if (c.h >= effectiveCutoffHour(branchId, c.dayName, s)) {
     const nx = new Date(Date.UTC(y, mo - 1, da, 12)); nx.setUTCDate(nx.getUTCDate() + 1);
     y = nx.getUTCFullYear(); mo = nx.getUTCMonth() + 1; da = nx.getUTCDate();
   }
-  // Sla weekend/feestdagen over tot de eerstvolgende verzenddag.
-  for (let i = 0; i < 9 && !isShipDay(branchId, y, mo, da); i++) {
+  // Sla dichte dagen/feestdagen over tot de eerstvolgende verzenddag.
+  for (let i = 0; i < 9 && !isShipDay(branchId, y, mo, da, s); i++) {
     const nx = new Date(Date.UTC(y, mo - 1, da, 12)); nx.setUTCDate(nx.getUTCDate() + 1);
     y = nx.getUTCFullYear(); mo = nx.getUTCMonth() + 1; da = nx.getUTCDate();
   }
+  // De deadline valt op de gevonden dag, dus met de cutoff VAN die dag.
+  const deadlineDag = WEEKDAGEN[new Date(Date.UTC(y, mo - 1, da, 12)).getUTCDay()];
+  const cutoff = effectiveCutoffHour(branchId, deadlineDag, s);
   const deadlineNum = y * 1e8 + mo * 1e6 + da * 1e4 + cutoff * 100;
   const n = amsterdamParts(now);
   const nowNum = n.y * 1e8 + n.mo * 1e6 + n.da * 1e4 + n.h * 100 + n.mi;

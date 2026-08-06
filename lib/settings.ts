@@ -27,6 +27,22 @@ export type Settings = {
    *  Bv. magazijn verzendt op vrijdag tot 16:00, winkels tot 17:00. */
   warehouseCutoffByDay: Record<string, number>;
   storeCutoffByDay: Record<string, number>;
+  /** Minuten vóór sluitingstijd dat een winkelorder nog dezelfde dag weg kan.
+   *  De cutoff van een winkel wordt nooit later dan haar sluitingstijd; deze
+   *  marge houdt daarnaast rekening met inpakken + overdracht aan de vervoerder. */
+  storeHandoverMinutes: number;
+  /** Verzendt er iemand op zondag? Vervoerders halen dan niet op, dus standaard
+   *  nee — anders belooft de site "vandaag verzonden" op een dag dat er niets
+   *  vertrekt. Zaterdag kan wél (winkels zijn open, vervoerders bezorgen ma-za). */
+  dispatchOnSunday: boolean;
+  dispatchOnSaturdayStores: boolean;
+  /** Filialen die tijdelijk GEEN orders mogen krijgen (verbouwing, vakantie-
+   *  sluiting, onderbezetting). Ze blijven bestaan, maar de allocatie slaat ze
+   *  over — zonder deploy of env-wijziging. */
+  pausedBranchIds: string[];
+  /** Extra verzendvrije dagen (yyyy-mm-dd) bovenop de feestdagen: bedrijfssluiting,
+   *  personeelsdag, inventarisatie. Geldt voor alle filialen. */
+  extraClosureDates: string[];
   // Levertijd (werkdagen)
   standardMinDays: number;
   standardMaxDays: number;
@@ -149,6 +165,11 @@ export const DEFAULT_SETTINGS: Settings = {
   branchCutoffs: {},
   warehouseCutoffByDay: { vrijdag: 16 },
   storeCutoffByDay: { vrijdag: 17 },
+  storeHandoverMinutes: num(process.env.GENTS_STORE_HANDOVER_MINUTES, 0),
+  dispatchOnSunday: false,
+  dispatchOnSaturdayStores: true,
+  pausedBranchIds: [],
+  extraClosureDates: [],
   standardMinDays: num(process.env.GENTS_STANDARD_MIN_DAYS, 2),
   standardMaxDays: num(process.env.GENTS_STANDARD_MAX_DAYS, 3),
   warehouseTransitDays: 1,
@@ -231,6 +252,10 @@ export async function getSettings(): Promise<Settings> {
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
+      /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
+         gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */
+      pausedBranchIds: Array.isArray(stored.pausedBranchIds) ? stored.pausedBranchIds.map(String) : [],
+      extraClosureDates: Array.isArray(stored.extraClosureDates) ? stored.extraClosureDates.map(String) : [],
     };
   } catch {
     _cache = DEFAULT_SETTINGS;
