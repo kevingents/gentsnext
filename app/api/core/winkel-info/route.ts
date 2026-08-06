@@ -67,5 +67,10 @@ export async function POST(req: Request) {
     klantenservice: { email: KS_EMAIL, telefoon: KS_TELEFOON },
     website: "gents.nl",
     aantalWinkels: winkels.length,
+    /* Alle steden waar we een winkel hebben — op de pakbon een reden om langs te
+       komen (Kevin, 6 aug: "misschien ook laten zien waar onze andere winkels
+       zitten?"). Alfabetisch, ontdubbeld: twee winkels in één stad hoeven daar
+       niet twee keer te staan. */
+    steden: [...new Set(winkels.map((s) => String(s.city || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "nl")),
   });
 }
