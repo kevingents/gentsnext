@@ -171,6 +171,19 @@ export async function registreerStudentVerkoop(input: {
   const store = clean(input.store);
   if (!geldtInWinkel(actie, store)) return { ok: false, error: `Deze actie geldt niet voor ${store}.` };
 
+  /* SERVER IS AUTORITATIEF (review 6 aug). Deze twee regels leefden alleen in de
+     kassa-UI, en dit endpoint accepteerde alles wat er binnenkwam. Een verlopen
+     of uitgezette actie kon dus alsnog omzet in Remy's overzicht zetten, en een
+     bon zonder klant kon geregistreerd worden terwijl de hele afspraak is dat de
+     klant aan de vereniging gekoppeld wordt. Een geparkeerde bon die dagen later
+     hervat wordt is precies zo'n geval. */
+  if (!looptVandaag(actie)) {
+    return { ok: false, error: `Actie "${actie.naam}" loopt niet meer (${actie.actief ? "buiten de periode" : "uitgezet"}).` };
+  }
+  if (!lower(input.klantEmail)) {
+    return { ok: false, error: "Zonder klant met e-mailadres kan de verkoop niet aan de vereniging gekoppeld worden." };
+  }
+
   let kortingCent = 0;
   let omzetCent = 0;
   const regels = (Array.isArray(input.regels) ? input.regels : []).map((l) => {
