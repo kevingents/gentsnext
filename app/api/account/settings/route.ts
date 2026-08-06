@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/permissions";
 import { updateSettings, type Settings } from "@/lib/settings";
 import { SALE_ANNOUNCEMENT_DAYS_MAX, SALE_ANNOUNCEMENT_DAYS_MIN } from "@/lib/pricing";
 import { DAYS } from "@/lib/stores";
+import { schoonPakbon } from "@/lib/pakbon-instelling";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ const NUM_FIELDS: (keyof Settings)[] = [
   "freeShippingCents", "shippingCents", "expressSurchargeCents",
   "warehouseCutoffHour", "storeCutoffHour",
   "standardMinDays", "standardMaxDays", "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
-  "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock", "pakbon",
+  "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock",
 ];
 
 /** Werkt de centrale instellingen bij — recht "instellingen". */
@@ -32,6 +33,10 @@ export async function POST(req: Request) {
     if (v != null && Number.isFinite(Number(v))) (patch as Record<string, number>)[f] = Math.max(0, Math.round(Number(v)));
   }
   if (typeof body.protectUnderstockedRetail === "boolean") patch.protectUnderstockedRetail = body.protectUnderstockedRetail;
+  /* Pakbontekst: geen getal maar een blok teksten — eigen sanitizer (regels
+     begrenzen, pipes eruit; die zijn scheidingsteken in de printopdracht). */
+  const pakbon = schoonPakbon(body.pakbon);
+  if (pakbon) patch.pakbon = pakbon;
   // Sale-vervaltermijn: geen stil geklem naar iets anders dan bedoeld — een
   // onzinwaarde (0, negatief, 5000) weigeren we mét uitleg, zodat een vertypte
   // waarde niet ongemerkt de sale-weergave van de hele winkel verandert.
