@@ -8,8 +8,9 @@
  *
  *   npm run check:verzenddagen
  */
-import { holidaysForYear, isHoliday } from "@/lib/fulfillment-config";
+import { holidaysForYear, isHoliday, isDispatchDay, effectiveCutoffHour } from "@/lib/fulfillment-config";
 import { getStores, isOpenOnDay, closingHourOnDay, DAYS } from "@/lib/stores";
+import { DEFAULT_SETTINGS, type Settings } from "@/lib/settings";
 
 let fouten = 0;
 function check(naam: string, ok: boolean, extra = "") {
@@ -89,6 +90,43 @@ check("een dichte dag geeft geen sluitingsuur", closingHourOnDay(hilversum?.hour
 check("onbekende uren geven null", closingHourOnDay(undefined, "maandag") === null);
 // Naar beneden afronden: 17:30 mag geen cutoff van 18 opleveren.
 check("17:30 → cutoff-uur 17", closingHourOnDay({ maandag: "10:00-17:30" }, "maandag") === 17);
+
+console.log("\nVerzenddag + cutoff (gedeeld door allocatie én pick-deadline)");
+const S = {
+  ...(DEFAULT_SETTINGS as unknown as Settings),
+};
+// Magazijn: werkdagen, cutoff blijft de ingestelde waarde.
+check("magazijn verzendt op woensdag", isDispatchDay("99", "woensdag", "2026-08-19", S));
+check("magazijn verzendt niet op zaterdag", !isDispatchDay("99", "zaterdag", "2026-08-22", S));
+check("magazijn verzendt niet op Koningsdag", !isDispatchDay("99", "maandag", "2026-04-27", S));
+// Winkels: openingstijden + zondagregel.
+check("Hilversum (12) verzendt niet op maandag", !isDispatchDay("12", "maandag", "2026-08-17", S));
+check("Almere (1) verzendt wel op maandag", isDispatchDay("1", "maandag", "2026-08-17", S));
+check("niemand verzendt op zondag (standaard)", !isDispatchDay("1", "zondag", "2026-08-16", S));
+check("winkels verzenden wel op zaterdag (standaard)", isDispatchDay("1", "zaterdag", "2026-08-15", S));
+check(
+  "zondag aanzetten kan via de instellingen",
+  isDispatchDay("1", "zondag", "2026-08-16", { ...S, dispatchOnSunday: true }),
+);
+check(
+  "eigen sluitingsdag blokkeert ook een gewone werkdag",
+  !isDispatchDay("1", "maandag", "2026-08-17", { ...S, extraClosureDates: ["2026-08-17"] }),
+);
+
+const almereZa = closingHourOnDay(almere?.hours, "zaterdag") ?? 0;
+check(
+  `winkelcutoff is nooit later dan de sluitingstijd (zaterdag ${almereZa}:00)`,
+  effectiveCutoffHour("1", "zaterdag", S) <= almereZa,
+  `cutoff=${effectiveCutoffHour("1", "zaterdag", S)}`,
+);
+check(
+  "overdrachtsmarge trekt er nog een uur vanaf",
+  effectiveCutoffHour("1", "zaterdag", { ...S, storeHandoverMinutes: 60 }) === almereZa - 1,
+);
+check(
+  "marge kan de cutoff nooit onder 0 duwen",
+  effectiveCutoffHour("1", "zaterdag", { ...S, storeHandoverMinutes: 100000 }) === 0,
+);
 
 console.log(fouten === 0 ? "\nAlles goed.\n" : `\n${fouten} fout(en).\n`);
 process.exit(fouten === 0 ? 0 : 1);

@@ -1,14 +1,14 @@
 import { stockForSkus } from "@/lib/stock";
-import { getStores, DAYS, isOpenOnDay, closingHourOnDay } from "@/lib/stores";
+import { getStores, DAYS } from "@/lib/stores";
 import {
   isFulfillable,
   isWarehouse,
   branchPriority,
   branchCountry,
   safetyStockFor,
-  cutoffHourFor,
   isHoliday,
-  BRANCH_CITY,
+  isDispatchDay,
+  effectiveCutoffHour,
 } from "@/lib/fulfillment-config";
 import { getSettings, type Settings } from "@/lib/settings";
 import { type Locale } from "@/lib/i18n";
@@ -95,64 +95,15 @@ function isoAtOffset(base: { y: number; m: number; d: number }, k: number): stri
   return `${dt.getUTCFullYear()}-${mm}-${dd}`;
 }
 
-/**
- * Kan dit filiaal op deze dag een pakket de deur uit doen?
- *
- * "Open" is niet hetzelfde als "er vertrekt iets": op zondag haalt geen enkele
- * vervoerder op, ook al staat de winkel open. Verder telt een dag alleen als de
- * winkeltijden een echte tijdrange bevatten — het WOORD "gesloten" in
- * content/stores.json las voorheen als open (Hilversum ma+zo, Delft zo,
- * Antwerpen zo) en leverde beloftes voor een dichte deur.
- */
-function openOn(
-  branchId: string,
-  dayName: string,
-  isoDate: string,
-  hoursByCity: Map<string, Record<string, string>>,
-  settings: Settings,
-): boolean {
-  if (isHoliday(branchId, isoDate, settings.extraClosureDates)) return false;
-  if (dayName === "zondag" && !settings.dispatchOnSunday) return false;
-  if (isWarehouse(branchId)) return dayName !== "zaterdag" && dayName !== "zondag";
-  if (dayName === "zaterdag" && !settings.dispatchOnSaturdayStores) return false;
-  const city = BRANCH_CITY[branchId];
-  const hours = city ? hoursByCity.get(city.toLowerCase()) : undefined;
-  // Onbekende stad → geen openingstijden bekend; val terug op werkdagen.
-  if (!hours) return dayName !== "zaterdag" && dayName !== "zondag";
-  return isOpenOnDay(hours, dayName);
-}
-
-/**
- * Effectieve cutoff (uur) van een filiaal op een dag. Naast de ingestelde cutoff
- * geldt de harde grens van de sluitingstijd: met een basiscutoff van 23:00 beloofde
- * de site 's avonds "vandaag verzonden" voor een winkel die om 17:30 dichtging —
- * en dat zijn juist de piek-besteluren. storeHandoverMinutes trekt daar nog de
- * tijd voor inpakken/overdracht vanaf.
- */
-function effectiveCutoffHour(
-  branchId: string,
-  dayName: string,
-  hoursByCity: Map<string, Record<string, string>>,
-  settings: Settings,
-): number {
-  const ingesteld = cutoffHourFor(branchId, settings, dayName);
-  if (isWarehouse(branchId)) return ingesteld;
-  const city = BRANCH_CITY[branchId];
-  const hours = city ? hoursByCity.get(city.toLowerCase()) : undefined;
-  const sluit = hours ? closingHourOnDay(hours, dayName) : null;
-  if (sluit == null) return ingesteld;
-  const marge = Math.max(0, Math.round(Number(settings.storeHandoverMinutes) || 0));
-  return Math.max(0, Math.min(ingesteld, sluit - Math.ceil(marge / 60)));
-}
-
-function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>, settings: Settings) {
+function dispatchInfo(branchId: string, settings: Settings) {
   const n = nowNL();
   for (let k = 0; k < 9; k++) {
     const day = DAYS[(n.dayIndex + k) % 7];
     const iso = isoAtOffset(n, k);
-    if (!openOn(branchId, day, iso, hoursByCity, settings)) continue;
-    // Cutoff hoort bij de dag die we bekijken (vrijdag 16:00 geldt op vrijdag).
-    if (k === 0 && n.minutes >= effectiveCutoffHour(branchId, day, hoursByCity, settings) * 60) continue;
+    // isDispatchDay + effectiveCutoffHour zijn gedeeld met de pick-deadline die
+    // de winkel ziet — één waarheid, anders wijkt de belofte af van de werklijst.
+    if (!isDispatchDay(branchId, day, iso, settings)) continue;
+    if (k === 0 && n.minutes >= effectiveCutoffHour(branchId, day, settings) * 60) continue;
     return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day, dispatchInDays: k };
   }
   return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: 9 };
@@ -195,7 +146,7 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
 
   const branches: Branch[] = [];
   for (const [branchId, rec] of byBranch) {
-    const d = dispatchInfo(branchId, hoursByCity, settings);
+    const d = dispatchInfo(branchId, settings);
     branches.push({
       branchId,
       store: rec.store,
@@ -596,12 +547,10 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
   // sluitingstijd van die winkel), anders telt de PDP af naar 23:00 terwijl de
   // deur om 17:30 dichtgaat.
   const today = DAYS[n.dayIndex];
-  const hoursByCity = new Map<string, Record<string, string>>();
-  for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
   const todayShips = plan.shipments.filter((s) => s.dispatchInDays === 0);
   const cutoffHour = todayShips.length
-    ? Math.min(...todayShips.map((s) => effectiveCutoffHour(s.branchId, today, hoursByCity, settings)))
-    : effectiveCutoffHour("99", today, hoursByCity, settings);
+    ? Math.min(...todayShips.map((s) => effectiveCutoffHour(s.branchId, today, settings)))
+    : effectiveCutoffHour("99", today, settings);
   const beforeCutoff = maxDispatch === 0;
   const promise = beforeCutoff
     ? S.promiseBeforeCutoff(cutoffHour, standard.dateLabel)
