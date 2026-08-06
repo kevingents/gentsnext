@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     pickupStore?: string;
     paymentMode?: string;
     conceptMail?: boolean;
+    voorverkoop?: boolean;
   };
   try {
     body = await req.json();
@@ -74,7 +75,14 @@ export async function POST(req: Request) {
        veiligheidsmarge niet mee - de verkoper staat bij het rek (Kevin, 6 aug).
        Bij BEZORGEN blijft de marge staan: dat loopt uit dezelfde online-pool als
        de webshop en mag een echte webklant niet wegdrukken. */
-    order = await createOrder(c as never, items, deliveryMethod, "", "", pickupStore, storeName, null, undefined, { channel: "store" });
+    order = await createOrder(c as never, items, deliveryMethod, "", "", pickupStore, storeName, null, undefined, {
+      channel: "store",
+      /* Voorverkoop = backorder: de winkel heeft het artikel nog niet, dus geen
+         voorraadclaim (die zou de bestelling juist weigeren). De vlag werd hier
+         eerder stil weggegooid, waardoor voorverkoop altijd op "Niet meer op
+         voorraad" stuk liep. */
+      voorverkoop: body?.voorverkoop === true,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Bestelling mislukt." }, { status: 400 });
   }
