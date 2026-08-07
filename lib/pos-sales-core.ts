@@ -219,10 +219,20 @@ export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: stri
    compare-and-swap, óók over neon-http zonder transacties. Empirisch getoetst:
    10 gelijktijdige claims van 1 stuk op 2 verkocht leveren er precies 2 op.
 
-   De geclaimde aantallen staan in data->'retourClaims' op de ORIGINELE bon, per
-   regel-sleutel (sku → barcode → lowercase naam; spiegelt lineKey in storegents
-   lib/pos-sales-store.js). ALLES-OF-NIETS: staat één gevraagde regel niet toe,
+   retourClaims op de ORIGINELE bon is een ONDERWEG-teller, geen historie: het
+   plafond is `verkocht >= gevraagd + al vastgelegde retouren + lopende claims`.
+   De aanroeper geeft de claim vrij zodra de retourrij bestaat — vanaf dat moment
+   telt de rij zelf mee. Dat is bewust zo: een teller die óók de historie zou
+   moeten dragen loopt scheef zodra er ergens een retour langs de claim heen komt
+   (fallback-pad, SRS-bon, of alles van vóór deze functie), en dan zou de bon
+   opnieuw op zijn volle verkochte aantal beginnen.
+
+   Sleutel = sku → barcode → lowercase naam; spiegelt lineKey in storegents
+   lib/pos-sales-store.js. ALLES-OF-NIETS: staat één gevraagde regel niet toe,
    dan wordt de hele claim geweigerd en is er niets geclaimd.
+
+   Faalt de vrijgave, dan telt de regel even dubbel (rij + claim) en is de guard
+   te streng in plaats van te soepel — de veilige kant.
 
    Cadeaubon-VERKOOPregels tellen als 0 verkocht — die zijn nooit retourneerbaar
    (terugdraaien = de verkoop annuleren, dat deactiveert de bon). */
@@ -253,6 +263,17 @@ export async function claimRetourCore(
       from pos_sales s, lateral jsonb_array_elements(s.data->'lines') l
       where s.id = ${id}
       group by 1
+    ),
+    /* Al VASTGELEGDE retouren op deze bon. Onmisbaar: retourClaims telt alleen
+       wat op dít moment onderweg is, en staat dus op 0 voor elke bon waarop vóór
+       deze functie al iets terugging — of waarop het fallback-pad (core even weg,
+       SRS-bon) een retour boekte zonder te claimen. Zonder deze CTE begon zo'n bon
+       opnieuw op zijn volle verkochte aantal. */
+    geboekt as (
+      select ${REGEL_SLEUTEL} as k, sum(abs((l->>'qty')::numeric)) as al
+      from pos_sales r, lateral jsonb_array_elements(r.data->'lines') l
+      where r.data->>'origSaleId' = ${id} and r.data->>'kind' = 'retour' and r.cancelled is not false
+      group by 1
     )
     update pos_sales p
     set data = jsonb_set(
@@ -270,7 +291,8 @@ export async function claimRetourCore(
       and not exists (
         select 1 from gevraagd g
         left join verkocht v on v.k = g.k
-        where coalesce(v.sold, 0) < g.want + coalesce((p.data->'retourClaims'->>g.k)::numeric, 0)
+        left join geboekt b on b.k = g.k
+        where coalesce(v.sold, 0) < g.want + coalesce(b.al, 0) + coalesce((p.data->'retourClaims'->>g.k)::numeric, 0)
       )
     returning p.data->'retourClaims' as claims`);
 
