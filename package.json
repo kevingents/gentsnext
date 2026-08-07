@@ -23,7 +23,8 @@
     "gen:occasion-tiles": "tsx scripts/generate-occasion-tiles.ts",
     "translate:catalog": "tsx scripts/translate-catalog.ts",
     "generate:model-photos": "tsx scripts/generate-model-photos.ts",
-    "check:rechten": "tsx scripts/check-rechten.ts"
+    "check:rechten": "tsx scripts/check-rechten.ts",
+    "verify:possales": "tsx scripts/verify-pos-sales.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
