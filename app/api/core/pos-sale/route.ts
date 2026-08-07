@@ -4,6 +4,7 @@ import {
   recordPosSaleCore, listPosSalesCore, listUnpostedPosSalesCore, getPosSaleCore,
   findSaleByClientRefCore, cancelPosSaleCore, markPosSaleSrsPostedCore, listPosSalesByRangeCore,
   listPosSalesByCustomerCore, assignCustomerToSaleCore, listRetourenByOrigCore,
+  claimRetourCore, releaseRetourCore,
 } from "@/lib/pos-sales-core";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,18 @@ export const runtime = "nodejs";
  *   find-by-ref     { clientRef }              → { ok, sale }
  *   cancel          { id, actor? }             → { ok, sale }
  *   mark-srs-posted { id, opts? }              → { ok, sale }
+ *   retour-claim    { id, wanted }             → { ok, claims } | { ok:false, error }
+ *   retour-release  { id, wanted }             → { ok }
+ *
+ * retour-claim is de over-retour-guard: claim de aantallen per regel-sleutel op de
+ * ORIGINELE bon vóórdat de retour wordt vastgelegd. Alles-of-niets en race-vrij —
+ * ok:false betekent "mag niet", niet "er ging iets stuk". retour-release draait een
+ * geslaagde claim terug als het vastleggen dáárna alsnog faalt.
  */
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; sale?: Record<string, unknown>; store?: string; limit?: number; id?: string; clientRef?: string; actor?: { name?: string }; opts?: Record<string, string | boolean>; from?: string; to?: string; customerId?: string; email?: string; name?: string };
+  let b: { action?: string; sale?: Record<string, unknown>; store?: string; limit?: number; id?: string; clientRef?: string; actor?: { name?: string }; opts?: Record<string, string | boolean>; from?: string; to?: string; customerId?: string; email?: string; name?: string; wanted?: Record<string, number> };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -52,6 +60,14 @@ export async function POST(req: Request) {
       }
       case "retouren-by-orig":
         return NextResponse.json({ ok: true, sales: await listRetourenByOrigCore(String(b.id || "")) });
+      /* Over-retour-guard. Claim de aantallen op de ORIGINELE bon vóór het
+         vastleggen van de retour; alles-of-niets en race-vrij (zie
+         claimRetourCore). Weigering is een NORMAAL antwoord (ok:false), geen
+         fout — de kassa toont de reden aan de medewerker. */
+      case "retour-claim":
+        return NextResponse.json(await claimRetourCore(String(b.id || ""), b.wanted || {}));
+      case "retour-release":
+        return NextResponse.json({ ok: await releaseRetourCore(String(b.id || ""), b.wanted || {}) });
       case "cancel": {
         const s = await cancelPosSaleCore(String(b.id || ""), b.actor || {});
         return NextResponse.json({ ok: !!s, sale: s });

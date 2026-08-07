@@ -205,3 +205,107 @@ export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: stri
   await db.update(posSales).set({ srsPosted: status === "posted", data: next }).where(eq(posSales.id, String(id)));
   return next;
 }
+
+/* ───── Over-retour-guard: atomische claim op de ORIGINELE bon ────────────────
+   De guard stond in storegents in de blob-mutator en werd daar "atomisch"
+   genoemd. Dat was hij niet: Vercel Blob heeft geen compare-and-swap en
+   json-blob-store doet na vier pogingen een last-writer-wins-put. Twee
+   gelijktijdige retouren op dezelfde bon konden dus samen meer terugnemen dan
+   er verkocht is.
+
+   Hier gebeurt het in ÉÉN statement op de originele bon-rij. Onder READ
+   COMMITTED herevalueert Postgres de WHERE tegen de nieuwe rijversie als een
+   andere transactie de rij intussen wijzigde (EvalPlanQual) — dat is echte
+   compare-and-swap, óók over neon-http zonder transacties. Empirisch getoetst:
+   10 gelijktijdige claims van 1 stuk op 2 verkocht leveren er precies 2 op.
+
+   De geclaimde aantallen staan in data->'retourClaims' op de ORIGINELE bon, per
+   regel-sleutel (sku → barcode → lowercase naam; spiegelt lineKey in storegents
+   lib/pos-sales-store.js). ALLES-OF-NIETS: staat één gevraagde regel niet toe,
+   dan wordt de hele claim geweigerd en is er niets geclaimd.
+
+   Cadeaubon-VERKOOPregels tellen als 0 verkocht — die zijn nooit retourneerbaar
+   (terugdraaien = de verkoop annuleren, dat deactiveert de bon). */
+
+const REGEL_SLEUTEL = sql`coalesce(nullif(trim(l->>'sku'), ''), nullif(trim(l->>'barcode'), ''), lower(trim(l->>'name')))`;
+
+/** Claim retour-aantallen op de originele bon. 0 rijen terug = geweigerd. */
+export async function claimRetourCore(
+  origSaleId: string,
+  wanted: Record<string, number>,
+): Promise<{ ok: boolean; claims?: Record<string, number>; error?: string }> {
+  const id = String(origSaleId || "").trim();
+  const schoon: Record<string, number> = {};
+  for (const [k, v] of Object.entries(wanted || {})) {
+    const n = Math.abs(Number(v) || 0);
+    if (k && n > 0) schoon[k] = (schoon[k] || 0) + n;
+  }
+  if (!id) return { ok: false, error: "Geen originele bon." };
+  if (!Object.keys(schoon).length) return { ok: false, error: "Geen retour-regels." };
+
+  const rows = await getDb().execute<{ claims: Record<string, number> }>(sql`
+    with gevraagd as (
+      select key as k, value::numeric as want from jsonb_each_text(${JSON.stringify(schoon)}::jsonb)
+    ),
+    verkocht as (
+      select ${REGEL_SLEUTEL} as k,
+             sum(case when coalesce(l->>'lineType', '') = 'giftcard' then 0 else abs((l->>'qty')::numeric) end) as sold
+      from pos_sales s, lateral jsonb_array_elements(s.data->'lines') l
+      where s.id = ${id}
+      group by 1
+    )
+    update pos_sales p
+    set data = jsonb_set(
+          p.data, '{retourClaims}',
+          (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb) from (
+             select coalesce(g.k, c.key) as k,
+                    coalesce(c.value::numeric, 0) + coalesce(g.want, 0) as v
+             from jsonb_each_text(coalesce(p.data->'retourClaims', '{}'::jsonb)) c
+             full outer join gevraagd g on g.k = c.key
+           ) t),
+          true)
+    where p.id = ${id}
+      and p.cancelled = false
+      and coalesce(p.data->>'kind', '') <> 'retour'
+      and not exists (
+        select 1 from gevraagd g
+        left join verkocht v on v.k = g.k
+        where coalesce(v.sold, 0) < g.want + coalesce((p.data->'retourClaims'->>g.k)::numeric, 0)
+      )
+    returning p.data->'retourClaims' as claims`);
+
+  if (!rows.rows.length) {
+    return { ok: false, error: "Deze regels zijn al (deels) geretourneerd, of de bon is geannuleerd/onbekend." };
+  }
+  return { ok: true, claims: rows.rows[0].claims };
+}
+
+/** Draai een eerder geslaagde claim terug (compensatie als het vastleggen erna faalt). */
+export async function releaseRetourCore(origSaleId: string, wanted: Record<string, number>): Promise<boolean> {
+  const id = String(origSaleId || "").trim();
+  const schoon: Record<string, number> = {};
+  for (const [k, v] of Object.entries(wanted || {})) {
+    const n = Math.abs(Number(v) || 0);
+    if (k && n > 0) schoon[k] = (schoon[k] || 0) + n;
+  }
+  if (!id || !Object.keys(schoon).length) return false;
+
+  /* greatest(...,0) zodat een dubbele release nooit onder nul zakt — dat zou
+     stilletjes extra retour-ruimte creëren. */
+  const rows = await getDb().execute(sql`
+    with terug as (
+      select key as k, value::numeric as v from jsonb_each_text(${JSON.stringify(schoon)}::jsonb)
+    )
+    update pos_sales p
+    set data = jsonb_set(
+          p.data, '{retourClaims}',
+          (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb) from (
+             select c.key as k, greatest(c.value::numeric - coalesce(t.v, 0), 0) as v
+             from jsonb_each_text(coalesce(p.data->'retourClaims', '{}'::jsonb)) c
+             left join terug t on t.k = c.key
+           ) x),
+          true)
+    where p.id = ${id}
+    returning p.id`);
+  return rows.rows.length > 0;
+}
