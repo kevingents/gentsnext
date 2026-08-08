@@ -151,6 +151,14 @@ export type Settings = {
    * env CONTACT_EMAIL_WEDDING/GENERAL is alleen fallback.
    */
   storeEmails: Record<string, string>;
+  /**
+   * Wie de interne bewakingsmeldingen krijgt (nu: de nachtelijke kassabon-
+   * verificatie, app/api/cron/verify-possales). Meerdere adressen mag. Leeg =
+   * niemand krijgt bericht en de melding blijft alleen in de cron-log staan —
+   * dus dit hoort gevuld te zijn zolang er bewaking draait.
+   * Env OPS_ALERT_EMAIL is alleen de initiële default.
+   */
+  alertEmails: string[];
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -246,6 +254,10 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   merchandisingPins: {},
   storeEmails: {},
+  alertEmails: (process.env.OPS_ALERT_EMAIL || "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean),
 };
 
 let _cache: Settings | null = null;
@@ -271,6 +283,10 @@ export async function getSettings(): Promise<Settings> {
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
+      /* Een leeg opgeslagen lijstje is een bewuste keuze ("stuur niemand iets")
+         en mag dus niet stil terugvallen op de env-default; alleen als het veld
+         nooit gezet is telt die default nog. */
+      alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

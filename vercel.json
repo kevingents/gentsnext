@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/wallet-vesting-push",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/verify-possales",
+      "schedule": "30 5 * * *"
     }
   ],
   "regions": [

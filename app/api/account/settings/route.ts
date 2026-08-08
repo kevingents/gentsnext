@@ -51,6 +51,20 @@ export async function POST(req: Request) {
     patch.saleAnnouncementDays = n;
   }
   if (typeof body.searchSynonyms === "string") patch.searchSynonyms = body.searchSynonyms.slice(0, 8000);
+  /* Ontvangers van de interne bewakingsmeldingen. Bewust ook een lege lijst
+     toegestaan (= "stuur niemand iets"); een vertypt adres slaan we niet op,
+     want een melding die naar niemand gaat is net zo stil als geen melding. */
+  if (body.alertEmails !== undefined) {
+    const raw = Array.isArray(body.alertEmails)
+      ? body.alertEmails
+      : String(body.alertEmails ?? "").split(/[,\n;]/);
+    const adressen = raw.map((a) => String(a ?? "").trim().slice(0, 120)).filter(Boolean);
+    const fout = adressen.filter((a) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a));
+    if (fout.length) {
+      return NextResponse.json({ ok: false, error: `Geen geldig e-mailadres: ${fout.join(", ")}` }, { status: 400 });
+    }
+    patch.alertEmails = adressen.slice(0, 10);
+  }
   if (body.branchCutoffs && typeof body.branchCutoffs === "object") {
     const bc: Record<string, number> = {};
     for (const [k, v] of Object.entries(body.branchCutoffs as Record<string, unknown>)) {
