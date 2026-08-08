@@ -189,6 +189,61 @@ async function main() {
     console.log(`      ref ${b.ref.padEnd(24)} blob=${b.id} (${b.kind})  neon=${n.id} (${n.kind || "verkoop"})`);
   }
 
+  /* ── 5. Is er ooit méér terug gegaan dan er verkocht is? ──────────────────
+     De over-retour-guard zit in de blob-mutator en heet daar "atomisch", maar
+     Vercel Blob heeft geen compare-and-swap: json-blob-store laat een
+     TOCTOU-venster open en doet na vier pogingen een last-writer-wins-put. Twee
+     gelijktijdige retouren op dezelfde bon zouden samen dus meer kunnen
+     terugnemen dan er verkocht is.
+
+     Die guard vervangen door een race-vaste variant bleek een fors karwei (zie
+     de sessie van 7 aug), en het risico is bij dit volume theoretisch. Daarom
+     eerst dit: een detector. Slaat 'ie ooit aan, dan weten we het dezelfde dag
+     in plaats van bij de jaarrekening.
+
+     Regel-sleutel spiegelt lineKey in storegents lib/pos-sales-store.js
+     (sku → barcode → lowercase naam). Cadeaubon-verkoopregels tellen als 0
+     verkocht: die zijn niet retourneerbaar. */
+  const SLEUTEL = sql`coalesce(nullif(trim(l->>'sku'), ''), nullif(trim(l->>'barcode'), ''), lower(trim(l->>'name')))`;
+  const overRetour = (
+    await db.execute<{ bon: string; k: string; verkocht: number; terug: number; n: number }>(sql`
+      with verkocht as (
+        select s.id as bon, ${SLEUTEL} as k,
+               sum(case when coalesce(l->>'lineType', '') = 'giftcard' then 0 else abs((l->>'qty')::numeric) end) as sold
+        from pos_sales s, lateral jsonb_array_elements(s.data->'lines') l
+        where coalesce(s.data->>'kind', '') <> 'retour'
+        group by 1, 2
+      ),
+      terug as (
+        select r.data->>'origSaleId' as bon, ${SLEUTEL} as k,
+               sum(abs((l->>'qty')::numeric)) as al, count(distinct r.id)::int as n
+        from pos_sales r, lateral jsonb_array_elements(r.data->'lines') l
+        where r.data->>'kind' = 'retour' and coalesce(r.data->>'origSaleId', '') <> ''
+        group by 1, 2
+      )
+      select t.bon, t.k, coalesce(v.sold, 0)::int as verkocht, t.al::int as terug, t.n
+      from terug t left join verkocht v on v.bon = t.bon and v.k = t.k
+      where t.al > coalesce(v.sold, 0)
+      order by (t.al - coalesce(v.sold, 0)) desc`)
+  ).rows;
+
+  console.log(`\n[5] Meer geretourneerd dan verkocht: ${overRetour.length}`);
+  for (const r of overRetour.slice(0, 15)) {
+    console.log(`      bon ${r.bon.padEnd(26)} ${String(r.k).padEnd(16)} verkocht ${r.verkocht}  terug ${r.terug}  (${r.n} retour(en))`);
+  }
+
+  /* Context, geen fout: pas met meerdere retouren op één bon wordt de race die
+     de guard moet vangen überhaupt mogelijk. Loopt dit op, dan is het tijd om
+     de guard alsnog race-vast te maken. */
+  const meerdere = (
+    await db.execute<{ n: number }>(
+      sql`select count(*)::int n from (
+            select 1 from pos_sales where data->>'kind' = 'retour' and coalesce(data->>'origSaleId', '') <> ''
+            group by data->>'origSaleId' having count(*) > 1) q`,
+    )
+  ).rows[0];
+  console.log(`      bonnen met meer dan één retour: ${meerdere?.n ?? 0} (context — niet fout)`);
+
   /* Gezondheidscheck: de unieke index zou dit onmogelijk moeten maken. */
   const dubbel = (
     await db.execute<{ client_ref: string; n: number }>(
@@ -197,13 +252,18 @@ async function main() {
   ).rows;
   console.log(`\n[gezondheid] Dubbele client_ref in Neon: ${dubbel.length} (hoort 0 te zijn)`);
 
-  const totaal = ontbreekt.length + echtWeg.length + drift.length + botsing.length;
+  const totaal = ontbreekt.length + echtWeg.length + drift.length + botsing.length + overRetour.length;
   console.log("\n" + "=".repeat(78));
   if (totaal === 0) {
-    console.log("SCHOON — blob en Neon lopen gelijk. De cutover kan zonder datareparatie.");
+    console.log("SCHOON — blob en Neon lopen gelijk, en er is nergens te veel geretourneerd.");
   } else {
-    console.log(`${totaal} afwijking(en) gevonden. Dit eerst repareren, vóór de cutover.`);
-    console.log("Let op: [1] en [2] zijn bonnen die de DAGSTAAT nu al mist (die leest Neon-first).");
+    console.log(`${totaal} afwijking(en) gevonden.`);
+    if (ontbreekt.length || echtWeg.length) {
+      console.log("Let op: [1] en [2] zijn bonnen die de DAGSTAAT nu al mist (die leest Neon-first).");
+    }
+    if (overRetour.length) {
+      console.log("Let op: [5] is GELD — er is meer terugbetaald dan er verkocht is. Direct uitzoeken.");
+    }
   }
   console.log("=".repeat(78));
 }
