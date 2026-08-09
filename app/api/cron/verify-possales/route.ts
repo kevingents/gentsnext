@@ -4,6 +4,7 @@ import { sendOpsAlert } from "@/lib/email";
 import { getSettings } from "@/lib/settings";
 import { meldingTekst } from "./melding";
 import { geldAfwijkingen, gestrandTeller, totaalAfwijkingen, verifyPosSales } from "@/lib/verify-pos-sales";
+import { cronSecretOk } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -28,17 +29,10 @@ export const maxDuration = 120;
  * Vercel stuurt automatisch `Authorization: Bearer <CRON_SECRET>`; een ingelogde
  * beheerder mag 'm ook handmatig openen.
  */
-function secretOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  const header = req.headers.get("authorization") || "";
-  const url = new URL(req.url);
-  return header === `Bearer ${secret}` || url.searchParams.get("secret") === secret;
-}
-
 export async function GET(req: Request) {
-  const customer = secretOk(req) ? null : await getSessionCustomer();
-  if (!secretOk(req) && !customer?.isAdmin) {
+  const viaCron = cronSecretOk(req);
+  const customer = viaCron ? null : await getSessionCustomer();
+  if (!viaCron && !customer?.isAdmin) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   try {
