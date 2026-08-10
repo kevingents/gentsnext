@@ -116,6 +116,52 @@ export async function pendingPrintJobs(store: string, limit = 20): Promise<Print
   return rows.reverse().map(toJob); // oudste eerst
 }
 
+/**
+ * HERPRINT (Kevin, 6 aug: "bij orders graag ook verwerkte orders laten zien en
+ * opnieuw label en pakbon kunnen printen"): zet een eerder geprinte opdracht
+ * terug op pending — de kassa-poll pakt 'm dan gewoon opnieuw op, met exact de
+ * payload van toen. Geen nieuwe gegevens nodig, geen dedup-gevecht met mode
+ * 'once' (dat geldt alleen voor ENQUEUE, niet voor een expliciete requeue).
+ */
+export async function requeuePrintJob(store: string, ref: string): Promise<{ ok: boolean; count: number }> {
+  const s = norm(store);
+  const r = norm(ref);
+  if (!s || !r) return { ok: false, count: 0 };
+  const db = getDb();
+  const rows = await db
+    .update(storePrintJobs)
+    /* createdAt MEE verversen. Opnieuw in de wachtrij zetten betekent dat dit
+       vanaf nu een nieuwe opdracht is — en de uitlevering laat alles ouder dan
+       24 uur vervallen (zie pendingPrintJobs). Zonder deze regel bleef de
+       oorspronkelijke datum staan: een herprint van een order van gisteren
+       kwam er STIL niet uit, terwijl de kassa "staat klaar voor de printer"
+       meldde en de eerstvolgende poll 'm meteen weer op 'expired' zette. */
+    .set({ status: "pending", printedAt: null, createdAt: new Date() })
+    .where(and(eq(storePrintJobs.store, s), eq(storePrintJobs.ref, r)))
+    .returning({ id: storePrintJobs.id });
+  return { ok: rows.length > 0, count: rows.length };
+}
+
+/**
+ * Historie voor de "Verwerkt"-lijst: recente opdrachten van een winkel met een
+ * ref-voorvoegsel (bv. 'PAKBON-'), ongeacht status. De payload bevat alles wat
+ * de lijst moet tonen (ordernummer, klant, artikelen).
+ */
+export async function listPrintJobHistory(store: string, refPrefix: string, limit = 30): Promise<PrintJob[]> {
+  const s = norm(store);
+  const p = norm(refPrefix);
+  if (!s || !p) return [];
+  const db = getDb();
+  const lim = Math.max(1, Math.min(100, Number(limit) || 30));
+  const rows = await db
+    .select()
+    .from(storePrintJobs)
+    .where(and(eq(storePrintJobs.store, s), sql`${storePrintJobs.ref} like ${p + "%"}`))
+    .orderBy(desc(storePrintJobs.createdAt))
+    .limit(lim);
+  return rows.map(toJob);
+}
+
 /** Markeer een opdracht als geprint (kassa heeft 'm naar de agent gestuurd). */
 export async function markPrintJobDone(id: string, store: string): Promise<{ ok: boolean }> {
   const jobId = norm(id);

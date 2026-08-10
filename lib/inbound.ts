@@ -34,8 +34,15 @@ function refFor(shipmentId: string) {
   return `RCV-${shipmentId}`;
 }
 
-/** Gescande code (barcode of sku) → variant-metadata + tel-sleutel. Zelfde resolutie
- *  als de inventarisatie/kassa zodat de stockKey 1-op-1 overeenkomt. */
+/** Gescande code (barcode, sku of SRS-artikelnummer) → variant-metadata + tel-sleutel.
+ *  Zelfde resolutie als de inventarisatie/kassa zodat de stockKey 1-op-1 overeenkomt.
+ *
+ *  srs_artikel_id doet MEE in de lookup (7 aug, Den Bosch "productscannen lukt
+ *  niet"): de ASN-canonicalisatie hieronder matcht al op barcode + sku + SRS-nummer,
+ *  maar de scan-lookup alleen op de eerste twee. Een fysiek label waarvan de code
+ *  enkel als SRS-nummer in de catalogus staat, stond dus wél verwacht op de pakbon
+ *  maar was onscanbaar ("Onbekend artikel"). De kolom is geïndexeerd; c is nooit
+ *  leeg, dus de default-'' matcht nooit per ongeluk. */
 export async function resolveCode(code: string): Promise<Omit<ExpectedLine, "expectedQty"> | null> {
   const c = String(code || "").trim();
   if (!c) return null;
@@ -44,7 +51,7 @@ export async function resolveCode(code: string): Promise<Omit<ExpectedLine, "exp
     select v.sku, v.barcode, p.title, v.size, v.color,
       coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
     from product_variants v join products p on p.id = v.product_id
-    where v.barcode = ${c} or v.sku = ${c}
+    where v.barcode = ${c} or v.sku = ${c} or v.srs_artikel_id = ${c}
     limit 1`);
   const r = rows.rows[0];
   if (!r) return null;

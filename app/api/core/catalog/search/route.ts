@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   };
   const kolommen = sql`v.product_id, p.handle, p.title, v.barcode, v.sku, v.size, v.color, v.price_cents,
       v.id as variant_id, v.shopify_variant_id, v.srs_artikel_id,
-      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img`;
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.is_packshot desc, pi.position asc limit 1), nullif(v.image_url, '')) img`;
 
   /* Cijfer-zoekopdrachten zijn codes (sku, barcode, SRS-artikelnummer), nooit
      titelwoorden. Een aparte, kale code-tak voorkomt twee problemen die de
@@ -85,29 +85,42 @@ export async function POST(req: Request) {
     )
     order by score desc, p.title asc, v.size asc
     limit ${rowCap}`)
-    : await getDb().execute<Rij>(sql`
+    : /* De titel-score wordt PER PRODUCT berekend, niet per variant. In de oude
+         vorm stonden de titel- en variant-voorwaarden in één OR-keten, dus kon de
+         planner word_similarity() pas ná de join evalueren: ~25.000 keer per
+         zoekopdracht in plaats van ~1.300 (het aantal actieve producten). Met een
+         `materialized` CTE gebeurt het één keer per product; de CTE heet bewust `p`
+         zodat het gedeelde kolommen-fragment hierboven ongewijzigd blijft werken.
+         Gemeten op productie over 7 zoektermen: 100-157 ms -> 33-47 ms, met
+         identieke resultaten en dezelfde scoring. */
+      await getDb().execute<Rij>(sql`
+    with p as materialized (
+      select id, handle, title,
+        word_similarity(${qLower}, lower(title)) ws,
+        (lower(title) like ${like}) tl
+      from products
+      where status = 'active'
+    )
     select ${kolommen},
       greatest(
-        word_similarity(${qLower}, lower(p.title)),
+        p.ws,
         case
           when lower(coalesce(v.sku, '')) = ${qLower} or lower(coalesce(v.barcode, '')) = ${qLower} then 1.0
           when lower(coalesce(v.sku, '')) like ${like} or lower(coalesce(v.barcode, '')) like ${like} then 0.95
-          when lower(p.title) like ${like} then 0.9
+          when p.tl then 0.9
           when lower(coalesce(v.srs_artikel_id, '')) like ${like} then 0.7
           when lower(coalesce(v.color, '')) like ${like} then 0.5
           else 0
         end
       ) as score
     from product_variants v
-    join products p on p.id = v.product_id
-    where p.status = 'active' and (
-      word_similarity(${qLower}, lower(p.title)) > 0.3
-      or lower(p.title) like ${like}
+    join p on p.id = v.product_id
+    where p.ws > 0.3
+      or p.tl
       or lower(coalesce(v.sku, '')) like ${like}
       or lower(coalesce(v.barcode, '')) like ${like}
       or lower(coalesce(v.srs_artikel_id, '')) like ${like}
       or lower(coalesce(v.color, '')) like ${like}
-    )
     order by score desc, p.title asc, v.size asc
     limit ${rowCap}`);
 

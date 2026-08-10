@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
+import { getSiteUrl } from "@/lib/site-url";
 import {
   createMollieTerminalPayment,
   getMolliePayment,
   cancelMolliePayment,
   refundMolliePayment,
   listMollieTerminals,
-  mollieConfigured,
+  mollieTerminalConfigured,
 } from "@/lib/mollie";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +58,7 @@ function bad(message: string, status = 400) {
 
 export async function GET(req: Request) {
   if (!(await coreAuth(req))) return bad("Geen toegang.", 403);
-  if (!mollieConfigured()) return bad("Mollie niet geconfigureerd.", 200);
+  if (!mollieTerminalConfigured()) return bad("Mollie-terminal niet geconfigureerd.", 200);
   try {
     const terminals = await listMollieTerminals();
     return NextResponse.json({ ok: true, terminals });
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return bad("Geen toegang.", 403);
-  if (!mollieConfigured()) return bad("Mollie niet geconfigureerd.", 200);
+  if (!mollieTerminalConfigured()) return bad("Mollie-terminal niet geconfigureerd.", 200);
 
   let body: StartBody;
   try {
@@ -102,6 +103,11 @@ export async function POST(req: Request) {
           clientRef,
         },
         idempotencyKey: clientRef.slice(0, 40),
+        /* EIGEN kassa-webhook, niet die van de webshop: een winkelbetaling is geen
+           webshoporder. Hij bestaat omdat de status-poll van de kassa in het
+           browsertabblad leeft — valt dat weg, dan is dit het enige kanaal waarlangs
+           we nog horen dat er geld binnenkwam. */
+        webhookUrl: `${getSiteUrl()}/api/webhooks/mollie-pos`,
       });
       return NextResponse.json({ ok: true, paymentId: payment.id, status: payment.status });
     }
@@ -109,7 +115,10 @@ export async function POST(req: Request) {
     if (action === "status") {
       const paymentId = String(body?.paymentId || "").trim();
       if (!paymentId) return bad("paymentId vereist.");
-      const p = await getMolliePayment(paymentId);
+      /* terminal:true — deze betaling is op de pinterminal aangemaakt en hoort
+         bij de terminalsleutel. Met de webshop-sleutel opvragen zou "niet
+         gevonden" geven zodra die twee verschillen. */
+      const p = await getMolliePayment(paymentId, { terminal: true });
       const amountCents = Math.round(parseFloat(p.amount?.value || "0") * 100);
       return NextResponse.json({ ok: true, status: p.status, paid: p.status === "paid", amountCents });
     }
@@ -117,7 +126,7 @@ export async function POST(req: Request) {
     if (action === "cancel") {
       const paymentId = String(body?.paymentId || "").trim();
       if (!paymentId) return bad("paymentId vereist.");
-      const r = await cancelMolliePayment(paymentId);
+      const r = await cancelMolliePayment(paymentId, { terminal: true });
       // ok:false van cancel is voor de kassa geen 500 waard: een niet-meer-annuleerbare
       // betaling (al betaald/verlopen) wordt door de poll-guard afgevangen. We geven de
       // ruwe uitkomst terug zodat de kassa het weet, maar breken de flow niet.
@@ -137,7 +146,11 @@ export async function POST(req: Request) {
       // gehaald en het bedrag al tegen die verkoop begrensd; hier storten we terug op
       // die originele betaling. Mollie weigert zelf een over-refund. refundRef = de
       // Idempotency-Key → dezelfde retour-poging levert dezelfde refund op (geen dubbel).
-      const r = await refundMolliePayment(paymentId, amountCents, "Retour kassa", refundRef);
+      /* terminal:true — de terugbetaling gaat op de ORIGINELE terminalbetaling,
+         dus met de terminalsleutel. Zonder deze vlag zou Mollie de betaling niet
+         vinden zodra terminal en webshop verschillende sleutels hebben, en zou
+         een retour aan de kassa stil mislukken. */
+      const r = await refundMolliePayment(paymentId, amountCents, "Retour kassa", refundRef, { terminal: true });
       if (!r.ok) return bad(r.error || "Terugbetaling mislukt.", 400);
       return NextResponse.json({ ok: true, refundId: r.id });
     }

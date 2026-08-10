@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { schoonPakbon } from "@/lib/pakbon-instelling";
 import { adminOrToken } from "@/lib/studio-token";
 import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
@@ -28,7 +29,7 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
     "warehouseCutoffHour", "storeCutoffHour",
     "standardMinDays", "standardMaxDays",
     "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
-    "retailSafetyStock", "warehouseSafetyStock",
+    "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock",
     "storeHandoverMinutes",
   ];
   for (const f of intFields) {
@@ -66,6 +67,9 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
         }),
     )].sort();
   }
+  /* Pakbontekst: geen getal maar een blok teksten — eigen sanitizer. */
+  const pakbon = schoonPakbon(b.pakbon);
+  if (pakbon) out.pakbon = pakbon;
   // Winkel-notificatie-adressen (o.a. afspraak-meldingen): beheerbaar via de
   // portal-studio i.p.v. env — zonder deze whitelist-entry was storeEmails
   // nergens te schrijven en viel elke winkelmelding terug op het centrale adres.
@@ -77,6 +81,15 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
       if (key && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) map[key] = mail;
     }
     out.storeEmails = map;
+  }
+  // Ontvangers van de interne bewakingsmeldingen (nachtelijke kassabon-
+  // verificatie). Ook vanuit de portal te zetten, zodat wie de melding krijgt
+  // een knop in de tool is en geen deploy.
+  if (Array.isArray(b.alertEmails)) {
+    out.alertEmails = b.alertEmails
+      .map((a) => String(a ?? "").trim().slice(0, 120))
+      .filter((a) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a))
+      .slice(0, 10);
   }
   if (b.routeOverstockFirst && typeof b.routeOverstockFirst === "object") {
     const r = b.routeOverstockFirst as Record<string, unknown>;

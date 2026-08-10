@@ -143,7 +143,26 @@ export function branchPriority(branchId: string): number {
 }
 
 /* ── Settings-afhankelijke helpers (instelbaar in de backend) ────────────── */
-export function safetyStockFor(branchId: string, s: Settings): number {
+/**
+ * Verkoopkanaal voor een voorraadberekening.
+ *
+ * "web"   — een klant koopt op afstand. De veiligheidsmarge beschermt hier tegen
+ *           een misteltelling of een displaystuk: verkoop je het laatste stuk dat
+ *           er niet blijkt te zijn, dan volgt een annulering bij een klant die
+ *           het schap nooit gezien heeft.
+ * "store" — winkels onderling / de kassa. De verkoper staat bij het rek en kan
+ *           het artikel pakken. Kevin, 6 aug: "mag eraf voor winkels onderling" —
+ *           88,4% van de winkelvoorraadregels heeft 1 of 2 stuks, dus met een
+ *           marge van 2 weigerde de kassa vrijwel elke klantbestelling terwijl
+ *           het artikel gewoon hing.
+ *
+ * Default is BEWUST "web": elke bestaande aanroep houdt daarmee exact het gedrag
+ * dat 'ie had, en een winkel-pad meldt zichzelf expliciet aan.
+ */
+export type StockChannel = "web" | "store";
+
+export function safetyStockFor(branchId: string, s: Settings, channel: StockChannel = "web"): number {
+  if (channel === "store") return s.storeChannelSafetyStock;
   return isWarehouse(branchId) ? s.warehouseSafetyStock : s.retailSafetyStock;
 }
 export function cutoffHourFor(branchId: string, s: Settings, dayName?: string): number {

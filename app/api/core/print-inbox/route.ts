@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { enqueuePrintJob, pendingPrintJobs, markPrintJobDone } from "@/lib/print-inbox";
+import { enqueuePrintJob, pendingPrintJobs, markPrintJobDone, requeuePrintJob, listPrintJobHistory } from "@/lib/print-inbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +32,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, jobs: await pendingPrintJobs(String(b.store || ""), b.limit) });
       case "ack":
         return NextResponse.json(await markPrintJobDone(String(b.id || ""), String(b.store || "")));
+      /* Herprint + historie (verwerkte orders in de kassa, 6 aug). */
+      case "requeue":
+        return NextResponse.json(await requeuePrintJob(String(b.store || ""), String(b.ref || "")));
+      case "history":
+        return NextResponse.json({ ok: true, jobs: await listPrintJobHistory(String(b.store || ""), String(b.ref || ""), b.limit) });
       default:
         return NextResponse.json({ ok: false, error: `Onbekende actie "${action}".` }, { status: 400 });
     }

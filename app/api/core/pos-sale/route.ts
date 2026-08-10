@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; sale?: Record<string, unknown>; store?: string; limit?: number; id?: string; clientRef?: string; actor?: { name?: string }; opts?: Record<string, string>; from?: string; to?: string; customerId?: string; email?: string; name?: string };
+  let b: { action?: string; sale?: Record<string, unknown>; store?: string; limit?: number; id?: string; clientRef?: string; actor?: { name?: string }; opts?: Record<string, string | boolean>; from?: string; to?: string; customerId?: string; email?: string; name?: string };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: !!s, sale: s });
       }
       case "mark-srs-posted": {
-        const s = await markPosSaleSrsPostedCore(String(b.id || ""), b.opts || {});
+        const s = await markPosSaleSrsPostedCore(String(b.id || ""), (b.opts || {}) as { srsRef?: string; credSource?: string; status?: string; error?: string; force?: boolean });
         return NextResponse.json({ ok: !!s, sale: s });
       }
       default:

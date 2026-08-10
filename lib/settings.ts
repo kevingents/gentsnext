@@ -52,6 +52,11 @@ export type Settings = {
   // Voorraad-bescherming
   retailSafetyStock: number;
   warehouseSafetyStock: number;
+  /* Marge voor het WINKEL-kanaal (kassa/winkels onderling). Los van de web-marge:
+     de web-marge beschermt tegen verkopen aan een klant die het schap niet ziet;
+     een verkoper in de winkel heeft het artikel in z'n handen. Kevin, 6 aug:
+     "mag eraf voor winkels onderling". Default 0. */
+  storeChannelSafetyStock: number;
   protectUnderstockedRetail: boolean;
   // Doorloop/overstock-routing: verzend bij voorkeur uit een winkel die ruim boven
   // z'n ideaal zit (trage/oude schapvoorraad eerst weg). minSurplus = drempel in
@@ -109,6 +114,20 @@ export type Settings = {
     signalMinRatePct: number;
     signalFastDays: number;
   };
+  /* PAKBON — de tekst die de klant in de doos vindt. In de tool aanpasbaar
+     (Kevin, 6 aug: "wij moeten zelf de pakbon kunnen aanpassen in de portal"),
+     want dit is marketingtekst en geen code: een formulering die op de winkel-
+     vloer scheef blijkt te staan moet je zonder release kunnen rechtzetten.
+     Plaatshouders die de kassa invult: {dagen} {retourkosten} {winkels} {steden}.
+     Lege lijst/tekst = die regel valt weg op de pakbon. */
+  pakbon: {
+    dankTekst: string;
+    retourKop: string;
+    retourRegels: string[];
+    tweedeKop: string;
+    tweedeRegels: string[];
+    toonSteden: boolean;
+  };
   // Spaarpunten: na hoeveel dagen na BETALING verdiende punten besteedbaar worden
   // (vesting). Dekt de retourperiode, zodat een retour binnen het venster geen
   // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
@@ -136,6 +155,19 @@ export type Settings = {
     alternativeAfterDays: number;
   };
   /**
+   * Niet-leverbaar-afhandeling: krijgt de klant bij een annulering + terugbetaling
+   * een bericht, en tonen we daarin alternatieven? Uit = stille terugbetaling
+   * (zoals het vóór deze functie ging). In de tool te schakelen, niet in Vercel.
+   */
+  unfulfillableConfig: {
+    /** Annuleringsmail versturen (uit = geen bericht bij een terugbetaling). */
+    emailEnabled: boolean;
+    /** Alternatieven meesturen/tonen. */
+    alternativesEnabled: boolean;
+    /** Hoeveel alternatieven maximaal (1-6). */
+    alternativesCount: number;
+  };
+  /**
    * Merchandising-pins: per PLP-context (categorie/collectie) een geordende lijst
    * product-handles die bovenaan de "Aanbevolen"-sort komen. Sleutel = `${kind}:${slug}`
    * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
@@ -148,6 +180,14 @@ export type Settings = {
    * env CONTACT_EMAIL_WEDDING/GENERAL is alleen fallback.
    */
   storeEmails: Record<string, string>;
+  /**
+   * Wie de interne bewakingsmeldingen krijgt (nu: de nachtelijke kassabon-
+   * verificatie, app/api/cron/verify-possales). Meerdere adressen mag. Leeg =
+   * niemand krijgt bericht en de melding blijft alleen in de cron-log staan —
+   * dus dit hoort gevuld te zijn zolang er bewaking draait.
+   * Env OPS_ALERT_EMAIL is alleen de initiële default.
+   */
+  alertEmails: string[];
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -181,6 +221,7 @@ export const DEFAULT_SETTINGS: Settings = {
   expressTransitDays: 1,
   retailSafetyStock: num(process.env.GENTS_RETAIL_SAFETY_STOCK, 2),
   warehouseSafetyStock: num(process.env.GENTS_WAREHOUSE_SAFETY_STOCK, 0),
+  storeChannelSafetyStock: num(process.env.GENTS_STORE_CHANNEL_SAFETY_STOCK, 0),
   protectUnderstockedRetail: (process.env.GENTS_PROTECT_UNDERSTOCKED ?? "1") !== "0",
   routeOverstockFirst: { enabled: false, minSurplus: 3 },
   searchSynonyms: DEFAULT_SYNONYMS,
@@ -207,6 +248,26 @@ export const DEFAULT_SETTINGS: Settings = {
   // import terug zou een cyclus geven waarbij DEFAULT_SETTINGS bij module-init
   // een half-geladen constante ziet.
   saleAnnouncementDays: num(process.env.GENTS_SALE_ANNOUNCEMENT_DAYS, 30),
+  pakbon: {
+    dankTekst: "Bedankt voor je bestelling. Hieronder zie je wat er in dit pakket zit, en wat je kunt doen als iets niet klopt of niet past.",
+    retourKop: "RUILEN OF RETOURNEREN",
+    retourRegels: [
+      "Je hebt {dagen} dagen bedenktijd.",
+      "Gratis retour met een GENTS-tegoed, of lever het in",
+      "bij een van onze {winkels} winkels.",
+      "Wil je het bedrag op je rekening terug? Dan houden",
+      "we {retourkosten} retourkosten in.",
+      "Regel het op gents.nl/retourneren en leg deze",
+      "pakbon bij je retourzending.",
+    ],
+    tweedeKop: "VERMAAKSERVICE",
+    tweedeRegels: [
+      "Net niet de juiste pasvorm? In onze winkels maken",
+      "we mouwen, pijpen en taille passend met onze",
+      "vermaakservice. Kom gerust even langs.",
+    ],
+    toonSteden: true,
+  },
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
     dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 499), // S-pakket heenzending, ex toeslagen (eigen DHL-contract)
@@ -229,8 +290,17 @@ export const DEFAULT_SETTINGS: Settings = {
     alternativeEnabled: true,
     alternativeAfterDays: num(process.env.GENTS_STOCK_ALT_DAYS, 14),
   },
+  unfulfillableConfig: {
+    emailEnabled: true,
+    alternativesEnabled: true,
+    alternativesCount: 3,
+  },
   merchandisingPins: {},
   storeEmails: {},
+  alertEmails: (process.env.OPS_ALERT_EMAIL || "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean),
 };
 
 let _cache: Settings | null = null;
@@ -255,11 +325,16 @@ export async function getSettings(): Promise<Settings> {
       returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
+      unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
       /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
          gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */
       pausedBranchIds: Array.isArray(stored.pausedBranchIds) ? stored.pausedBranchIds.map(String) : [],
       extraClosureDates: Array.isArray(stored.extraClosureDates) ? stored.extraClosureDates.map(String) : [],
+      /* Een leeg opgeslagen lijstje is een bewuste keuze ("stuur niemand iets")
+         en mag dus niet stil terugvallen op de env-default; alleen als het veld
+         nooit gezet is telt die default nog. */
+      alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
     };
   } catch {
     _cache = DEFAULT_SETTINGS;
