@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
+import { getSiteUrl } from "@/lib/site-url";
 import {
   createMollieTerminalPayment,
   getMolliePayment,
@@ -102,6 +103,11 @@ export async function POST(req: Request) {
           clientRef,
         },
         idempotencyKey: clientRef.slice(0, 40),
+        /* EIGEN kassa-webhook, niet die van de webshop: een winkelbetaling is geen
+           webshoporder. Hij bestaat omdat de status-poll van de kassa in het
+           browsertabblad leeft — valt dat weg, dan is dit het enige kanaal waarlangs
+           we nog horen dat er geld binnenkwam. */
+        webhookUrl: `${getSiteUrl()}/api/webhooks/mollie-pos`,
       });
       return NextResponse.json({ ok: true, paymentId: payment.id, status: payment.status });
     }

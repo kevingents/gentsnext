@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { getSessionCustomer } from "@/lib/account";
 import { sweepExpiredHolds } from "@/lib/store-reserve";
 import { reconcileReservationCounters } from "@/lib/stock-reconcile";
+import { cronSecretOk } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,17 +24,10 @@ export const maxDuration = 60;
  * anti-oversell-teller op de werkelijke holds en logt de drift (nulmeting vóór we
  * de kassa door dezelfde gate laten lopen). Zie lib/stock-reconcile.
  */
-function secretOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  const header = req.headers.get("authorization") || "";
-  const url = new URL(req.url);
-  return header === `Bearer ${secret}` || url.searchParams.get("secret") === secret;
-}
-
 export async function GET(req: Request) {
-  const customer = secretOk(req) ? null : await getSessionCustomer();
-  if (!secretOk(req) && !customer?.isAdmin) {
+  const viaCron = cronSecretOk(req);
+  const customer = viaCron ? null : await getSessionCustomer();
+  if (!viaCron && !customer?.isAdmin) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   try {

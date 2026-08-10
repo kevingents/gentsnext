@@ -433,6 +433,12 @@ export const productImages = pgTable(
     // '' = echte (gesyncte) foto; 'ai-packshot' = gegenereerd beeld ter indicatie.
     // AI-rijen overleven de Shopify-import en wijken zodra echte foto's binnenkomen.
     source: text("source").notNull().default(""),
+    // true = deze foto is een packshot (alleen het product, egale achtergrond) i.p.v.
+    // een modelfoto/sfeerbeeld. Gezet door de beeld-classificatie in storegents, via
+    // /api/core/catalog/packshots. Wordt ALLEEN gebruikt om de kassa het artikel te
+    // laten zien i.p.v. een model; `position` blijft de redactionele volgorde en
+    // bepaalt onveranderd wat gents.nl toont.
+    isPackshot: boolean("is_packshot").notNull().default(false),
   },
   (t) => [index("images_product_idx").on(t.productId, t.position)]
 );

@@ -139,6 +139,19 @@ export type Settings = {
     alternativeAfterDays: number;
   };
   /**
+   * Niet-leverbaar-afhandeling: krijgt de klant bij een annulering + terugbetaling
+   * een bericht, en tonen we daarin alternatieven? Uit = stille terugbetaling
+   * (zoals het vóór deze functie ging). In de tool te schakelen, niet in Vercel.
+   */
+  unfulfillableConfig: {
+    /** Annuleringsmail versturen (uit = geen bericht bij een terugbetaling). */
+    emailEnabled: boolean;
+    /** Alternatieven meesturen/tonen. */
+    alternativesEnabled: boolean;
+    /** Hoeveel alternatieven maximaal (1-6). */
+    alternativesCount: number;
+  };
+  /**
    * Merchandising-pins: per PLP-context (categorie/collectie) een geordende lijst
    * product-handles die bovenaan de "Aanbevolen"-sort komen. Sleutel = `${kind}:${slug}`
    * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
@@ -151,6 +164,14 @@ export type Settings = {
    * env CONTACT_EMAIL_WEDDING/GENERAL is alleen fallback.
    */
   storeEmails: Record<string, string>;
+  /**
+   * Wie de interne bewakingsmeldingen krijgt (nu: de nachtelijke kassabon-
+   * verificatie, app/api/cron/verify-possales). Meerdere adressen mag. Leeg =
+   * niemand krijgt bericht en de melding blijft alleen in de cron-log staan —
+   * dus dit hoort gevuld te zijn zolang er bewaking draait.
+   * Env OPS_ALERT_EMAIL is alleen de initiële default.
+   */
+  alertEmails: string[];
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -244,8 +265,17 @@ export const DEFAULT_SETTINGS: Settings = {
     alternativeEnabled: true,
     alternativeAfterDays: num(process.env.GENTS_STOCK_ALT_DAYS, 14),
   },
+  unfulfillableConfig: {
+    emailEnabled: true,
+    alternativesEnabled: true,
+    alternativesCount: 3,
+  },
   merchandisingPins: {},
   storeEmails: {},
+  alertEmails: (process.env.OPS_ALERT_EMAIL || "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean),
 };
 
 let _cache: Settings | null = null;
@@ -270,7 +300,12 @@ export async function getSettings(): Promise<Settings> {
       returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
+      unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
+      /* Een leeg opgeslagen lijstje is een bewuste keuze ("stuur niemand iets")
+         en mag dus niet stil terugvallen op de env-default; alleen als het veld
+         nooit gezet is telt die default nog. */
+      alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

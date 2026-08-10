@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateBlogPost } from "@/lib/blog";
 import { getSessionCustomer } from "@/lib/account";
+import { cronSecretOk } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -10,15 +11,8 @@ export const maxDuration = 120;
  * Vercel-cron stuurt `Authorization: Bearer <CRON_SECRET>`. Een ingelogde admin
  * mag 'm ook handmatig starten. Genereert het volgende onderwerp uit BLOG_TOPICS.
  */
-function secretOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  const header = req.headers.get("authorization") || "";
-  return header === `Bearer ${secret}` || new URL(req.url).searchParams.get("secret") === secret;
-}
-
 export async function GET(req: Request) {
-  const ok = secretOk(req);
+  const ok = cronSecretOk(req);
   if (!ok) {
     const customer = await getSessionCustomer().catch(() => null);
     if (!customer?.isAdmin) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });

@@ -248,8 +248,13 @@ export async function getMolliePayment(id: string, opts: { terminal?: boolean } 
  * Payments-API als de webshop, maar met `method:"pointofsale"` + `terminalId`:
  * Mollie pusht de betaling naar het pin-apparaat en wij POLLEN de status
  * (open/pending → paid|failed|canceled|expired). Bewust GEEN redirectUrl (er is
- * geen browser-redirect aan de kassa) en GEEN webhookUrl (we pollen actief; een
- * webhook zou aan de kassa toch niet de afronding kunnen sturen).
+ * geen browser-redirect aan de kassa).
+ *
+ * WEL een webhookUrl (nieuw). Pollen werkt prima zolang de kassa openstaat, en
+ * daar zat precies het gat: viel het browsertabblad weg — of de pc — dan stopte
+ * de poll en wist niemand meer dát er een betaling liep. Geld binnen, geen bon,
+ * en anders dan bij Worldline geen driverlog om tegen af te vinken. De webhook
+ * komt ongeacht wat de kassa doet en legt de uitkomst server-side vast.
  *
  * GELD-VEILIGHEID: de Idempotency-Key (= clientRef van de checkout-poging) zorgt
  * dat een RETRY na een netwerkfout NOOIT een tweede betaling aanmaakt — Mollie
@@ -261,6 +266,8 @@ export async function createMollieTerminalPayment(input: {
   terminalId: string;
   metadata: Record<string, unknown>;
   idempotencyKey: string;
+  /** Weglaten = geen webhook (het gedrag van vóór deze wijziging). */
+  webhookUrl?: string;
 }): Promise<MolliePayment> {
   if (!input.terminalId) throw new Error("terminalId ontbreekt — geen Mollie-terminal geconfigureerd.");
   const body: Record<string, unknown> = {
@@ -270,6 +277,12 @@ export async function createMollieTerminalPayment(input: {
     terminalId: input.terminalId,
     metadata: input.metadata,
   };
+  /* Mollie accepteert geen webhook op localhost. Lokaal ontwikkelen laat 'm dus
+     weg in plaats van de betaling te laten mislukken — dan pollt de kassa gewoon,
+     precies zoals het hiervoor werkte. */
+  if (input.webhookUrl && !/^https?:\/\/(localhost|127\.|\[?::1)/i.test(input.webhookUrl)) {
+    body.webhookUrl = input.webhookUrl;
+  }
   // Access-token vereist een profileId + expliciete testmode (net als createMolliePayment).
   if (usesAccessToken("terminal")) {
     const profiel = process.env.MOLLIE_TERMINAL_PROFILE_ID || process.env.MOLLIE_PROFILE_ID;

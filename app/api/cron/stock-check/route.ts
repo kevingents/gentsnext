@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { processStockNotifications, processStaleStockNotifications } from "@/lib/stock-notify";
+import { cronSecretOk } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -14,17 +15,10 @@ export const maxDuration = 300;
  *     → een alternatief-op-maat sturen dat wél op voorraad is.
  * De hele flow (aan/uit, kanalen, wachttijd) is instelbaar via de portal (settings-store).
  */
-function secretOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  const header = req.headers.get("authorization") || "";
-  const url = new URL(req.url);
-  return header === `Bearer ${secret}` || url.searchParams.get("secret") === secret;
-}
-
 export async function GET(req: Request) {
-  const customer = secretOk(req) ? null : await getSessionCustomer();
-  if (!secretOk(req) && !customer?.isAdmin) {
+  const viaCron = cronSecretOk(req);
+  const customer = viaCron ? null : await getSessionCustomer();
+  if (!viaCron && !customer?.isAdmin) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   try {

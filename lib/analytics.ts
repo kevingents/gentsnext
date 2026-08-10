@@ -33,6 +33,11 @@ const ALLOWED = new Set([
   "size_click",
   // Klantafspraken: server-side gelogd bij een geslaagde boeking (type+winkel in props).
   "afspraak_geboekt",
+  // Alternatieven bij een niet-leverbaar artikel: hoe vaak we ze tonen
+  // (alt_offered, bij het versturen van de annuleringsmail) tegenover hoe vaak
+  // erop geklikt wordt (alt_click, via /api/r). Samen: haalt een annulering nog
+  // iets op, of geven we alleen geld terug?
+  "alt_offered", "alt_click",
 ]);
 
 export async function recordEvents(list: IncomingEvent[]): Promise<number> {
