@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrderForViewer, getPostPurchase } from "@/lib/orders";
@@ -14,6 +15,7 @@ import { CareBlock } from "@/components/pdp/care-material";
 import { ProductCard } from "@/components/product-card";
 import { OrderStatusPoller } from "@/components/order/order-status-poller";
 import { ReorderButton } from "@/components/order/reorder-button";
+import { getCancelledWithAlternatives } from "@/lib/unfulfillable";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +111,11 @@ export default async function OrderPage({ params, searchParams }: Props) {
 
   // Post-purchase: verzorgingstips + cross-sell (alleen bij een betaalde order).
   const extras = paid ? await getPostPurchase(lines.map((l) => l.productHandle)) : null;
+
+  // Niet-leverbaar afgehandeld? Dan hoort hier hetzelfde aanbod als in de
+  // annuleringsmail — de klant die de mail kwijt is opent tóch deze pagina.
+  // Staat los van order.status: een deels geannuleerde order blijft 'paid'.
+  const cancelled = await getCancelledWithAlternatives(order.orderNumber, { locale, lines }).catch(() => null);
 
   // Bezorgschatting voor het stappenplan.
   const settings = paid ? await getSettings() : null;
@@ -208,6 +215,45 @@ export default async function OrderPage({ params, searchParams }: Props) {
             {t("order.retry_checkout")}
           </Link>
         </>
+      ) : null}
+
+      {cancelled?.titles.length ? (
+        <section className="mt-8 rounded-card border border-line p-5">
+          <p className="label-brand">{t("order.unfulfillable.title")}</p>
+          <ul className="mt-2 font-sans text-sm text-ink">
+            {cancelled.titles.map((title, i) => (
+              <li key={i}>{title}</li>
+            ))}
+          </ul>
+          <p className="mt-2 font-sans text-sm text-ink-soft">{t("order.unfulfillable.body")}</p>
+          {cancelled.alternatives.length ? (
+            <div className="mt-6 border-t border-line pt-5">
+              <p className="font-display text-lg">{t("order.unfulfillable.altTitle")}</p>
+              <p className="mt-1 font-sans text-sm text-ink-soft">{t("order.unfulfillable.altBody")}</p>
+              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
+                {cancelled.alternatives.map((a) => (
+                  // Via /api/r zodat de doorklik meetelt (zelfde meting als in de mail).
+                  <a key={a.handle} href={a.href} className="group flex flex-col gap-2">
+                    <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
+                      <Image
+                        src={a.imageUrl}
+                        alt={a.imageAlt}
+                        fill
+                        sizes="(max-width: 640px) 50vw, 33vw"
+                        className="object-cover transition duration-500 ease-brand group-hover:scale-[1.04]"
+                      />
+                    </div>
+                    <span className="font-sans text-sm text-ink group-hover:underline">{a.title}</span>
+                    <span className="font-sans text-sm text-muted">
+                      {a.hasPriceRange ? `${t("product.from")} ` : ""}
+                      {formatEuro(a.minPriceCents)}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       <div className="mt-8 border-y border-line py-5">
