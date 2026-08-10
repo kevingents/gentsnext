@@ -42,6 +42,7 @@ type Settings = {
     signalMinRatePct: number;
     signalFastDays: number;
   };
+  alertEmails: string[];
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan).
@@ -97,6 +98,14 @@ export function SettingsForm({ initial }: { initial: Settings }) {
   const [presetText, setPresetText] = useState(
     initial.giftcardConfig.presetAmountsCents.map((c) => (c / 100).toString()).join(", ")
   );
+  /* Als tekst bewerkt, als lijst opgeslagen — anders kun je tijdens het typen
+     geen komma zetten zonder dat het veld onder je handen opsplitst. */
+  const [alertText, setAlertText] = useState((initial.alertEmails || []).join(", "));
+
+  function setAlerts(v: string) {
+    setAlertText(v);
+    setS((p) => ({ ...p, alertEmails: v.split(",").map((a) => a.trim()).filter(Boolean) }));
+  }
 
   function setGc(patch: Partial<Settings["giftcardConfig"]>) {
     setS((p) => ({ ...p, giftcardConfig: { ...p.giftcardConfig, ...patch } }));
@@ -240,6 +249,24 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         />
         <span className="font-sans text-sm">Onderbevoorrade winkels (tekort) niet laten meeleveren</span>
       </label>
+
+      <section>
+        <p className="label-brand mb-2">Meldingen aan onszelf</p>
+        <p className="mb-2 font-sans text-xs text-muted">
+          Waar de interne bewaking naartoe mag mailen — nu de nachtelijke
+          kassabon-controle, die alleen bericht stuurt als er iets níét klopt
+          (een bon die de dagstaat mist, of ergens meer geretourneerd dan
+          verkocht). Meerdere adressen: komma-gescheiden. Leeg = niemand krijgt
+          bericht en zo&apos;n bevinding blijft alleen in de cron-log staan.
+        </p>
+        <input
+          type="text"
+          value={alertText}
+          onChange={(e) => setAlerts(e.target.value)}
+          placeholder="kevin@gents.nl, backoffice@gents.nl"
+          className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+        />
+      </section>
 
       <section>
         <p className="label-brand mb-2">Zoek-synoniemen</p>

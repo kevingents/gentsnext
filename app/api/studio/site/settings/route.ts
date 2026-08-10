@@ -53,6 +53,15 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
     }
     out.storeEmails = map;
   }
+  // Ontvangers van de interne bewakingsmeldingen (nachtelijke kassabon-
+  // verificatie). Ook vanuit de portal te zetten, zodat wie de melding krijgt
+  // een knop in de tool is en geen deploy.
+  if (Array.isArray(b.alertEmails)) {
+    out.alertEmails = b.alertEmails
+      .map((a) => String(a ?? "").trim().slice(0, 120))
+      .filter((a) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a))
+      .slice(0, 10);
+  }
   if (b.routeOverstockFirst && typeof b.routeOverstockFirst === "object") {
     const r = b.routeOverstockFirst as Record<string, unknown>;
     out.routeOverstockFirst = {

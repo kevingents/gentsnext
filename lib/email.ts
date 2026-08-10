@@ -718,3 +718,26 @@ export async function sendAppointmentStoreNotify(n: AppointmentStoreNotify): Pro
   }
   return true;
 }
+
+/**
+ * Interne signaalmail (bewaking, storingen) — platte tekst, geen huisstijl-shell
+ * en geen klant in de cc. Bedoeld voor meldingen die iemand 's ochtends moet
+ * kunnen scannen, niet voor iets dat een klant ooit ziet.
+ *
+ * Ontvangers komen uit de instellingen (settings.alertEmails), niet uit env:
+ * wie de bewaking krijgt is een knop in de tool, geen deploy.
+ */
+export async function sendOpsAlert(to: string[], subject: string, text: string): Promise<boolean> {
+  const ontvangers = (to || []).map((a) => String(a || "").trim()).filter(Boolean);
+  if (!emailConfigured() || !ontvangers.length) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: process.env.RESEND_FROM, to: ontvangers, subject, text }),
+  });
+  if (!res.ok) {
+    console.error("[email] ops-melding Resend-fout:", res.status, (await res.text()).slice(0, 200));
+    return false;
+  }
+  return true;
+}
