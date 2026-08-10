@@ -1466,6 +1466,29 @@ export const SITE_CATALOG: Record<string, string> = {
     "Hoi {name}, je bestelling {orderNumber} is bezorgd. We zijn benieuwd wat je ervan vindt — een korte review helpt andere klanten enorm en kost je maar een minuutje.",
   "mail.status.refunded.subject": "Je GENTS-bestelling {orderNumber} is terugbetaald",
   "mail.status.refunded.text": "Hoi {name}, je betaling voor {orderNumber} is terugbetaald. Vragen? We helpen je graag.",
+  // — Niet leverbaar: annulering + terugbetaling, mét alternatieven —
+  "mail.unfulfillable.subject": "Je GENTS-bestelling {orderNumber}: we konden niet alles leveren",
+  "mail.unfulfillable.heading": "We konden niet alles leveren",
+  "mail.unfulfillable.intro": "Hoi {name}, vervelend nieuws over je bestelling {orderNumber}.",
+  "mail.unfulfillable.checked":
+    "We hebben al onze winkels en het magazijn nagekeken, maar dit artikel is nergens meer op voorraad. Onze excuses.",
+  "mail.unfulfillable.refunded":
+    "Je krijgt <strong>{amount}</strong> terug op je betaalmethode. Afhankelijk van je bank staat dat binnen enkele werkdagen op je rekening.",
+  "mail.unfulfillable.refundPending":
+    "We regelen je terugbetaling. Je hoort zo snel mogelijk van ons wat er precies wordt teruggestort.",
+  "mail.unfulfillable.returnNote":
+    "Het deel van je bestelling dat al onderweg is, mag je gratis terugsturen. Je krijgt daarvoor een apart bericht met retourlabel.",
+  "mail.unfulfillable.altHeading": "Dit hebben we wel in jouw maat",
+  "mail.unfulfillable.altIntro": "Vergelijkbaar met wat je koos en direct leverbaar:",
+  "mail.unfulfillable.cta": "Bekijk je bestelling",
+  "mail.unfulfillable.help":
+    "Zit er niets bij? Antwoord op deze mail of loop binnen bij een van onze winkels; onze stylisten zoeken graag iets passends voor je uit.",
+  // — Niet leverbaar op de bestelpagina —
+  "order.unfulfillable.title": "Niet meer leverbaar",
+  "order.unfulfillable.body":
+    "Deze artikelen konden we niet leveren; het bedrag is teruggestort op je betaalmethode.",
+  "order.unfulfillable.altTitle": "Dit hebben we wel in jouw maat",
+  "order.unfulfillable.altBody": "Vergelijkbaar met wat je koos en direct leverbaar.",
   // — Welkomstkorting-mail (/api/welcome-discount) —
   "mail.welcome.subject": "Je GENTS-welkomstkorting: {percent}% met code {code}",
   "mail.welcome.heading": "Je welkomstkorting staat klaar",
