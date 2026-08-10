@@ -315,6 +315,9 @@ async function notifyCancellation(input: {
 }): Promise<{ mailed: boolean; alternatives: number }> {
   const cfg = (await getSettings()).unfulfillableConfig;
   if (!cfg.emailEnabled || !input.order.email) return { mailed: false, alternatives: 0 };
+  // Geen regels om over te berichten (melding verwijst naar een SKU die niet
+  // meer op de order staat) → geen mail zonder inhoud sturen.
+  if (!input.cancelled.length) return { mailed: false, alternatives: 0 };
 
   const locale: Locale = isLocale(String(input.order.locale || "")) ? (input.order.locale as Locale) : DEFAULT_LOCALE;
   const alternatives = cfg.alternativesEnabled
@@ -405,7 +408,11 @@ export async function getCancelledWithAlternatives(
 
   return {
     titles: setLines.map((l) => l.title),
-    alternatives: alternatives.map((a) => ({ ...a, href: alternativeUrl({ handle: a.handle, src: "bestelpagina", locale }) })),
+    alternatives: alternatives.map((a) => ({
+      ...a,
+      // Relatief: de klant blijft op de omgeving waar hij al is.
+      href: alternativeUrl({ handle: a.handle, src: "bestelpagina", locale, absolute: false }),
+    })),
   };
 }
 

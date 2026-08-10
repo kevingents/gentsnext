@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getSiteUrl } from "@/lib/site-url";
 import { recordEvents } from "@/lib/analytics";
 import { safeInternalPath } from "@/lib/safe-redirect";
 
@@ -20,13 +19,22 @@ export const runtime = "nodejs";
  * Open redirect is de voor de hand liggende fout hier: `to` mag daarom alleen een
  * pad op onze eigen site zijn. Alles anders → naar de homepage, nooit doorsturen
  * naar een externe host.
+ *
+ * De Location is bewust RELATIEF. Een absolute URL uit getSiteUrl() zou een klik
+ * op een preview-omgeving naar productie sturen, en een absolute URL uit de
+ * Host-header zou juist wél een open redirect zijn (die header is van de client).
+ * Relatief lost allebei op: de browser lost 'm op tegen de host waar het verzoek
+ * al heen ging, en die kan het gevalideerde pad nooit verlaten.
  */
+
+function naarPad(pad: string): NextResponse {
+  return new NextResponse(null, { status: 302, headers: { Location: pad } });
+}
 
 /** Toegestane event-types; onbekend type = niet meetellen (wel doorsturen). */
 const ALLOWED_EVENTS = new Set(["alt_click"]);
 
 export async function GET(req: Request) {
-  const site = getSiteUrl();
   let target: string | null = null;
   let ev = "";
   let src = "";
@@ -42,7 +50,7 @@ export async function GET(req: Request) {
     target = null;
   }
 
-  if (!target) return NextResponse.redirect(site, 302);
+  if (!target) return naarPad("/");
 
   if (ALLOWED_EVENTS.has(ev)) {
     // Meten mag de doorverwijzing nooit ophouden of stukmaken.
@@ -53,5 +61,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.redirect(`${site}${target}`, 302);
+  return naarPad(target);
 }

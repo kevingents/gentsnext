@@ -58,12 +58,16 @@ const PRICE_MAX_FACTOR = 1.6;
 /**
  * Link naar een alternatief die de doorklik meetelt (/api/r → 302 naar de PDP).
  * `src` scheidt de bronnen: "mail" (annuleringsmail) vs "bestelpagina".
- * Altijd absoluut, want dezelfde helper vult ook links in e-mail.
+ *
+ * In e-mail moet de link absoluut zijn. Op de site juist NIET: met een absolute
+ * link zou een klik op een preview- of test-omgeving je naar productie sturen,
+ * en dan meet je daar een klik die op een andere omgeving is gemaakt.
  */
-export function alternativeUrl(opts: { handle: string; src: string; locale?: Locale }): string {
+export function alternativeUrl(opts: { handle: string; src: string; locale?: Locale; absolute?: boolean }): string {
   const path = localizedPath(`/products/${opts.handle}`, opts.locale ?? DEFAULT_LOCALE);
   const q = new URLSearchParams({ to: path, ev: "alt_click", src: opts.src, h: opts.handle });
-  return `${getSiteUrl()}/api/r?${q.toString()}`;
+  const base = opts.absolute === false ? "" : getSiteUrl();
+  return `${base}/api/r?${q.toString()}`;
 }
 
 type Pass = {

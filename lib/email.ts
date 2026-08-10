@@ -338,6 +338,16 @@ function attrUrl(url: string): string {
   return String(url || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
+/**
+ * Tekst uit de database of van de klant in HTML. Producttitels komen uit de
+ * SRS-/Shopify-import en de voornaam typt de klant zelf; vandaag staat er niets
+ * bijzonders in, maar één her-import met "Overhemd S&P" of een naam met een
+ * punthaak breekt anders de mail-opmaak.
+ */
+function escHtml(s: string): string {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** Eén productkaartje in een mail: foto, titel, prijs — de hele kaart is de link. */
 export type MailProductCard = {
   title: string;
@@ -363,7 +373,7 @@ export function productCardsHtml(items: MailProductCard[], t: Tr = nlT): string 
                 (r) => `<td width="${width}%" valign="top" style="padding:0 5px">
               <a href="${attrUrl(r.href)}" style="text-decoration:none;color:#0A0A0A">
                 ${r.imageUrl ? `<img src="${attrUrl(r.imageUrl)}" width="100%" alt="" style="display:block;border:1px solid #E6E4DF;background:#F6F5F2"/>` : ""}
-                <div style="font:12px Arial,sans-serif;color:#0A0A0A;margin-top:6px;line-height:1.3">${r.title}</div>
+                <div style="font:12px Arial,sans-serif;color:#0A0A0A;margin-top:6px;line-height:1.3">${escHtml(r.title)}</div>
                 <div style="font:12px Arial,sans-serif;color:#8B8B8B">${r.hasPriceRange ? `${t("product.from")} ` : ""}${euro(r.minPriceCents)}</div>
               </a>
             </td>`,
@@ -707,12 +717,13 @@ export type UnfulfillableRefundEmail = {
 export async function sendUnfulfillableRefund(m: UnfulfillableRefundEmail): Promise<boolean> {
   const t = m.t ?? nlT;
   const locale = m.locale ?? DEFAULT_LOCALE;
-  const name = m.firstName || t("mail.greeting.fallbackName");
+  // Escapen vóór de vertaling: interpolate() plakt de waarde rauw in de tekst.
+  const name = escHtml(m.firstName) || t("mail.greeting.fallbackName");
   const titles = (m.cancelledTitles || []).filter(Boolean);
 
   const itemsHtml = titles.length
     ? `<ul style="margin:10px 0 0;padding-left:18px;color:#0A0A0A">${titles
-        .map((title) => `<li style="margin:2px 0">${esc(title)}</li>`)
+        .map((title) => `<li style="margin:2px 0">${escHtml(title)}</li>`)
         .join("")}</ul>`
     : "";
 
