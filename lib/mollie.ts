@@ -10,27 +10,78 @@
 
 const API = "https://api.mollie.com/v2";
 
+/**
+ * WELKE SLEUTEL — webshop of pinterminal (Kevin, 10 aug).
+ *
+ * De fysieke pinterminals draaiden op dezelfde sleutel als de webshop. Dat is
+ * onhandig én riskant: je kunt de terminals niet apart testen of de sleutel
+ * vervangen zonder de webshop te raken, en in Mollie loopt alles door elkaar.
+ *
+ * MOLLIE_TERMINAL_API_KEY is nu de sleutel voor alles wat met een fysieke
+ * terminal te maken heeft. Staat 'ie niet gezet, dan valt het terug op
+ * MOLLIE_API_KEY — precies het gedrag van vóór deze wijziging, dus mergen
+ * verandert niets.
+ *
+ * LET OP (de reden dat dit per aanroep expliciet is): een betaling hoort bij de
+ * sleutel waarmee 'ie is aangemaakt. Een terminalbetaling opvragen of annuleren
+ * met de webshop-sleutel geeft "niet gevonden" — zeker als de één test_ is en de
+ * ander live_. Daarom dragen getMolliePayment/cancelMolliePayment/
+ * refundMolliePayment een expliciete `terminal`-vlag; de POS-route zet 'm, de
+ * webshop-webhook niet.
+ */
+type Sleutel = "web" | "terminal";
+
+function keyFor(scope: Sleutel): string {
+  if (scope === "terminal") return process.env.MOLLIE_TERMINAL_API_KEY || process.env.MOLLIE_API_KEY || "";
+  return process.env.MOLLIE_API_KEY || "";
+}
+
 export function mollieConfigured(): boolean {
   return Boolean(process.env.MOLLIE_API_KEY);
 }
 
-function apiKey(): string {
-  const key = process.env.MOLLIE_API_KEY;
-  if (!key) throw new Error("MOLLIE_API_KEY ontbreekt — checkout is niet geconfigureerd.");
+/** Is er een sleutel voor de pinterminals (eigen of geërfd van de webshop)? */
+export function mollieTerminalConfigured(): boolean {
+  return Boolean(keyFor("terminal"));
+}
+
+/**
+ * Welke sleutel gebruiken de terminals, en staat die in test- of live-modus?
+ * Geeft NOOIT de sleutel zelf terug — alleen genoeg om in de portal te tonen
+ * dat je met echt geld werkt. Precies de controle die je vóór een winkeltest
+ * wilt kunnen doen zonder in Vercel te hoeven kijken.
+ */
+export function mollieTerminalKeyInfo(): { eigenSleutel: boolean; modus: "test" | "live" | "onbekend"; geconfigureerd: boolean } {
+  const eigen = Boolean(process.env.MOLLIE_TERMINAL_API_KEY);
+  const k = keyFor("terminal");
+  const modus = k.startsWith("test_") ? "test" : k.startsWith("live_") ? "live" : "onbekend";
+  return { eigenSleutel: eigen, modus, geconfigureerd: Boolean(k) };
+}
+
+function apiKey(scope: Sleutel = "web"): string {
+  const key = keyFor(scope);
+  if (!key) {
+    throw new Error(
+      scope === "terminal"
+        ? "MOLLIE_TERMINAL_API_KEY (of MOLLIE_API_KEY) ontbreekt — pinnen op de terminal is niet geconfigureerd."
+        : "MOLLIE_API_KEY ontbreekt — checkout is niet geconfigureerd.",
+    );
+  }
   return key;
 }
 
 /**
  * Organisatie-/OAuth-token (access_…) i.p.v. een gewone API-key (test_/live_).
- * Dan moet je profileId + testmode expliciet meesturen.
+ * Dan moet je profileId + testmode expliciet meesturen. Per sleutel bepaald: de
+ * terminalsleutel kan best een ander type zijn dan die van de webshop.
  */
-function usesAccessToken(): boolean {
-  return (process.env.MOLLIE_API_KEY || "").startsWith("access_");
+function usesAccessToken(scope: Sleutel = "web"): boolean {
+  return keyFor(scope).startsWith("access_");
 }
-function testmode(): boolean {
+function testmode(scope: Sleutel = "web"): boolean {
   // Access-token: standaard testmode tenzij expliciet uitgezet. API-key bepaalt
   // de modus zelf (test_/live_).
-  if (!usesAccessToken()) return false;
+  if (!usesAccessToken(scope)) return false;
   return process.env.MOLLIE_TESTMODE !== "false";
 }
 
@@ -44,17 +95,23 @@ export async function refundMolliePayment(
   amountCents: number,
   description = "Retour",
   idempotencyKey?: string,
+  /* Een terugbetaling hoort bij de sleutel waarmee de BETALING is aangemaakt.
+     Een terminalbetaling terugbetalen met de webshop-sleutel vindt 'm niet. */
+  opts: { terminal?: boolean } = {},
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
-  if (!mollieConfigured()) return { ok: false, error: "Mollie niet geconfigureerd." };
+  const scope: Sleutel = opts.terminal ? "terminal" : "web";
+  if (scope === "terminal" ? !mollieTerminalConfigured() : !mollieConfigured()) {
+    return { ok: false, error: "Mollie niet geconfigureerd." };
+  }
   if (!paymentId || amountCents <= 0) return { ok: false, error: "Ongeldig refund-bedrag." };
   const body: Record<string, unknown> = {
     amount: { currency: "EUR", value: centsToValue(amountCents) },
     description: description.slice(0, 140),
   };
-  if (usesAccessToken() && testmode()) body.testmode = true;
+  if (usesAccessToken(scope) && testmode(scope)) body.testmode = true;
   // Idempotency-Key: een dubbele/parallelle refund-poging met dezelfde sleutel
   // levert Mollie-zijdig dezelfde refund op i.p.v. een tweede terugstorting.
-  const headers: Record<string, string> = { authorization: `Bearer ${apiKey()}`, "content-type": "application/json" };
+  const headers: Record<string, string> = { authorization: `Bearer ${apiKey(scope)}`, "content-type": "application/json" };
   if (idempotencyKey) headers["idempotency-key"] = idempotencyKey.slice(0, 40);
   try {
     const r = await fetch(`https://api.mollie.com/v2/payments/${encodeURIComponent(paymentId)}/refunds`, {
@@ -172,10 +229,13 @@ export async function getMollieMethods(amountCents?: number): Promise<MollieMeth
   }
 }
 
-export async function getMolliePayment(id: string): Promise<MolliePayment> {
-  const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
+/** `terminal:true` = een betaling die op een pinterminal is aangemaakt; die moet
+ *  met dezelfde sleutel opgevraagd worden, anders bestaat 'ie simpelweg niet. */
+export async function getMolliePayment(id: string, opts: { terminal?: boolean } = {}): Promise<MolliePayment> {
+  const scope: Sleutel = opts.terminal ? "terminal" : "web";
+  const qs = usesAccessToken(scope) ? `?testmode=${testmode(scope)}` : "";
   const res = await fetch(`${API}/payments/${encodeURIComponent(id)}${qs}`, {
-    headers: { Authorization: `Bearer ${apiKey()}` },
+    headers: { Authorization: `Bearer ${apiKey(scope)}` },
   });
   if (!res.ok) {
     throw new Error(`Mollie getPayment ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -211,15 +271,16 @@ export async function createMollieTerminalPayment(input: {
     metadata: input.metadata,
   };
   // Access-token vereist een profileId + expliciete testmode (net als createMolliePayment).
-  if (usesAccessToken()) {
-    if (process.env.MOLLIE_PROFILE_ID) body.profileId = process.env.MOLLIE_PROFILE_ID;
-    body.testmode = testmode();
+  if (usesAccessToken("terminal")) {
+    const profiel = process.env.MOLLIE_TERMINAL_PROFILE_ID || process.env.MOLLIE_PROFILE_ID;
+    if (profiel) body.profileId = profiel;
+    body.testmode = testmode("terminal");
   }
 
   const res = await fetch(`${API}/payments`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey()}`,
+      Authorization: `Bearer ${apiKey("terminal")}`,
       "Content-Type": "application/json",
       "Idempotency-Key": input.idempotencyKey,
     },
@@ -240,14 +301,18 @@ export async function createMollieTerminalPayment(input: {
  */
 export async function cancelMolliePayment(
   id: string,
+  opts: { terminal?: boolean } = {},
 ): Promise<{ ok: boolean; status?: string; error?: string }> {
-  if (!mollieConfigured()) return { ok: false, error: "Mollie niet geconfigureerd." };
+  const scope: Sleutel = opts.terminal ? "terminal" : "web";
+  if (scope === "terminal" ? !mollieTerminalConfigured() : !mollieConfigured()) {
+    return { ok: false, error: "Mollie niet geconfigureerd." };
+  }
   if (!id) return { ok: false, error: "Geen paymentId." };
-  const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
+  const qs = usesAccessToken(scope) ? `?testmode=${testmode(scope)}` : "";
   try {
     const res = await fetch(`${API}/payments/${encodeURIComponent(id)}${qs}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${apiKey()}` },
+      headers: { Authorization: `Bearer ${apiKey(scope)}` },
     });
     // 200 = geannuleerd, 422 = niet (meer) annuleerbaar (bv. al betaald/verlopen):
     // dat laatste is voor de kassa geen harde fout — de poll-guard vangt het af.
@@ -266,11 +331,11 @@ export type MollieTerminal = { id: string; status: string; description: string; 
  * terminalId opzoekbaar is in de config-UI. Faalt zacht → lege lijst.
  */
 export async function listMollieTerminals(): Promise<MollieTerminal[]> {
-  if (!mollieConfigured()) return [];
-  const qs = usesAccessToken() ? `?testmode=${testmode()}` : "";
+  if (!mollieTerminalConfigured()) return [];
+  const qs = usesAccessToken("terminal") ? `?testmode=${testmode("terminal")}` : "";
   try {
     const res = await fetch(`${API}/terminals${qs}`, {
-      headers: { Authorization: `Bearer ${apiKey()}` },
+      headers: { Authorization: `Bearer ${apiKey("terminal")}` },
     });
     if (!res.ok) return [];
     const json = await res.json();
