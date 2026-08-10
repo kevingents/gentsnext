@@ -27,6 +27,22 @@ export type Settings = {
    *  Bv. magazijn verzendt op vrijdag tot 16:00, winkels tot 17:00. */
   warehouseCutoffByDay: Record<string, number>;
   storeCutoffByDay: Record<string, number>;
+  /** Minuten vóór sluitingstijd dat een winkelorder nog dezelfde dag weg kan.
+   *  De cutoff van een winkel wordt nooit later dan haar sluitingstijd; deze
+   *  marge houdt daarnaast rekening met inpakken + overdracht aan de vervoerder. */
+  storeHandoverMinutes: number;
+  /** Verzendt er iemand op zondag? Vervoerders halen dan niet op, dus standaard
+   *  nee — anders belooft de site "vandaag verzonden" op een dag dat er niets
+   *  vertrekt. Zaterdag kan wél (winkels zijn open, vervoerders bezorgen ma-za). */
+  dispatchOnSunday: boolean;
+  dispatchOnSaturdayStores: boolean;
+  /** Filialen die tijdelijk GEEN orders mogen krijgen (verbouwing, vakantie-
+   *  sluiting, onderbezetting). Ze blijven bestaan, maar de allocatie slaat ze
+   *  over — zonder deploy of env-wijziging. */
+  pausedBranchIds: string[];
+  /** Extra verzendvrije dagen (yyyy-mm-dd) bovenop de feestdagen: bedrijfssluiting,
+   *  personeelsdag, inventarisatie. Geldt voor alle filialen. */
+  extraClosureDates: string[];
   // Levertijd (werkdagen)
   standardMinDays: number;
   standardMaxDays: number;
@@ -182,13 +198,22 @@ export const DEFAULT_SETTINGS: Settings = {
   // landen staan in lib/shipping-zones.
   shippingCents: num(process.env.GENTS_SHIPPING_CENTS, 395),
   expressSurchargeCents: num(process.env.GENTS_EXPRESS_SURCHARGE_CENTS, 150),
-  // Basisuur = "einde dag" (geen vroege cutoff); de bindende cutoff zit in de
-  // per-weekdag-override hieronder (magazijn vrijdag 16:00, winkels vrijdag 17:00).
-  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 23),
-  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 23),
+  /* Basisuur = het laatste moment dat een pakket nog dezelfde dag aan de
+     vervoerder wordt meegegeven. Stond op 23 ("einde dag"), maar dat beloofde
+     's avonds same-day-verzending terwijl er niets meer vertrok — op koopavond
+     zelfs tot 21:00, want de winkel was dan nog open. 17 is een veilige
+     aanname; zet hier het échte ophaalmoment neer (per filiaal kan via
+     branchCutoffs, per weekdag via de overrides hieronder). */
+  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 17),
+  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 17),
   branchCutoffs: {},
   warehouseCutoffByDay: { vrijdag: 16 },
   storeCutoffByDay: { vrijdag: 17 },
+  storeHandoverMinutes: num(process.env.GENTS_STORE_HANDOVER_MINUTES, 0),
+  dispatchOnSunday: false,
+  dispatchOnSaturdayStores: true,
+  pausedBranchIds: [],
+  extraClosureDates: [],
   standardMinDays: num(process.env.GENTS_STANDARD_MIN_DAYS, 2),
   standardMaxDays: num(process.env.GENTS_STANDARD_MAX_DAYS, 3),
   warehouseTransitDays: 1,
@@ -302,6 +327,10 @@ export async function getSettings(): Promise<Settings> {
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
+      /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
+         gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */
+      pausedBranchIds: Array.isArray(stored.pausedBranchIds) ? stored.pausedBranchIds.map(String) : [],
+      extraClosureDates: Array.isArray(stored.extraClosureDates) ? stored.extraClosureDates.map(String) : [],
       /* Een leeg opgeslagen lijstje is een bewuste keuze ("stuur niemand iets")
          en mag dus niet stil terugvallen op de env-default; alleen als het veld
          nooit gezet is telt die default nog. */

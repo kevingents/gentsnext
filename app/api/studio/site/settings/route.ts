@@ -3,6 +3,7 @@ import { schoonPakbon } from "@/lib/pakbon-instelling";
 import { adminOrToken } from "@/lib/studio-token";
 import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
+import { isFulfillable } from "@/lib/fulfillment-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,7 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
     "standardMinDays", "standardMaxDays",
     "warehouseTransitDays", "storeExtraDays", "expressTransitDays",
     "retailSafetyStock", "warehouseSafetyStock", "storeChannelSafetyStock",
+    "storeHandoverMinutes",
   ];
   for (const f of intFields) {
     if (b[f] !== undefined && Number.isFinite(Number(b[f]))) {
@@ -37,6 +39,33 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   }
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
+  }
+  if (b.dispatchOnSunday !== undefined) out.dispatchOnSunday = Boolean(b.dispatchOnSunday);
+  if (b.dispatchOnSaturdayStores !== undefined) out.dispatchOnSaturdayStores = Boolean(b.dispatchOnSaturdayStores);
+  /* Tijdelijk gepauzeerde filialen: alleen bestaande filiaalnummers, zodat een
+     typefout niet stilletjes niets doet (of erger: alles doorlaat). */
+  if (Array.isArray(b.pausedBranchIds)) {
+    out.pausedBranchIds = [...new Set(
+      b.pausedBranchIds.map((v) => String(v).trim()).filter((v) => v && isFulfillable(v)),
+    )];
+  }
+  /* Extra verzendvrije dagen: strikt yyyy-mm-dd, en alleen dit en volgend jaar —
+     een tikfout als "20026-01-02" hoort niet stil in de kalender te belanden. */
+  if (Array.isArray(b.extraClosureDates)) {
+    /* Amsterdams jaar, niet UTC: in het eerste uur van 1 januari staat UTC nog
+       in het oude jaar en zou een geldige sluitingsdag stil weggefilterd worden. */
+    const nu = Number(
+      new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", year: "numeric" }).format(new Date()),
+    );
+    out.extraClosureDates = [...new Set(
+      b.extraClosureDates
+        .map((v) => String(v).trim())
+        .filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)))
+        .filter((v) => {
+          const j = Number(v.slice(0, 4));
+          return j >= nu && j <= nu + 2;
+        }),
+    )].sort();
   }
   /* Pakbontekst: geen getal maar een blok teksten — eigen sanitizer. */
   const pakbon = schoonPakbon(b.pakbon);

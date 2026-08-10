@@ -101,6 +101,11 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
     getSettings(),
   ]);
   const online = onlineBranchSet(); // Set<branchId> of null = alle filialen
+  /* Tijdelijk gepauzeerde filialen (verbouwing/vakantie) tellen NIET mee als
+     online voorraad. Zonder dit bleef een maat waarvan de enige stuks in het
+     gepauzeerde filiaal liggen gewoon te koop, terwijl de allocatie dat filiaal
+     overslaat — de klant betaalt en er komt geen plan. */
+  const gepauzeerd = new Set((settings.pausedBranchIds || []).map(String));
   for (const [sku, st] of gross) {
     const keyL = sku.toLowerCase();
     let total = 0;
@@ -114,7 +119,7 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
       // buiten verkoop/reservering (buffer tegen miteltelling/displaystuk).
       const net = Math.max(0, b.qty + pd - wr - held - safetyStockFor(b.branchId, settings));
       total += net;
-      if (!online || online.has(b.branchId)) onlineQty += net;
+      if ((!online || online.has(b.branchId)) && !gepauzeerd.has(String(b.branchId))) onlineQty += net;
       return { ...b, qty: net };
     });
     out.set(sku, { total, online: onlineQty, byBranch });

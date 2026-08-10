@@ -77,7 +77,6 @@ type Props = {
   /** Server-belofte uit de allocatie-engine (estimateDelivery). */
   deliveryPromise?: string | null;
   deliveryNote?: string | null;
-  cutoffHour?: number;
   /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
   mySize?: string | null;
   /** Pasvorm-noot (bv. "Modern fit") — getoond onder de maatkiezer. */
@@ -103,7 +102,6 @@ export function BuyBox({
   colorSiblings,
   deliveryPromise,
   deliveryNote,
-  cutoffHour,
   mySize,
   fitNote,
   freeShipThresholdCents,
@@ -423,7 +421,6 @@ export function BuyBox({
         <DeliveryPromise
           promise={deliveryPromise}
           note={deliveryNote}
-          cutoffHour={cutoffHour}
           extra={
             freeShipThresholdCents
               ? priceCents >= freeShipThresholdCents
