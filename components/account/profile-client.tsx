@@ -5,6 +5,7 @@ import { CheckIcon } from "@/components/icons";
 import { useT } from "@/components/i18n/locale-provider";
 import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
+import { PORTAL_URL } from "@/lib/portal";
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
@@ -32,12 +33,8 @@ type Address = {
 type Customer = {
   id: string; email: string; firstName: string; lastName: string; phone: string;
   loyaltyPoints: number; sizeProfile: Record<string, string>; marketingOptIn: boolean;
-  /** Heeft deze persoon toegang tot de studio (beheerder of een rol)? */
+  /** Medewerker? Bepaalt alleen of we de ingang naar de portal tonen. */
   isStaff?: boolean;
-  /** De werkgebieden waar hij in mag — bepaalt welke snelkoppelingen we tonen. */
-  permissions?: string[];
-  /** Eerste studiopagina waar hij in mag; altijd zichtbaar als vangnet. */
-  studioHref?: string | null;
 };
 type ReturnRow = {
   id: string; orderNumber: string; status: string; method: "dhl" | "store"; refundType: "money" | "credit";
@@ -86,7 +83,6 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
   const [tab, setTab] = useState<TabKey>("overzicht");
   const name = customer.firstName || customer.email.split("@")[0];
   // Alleen presentatie: de pagina achter de link controleert zelf opnieuw.
-  const mag = (recht: string) => (customer.permissions ?? []).includes(recht);
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
@@ -97,15 +93,13 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
         </div>
         <div className="flex items-center gap-4">
           {customer.isStaff ? (
-            <>
-              {mag("meten") ? <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.statistics")}</a> : null}
-              {mag("operatie") ? <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.orders")}</a> : null}
-              {mag("klanten") ? <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.customers")}</a> : null}
-              {mag("meten") ? <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reports")}</a> : null}
-              {mag("presentatie") ? <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reviews")}</a> : null}
-              {mag("instellingen") ? <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.settings")}</a> : null}
-              {customer.studioHref ? <a href={customer.studioHref} className="font-sans text-sm text-ink underline hover:text-ink">Site-studio</a> : null}
-            </>
+            <a
+              href={`${PORTAL_URL}/site`}
+              className="font-sans text-sm text-ink underline hover:text-ink"
+              rel="noopener noreferrer"
+            >
+              Portal
+            </a>
           ) : null}
           <form action="/api/account/logout" method="post">
             <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">{t("account.logout")}</button>

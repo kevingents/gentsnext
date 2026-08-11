@@ -27,6 +27,50 @@ const nextConfig = {
     // Correctheid wordt bewaakt door `tsc --noEmit`; eslint-flat-config volgt later.
     ignoreDuringBuilds: true,
   },
+  /**
+   * De Site-studio op /account/* is opgeheven; al dat beheer zit nu in de
+   * portal onder /site. Iedereen heeft die pagina's jarenlang als bladwijzer
+   * gehad, dus ze landen op hun tegenhanger in plaats van op een 404.
+   *
+   * Bewust `permanent: false` (307): een 308 wordt hard door de browser gecachet
+   * en dan kom je er nooit meer vanaf als een pad ooit anders moet. Zelfde keuze
+   * als de portal maakte bij /nieuwe-site → /site.
+   *
+   * "team" gaat naar /site zonder eigen tegenhanger: het rollenmodel van de
+   * webshop is vervallen — wie wat mag bepaalt de portal nu zelf.
+   */
+  async redirects() {
+    const portal = (process.env.NEXT_PUBLIC_PORTAL_URL || 'https://portal.gents.nl').replace(/\/+$/, '');
+    const naar = {
+      statistieken: '/site/omzet',
+      analytics: '/site/gedrag',
+      rapportages: '/site/rapportages',
+      paginas: '/site/paginas',
+      looks: '/site/looks',
+      blog: '/site/blog',
+      gelegenheden: '/site/gelegenheden',
+      menu: '/site/menu',
+      seo: '/site/seo',
+      vertalingen: '/site/vertalingen',
+      redirects: '/site/redirects',
+      merchandising: '/site/merchandising',
+      productmedia: '/site/productmedia',
+      beeldstatus: '/site/foto/fotostatus',
+      reviews: '/site/reviews',
+      instellingen: '/site/instellingen',
+      cadeaubonnen: '/site/cadeaubonnen',
+      orders: '/site/bestellingen',
+      klanten: '/site/klanten',
+      fulfilment: '/site/fulfilment',
+      team: '/site',
+    };
+    return Object.entries(naar).flatMap(([van, pad]) => [
+      { source: `/account/${van}`, destination: `${portal}${pad}`, permanent: false },
+      // Subpaden mee (/account/klanten/<id> → /site/klanten).
+      { source: `/account/${van}/:rest*`, destination: `${portal}${pad}`, permanent: false },
+    ]);
+  },
+
   // Veilige, breed-toepasbare beveiligingsheaders (uit de Lighthouse-best-practices):
   // HSTS (Vercel is altijd HTTPS), clickjacking-bescherming, MIME-sniffing uit, en een
   // strak referrer-/permissions-beleid. Bewust GEEN CSP/COOP hier — die vergen
