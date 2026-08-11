@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.js",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -24,7 +25,8 @@
     "translate:catalog": "tsx scripts/translate-catalog.ts",
     "generate:model-photos": "tsx scripts/generate-model-photos.ts",
     "check:rechten": "tsx scripts/check-rechten.ts",
-    "verify:possales": "tsx scripts/verify-pos-sales.ts"
+    "verify:possales": "tsx scripts/verify-pos-sales.ts",
+    "backfill:punten": "tsx scripts/backfill-loyalty.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

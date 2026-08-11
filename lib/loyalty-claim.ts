@@ -199,18 +199,27 @@ async function creditOnce(customerId: string, points: number, reason: string, re
 }
 
 /** Verzilver de spaarpunten van een ANONIEME kassabon naar een account. */
-export async function claimReceiptPoints(input: { saleId: string; token: string; customerId: string }): Promise<ClaimResult> {
+export async function claimReceiptPoints(input: { saleId: string; token: string; customerId: string; email?: string }): Promise<ClaimResult> {
   const saleId = String(input.saleId || "").trim();
   const customerId = String(input.customerId || "").trim();
+  const myEmail = String(input.email || "").trim().toLowerCase();
   if (!saleId || !customerId) return { ok: false, error: "Onvolledig verzoek." };
   // Fail closed: zonder een eigen bon-secret is het token te vervalsen → geen punten.
   if (!receiptSecretConfigured()) return { ok: false, error: "Punten verzilveren is nog niet ingeschakeld." };
   if (!verifyReceiptToken(saleId, input.token)) return { ok: false, error: "Ongeldige bon-link." };
   const sale = await getPosSaleCore(saleId);
   if (!sale) return { ok: false, error: "Bon niet gevonden." };
-  const s = sale as { cancelled?: boolean; customerId?: string; total?: number };
+  const s = sale as { cancelled?: boolean; customerId?: string; customerEmail?: string; total?: number };
   if (s.cancelled) return { ok: false, error: "Deze bon is geannuleerd." };
-  if (String(s.customerId || "") && String(s.customerId) !== customerId) {
+  /* Van wie is deze bon? Het customerId-veld is GEEN betrouwbaar account-id: de kassa
+     zet er het gents.nl-account (uuid) in óf een SRS-klantnummer, afhankelijk van in
+     welk bestand de verkoper de klant opzocht. Puur op dat veld vergelijken zei tegen
+     de rechtmatige eigenaar van een op SRS-nummer gekoppelde bon "hoort bij een andere
+     klant". Het e-mailadres op de bon is de brug tussen beide nummerreeksen. */
+  const saleEmail = String(s.customerEmail || "").trim().toLowerCase();
+  const linked = String(s.customerId || "").trim();
+  const isMine = (!!linked && linked === customerId) || (!!saleEmail && !!myEmail && saleEmail === myEmail);
+  if (linked && !isMine) {
     return { ok: false, error: "Deze bon hoort bij een andere klant." };
   }
   /* Hoort de bon al bij DEZE klant, dan is 't een kassa-verkoop op naam en heeft de
@@ -221,8 +230,11 @@ export async function claimReceiptPoints(input: { saleId: string; token: string;
      wat de kassa in de blob deed.
      Zolang die twee grootboeken niet samengevoegd zijn, is niet-boeken het enige
      juiste antwoord. De QR-claim op de bon blijft wél werken waarvoor hij bedoeld is:
-     een ANONIEME bon aan een account koppelen. */
-  if (String(s.customerId || "") === customerId) {
+     een ANONIEME bon aan een account koppelen.
+     Voorwaarde is wél dat de bon een klant DRÁÁGT: alleen dan liet de kassa z'n
+     earnLoyalty lopen. Staat er enkel een e-mailadres op (bon zonder klantkoppeling),
+     dan kreeg niemand punten en hoort deze claim gewoon te boeken. */
+  if (linked && isMine) {
     return {
       ok: true,
       points: 0,

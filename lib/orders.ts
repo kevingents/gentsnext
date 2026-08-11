@@ -103,7 +103,7 @@ const orderColumns = {
   updatedAt: orders.updatedAt,
 } as const;
 
-/** Alles wat de bevestigingsmail + de puntenbijschrijving nodig hebben — niet meer. */
+/** Alles wat de bevestigingsmail nodig heeft — niet meer. */
 const orderMailColumns = {
   id: orders.id,
   orderNumber: orders.orderNumber,
@@ -638,7 +638,10 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     .update(orders)
     .set(set)
     .where(whereClause)
-    .returning({ id: orders.id, voucherCode: orders.voucherCode, orderNumber: orders.orderNumber, totalCents: orders.totalCents });
+    .returning({
+      id: orders.id, voucherCode: orders.voucherCode, orderNumber: orders.orderNumber, totalCents: orders.totalCents,
+      customerId: orders.customerId, paidAt: orders.paidAt, createdAt: orders.createdAt,
+    });
   // Omzet-event op het choke-point van élke betaling. Het bestaande
   // purchase-event stond client-side op de bedanktpagina en miste daardoor
   // vrijwel alles (1 event tegenover 28.436 betaalde orders): adblockers,
@@ -660,6 +663,24 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
           props: { source: "webhook", orderNumber: o.orderNumber },
         },
       ]).catch(() => {});
+    }
+  }
+  /* Spaarpunten op hetzelfde choke-point als het omzet-event: élke betaling komt
+     hier langs (Mollie + Worldline, webhook én terugkeerpagina, cadeaubon-order,
+     kassa-order). Stond eerder in sendOrderConfirmationOnce, en dat was fout: dat
+     pad keert vóór de bijschrijving terug als er geen mailkanaal is, en na een
+     mislukte poging is de bevestigings-claim al gezet waardoor de punten er ook bij
+     een retry nooit meer langskwamen. Punten hingen zo aan e-mail-infrastructuur.
+     creditOrderLoyalty is idempotent op (refType, refId) → dubbel boeken kan niet.
+     Non-fataal: een webhook mag hier nooit op stuklopen. */
+  if (orderStatus === "paid" && updated.length) {
+    for (const o of updated) {
+      if (!o.customerId) continue; // gast — punten volgen bij account-koppeling (claimGuestData)
+      try {
+        await creditOrderLoyalty(o.customerId, { id: o.id, totalCents: o.totalCents, status: "paid", paidAt: o.paidAt, createdAt: o.createdAt });
+      } catch (e) {
+        console.warn(`[applyPaymentStatus] punten bijschrijven mislukt voor ${o.orderNumber}:`, e instanceof Error ? e.message : e);
+      }
     }
   }
   // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven ÉN een
@@ -744,16 +765,8 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   try {
     const [order] = await db.select(orderMailColumns).from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order) throw new Error(`Order ${orderId} niet gevonden na claim.`);
-    // Spaarpunten bijschrijven voor een ingelogde klant (gast-orders krijgen ze bij
-    // account-koppeling via claimGuestData). Idempotent + non-fataal — nooit de
-    // bevestiging blokkeren.
-    if (order.customerId) {
-      try {
-        await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status), paidAt: order.paidAt, createdAt: order.createdAt });
-      } catch (e) {
-        console.warn("[order] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
-      }
-    }
+    // Spaarpunten staan bewust NIET meer hier maar in applyPaymentStatus: dit pad
+    // draait niet zonder mailkanaal en niet bij een retry na een mislukte poging.
     const lines = await db.select(orderLineColumns).from(orderLines).where(eq(orderLines.orderId, orderId));
     const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
     // De webhook kent de klantsessie niet meer — de taal reist mee op de order.

@@ -813,6 +813,14 @@ export const walletAppleRegistrations = pgTable(
     deviceLibraryIdentifier: text("device_library_identifier").notNull(),
     serialNumber: text("serial_number").notNull(),
     pushToken: text("push_token").notNull(),
+    /**
+     * Het saldo zoals de pas het kent na de laatste geslaagde push. Maakt drift
+     * zichtbaar: wijkt dit af van het huidige saldo, dan loopt de pas achter en
+     * moet er alsnog gepusht worden. Zonder deze kolom is een gemiste push
+     * onzichtbaar — er komt geen fout, de klant ziet alleen een oud getal.
+     * NULL = nog nooit gepusht.
+     */
+    lastPushedPoints: integer("last_pushed_points"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -23,6 +23,14 @@
     {
       "path": "/api/cron/wallet-vesting-push",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sandbox-verversen",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/punten-bijboeken",
+      "schedule": "15 * * * *"
     }
   ],
   "regions": [

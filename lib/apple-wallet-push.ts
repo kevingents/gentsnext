@@ -1,5 +1,5 @@
 import { connect } from "node:http2";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletAppleRegistrations } from "@/db/schema";
 import { walletConfigured } from "@/lib/apple-wallet-config";
@@ -20,6 +20,19 @@ function b64Pem(key: string): string {
   const v = process.env[key] || "";
   if (!v) return "";
   return v.includes("-----BEGIN") ? v : Buffer.from(v, "base64").toString("utf8");
+}
+
+/**
+ * Het saldo zoals het OP DE PAS staat: het geveste (besteedbare) deel van het
+ * grootboek, geklemd op 0 — exact wat de pas-route rendert (redeemableBalance).
+ * Eén definitie, gebruikt door zowel de stempel na een push als de drift-cron,
+ * zodat die twee niet uiteen kunnen lopen.
+ */
+export function vestedBalanceSql(serial: string) {
+  return sql`greatest(0, coalesce((
+    select sum(points)::int from loyalty_events
+    where customer_id::text = ${serial} and (vests_at is null or vests_at <= now())
+  ), 0))`;
 }
 
 const APNS_HOST = "https://api.push.apple.com";
@@ -118,6 +131,24 @@ export async function pushPassUpdate(serialNumber: string): Promise<number> {
       }
     } catch (e) {
       console.warn("[wallet/push] stale-registraties opruimen faalde:", (e as Error).message);
+    }
+  }
+  /* Vastleggen wélk saldo de pas nu kent. Daarmee is achterlopen meetbaar: de
+     drift-cron vergelijkt dit met het echte saldo en haalt in wat een pad hier
+     niet langs bracht. Alleen bij een geslaagde push — anders zouden we een
+     update claimen die het toestel nooit kreeg.
+     Let op: de pas toont het GEVESTE (besteedbare) saldo, niet de totaalcache.
+     Vergelijken met customers.loyalty_points zou vesting missen — en dat is nu
+     juist de reden dat deze cron ooit bestond. */
+  if (ok > 0) {
+    try {
+      const db = getDb();
+      await db.execute(sql`
+        update wallet_apple_registrations
+        set last_pushed_points = ${vestedBalanceSql(serial)}
+        where serial_number = ${serial}`);
+    } catch (e) {
+      console.warn("[wallet/push] saldo-stempel bijwerken faalde:", (e as Error).message);
     }
   }
   return ok;

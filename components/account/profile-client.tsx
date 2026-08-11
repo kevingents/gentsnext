@@ -9,18 +9,13 @@ import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
 import { AppleWalletButton } from "@/components/account/apple-wallet-button";
+import { Bestellingen, type OrderRow, type StoreBuyRow } from "@/components/account/bestellingen";
 import type { ProductCardData } from "@/lib/catalog";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
-type Line = { title: string; size: string; color: string; quantity: number; unitPriceCents: number };
-type Order = {
-  id: string; orderNumber: string; status: string; createdAt: string;
-  totalCents: number; lines: Line[];
-};
-type StoreBuy = {
-  id: string; storeName: string; purchasedAt: string; totalCents: number;
-  pointsEarned: number; lines: { title: string; size?: string; color?: string; qty?: number; unitPriceCents?: number }[];
-};
+// Order- en winkelbon-vorm staan bij het besteloverzicht dat ze rendert.
+type Order = OrderRow;
+type StoreBuy = StoreBuyRow;
 type Voucher = {
   id: string; code: string; description: string; kind: string; valueCents: number;
   percentOff: number; status: string; expiresAt: string | null;
@@ -141,7 +136,7 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
 
       <div className="mt-8">
         {tab === "overzicht" && <Overzicht customer={customer} data={data} onTab={setTab} />}
-        {tab === "bestellingen" && <Bestellingen data={data} />}
+        {tab === "bestellingen" && <BestellingenTab data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
         {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} />}
         {tab === "vouchers" && <Vouchers data={data} />}
@@ -250,8 +245,14 @@ function QuickTile({ title, sub, onClick }: { title: string; sub: string; onClic
 function RecentActivity({ data }: { data: Data }) {
   const t = useT();
   const items = [
-    ...data.onlineOrders.map((o) => ({ when: o.createdAt, kind: "Online", label: t("account.orderNumber", { n: o.orderNumber }), total: o.totalCents })),
-    ...data.storeBuys.map((s) => ({ when: s.purchasedAt, kind: "Winkel", label: s.storeName || t("account.activity.storePurchase"), total: s.totalCents })),
+    ...data.onlineOrders.map((o) => ({ when: o.createdAt, kind: "Online", retour: false, label: t("account.orderNumber", { n: o.orderNumber }), total: o.totalCents })),
+    ...data.storeBuys.map((s) => ({
+      when: s.purchasedAt,
+      kind: "Winkel",
+      retour: s.kind === "retour",
+      label: s.storeName || t("account.activity.storePurchase"),
+      total: s.totalCents,
+    })),
   ]
     .sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime())
     .slice(0, 5);
@@ -263,7 +264,9 @@ function RecentActivity({ data }: { data: Data }) {
         {items.map((i, idx) => (
           <li key={idx} className="flex items-center justify-between py-3 font-sans text-sm">
             <span className="flex items-center gap-3">
-              <span className={`inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-wide ${i.kind === "Winkel" ? "bg-ink text-canvas" : "border border-line"}`}>{i.kind === "Winkel" ? t("account.activity.store") : t("account.activity.online")}</span>
+              <span className={`inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-wide ${i.kind === "Winkel" ? "bg-ink text-canvas" : "border border-line"}`}>
+                {i.retour ? t("account.activity.storeReturn") : i.kind === "Winkel" ? t("account.activity.store") : t("account.activity.online")}
+              </span>
               <span>{i.label}</span>
             </span>
             <span className="text-ink-soft">{nlDate(i.when)} · {formatEuro(i.total)}</span>
@@ -274,87 +277,15 @@ function RecentActivity({ data }: { data: Data }) {
   );
 }
 
-/* ── Bestellingen (online + winkel) ───────────────────────────────────────── */
-function Bestellingen({ data }: { data: Data }) {
-  const t = useT();
-  if (!data.onlineOrders.length && !data.storeBuys.length) {
-    return <Empty title={t("account.orders.emptyTitle")} body={t("account.orders.emptyBody")} />;
-  }
+/* ── Bestellingen: één tijdlijn van online orders + winkelbonnen ───────── */
+function BestellingenTab({ data }: { data: Data }) {
   return (
-    <div className="space-y-8">
-      {data.onlineOrders.length ? (
-        <section>
-          <p className="label-brand mb-3">{t("account.orders.onlineTitle")}</p>
-          <ul className="space-y-3">
-            {data.onlineOrders.map((o) => (
-              <li key={o.id} className="border border-line p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{t("account.orderNumber", { n: o.orderNumber })}</span>
-                  <span className="font-sans text-sm text-muted">{nlDate(o.createdAt)}</span>
-                </div>
-                <p className="mt-1 font-sans text-xs text-ink-soft">{STATUS_NL[o.status] || o.status} · {formatEuro(o.totalCents)}</p>
-                {o.lines.length ? (
-                  <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
-                    {o.lines.map((l, i) => (
-                      <li key={i}>{l.quantity}× {l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                <OrderReturnFooter order={o} returns={data.returns} windowDays={data.returnWindowDays} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {data.storeBuys.length ? (
-        <section>
-          <p className="label-brand mb-3">{t("account.orders.storeTitle")}</p>
-          <ul className="space-y-3">
-            {data.storeBuys.map((s) => (
-              <li key={s.id} className="border border-line p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 font-medium">
-                    <span className="inline-block bg-ink px-2 py-0.5 text-[0.6rem] uppercase tracking-wide text-canvas">{t("account.activity.store")}</span>
-                    {s.storeName || t("account.activity.storePurchase")}
-                  </span>
-                  <span className="font-sans text-sm text-muted">{nlDate(s.purchasedAt)}</span>
-                </div>
-                <p className="mt-1 font-sans text-xs text-ink-soft">{formatEuro(s.totalCents)}{s.pointsEarned ? ` · ${t("puntenClaim.success.points", { points: s.pointsEarned })}` : ""}</p>
-                {s.lines?.length ? (
-                  <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
-                    {s.lines.map((l, i) => (
-                      <li key={i}>{l.qty ? `${l.qty}× ` : ""}{l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-function OrderReturnFooter({ order, returns, windowDays }: { order: Order; returns: ReturnRow[]; windowDays: number }) {
-  const t = useT();
-  const ret = returns.find((r) => r.orderNumber === order.orderNumber);
-  const eligible = ["paid", "shipped", "delivered", "ready_pickup"].includes(order.status);
-  const withinWindow = Date.now() - new Date(order.createdAt).getTime() <= windowDays * 86400000;
-  if (!ret && (!eligible || !withinWindow)) return null;
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs">
-      {ret ? (
-        <span className="text-ink-soft">
-          {t("account.returns.prefix")} {RET_STATUS_NL[ret.status] || ret.status}
-          {ret.refundType === "credit" && ret.creditCode ? ` · ${t("account.returns.creditCode", { code: ret.creditCode })}` : ""}
-          {ret.refundType === "money" && ret.refundedCents ? ` · ${t("account.returns.refunded", { amount: formatEuro(ret.refundedCents) })}` : ""}
-        </span>
-      ) : (
-        <a href={`/retourneren?order=${encodeURIComponent(order.orderNumber)}`} className="underline underline-offset-2 hover:opacity-70">{t("retourneren.title")}</a>
-      )}
-    </div>
+    <Bestellingen
+      onlineOrders={data.onlineOrders}
+      storeBuys={data.storeBuys}
+      returns={data.returns}
+      returnWindowDays={data.returnWindowDays}
+    />
   );
 }
 

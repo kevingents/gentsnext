@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     saleId: String(b?.saleId || "").trim(),
     token: String(b?.token || "").trim(),
     customerId: customer.id,
+    email: customer.email,
   });
   return NextResponse.json(res, { status: res.ok ? 200 : 400 });
 }
