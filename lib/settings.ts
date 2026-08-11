@@ -174,6 +174,13 @@ export type Settings = {
    */
   merchandisingPins: Record<string, string[]>;
   /**
+   * Merchandising-regels: automatische boosts/demotions op productkenmerken
+   * ("jaar 2026 omhoog", "NOS omlaag"), optioneel met een looptijd zodat
+   * seizoensregels vanzelf aflopen. Vorm + compilatie naar SQL staan in
+   * lib/merchandising-regels.ts (type MerchRegel). Beheerd vanuit de portal.
+   */
+  merchandisingRegels: unknown[];
+  /**
    * Notificatie-mailadres per winkel (sleutel = winkelnaam of stad, lowercase,
    * bv. "amsterdam" of "gents amsterdam"). Gebruikt voor o.a. de
    * afspraak-notificatie naar de winkel. In de tool beheerbaar (settings-store);
@@ -296,6 +303,7 @@ export const DEFAULT_SETTINGS: Settings = {
     alternativesCount: 3,
   },
   merchandisingPins: {},
+  merchandisingRegels: [],
   storeEmails: {},
   alertEmails: (process.env.OPS_ALERT_EMAIL || "")
     .split(",")
