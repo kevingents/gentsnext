@@ -1021,14 +1021,16 @@ export async function getPostPurchase(
   const uniq = [...new Set(handles.filter(Boolean))];
   if (!uniq.length) return { careItems: [], recommendations: [] };
   const db = getDb();
-  const rows = await db.execute<{ id: string; hg: string; was: string; mat: string }>(sql`
-    select id, attributes->>'hoofdgroep_omschrijving' hg, attributes->>'wasvoorschrift' was, attributes->>'materiaal' mat
+  // subgroep + titel horen erbij: pas die onderscheiden een chino van een pakbroek.
+  const rows = await db.execute<{ id: string; hg: string; sub: string; was: string; mat: string; titel: string }>(sql`
+    select id, attributes->>'hoofdgroep_omschrijving' hg, attributes->>'subgroep' sub,
+           attributes->>'wasvoorschrift' was, attributes->>'materiaal' mat, title titel
     from products where handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)})
   `);
   const seen = new Set<string>();
   const careItems: CareItem[] = [];
   for (const r of rows.rows) {
-    for (const ci of parseCare(r.was, { hoofdgroep_omschrijving: r.hg, materiaal: r.mat })) {
+    for (const ci of parseCare(r.was, { hoofdgroep_omschrijving: r.hg, subgroep: r.sub, materiaal: r.mat, titel: r.titel })) {
       if (!seen.has(ci.key)) {
         seen.add(ci.key);
         careItems.push(ci);
