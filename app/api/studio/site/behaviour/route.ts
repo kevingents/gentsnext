@@ -23,8 +23,12 @@ export async function GET(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  const raw = Number(new URL(req.url).searchParams.get("days"));
-  const days = Number.isFinite(raw) ? Math.min(365, Math.max(1, Math.round(raw))) : 30;
+  // Number(null) is 0 en dus "finite" — een ontbrekende ?days viel daardoor
+  // door de clamp heen naar 1 dag in plaats van de bedoelde 30, en de pagina
+  // toonde vrijwel lege grafieken. Eerst op afwezig/leeg toetsen, dan pas rekenen.
+  const rawParam = new URL(req.url).searchParams.get("days");
+  const parsed = Number(rawParam);
+  const days = rawParam && Number.isFinite(parsed) ? Math.min(365, Math.max(1, Math.round(parsed))) : 30;
 
   try {
     const [dashboard, nav] = await Promise.all([getDashboard(days), getNavInsights(days)]);

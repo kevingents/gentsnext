@@ -26,26 +26,45 @@ export async function GET(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
+  const LIMIET = 500;
   try {
     const db = getDb();
-    const rows = await db
-      .select({
-        handle: products.handle,
-        title: products.title,
-        modelImageUrl: products.modelImageUrl,
-        modelImageAlt: products.modelImageAlt,
-        largeUrl: productSizeMedia.url,
-        largeAlt: productSizeMedia.alt,
-        threshold: productSizeMedia.threshold,
-        updatedAt: productSizeMedia.updatedAt,
-      })
-      .from(products)
-      .leftJoin(productSizeMedia, eq(productSizeMedia.productId, products.id))
-      .where(or(ne(products.modelImageUrl, ""), sql`${productSizeMedia.url} is not null`))
-      .orderBy(desc(productSizeMedia.updatedAt), products.title)
-      .limit(500);
+    const heeftMedia = or(ne(products.modelImageUrl, ""), sql`${productSizeMedia.url} is not null`);
 
-    return NextResponse.json({ ok: true, items: rows, thresholds: THRESHOLDS });
+    // Het totaal apart tellen: er staan er meer dan de lijst aankan, en "500"
+    // zonder context leest als "dit zijn ze allemaal".
+    const [rows, telling] = await Promise.all([
+      db
+        .select({
+          handle: products.handle,
+          title: products.title,
+          modelImageUrl: products.modelImageUrl,
+          modelImageAlt: products.modelImageAlt,
+          largeUrl: productSizeMedia.url,
+          largeAlt: productSizeMedia.alt,
+          threshold: productSizeMedia.threshold,
+          updatedAt: productSizeMedia.updatedAt,
+        })
+        .from(products)
+        .leftJoin(productSizeMedia, eq(productSizeMedia.productId, products.id))
+        .where(heeftMedia)
+        .orderBy(desc(productSizeMedia.updatedAt), products.title)
+        .limit(LIMIET),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(products)
+        .leftJoin(productSizeMedia, eq(productSizeMedia.productId, products.id))
+        .where(heeftMedia),
+    ]);
+
+    const total = telling[0]?.n ?? rows.length;
+    return NextResponse.json({
+      ok: true,
+      items: rows,
+      total,
+      truncated: total > rows.length,
+      thresholds: THRESHOLDS,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
