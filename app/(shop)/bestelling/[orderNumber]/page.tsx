@@ -117,10 +117,13 @@ export default async function OrderPage({ params, searchParams }: Props) {
   // Staat los van order.status: een deels geannuleerde order blijft 'paid'.
   const cancelled = await getCancelledWithAlternatives(order.orderNumber, { locale, lines }).catch(() => null);
 
-  // Bezorgschatting voor het stappenplan.
-  const settings = paid ? await getSettings() : null;
+  // Altijd laden (30 sec gecached): de retourbelofte onderaan hoort ook bij een
+  // nog niet betaalde order het ingestelde bedrag te noemen, niet een vast getal.
+  const settings = await getSettings();
+  const returnVars = { amount: formatEuro(settings.returnConfig.dhlReturnCostCents) };
+  // Bezorgschatting voor het stappenplan — alleen zinvol als er betaald is.
   const isExpress = order.deliveryMethod === "express";
-  const deliveryDate = settings
+  const deliveryDate = paid
     ? addBusinessDays(new Date(order.createdAt), isExpress ? Math.max(1, settings.expressTransitDays) : settings.standardMaxDays)
     : null;
 
@@ -346,7 +349,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <h2 className="mt-2 font-display text-xl">{t("order.care_tips_title")}</h2>
           <ul className="mt-4 space-y-2.5 font-sans text-sm leading-relaxed text-ink-soft">
             <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span>{t("order.unpack_prefix")} <span className="text-ink">{t("order.hang_immediately")}</span> — {t("order.creases_note")}</span></li>
-            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span><span className="text-ink">{t("order.fit_question")}</span> {t("order.with_our")} <span className="text-ink">{t("order.alteration_service")}</span> {t("order.alteration_details")} <span className="text-ink">{t("order.free_return")}</span> — {t("order.return_in_store")}</span></li>
+            <li className="flex gap-2"><span aria-hidden className="text-ink">·</span><span><span className="text-ink">{t("order.fit_question")}</span> {t("order.with_our")} <span className="text-ink">{t("order.alteration_service")}</span> {t("order.alteration_details")} <span className="text-ink">{t("order.free_return", returnVars)}</span> — {t("order.return_in_store")}</span></li>
           </ul>
           {extras?.careItems.length ? (
             <>
