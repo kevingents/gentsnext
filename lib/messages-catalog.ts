@@ -717,7 +717,8 @@ export const SITE_CATALOG: Record<string, string> = {
   // Geen onvoorwaardelijke "gratis binnen 14 dagen" meer: gratis is de retour
   // alleen bij een tegoed of inleveren in de winkel. De renderplek (de
   // bestelpagina) geeft geen params mee, dus hier bewust zonder {placeholder}.
-  "order.free_return": "gratis met een GENTS-tegoed of in de winkel; bij geld terug per post € 4,99 retourkosten",
+  // {amount} uit returnConfig (Instellingen); de besteloverzicht-pagina geeft 'm mee aan t().
+  "order.free_return": "gratis met een GENTS-tegoed of in de winkel; bij geld terug per post {amount} retourkosten",
   "order.from_locations": "Je bestelling komt uit",
   "order.from_store": "Onze winkel in",
   "order.from_warehouse": "Vanuit ons magazijn",
@@ -825,7 +826,6 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.accordion_specs": "Specificaties",
   "pdp.accordion.care": "Onderhoud",
   "pdp.accordion.delivery": "Bezorging & retour",
-  "pdp.accordion.deliveryContent1": "Binnen 14 dagen retourneren: gratis als je kiest voor een GENTS-tegoed of het in de winkel inlevert; bij geld terug rekenen we € 4,99 retourkosten. Ophalen in een van onze 19 winkels kan ook.",
   "pdp.accordion.deliveryContent2": "Twijfel je over je maat? Gebruik ons",
   "pdp.accordion.deliveryContent3": "of vraag het in de winkel.",
   "pdp.accordion.deliveryLink": "maatadvies",
@@ -884,7 +884,6 @@ export const SITE_CATALOG: Record<string, string> = {
   // regel eronder in dezelfde accordeon de échte voorwaarde noemt.
   // {days}/{amount} uit returnConfig (Instellingen); de PDP geeft ze mee aan t().
   "pdp.returns.freeNote": "Niet helemaal goed? Je hebt {days} dagen bedenktijd. Kies je een GENTS-tegoed of lever je het in één van onze winkels in, dan is retourneren gratis; bij geld terug op je rekening rekenen we {amount} retourkosten.",
-  "pdp.return_policy": "Binnen 14 dagen retourneren: gratis met een GENTS-tegoed of in de winkel; bij geld terug € 4,99 retourkosten. Ophalen in één van onze 19 winkels kan ook.",
   "pdp.season": "Seizoen",
   "pdp.share.copied": "Link gekopieerd",
   "pdp.share.label": "Deel dit product",
@@ -1477,8 +1476,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "mail.order.pointsBody":
     "Bekijk en verzilver ze in je {link}. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.",
   "mail.order.accountLink": "GENTS-account",
+  // {days}/{amount} uit returnConfig (Instellingen); lib/email geeft ze mee aan t().
   "mail.order.returnNote":
-    "Niet helemaal tevreden? Je hebt 14 dagen bedenktijd. Retourneren is gratis met een GENTS-tegoed of als je het in de winkel inlevert; wil je het bedrag terug op je rekening, dan rekenen we € 4,99 retourkosten.",
+    "Niet helemaal tevreden? Je hebt {days} dagen bedenktijd. Retourneren is gratis met een GENTS-tegoed of als je het in de winkel inlevert; wil je het bedrag terug op je rekening, dan rekenen we {amount} retourkosten.",
   "mail.order.questions": "Vragen? Antwoord op deze mail of bezoek {link}.",
   "mail.login.subject": "Je inloglink voor GENTS",
   "mail.login.heading": "Inloggen bij GENTS",

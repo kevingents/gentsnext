@@ -91,7 +91,30 @@ type OrderInfo = {
 
 type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
 
-function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = [], t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
+/** Bedenktijd + retourkosten uit Instellingen; zonder waarde valt de mail terug
+ *  op de standaard, zodat een tijdelijk onbereikbare instellingen-store nooit
+ *  "{amount}" in een klantmail zet. */
+export type RetourBelofte = { days: number; amount: string };
+
+/** Haalt de retourbelofte op uit Instellingen; faalt dat, dan de standaard. */
+async function retourBelofte(): Promise<RetourBelofte> {
+  try {
+    const { getSettings } = await import("@/lib/settings");
+    const s = await getSettings();
+    return { days: s.returnConfig.windowDays, amount: euro(s.returnConfig.dhlReturnCostCents) };
+  } catch {
+    return { days: 14, amount: euro(499) };
+  }
+}
+
+function orderHtml(
+  order: OrderInfo,
+  lines: OrderLine[],
+  recs: CrossSellItem[] = [],
+  t: Tr = nlT,
+  locale: Locale = DEFAULT_LOCALE,
+  retour: RetourBelofte = { days: 14, amount: euro(499) },
+): string {
   const site = getSiteUrl();
   // Links met locale-prefix: de mail wordt ook geopend zonder onze taal-cookie.
   const url = (path: string) => `${site}${localizedPath(path, locale)}`;
@@ -160,7 +183,7 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
             <strong>${t("checkout.delivery_address")}</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}
           </p>
           <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:16px">
-            ${t("mail.order.returnNote")}
+            ${t("mail.order.returnNote", { days: retour.days, amount: retour.amount })}
             ${t("mail.order.questions", { link: `<a href="${url("/")}" style="color:#0A0A0A">gents.nl</a>` })}
           </p>
         </td></tr>
@@ -537,6 +560,9 @@ export async function sendOrderConfirmation(
 ): Promise<boolean> {
   if (!emailConfigured()) return false;
   const t = await mailT(locale);
+  // Bedenktijd + retourkosten uit Instellingen, niet uit de tekst zelf: past
+  // Kevin het bedrag aan, dan klopt de bevestigingsmail meteen mee.
+  const retour = await retourBelofte();
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -547,7 +573,7 @@ export async function sendOrderConfirmation(
       from: process.env.RESEND_FROM,
       to: [order.email],
       subject: t("mail.order.subject", { orderNumber: order.orderNumber }),
-      html: orderHtml(order, lines, recs, t, locale),
+      html: orderHtml(order, lines, recs, t, locale, retour),
     }),
   });
   if (!res.ok) {
