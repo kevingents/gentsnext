@@ -102,6 +102,12 @@ export type Settings = {
    * gewoon de normale prijs. Rekenkern: lib/pricing (computeReferencePrices).
    */
   saleAnnouncementDays: number;
+  /* Welke betaalprovider de webshop gebruikt. Stond eerder alleen als env-var
+     PAYMENT_PROVIDER in Vercel; die blijft als noodrem bestaan en gaat vóór op
+     deze instelling (zie lib/payments.ts). Zonder deze knop was omschakelen
+     alleen mogelijk met een deploy — en dat is precies hoe de webshop dagenlang
+     op een Worldline-sleutel bleef staan die 403 gaf. */
+  paymentProvider: "mollie" | "worldline";
   // Retouren: bedenktijd, retourkosten bij geld-terug (DHL-label), en of store
   // credit / omruilen altijd een gratis retour geeft.
   returnConfig: {
@@ -268,6 +274,7 @@ export const DEFAULT_SETTINGS: Settings = {
     ],
     toonSteden: true,
   },
+  paymentProvider: "mollie",
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
     dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 499), // S-pakket heenzending, ex toeslagen (eigen DHL-contract)
