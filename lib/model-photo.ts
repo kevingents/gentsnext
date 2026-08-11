@@ -3,12 +3,12 @@ import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { modelStylePrompt } from "@/lib/model-styling";
-import { getModelLearnings, modelLearningsBlock } from "@/lib/model-learnings";
+import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
 
 /**
  * Eén modelfoto (her)genereren via FASHN product-to-model, MÉT de geleerde
- * model-smaak (modelLearningsBlock), kleur-bewuste styling (modelStylePrompt) en
- * native 4:5. Gebruikt door de portal "Modellen-studio" (regenerate-knop).
+ * smaak (modelPromptBlocks), kleur-bewuste styling (modelStylePrompt) en native
+ * 4:5. Gebruikt door de portal "Modellen-studio" (regenerate-knop).
  */
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
@@ -65,8 +65,12 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   if (!p?.img) return { ok: false, error: "Product of productfoto niet gevonden." };
 
   const style = modelStylePrompt(p.hg, p.vcl, p.title, handle);
-  const learn = modelLearningsBlock(await getModelLearnings());
-  const prompt = `${garmentFor(p.hg, style)} ${POSE} ${STUDIO}${learn}`;
+  // Kleding-regels vlak achter de zin over het kledingstuk, model-regels achter
+  // de pose/studio-zinnen, en de correcties voor precies dit product als laatste
+  // — daar leest de generator ze het scherpst en verdrinken ze niet tussen de
+  // algemene huisregels. Zie de toelichting in lib/model-learnings.ts.
+  const learn = modelPromptBlocks(await getModelLearnings(), { handle });
+  const prompt = `${garmentFor(p.hg, style)}${learn.garment} ${POSE} ${STUDIO}${learn.model}${learn.fix}`;
 
   const out = await runProductToModel(p.img, prompt, apiKey);
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };

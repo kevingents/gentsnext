@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { adminOrToken } from "@/lib/studio-token";
 import { getDb } from "@/db";
-import { getModelLearnings, MODEL_REJECT_CATEGORIES } from "@/lib/model-learnings";
+import { getModelLearnings, REJECT_CATEGORIES, topicOf } from "@/lib/model-learnings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,11 +38,19 @@ export async function GET(req: Request) {
       page,
       pageSize,
       items: rows.rows.map((r) => ({ handle: r.handle, title: r.title, hoofdgroep: r.hg || "", url: r.url })),
-      categories: Object.entries(MODEL_REJECT_CATEGORIES).map(([key, v]) => ({ key, label: v.label })),
+      categories: REJECT_CATEGORIES,
       learnings: {
         count: store.learnings.length,
         updatedAt: store.updatedAt,
-        recent: store.learnings.slice(0, 24).map((l) => ({ category: l.category, reason: l.reason, kind: l.kind || "negative", handle: l.handle, at: l.at })),
+        recent: store.learnings.slice(0, 24).map((l) => ({
+          topic: l.topic || topicOf(l.category),
+          category: l.category,
+          reason: l.reason,
+          directive: l.directive,
+          kind: l.kind || "negative",
+          handle: l.handle,
+          at: l.at,
+        })),
       },
     });
   } catch (e) {

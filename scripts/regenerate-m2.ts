@@ -75,7 +75,9 @@ async function main() {
     order by p.handle`)).rows;
 
   console.log(`⏳ ${rows.length} tweede-poses hergenereren (zelfde man als pose 1)…`);
-  const learn = modelLearningsBlock(await getModelLearnings());
+  // Eén keer ophalen, per product uitrollen: de feedback die bij dít product
+  // hoort telt als correctie, de rest alleen als algemene huisregel.
+  const learnStore = await getModelLearnings();
   let done = 0, err = 0;
 
   async function worker(slice: Row[]) {
@@ -83,6 +85,7 @@ async function main() {
       if (!r.img || !r.m1) { err++; done++; continue; }
       try {
         const style = modelStylePrompt(r.hg, r.vcl, r.title, r.handle);
+        const learn = modelLearningsBlock(learnStore, { handle: r.handle });
         const prompt = `${garmentFor(r.hg, style)} ${POSE2} ${STUDIO}${learn}`;
         const out = await run(r.img, prompt, r.m1, apiKey);
         if (!out) { err++; done++; continue; }
