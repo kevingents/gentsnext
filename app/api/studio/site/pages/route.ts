@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
 import { getStorePages, saveStorePages, type StorePage } from "@/lib/content-pages";
 import { reservedPageSlugs } from "@/lib/reserved-page-slugs";
+import { docVersion, CONFLICT_MESSAGE } from "@/lib/content-version";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,7 +43,8 @@ function sanitize(input: unknown): StorePage[] {
 export async function GET(req: Request) {
   if (!(await adminOrToken(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   try {
-    return NextResponse.json({ ok: true, items: await getStorePages() });
+    const items = await getStorePages();
+    return NextResponse.json({ ok: true, items, version: docVersion(items) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
@@ -50,9 +52,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!(await adminOrToken(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
-  let body: { items?: unknown };
+  let body: { items?: unknown; version?: unknown };
   try {
-    body = (await req.json()) as { items?: unknown };
+    body = (await req.json()) as { items?: unknown; version?: unknown };
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
   }
@@ -71,8 +73,20 @@ export async function POST(req: Request) {
     );
   }
   try {
+    // Botsingscontrole: stuurt de client de stempel mee die hij bij het openen
+    // kreeg, dan moet die nog kloppen met wat er nu staat. Zo niet, dan heeft
+    // iemand anders intussen opgeslagen en zou dit zijn werk wissen.
+    // Ontbreekt de stempel, dan slaan we gewoon op — anders zou een oudere
+    // client tijdens een uitrol geen enkele wijziging meer kwijt kunnen.
+    if (typeof body.version === "string" && body.version) {
+      const huidig = docVersion(await getStorePages());
+      if (body.version !== huidig) {
+        return NextResponse.json({ ok: false, error: CONFLICT_MESSAGE, conflict: true }, { status: 409 });
+      }
+    }
     await saveStorePages(items);
-    return NextResponse.json({ ok: true, items });
+    // Verse stempel uit de leeslaag, niet uit wat we net instuurden.
+    return NextResponse.json({ ok: true, items, version: docVersion(await getStorePages()) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

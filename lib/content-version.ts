@@ -1,15 +1,19 @@
 /**
  * Versiestempel van een content-document (pagina's, menu, gelegenheden).
  *
- * Waarom: diezelfde documenten worden door TWEE beheerkanten volledig
- * overschreven — de Site-studio in de webshop (/account/*) en het portal-venster
- * (/api/studio/site/*). Beide sturen de complete lijst vanuit een momentopname
- * die bij het openen van het scherm is gemaakt. Zonder controle wist de laatste
- * opslag stilzwijgend het werk van de ander (of van een tweede tabblad).
+ * Waarom: die documenten worden altijd in hun geheel overschreven. De portal
+ * stuurt de complete lijst vanuit een momentopname die bij het openen van het
+ * scherm is gemaakt, dus zonder controle wist de laatste opslag stilzwijgend
+ * het werk van wie er net vóór was — een collega, of gewoon je eigen tweede
+ * tabblad. Niemand krijgt een foutmelding; het werk is er simpelweg niet meer.
  *
- * De stempel is een goedkope hash van het opgeslagen document. Bewust GEEN extra
- * veld in de opslag: het opslagformaat blijft precies zoals het is, en beide
- * kanten kunnen de stempel op elk moment opnieuw uit de opslag afleiden.
+ * Dit begon als bescherming tegen twee beheerkanten (de Site-studio op
+ * /account/* naast de portal). Die studio is opgeheven, maar de bescherming
+ * niet overbodig: één beheerkant met meerdere gebruikers botst net zo hard.
+ *
+ * De stempel is een goedkope hash van het document zoals de GET het teruggaf.
+ * Bewust GEEN extra veld in de opslag: het opslagformaat blijft precies zoals
+ * het is, en beide kanten kunnen de stempel op elk moment opnieuw afleiden.
  */
 export function docVersion(doc: unknown): string {
   const json = JSON.stringify(doc ?? null) ?? "null";
