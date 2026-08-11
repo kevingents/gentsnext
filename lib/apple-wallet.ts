@@ -44,6 +44,13 @@ export type LoyaltyPassInput = {
   email: string;
   points: number;
   memberSince?: Date | string | null;
+  /**
+   * Openstaande tegoedbonnen. Staan op de pas zodat de klant in de winkel niets
+   * hoeft op te zoeken: de kassier scant de QR (= het klant-id) en haalt via
+   * /api/core/voucher op wat er openstaat. De codes staan er ook letterlijk bij,
+   * zodat het ook werkt aan een kassa die alleen een code-invoerveld heeft.
+   */
+  vouchers?: { code: string; label: string; valueCents?: number; verlooptOp?: Date | string | null }[];
 };
 
 /**
@@ -52,6 +59,11 @@ export type LoyaltyPassInput = {
  * te sparen/inwisselen). serialNumber = customerId → opnieuw downloaden werkt de
  * bestaande pas bij i.p.v. een tweede pas te maken.
  */
+/** Bedrag voor op de pas — kort, want een pas-veld is smal. */
+function euroKort(cents: number): string {
+  return (cents / 100).toLocaleString("nl-NL", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   if (!walletConfigured()) throw new Error("Apple Wallet is niet geconfigureerd.");
   const { icon, logo } = passImages();
@@ -89,10 +101,23 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
     },
   );
 
+  const tegoeden = (input.vouchers ?? []).filter((v) => v.code);
+  const tegoedCents = tegoeden.reduce((s, v) => s + (Number(v.valueCents) || 0), 0);
+
   pass.type = "storeCard";
   pass.primaryFields.push({ key: "balance", label: "Spaarpunten", value: String(points) });
   pass.secondaryFields.push({ key: "member", label: "Lid", value: input.name });
-  if (sinceYear) pass.auxiliaryFields.push({ key: "since", label: "Lid sinds", value: String(sinceYear) });
+  /* Tegoed vóór "lid sinds": wat je kunt uitgeven is belangrijker dan sinds
+     wanneer je klant bent, en er is maar plek voor een handvol velden. */
+  if (tegoeden.length) {
+    pass.auxiliaryFields.push({
+      key: "credit",
+      label: tegoeden.length === 1 ? "Tegoed" : `Tegoed (${tegoeden.length})`,
+      value: tegoedCents > 0 ? euroKort(tegoedCents) : tegoeden[0].label,
+    });
+  } else if (sinceYear) {
+    pass.auxiliaryFields.push({ key: "since", label: "Lid sinds", value: String(sinceYear) });
+  }
   pass.backFields.push(
     {
       key: "how",
@@ -101,6 +126,18 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
         "Je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen.",
     },
     { key: "value", label: "Je saldo", value: `${points} punten` },
+  );
+  if (tegoeden.length) {
+    pass.backFields.push({
+      key: "credit-detail",
+      label: tegoeden.length === 1 ? "Je tegoedbon" : "Je tegoedbonnen",
+      // Code voluit: werkt ook aan een kassa die alleen een code-invoerveld heeft.
+      value: tegoeden
+        .map((v) => `${v.code} — ${v.label}${v.verlooptOp ? ` (geldig t/m ${new Date(v.verlooptOp).toLocaleDateString("nl-NL")})` : ""}`)
+        .join("\n"),
+    });
+  }
+  pass.backFields.push(
     { key: "account", label: "Account", value: "Bekijk en verzilver je punten op gents.nl/account." },
     {
       key: "terms",
