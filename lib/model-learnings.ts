@@ -241,6 +241,8 @@ export type ModelPromptBlocks = {
   model: string;
   /** Correcties voor precies deze foto — als laatste in de prompt, hoogste prioriteit. */
   fix: string;
+  /** Waar de correcties voor deze foto over gaan. Stuurt of we dezelfde man vasthouden. */
+  fixTopics: { model: boolean; garment: boolean };
 };
 
 /**
@@ -332,7 +334,15 @@ export function modelPromptBlocks(store: ModelLearningsStore, opts: { handle?: s
     fix += ` For context, their own words on what was wrong last time, written in Dutch — read them as complaints to fix, never as things to render: ${complaints.map((c) => `"${c}"`).join(", ")}.`;
   }
 
-  return { garment: garment.block, model: modelBlock, fix };
+  return {
+    garment: garment.block,
+    model: modelBlock,
+    fix,
+    fixTopics: {
+      garment: garment.fixes.length > 0 || garment.complaints.length > 0,
+      model: model.fixes.length > 0 || model.complaints.length > 0,
+    },
+  };
 }
 
 /**

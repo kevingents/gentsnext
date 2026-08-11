@@ -9,6 +9,9 @@ import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
  * Eén modelfoto (her)genereren via FASHN product-to-model, MÉT de geleerde
  * smaak (modelPromptBlocks), kleur-bewuste styling (modelStylePrompt) en native
  * 4:5. Gebruikt door de portal "Modellen-studio" (regenerate-knop).
+ *
+ * Gaat de feedback alleen over de kleding, dan houden we via face_reference
+ * dezelfde man vast — zie de toelichting bij regenerateModelPhoto.
  */
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
@@ -29,11 +32,13 @@ function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
   }
 }
 
-async function runProductToModel(productImage: string, prompt: string, apiKey: string): Promise<string | null> {
+async function runProductToModel(productImage: string, prompt: string, apiKey: string, faceRef = ""): Promise<string | null> {
+  const inputs: Record<string, unknown> = { product_image: productImage, prompt, output_format: "jpeg", aspect_ratio: "4:5" };
+  if (faceRef) { inputs.face_reference = faceRef; inputs.face_reference_mode = "match_reference"; }
   const start = await fetch(`${API}/run`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model_name: "product-to-model", inputs: { product_image: productImage, prompt, output_format: "jpeg", aspect_ratio: "4:5" } }),
+    body: JSON.stringify({ model_name: "product-to-model", inputs }),
   });
   if (!start.ok) return null;
   const { id } = await start.json();
@@ -57,8 +62,9 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
 
   const db = getDb();
   const [p] = (
-    await db.execute<{ id: string; title: string; hg: string; vcl: string | null; img: string }>(sql`
+    await db.execute<{ id: string; title: string; hg: string; vcl: string | null; img: string; huidig: string | null }>(sql`
       select p.id, p.title, p.attributes->>'hoofdgroep_omschrijving' hg, p.variant_color_label vcl,
+        split_part(p.model_image_url,'?',1) huidig,
         (select pi.url from product_images pi where pi.product_id=p.id order by pi.position asc limit 1) img
       from products p where p.handle = ${handle}`)
   ).rows;
@@ -72,7 +78,13 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   const learn = modelPromptBlocks(await getModelLearnings(), { handle });
   const prompt = `${garmentFor(p.hg, style)}${learn.garment} ${POSE} ${STUDIO}${learn.model}${learn.fix}`;
 
-  const out = await runProductToModel(p.img, prompt, apiKey);
+  // FASHN maakt elke keer een compleet nieuwe foto vanaf de packshot: vraag je om
+  // kortere mouwen, dan krijg je óók een andere man. Gaat alle openstaande
+  // feedback over de kleding en niets over de persoon, dan geven we de huidige
+  // foto mee als face_reference — zelfde man, alleen de kleding verandert. Is er
+  // wél model-feedback, dan moet die man juist wég en laten we hem los.
+  const zelfdeMan = learn.fixTopics.garment && !learn.fixTopics.model ? p.huidig || "" : "";
+  const out = await runProductToModel(p.img, prompt, apiKey, zelfdeMan);
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
   try {
     const buf = Buffer.from(await (await fetch(out)).arrayBuffer());
