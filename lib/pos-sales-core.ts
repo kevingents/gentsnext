@@ -129,6 +129,85 @@ export async function listPosSalesByCustomerCore(input: { customerId?: string; e
 }
 
 /**
+ * Kassabonnen van één klant, klaargezet als "winkelaankoop" voor het klantprofiel.
+ *
+ * Waarom dit bestaat: het profiel toonde uitsluitend `store_purchases`, en die tabel
+ * wordt alleen gevuld door de SRS-import (lib/srs-store-import.ts). Een bon van de
+ * nieuwe kassa landt hier in `pos_sales` en kwam daardoor in géén enkel profiel terecht.
+ *
+ * Matcht op de klant-id ÉN op het e-mailadres uit de bon, omdat de kassa in
+ * `customerId` twee soorten id's schrijft: het gents.nl-account (uuid) of een
+ * SRS-klantnummer. Zonder de e-mail-match blijft een op SRS-nummer gekoppelde bon
+ * onzichtbaar voor de klant van wie hij is.
+ */
+export type ProfileStoreBuy = {
+  id: string;
+  storeName: string;
+  purchasedAt: Date;
+  totalCents: number;
+  pointsEarned: number;
+  kind: "sale" | "retour";
+  /** SRS-bonnummer — sleutel om te ontdubbelen met een SRS-geïmporteerde rij. */
+  receiptRef: string;
+  /** Artikelcodes zoals ze over de scanner gingen — waarmee we het productbeeld erbij zoeken. */
+  lines: { title: string; size: string; color: string; qty: number; unitPriceCents: number; sku: string; barcode: string }[];
+};
+
+function saleToStoreBuy(sale: Sale, createdAt: Date, totalCents: number): ProfileStoreBuy {
+  const s = sale as Sale & { kind?: string; srsRef?: string; lines?: Record<string, unknown>[] };
+  const isRetour = String(s.kind || "") === "retour";
+  const sign = isRetour ? -1 : 1;
+  const rawLines = Array.isArray(s.lines) ? s.lines : [];
+  return {
+    id: String(s.id || ""),
+    storeName: String(s.store || ""),
+    purchasedAt: createdAt,
+    totalCents: sign * Math.abs(Number(totalCents) || 0),
+    /* Bewust 0: bij een bon-op-naam kent de kassa de punten toe in ZIJN grootboek
+       (storegents), niet in loyalty_events. Hier een aantal tonen zou punten beloven
+       die niet in het saldo van dit account zitten. */
+    pointsEarned: 0,
+    kind: isRetour ? "retour" : "sale",
+    receiptRef: String(s.srsRef || ""),
+    lines: rawLines.map((l) => ({
+      title: String(l.name || l.title || ""),
+      size: String(l.size || ""),
+      color: String(l.color || ""),
+      qty: Math.abs(Math.trunc(Number(l.qty)) || 1),
+      unitPriceCents: sign * Math.abs(Math.round((Number(l.price) || 0) * 100)),
+      sku: String(l.sku || ""),
+      barcode: String(l.barcode || ""),
+    })),
+  };
+}
+
+export async function listStoreBuysForProfileCore(input: { customerId?: string; email?: string; limit?: number }): Promise<ProfileStoreBuy[]> {
+  const cid = String(input.customerId || "").trim();
+  const email = String(input.email || "").trim().toLowerCase();
+  if (!cid && !email) return [];
+  const db = getDb();
+  const lim = Math.max(1, Math.min(100, Number(input.limit) || 50));
+  const ors = [];
+  if (cid) ors.push(eq(posSales.customerId, cid));
+  if (email) ors.push(sql`lower(${posSales.data} ->> 'customerEmail') = ${email}`);
+  const rows = await db
+    .select()
+    .from(posSales)
+    .where(
+      and(
+        or(...ors),
+        /* Geen storno's — een geannuleerde bon is geen aankoop. Retour-records dragen
+           óók cancelled=true (kassa-conventie), maar horen er juist wél bij: laat je ze
+           weg, dan blijft de teruggebrachte aankoop als besteed geld in het profiel staan. */
+        sql`(${posSales.cancelled} = false or ${posSales.data} ->> 'kind' = 'retour')`,
+      ),
+    )
+    .orderBy(desc(posSales.createdAt))
+    .limit(lim);
+  return rows.map((r) => saleToStoreBuy(rowToSale(r), r.createdAt, r.totalCents));
+}
+
+/**
  * Koppel een klant achteraf aan een bestaande bon (klant kocht zonder z'n profiel te koppelen).
  * IDEMPOTENT via een DB-guard: de update slaagt alléén als de bon nog geen customer_id had.
  *   assigned:true  → nieuw gekoppeld (de aanroeper mag nú de spaarpunten toekennen).

@@ -18,6 +18,9 @@ import {
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
 import { creditOrderLoyalty, reverseOrderLoyalty, redeemableBalance, pendingBalance } from "@/lib/loyalty-claim";
+import { listStoreBuysForProfileCore } from "@/lib/pos-sales-core";
+import { mediaByHandle, mediaByArticleCode } from "@/lib/order-media";
+import { pickedKeysByOrder } from "@/lib/split-fulfilment";
 import { getSettings } from "@/lib/settings";
 import { sendWelcomeEmail } from "@/lib/email";
 import { importStorePurchasesOnce } from "@/lib/srs-store-import";
@@ -322,28 +325,117 @@ export async function claimGuestData(customerId: string, email: string): Promise
 
 export type ProfileData = Awaited<ReturnType<typeof getProfileData>>;
 
+/** Bonnummers vergelijkbaar maken: SRS levert ze soms met voorloopnullen/prefix. */
+function normReceiptRef(v: unknown): string {
+  return String(v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+}
+function dayKey(d: Date | string | null | undefined): string {
+  const x = d instanceof Date ? d : new Date(String(d ?? ""));
+  return isNaN(x.getTime()) ? "" : x.toISOString().slice(0, 10);
+}
+
+/**
+ * De zendingen van een split-order, met per zending of dat deel al klaarstaat.
+ * `gereed` komt uit order_shipment_picks (winkel meldt z'n deel gereed); het
+ * magazijn heeft daar geen melding, dus dat blijft null (= geen uitspraak) totdat
+ * de hele order verzonden is. Bij één zending: lege lijst — dan zegt de orderstatus
+ * alles al en zou een "zending 1 van 1" alleen maar ruis zijn.
+ */
+function deelzendingen(
+  plan: unknown,
+  gemeld: Set<string> | undefined,
+  orderStatus: string,
+): { store: string; isWarehouse: boolean; gereed: boolean | null; lines: { title: string; qty: number }[] }[] {
+  const ships = (plan as { shipments?: { store?: string; isWarehouse?: boolean; units?: number; lines?: { sku?: string; qty?: number; title?: string }[] }[] } | null)?.shipments ?? [];
+  if (ships.length < 2) return [];
+  const onderweg = ["shipped", "ready_pickup", "delivered"].includes(String(orderStatus));
+  const picked = gemeld ?? new Set<string>();
+  return ships.map((s) => ({
+    store: String(s.store || ""),
+    isWarehouse: Boolean(s.isWarehouse),
+    gereed: onderweg ? true : s.isWarehouse ? null : picked.has(String(s.store || "").trim().toLowerCase()),
+    lines: (s.lines ?? []).map((l) => ({ title: String(l.title || l.sku || ""), qty: Number(l.qty) || 1 })),
+  }));
+}
+
 /** Alle profielgegevens in één keer voor de accountpagina. */
 export async function getProfileData(customerId: string, email = "") {
   const db = getDb();
-  const [onlineOrders, storeBuys, vouchersList, loyalty, addresses, giftcardsList] = await Promise.all([
+  const [onlineOrders, importedBuys, posBuys, vouchersList, loyalty, addresses, giftcardsList] = await Promise.all([
     db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.createdAt)).limit(50),
     db.select().from(storePurchases).where(eq(storePurchases.customerId, customerId)).orderBy(desc(storePurchases.purchasedAt)).limit(50),
+    // Bonnen van de nieuwe kassa (pos_sales) — die staan NIET in store_purchases.
+    listStoreBuysForProfileCore({ customerId, email, limit: 50 }),
     db.select().from(vouchers).where(eq(vouchers.customerId, customerId)).orderBy(desc(vouchers.createdAt)),
     db.select().from(loyaltyEvents).where(eq(loyaltyEvents.customerId, customerId)).orderBy(desc(loyaltyEvents.createdAt)).limit(100),
     db.select().from(customerAddresses).where(eq(customerAddresses.customerId, customerId)).orderBy(desc(customerAddresses.isDefault)),
     getGiftcardsForCustomer(customerId, email),
   ]);
 
+  /* Winkelaankopen = SRS-import (store_purchases) + kassabonnen (pos_sales), in één lijst.
+     Ontdubbelen is nodig omdat de kassa z'n bon óók naar SRS boekt: heeft de klant een
+     SRS-klantnummer, dan haalt de import diezelfde bon later alsnog op. Sleutel is het
+     SRS-bonnummer, met de dag als extra guard (bonnummers zijn per filiaal, dus niet
+     uniek genoeg om er alleen op te ontdubbelen). Bij een treffer wint de kassa-versie:
+     die is native, heeft de regels zoals ze geslagen zijn, en kent retouren. */
+  const posRefDays = new Map<string, Set<string>>();
+  for (const b of posBuys) {
+    const k = normReceiptRef(b.receiptRef);
+    if (!k) continue;
+    if (!posRefDays.has(k)) posRefDays.set(k, new Set());
+    posRefDays.get(k)!.add(dayKey(b.purchasedAt));
+  }
+  const storeBuys = [
+    ...importedBuys
+      .filter((s) => {
+        const k = normReceiptRef(s.receiptId);
+        return !k || !posRefDays.get(k)?.has(dayKey(s.purchasedAt));
+      })
+      .map((s) => ({
+        id: s.id,
+        storeName: s.storeName,
+        purchasedAt: s.purchasedAt,
+        totalCents: s.totalCents,
+        pointsEarned: s.pointsEarned,
+        kind: (s.totalCents < 0 ? "retour" : "sale") as "sale" | "retour",
+        receiptRef: s.receiptId || "",
+        lines: ((s.lines ?? []) as { title: string; size: string; color: string; qty: number; unitPriceCents: number }[])
+          .map((l) => ({ ...l, sku: "", barcode: "" })),
+      })),
+    ...posBuys,
+  ]
+    .sort((a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime())
+    .slice(0, 50);
+
   // Orderregels ophalen voor de online orders.
   const orderIds = onlineOrders.map((o) => o.id);
   const lines = orderIds.length
     ? await db.select().from(orderLines).where(sql`${orderLines.orderId} in (${sql.join(orderIds.map((i) => sql`${i}`), sql`, `)})`)
     : [];
-  const linesByOrder = new Map<string, typeof lines>();
+
+  /* Productbeeld erbij — voor beide kanalen tegelijk, in twee batch-queries. Online
+     regels vinden hun product via de handle, kassaregels via de artikelcode die over
+     de scanner ging. Zonder de tweede zou de helft van één en dezelfde lijst
+     beeldloos blijven. */
+  const [mediaHandles, mediaCodes, pickedKeys] = await Promise.all([
+    mediaByHandle(lines.map((l) => l.productHandle)),
+    mediaByArticleCode(storeBuys.flatMap((b) => b.lines.flatMap((l) => [l.sku, l.barcode]))),
+    pickedKeysByOrder(onlineOrders.map((o) => o.orderNumber)),
+  ]);
+  const mediaVoorRegel = (sku: string, barcode: string) => mediaCodes.get(sku) ?? mediaCodes.get(barcode);
+
+  const linesByOrder = new Map<string, (typeof lines[number] & { imageUrl: string })[]>();
   for (const l of lines) {
     if (!linesByOrder.has(l.orderId)) linesByOrder.set(l.orderId, []);
-    linesByOrder.get(l.orderId)!.push(l);
+    linesByOrder.get(l.orderId)!.push({ ...l, imageUrl: mediaHandles.get(l.productHandle)?.imageUrl ?? "" });
   }
+  const storeBuysMetBeeld = storeBuys.map((b) => ({
+    ...b,
+    lines: b.lines.map((l) => {
+      const m = mediaVoorRegel(l.sku, l.barcode);
+      return { ...l, imageUrl: m?.imageUrl ?? "", handle: m?.handle ?? "" };
+    }),
+  }));
 
   // Beschikbaar (gevest) vs in behandeling — uit het HELE grootboek (SUM, niet de op
   // 100 gekapte history-lijst), en geklemd op 0. De `loyalty`-array blijft puur voor
@@ -371,8 +463,15 @@ export async function getProfileData(customerId: string, email = "") {
   }
 
   return {
-    onlineOrders: onlineOrders.map((o) => ({ ...o, lines: linesByOrder.get(o.id) ?? [] })),
-    storeBuys,
+    onlineOrders: onlineOrders.map((o) => ({
+      ...o,
+      lines: linesByOrder.get(o.id) ?? [],
+      /* Deellevering: bij een order uit meerdere locaties wil de klant weten wát er al
+         klaarstaat en wat nog niet. Alleen tonen als er echt meerdere zendingen zijn —
+         bij één zending is de orderstatus zelf het hele verhaal. */
+      shipments: deelzendingen(o.fulfillmentPlan, pickedKeys.get(o.orderNumber), o.status),
+    })),
+    storeBuys: storeBuysMetBeeld,
     vouchers: vouchersList,
     activeVouchers,
     giftcards: giftcardsList,

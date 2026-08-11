@@ -134,6 +134,19 @@ export type Settings = {
     tweedeRegels: string[];
     toonSteden: boolean;
   };
+  /* FACTUURGEGEVENS — de bedrijfsregels onderaan de klantfactuur. In de tool en
+     niet in code, want KvK/btw-nummer en IBAN veranderen zonder release. Leeg =
+     die regel valt weg; er wordt nooit een nummer verzonnen. */
+  factuur: {
+    bedrijfsnaam: string;
+    adres: string;
+    postcodePlaats: string;
+    kvk: string;
+    btwNummer: string;
+    iban: string;
+    /** Btw-tarief in procenten op kleding (NL: 21). */
+    btwPercent: number;
+  };
   // Spaarpunten: na hoeveel dagen na BETALING verdiende punten besteedbaar worden
   // (vesting). Dekt de retourperiode, zodat een retour binnen het venster geen
   // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
@@ -147,6 +160,14 @@ export type Settings = {
     redeemStepPoints: number;
     /** Geldigheid van de ingewisselde tegoedbon (dagen). */
     redeemVoucherDays: number;
+    /**
+     * Hoe ver de zelfherstel-cron terugkijkt naar orders die nooit punten kregen
+     * (dagen). Bewust kort: de historie bijboeken is een geld-besluit (2,87 mln
+     * punten over 23.476 klanten stond open bij het bouwen), geen bijwerking van
+     * een deploy. Zet dit hoog of draai `npm run backfill:punten -- --doen` als je
+     * de volledige historie alsnog wilt uitkeren.
+     */
+    backfillLookbackDays: number;
   };
   /**
    * Terug-op-voorraad-meldingen: aan/uit + welke kanalen (mail/WhatsApp) mogen
@@ -179,6 +200,13 @@ export type Settings = {
    * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
    */
   merchandisingPins: Record<string, string[]>;
+  /**
+   * Merchandising-regels: automatische boosts/demotions op productkenmerken
+   * ("jaar 2026 omhoog", "NOS omlaag"), optioneel met een looptijd zodat
+   * seizoensregels vanzelf aflopen. Vorm + compilatie naar SQL staan in
+   * lib/merchandising-regels.ts (type MerchRegel). Beheerd vanuit de portal.
+   */
+  merchandisingRegels: unknown[];
   /**
    * Notificatie-mailadres per winkel (sleutel = winkelnaam of stad, lowercase,
    * bv. "amsterdam" of "gents amsterdam"). Gebruikt voor o.a. de
@@ -274,6 +302,18 @@ export const DEFAULT_SETTINGS: Settings = {
     ],
     toonSteden: true,
   },
+  factuur: {
+    // Naam + adres staan al zo in de klantmails (lib/email.ts). KvK, btw-nummer en
+    // IBAN bewust LEEG: die vul je in de instellingen in. Een verzonnen nummer op
+    // een factuur is erger dan een ontbrekende regel — de regel valt gewoon weg.
+    bedrijfsnaam: "GENTS B.V.",
+    adres: "Lemelerbergweg 15",
+    postcodePlaats: "1101 AJ Amsterdam",
+    kvk: process.env.GENTS_KVK || "",
+    btwNummer: process.env.GENTS_BTW_NUMMER || "",
+    iban: process.env.GENTS_IBAN || "",
+    btwPercent: num(process.env.GENTS_BTW_PERCENT, 21),
+  },
   paymentProvider: "mollie",
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
@@ -289,6 +329,7 @@ export const DEFAULT_SETTINGS: Settings = {
     redeemMinPoints: num(process.env.GENTS_LOYALTY_REDEEM_MIN_POINTS, 500),
     redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
     redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
+    backfillLookbackDays: num(process.env.GENTS_LOYALTY_BACKFILL_LOOKBACK_DAYS, 30),
   },
   stockNotifyConfig: {
     enabled: true,
@@ -303,6 +344,7 @@ export const DEFAULT_SETTINGS: Settings = {
     alternativesCount: 3,
   },
   merchandisingPins: {},
+  merchandisingRegels: [],
   storeEmails: {},
   alertEmails: (process.env.OPS_ALERT_EMAIL || "")
     .split(",")

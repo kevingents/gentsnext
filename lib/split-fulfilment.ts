@@ -108,6 +108,27 @@ export async function setShipmentPicked(
   }
 }
 
+/**
+ * Welke winkel-delen zijn gemeld, per ordernummer (batch). Voor het klant-
+ * besteloverzicht: bij een order uit meerdere winkels wil de klant zien wát er al
+ * onderweg is en wat nog moet komen. Eén query voor de hele lijst — per order
+ * pickStatusForPlan aanroepen zou tientallen round-trips per paginaweergave kosten.
+ */
+export async function pickedKeysByOrder(orderNumbers: string[]): Promise<Map<string, Set<string>>> {
+  const uniq = [...new Set(orderNumbers.filter(Boolean))];
+  if (!uniq.length) return new Map();
+  const res = await getDb().execute<{ order_number: string; shipment_key: string }>(
+    sql`select order_number, shipment_key from order_shipment_picks
+        where order_number in (${sql.join(uniq.map((o) => sql`${o}`), sql`, `)})`,
+  );
+  const out = new Map<string, Set<string>>();
+  for (const r of res.rows) {
+    if (!out.has(r.order_number)) out.set(r.order_number, new Set());
+    out.get(r.order_number)!.add(r.shipment_key);
+  }
+  return out;
+}
+
 /** Aantal gemelde winkel-delen per ordernummer (batch, voor de kassa-lijst). */
 export async function pickedCountByOrder(orderNumbers: string[]): Promise<Map<string, number>> {
   const uniq = [...new Set(orderNumbers.filter(Boolean))];
