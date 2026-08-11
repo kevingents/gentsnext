@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/permissions";
 import { updateSettings, type Settings } from "@/lib/settings";
+import { paymentConfigured, type PaymentProvider } from "@/lib/payments";
 import { SALE_ANNOUNCEMENT_DAYS_MAX, SALE_ANNOUNCEMENT_DAYS_MIN } from "@/lib/pricing";
 import { DAYS } from "@/lib/stores";
 import { schoonPakbon } from "@/lib/pakbon-instelling";
@@ -49,6 +50,23 @@ export async function POST(req: Request) {
       );
     }
     patch.saleAnnouncementDays = n;
+  }
+  /* Betaalprovider. Omschakelen naar een provider zonder sleutels legt het
+     afrekenen plat ("binnenkort live"), dus dat weigeren we mét uitleg in
+     plaats van het stilletjes op te slaan. */
+  if (body.paymentProvider != null && body.paymentProvider !== "") {
+    const p = String(body.paymentProvider).toLowerCase();
+    if (p !== "mollie" && p !== "worldline") {
+      return NextResponse.json({ ok: false, error: "Onbekende betaalprovider." }, { status: 400 });
+    }
+    if (!(await paymentConfigured(p as PaymentProvider))) {
+      const wat = p === "mollie" ? "MOLLIE_API_KEY" : "WORLDLINE_MERCHANT_ID, WORLDLINE_API_KEY_ID en WORLDLINE_API_SECRET";
+      return NextResponse.json(
+        { ok: false, error: `${p === "mollie" ? "Mollie" : "Worldline"} kan nu niet worden gekozen: de sleutels ontbreken (${wat}). Zet die eerst in Vercel, anders kan er niet meer afgerekend worden.` },
+        { status: 400 }
+      );
+    }
+    patch.paymentProvider = p as PaymentProvider;
   }
   if (typeof body.searchSynonyms === "string") patch.searchSynonyms = body.searchSynonyms.slice(0, 8000);
   /* Ontvangers van de interne bewakingsmeldingen. Bewust ook een lege lijst
