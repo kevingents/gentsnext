@@ -125,6 +125,10 @@ export async function getModelLearnings(): Promise<ModelLearningsStore> {
  * time-out, rare output), dan geven we null terug en gebruikt de prompt de ruwe
  * notitie — nooit een harde fout, feedback opslaan mag hier niet op stuklopen.
  */
+export function hasDirectiveProvider(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY);
+}
+
 export async function toDirective(reason: string, category: string, topic: LearningTopic): Promise<string | null> {
   const text = String(reason || "").trim();
   if (text.length < 3) return null;

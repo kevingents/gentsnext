@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { adminOrToken } from "@/lib/studio-token";
 import { getDb } from "@/db";
-import { getModelLearnings, REJECT_CATEGORIES, topicOf } from "@/lib/model-learnings";
+import { getModelLearnings, hasDirectiveProvider, REJECT_CATEGORIES, topicOf } from "@/lib/model-learnings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +39,11 @@ export async function GET(req: Request) {
       pageSize,
       items: rows.rows.map((r) => ({ handle: r.handle, title: r.title, hoofdgroep: r.hg || "", url: r.url })),
       categories: REJECT_CATEGORIES,
+      // Staat er een AI-sleutel op de server? Zonder die sleutel worden notities
+      // niet omgezet naar positieve prompt-instructies en werkt je feedback
+      // merkbaar minder goed — de portal waarschuwt daar dan voor, zodat je het
+      // ziet in de tool zelf en niet in de Vercel-instellingen hoeft te zoeken.
+      aiReady: hasDirectiveProvider(),
       learnings: {
         count: store.learnings.length,
         updatedAt: store.updatedAt,
