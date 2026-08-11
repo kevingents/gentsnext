@@ -106,6 +106,37 @@ export async function redeemVoucherForRef(
   return { ok: false, error: "Deze code is al gebruikt." };
 }
 
+/**
+ * Geeft een tegoedbon terug die DEZE bon verzilverde. Nodig omdat de kassa
+ * fail-closed werkt: eerst verzilveren, dan pas vastleggen. Struikelt het
+ * vastleggen daarna (prijsverschil, storing), dan is de bon zonder aankoop
+ * verbrand.
+ *
+ * De ref-guard is het hele punt: zonder die voorwaarde kan wie het core-token
+ * heeft elke willekeurige verzilverde bon weer activeren — inclusief bonnen die
+ * bij een andere, gewoon afgeronde verkoop hoorden. Alleen wie 'm verzilverde
+ * mag 'm teruggeven.
+ */
+export async function releaseVoucherForRef(code: string, ref: string): Promise<{ ok: boolean; error?: string }> {
+  const norm = code.trim().toUpperCase();
+  const bon = String(ref || "").trim();
+  if (!norm || !bon) return { ok: false, error: "Code en bon-referentie vereist." };
+  const rows = await getDb()
+    .update(vouchers)
+    .set({ status: "active", redeemedAt: null, redeemedRef: "" })
+    .where(and(eq(vouchers.code, norm), eq(vouchers.status, "redeemed"), eq(vouchers.redeemedRef, bon)))
+    .returning({ id: vouchers.id, customerId: vouchers.customerId });
+  // Niets geraakt = niet door deze bon verzilverd. Geen fout: een release die
+  // twee keer binnenkomt (retry) hoort geen storing te veroorzaken.
+  if (rows.length) {
+    const owner = rows[0].customerId;
+    if (owner) {
+      try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(owner); } catch { /* best-effort */ }
+    }
+  }
+  return { ok: true };
+}
+
 /** Maakt een net-verzilverde single-use code weer actief (bij een teruggedraaide order). */
 export async function releaseVoucher(code: string): Promise<void> {
   const db = getDb();

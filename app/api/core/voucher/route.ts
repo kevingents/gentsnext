@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
-import { validateVoucher, redeemVoucherForRef, activeVouchersForCustomer } from "@/lib/vouchers";
+import { validateVoucher, redeemVoucherForRef, releaseVoucherForRef, activeVouchersForCustomer } from "@/lib/vouchers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +22,11 @@ export const runtime = "nodejs";
  *   redeem   { code, ref }                      → { ok, herhaald?, error? }
  *     Verzilvert atomair en idempotent op `ref` (de bon-id/clientRef). Dezelfde
  *     bon twee keer aanbieden is veilig; een andere bon met dezelfde code krijgt
- *     "al gebruikt". Roep dit pas aan wanneer de verkoop vaststaat.
+ *     "al gebruikt".
+ *
+ *   release  { code, ref }                      → { ok }
+ *     Draait een verzilvering terug die DEZELFDE ref maakte — voor een verkoop
+ *     die na het verzilveren alsnog strandt. Een andere ref raakt niets aan.
  *
  * Verzilveren en pas dán afrekenen — niet andersom. Een code die wél van de prijs
  * ging maar niet verzilverd raakte, is gratis geld dat oneindig herbruikbaar is.
@@ -58,6 +62,8 @@ export async function POST(req: Request) {
         const r = await redeemVoucherForRef(String(b.code || ""), String(b.ref || ""));
         return NextResponse.json(r, { status: r.ok ? 200 : 409 });
       }
+      case "release":
+        return NextResponse.json(await releaseVoucherForRef(String(b.code || ""), String(b.ref || "")));
       default:
         return NextResponse.json({ ok: false, error: `Onbekende actie "${action}".` }, { status: 400 });
     }
