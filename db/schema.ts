@@ -771,6 +771,14 @@ export const vouchers = pgTable(
     singleUse: boolean("single_use").notNull().default(true),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    /**
+     * WAT de code verzilverde: het ordernummer, of aan de kassa de bon-referentie.
+     * Nodig voor idempotentie buiten de webshop: een kassa-POST kan opnieuw komen
+     * (netwerk, offline-sync), en zonder deze referentie is "al verzilverd" niet te
+     * onderscheiden van "door mijzelf verzilverd" — de kassier zou een geldige
+     * tegoedbon geweigerd zien, of 'm twee keer aftrekken.
+     */
+    redeemedRef: text("redeemed_ref").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

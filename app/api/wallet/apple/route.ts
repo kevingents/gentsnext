@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { redeemableBalance } from "@/lib/loyalty-claim";
 import { walletConfigured, buildLoyaltyPass } from "@/lib/apple-wallet";
+import { activeVouchersForCustomer } from "@/lib/vouchers";
 
 // node-forge (ondertekening) heeft de Node-runtime nodig, niet edge.
 export const runtime = "nodejs";
@@ -19,7 +20,10 @@ export async function GET() {
     return NextResponse.json({ error: "Apple Wallet is nog niet geconfigureerd." }, { status: 503 });
   }
   try {
-    const points = Math.max(0, await redeemableBalance(customer.id));
+    const [points, tegoeden] = await Promise.all([
+      redeemableBalance(customer.id).then((p) => Math.max(0, p)),
+      activeVouchersForCustomer({ customerId: customer.id, email: customer.email }),
+    ]);
     const name = `${customer.firstName ?? ""} ${customer.lastName ?? ""}`.trim() || customer.email;
     const buf = buildLoyaltyPass({
       customerId: customer.id,
@@ -27,6 +31,7 @@ export async function GET() {
       email: customer.email,
       points,
       memberSince: customer.createdAt,
+      vouchers: tegoeden.map((v) => ({ code: v.code, label: v.label, valueCents: v.valueCents, verlooptOp: v.verlooptOp })),
     });
     return new Response(new Uint8Array(buf), {
       headers: {

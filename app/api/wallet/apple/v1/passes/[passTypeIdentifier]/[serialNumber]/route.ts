@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { customers, loyaltyEvents } from "@/db/schema";
 import { redeemableBalance } from "@/lib/loyalty-claim";
 import { buildLoyaltyPass } from "@/lib/apple-wallet";
+import { activeVouchersForCustomer } from "@/lib/vouchers";
 import { walletConfigured, verifyPassAuth } from "@/lib/apple-wallet-config";
 
 /** Zie de serials-route: besteedbaar-saldo-wijziging = coalesce(vests_at, created_at). */
@@ -49,7 +50,23 @@ export async function GET(req: Request, { params }: Params) {
       .select({ updated: max(effectiveTs) })
       .from(loyaltyEvents)
       .where(sql`${eq(loyaltyEvents.customerId, serialNumber)} and ${effectiveTs} <= now()`);
-    const lastModMs = ev?.updated ? new Date(ev.updated as unknown as string).getTime() : new Date(cust.createdAt).getTime();
+    /* Ook op tegoedbonnen: die staan nu op de pas, en een verbruikte of verlopen
+       bon maakt geen loyalty-event. Zonder dit blijft een pas met "EUR 25 tegoed"
+       een 304 krijgen nadat dat tegoed al uitgegeven is — de klant staat dan in
+       de winkel met een bedrag dat er niet meer is. Verlopen is tijd-gebaseerd,
+       dus zelfde truc als vesting: alleen momenten die al gepasseerd zijn. */
+    const vc = await db.execute<{ updated: string | null }>(sql`
+      select max(t) updated from (
+        select greatest(created_at, coalesce(redeemed_at, created_at),
+                        case when expires_at is not null and expires_at <= now() then expires_at else created_at end) t
+        from vouchers
+        where customer_id = ${serialNumber}::uuid or lower(email) = lower(${cust.email})
+      ) x where t <= now()`);
+
+    const stamps = [ev?.updated, vc.rows[0]?.updated]
+      .map((v) => (v ? new Date(v as unknown as string).getTime() : 0))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const lastModMs = stamps.length ? Math.max(...stamps) : new Date(cust.createdAt).getTime();
 
     const ims = req.headers.get("if-modified-since");
     if (ims) {
@@ -60,7 +77,10 @@ export async function GET(req: Request, { params }: Params) {
       }
     }
 
-    const points = Math.max(0, await redeemableBalance(cust.id));
+    const [points, tegoeden] = await Promise.all([
+      redeemableBalance(cust.id).then((p) => Math.max(0, p)),
+      activeVouchersForCustomer({ customerId: cust.id, email: cust.email }),
+    ]);
     const name = `${cust.firstName ?? ""} ${cust.lastName ?? ""}`.trim() || cust.email;
     const buf = buildLoyaltyPass({
       customerId: cust.id,
@@ -68,6 +88,7 @@ export async function GET(req: Request, { params }: Params) {
       email: cust.email,
       points,
       memberSince: cust.createdAt,
+      vouchers: tegoeden.map((v) => ({ code: v.code, label: v.label, valueCents: v.valueCents, verlooptOp: v.verlooptOp })),
     });
     return new Response(new Uint8Array(buf), {
       headers: {
