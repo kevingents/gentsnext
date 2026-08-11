@@ -254,8 +254,10 @@ async function main() {
   `);
   console.log(`⏳ ${rows.rows.length} producten te verwerken (product-to-model)…`);
 
-  // Geleerde model-smaak (goed-/afkeuringen uit de portal Modellen-studio).
-  const learnBlock = modelLearningsBlock(await getModelLearnings());
+  // Geleerde smaak (goed-/afkeuringen uit de portal Modellen-studio). Eén keer
+  // ophalen, per product uitrollen: feedback op dít product telt als correctie,
+  // de rest alleen als algemene huisregel.
+  const learnStore = await getModelLearnings();
 
   let done = 0, err = 0, seen = 0, skipped = 0;
   const rowsArr = rows.rows;
@@ -264,7 +266,7 @@ async function main() {
     try {
       const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
       if (!prompt || !r.img) { skipped++; return; }
-      const out = await runProductToModel(r.img, prompt + learnBlock, apiKey!);
+      const out = await runProductToModel(r.img, prompt + modelLearningsBlock(learnStore, { handle: r.handle }), apiKey!);
       if (!out) { err++; return; }
       // FASHN levert native 4:5 (aspect_ratio); padTo45 is dan een no-op.
       const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken!);
