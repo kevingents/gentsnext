@@ -15,6 +15,7 @@ import {
   orderLines,
   events,
 } from "@/db/schema";
+import { buildRegelScore, type MerchRegel } from "@/lib/merchandising-regels";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
@@ -435,6 +436,8 @@ export type PlpRankContext = {
   tasteCats?: string[];
   /** Merchandising-pins (product-handles, in volgorde) → altijd bovenaan in de default. */
   pinnedHandles?: string[];
+  /** Merchandising-regels die nú gelden voor deze PLP (getActieveRegels). */
+  regels?: MerchRegel[];
   /** Populariteits-venster in dagen (default 30). */
   popularityDays?: number;
 };
@@ -778,12 +781,40 @@ function allConditions(f: ProductFilters): SQL[] {
   return conds;
 }
 
+/**
+ * Versheid = collectiejaar, met de aanmaakdatum als terugval.
+ *
+ * `source_created_at` is de aanmaakdatum van het Shopify-record uit de migratie,
+ * niet het moment dat het artikel echt nieuw was. Binnen de New arrivals-collectie
+ * (alles jaar=2026) loopt die datum van maart 2024 tot juni 2026, puur afhankelijk
+ * van of een artikel in de migratiebatch zat. Op "Nieuwste" zakten daardoor echte
+ * artikelen uit de nieuwe collectie naar de laatste pagina.
+ *
+ * SRS' `jaar` is het signaal dat de merchandiser zelf onderhoudt en dat 1-op-1
+ * samenvalt met de New arrivals-collectie. Het is tekst en bevat ook "NOS", dus:
+ * cijfers eruit filteren, casten, en bij géén jaartal terugvallen op het jaar van
+ * de aanmaakdatum — zo zakt een artikel zonder jaar niet naar de bodem.
+ */
+const VERSHEID = sql`coalesce(
+  nullif(regexp_replace(coalesce(${products.attributes} ->> 'jaar', ''), '\\D', '', 'g'), '')::int,
+  extract(year from ${products.sourceCreatedAt})::int
+)`;
+
+/**
+ * Stabiele staart. Zonder unieke laatste sleutel mag Postgres rijen met gelijke
+ * sorteerwaarde per query in een andere volgorde teruggeven — en dat gebeurt hier
+ * ook: tot 10 producten delen exact dezelfde `source_created_at` (importbatches).
+ * Met LIMIT/OFFSET betekent dat een product dat op pagina 2 én 3 opduikt, of
+ * helemaal wegvalt. `id` breekt elke gelijkstand definitief.
+ */
+const STABIEL = sql`${products.id} desc`;
+
 /** Objectieve sorteringen (los van personalisatie). */
 const SORT_ORDER: Record<"nieuw" | "prijs-op" | "prijs-af" | "naam", SQL> = {
-  nieuw: sql`${products.sourceCreatedAt} desc nulls last`,
-  "prijs-op": sql`mp asc nulls last`,
-  "prijs-af": sql`mp desc nulls last`,
-  naam: sql`${products.title} asc`,
+  nieuw: sql`${VERSHEID} desc nulls last, ${products.sourceCreatedAt} desc nulls last, ${STABIEL}`,
+  "prijs-op": sql`mp asc nulls last, ${STABIEL}`,
+  "prijs-af": sql`mp desc nulls last, ${STABIEL}`,
+  naam: sql`${products.title} asc, ${STABIEL}`,
 };
 
 /** `col in ('a','b',…)` met correcte placeholders voor een ruwe sql-fragment. */
@@ -803,7 +834,7 @@ function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; u
   }
   const popScore = sql`coalesce(pop.score, 0)`;
   const breadth = sql`(select count(*) from ${productVariants} vb where vb.product_id = ${products.id} and vb.stock_qty > 0)`;
-  const tail = sql`${products.stockQty} desc nulls last, ${products.sourceCreatedAt} desc nulls last`;
+  const tail = sql`${products.stockQty} desc nulls last, ${VERSHEID} desc nulls last, ${products.sourceCreatedAt} desc nulls last, ${STABIEL}`;
 
   if (sort === "populair") {
     return { order: sql`${popScore} desc, ${tail}`, usesPop: true };
@@ -822,9 +853,13 @@ function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; u
   const tasteBoost = tasteCats.length
     ? sql`(case when ${products.attributes} ->> 'hoofdgroep_omschrijving' in (${sqlInList(tasteCats)}) then 0 else 1 end), `
     : sql``;
+  // Merchandising-regels: één opgetelde score (omhoog +, omlaag −), boven de
+  // populariteit. Geen regels → letterlijk dezelfde ORDER BY als hiervoor.
+  const regelScore = buildRegelScore(ctx?.regels ?? []);
+  const regelBoost = regelScore ? sql`${regelScore} desc, ` : sql``;
 
   return {
-    order: sql`${pinBoost}${mySizeBoost}${popScore} desc, ${tasteBoost}${breadth} desc, ${tail}`,
+    order: sql`${pinBoost}${mySizeBoost}${regelBoost}${popScore} desc, ${tasteBoost}${breadth} desc, ${tail}`,
     usesPop: true,
   };
 }

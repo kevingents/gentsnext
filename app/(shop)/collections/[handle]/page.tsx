@@ -17,6 +17,7 @@ import { localizeCollectionText } from "@/lib/catalog-i18n";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
+import { getActieveRegels } from "@/lib/merchandising-regels";
 
 export const dynamic = "force-dynamic";
 
@@ -82,14 +83,16 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   // Gemengde collectie → boost op álle bewaarde maten (een schoen matcht nooit een
   // colbert-bucket, dus dat is veilig). Smaak + pins alleen op de default.
   const isDefault = sel.sort === "aanbevolen";
-  const [tasteCats, pinnedHandles] = await Promise.all([
+  const [tasteCats, pinnedHandles, regels] = await Promise.all([
     isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
     isDefault ? getMerchandisingPins("collection", handle) : Promise.resolve([]),
+    isDefault ? getActieveRegels("collection", handle) : Promise.resolve([]),
   ]);
   const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
     mySizeRows: mySizeBuckets(sessionCustomer?.sizeProfile),
     tasteCats,
     pinnedHandles,
+    regels,
   });
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
