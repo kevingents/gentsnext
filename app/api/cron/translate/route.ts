@@ -12,6 +12,7 @@ import { ensureLandingsContent } from "@/lib/landings-i18n";
 import { ensureNavContent } from "@/lib/nav-i18n";
 import { ensureCollectionsContent } from "@/lib/catalog-i18n";
 import { ensureFacetContent } from "@/lib/facet-i18n";
+import { cronSecretOk } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -27,15 +28,8 @@ export const maxDuration = 300;
  * mag 'm handmatig starten. Zonder AI-sleutel → 412 (er gebeurt niets).
  * Querystrings: ?locale=en (één taal) · ?descriptions=1 · ?products=0 · ?limit=400
  */
-function secretOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  const header = req.headers.get("authorization") || "";
-  return header === `Bearer ${secret}` || new URL(req.url).searchParams.get("secret") === secret;
-}
-
 export async function GET(req: Request) {
-  if (!secretOk(req)) {
+  if (!cronSecretOk(req)) {
     const customer = await getSessionCustomer().catch(() => null);
     if (!customer?.isAdmin) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }

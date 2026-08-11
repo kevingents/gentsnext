@@ -382,7 +382,7 @@ export default async function ProductPage({ params }: Props) {
 
   // Materiaal + Onderhoud automatisch uit de SRS-data (samenstelling + wasvoorschrift).
   const composition = parseComposition(String(attrs.samenstelling_materiaal ?? attrs.samenstelling ?? ""));
-  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), attrs);
+  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), { ...attrs, titel: product.title });
   const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
   const materiaal = String(attrs.materiaal ?? "").trim();
 
@@ -546,7 +546,6 @@ export default async function ProductPage({ params }: Props) {
             colorSiblings={colorSiblings}
             deliveryPromise={delivery?.promise ?? null}
             deliveryNote={delivery?.note ?? null}
-            cutoffHour={delivery?.cutoffHour ?? 16}
             mySize={mySize?.raw ?? null}
             fitNote={String(attrs.pasvorm ?? "").trim() || null}
             freeShipThresholdCents={settings.freeShippingCents}

@@ -4,13 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
-import { DeliveryEstimate } from "@/components/cart/delivery-estimate";
+import { useDeliveryEstimate } from "@/components/cart/use-delivery-estimate";
+import { Dot } from "@/components/icons";
 import { CartSuggestions } from "@/components/cart/cart-suggestions";
 import { useT } from "@/components/i18n/locale-provider";
 import { formatEuro } from "@/lib/pricing";
 
 // Fallback; de echte, instelbare drempel komt uit /api/promo (freeShippingCents).
 const FREE_SHIPPING_FALLBACK = 7500;
+const SHIPPING_RATE_FALLBACK = 395;
 
 type Group = { groupId?: string; groupLabel?: string; lines: CartLine[] };
 
@@ -40,16 +42,25 @@ export function CartDrawer() {
   const closeRef = useRef(cart.close);
   closeRef.current = cart.close;
 
-  // Instelbare gratis-verzending-drempel (loopt mee met de settings; checkout blijft autoritatief).
+  // Instelbare drempel + tarief (loopt mee met de settings; checkout blijft autoritatief).
   const [freeShipCents, setFreeShipCents] = useState(FREE_SHIPPING_FALLBACK);
+  const [shipRateCents, setShipRateCents] = useState(SHIPPING_RATE_FALLBACK);
   useEffect(() => {
     let active = true;
     fetch("/api/promo")
       .then((r) => r.json())
-      .then((d) => { if (active && Number(d?.freeShippingCents) > 0) setFreeShipCents(Number(d.freeShippingCents)); })
+      .then((d) => {
+        if (!active) return;
+        if (Number(d?.freeShippingCents) > 0) setFreeShipCents(Number(d.freeShippingCents));
+        if (Number.isFinite(Number(d?.shippingCents))) setShipRateCents(Number(d.shippingCents));
+      })
       .catch(() => {});
     return () => { active = false; };
   }, []);
+
+  /* Levertijd uit de allocatie-engine — één call voor zowel de belofte bovenin
+     als de per-artikel-datums bij een gesplitste zending. */
+  const levering = useDeliveryEstimate(cart.lines.map((l) => ({ sku: l.sku, qty: l.qty })));
 
   // Toegankelijkheid: scroll-lock + Esc-sluiten + focus-trap + focus-terugkeer.
   useEffect(() => {
@@ -98,6 +109,10 @@ export function CartDrawer() {
 
   const remaining = Math.max(0, freeShipCents - cart.subtotalCents);
   const pct = Math.min(100, Math.round((cart.subtotalCents / freeShipCents) * 100));
+  /* Zelfde regel als de checkout: boven de drempel is verzending gratis. Zo kan
+     de kop niet meer "gratis verzending" zeggen terwijl de voettekst kosten
+     suggereert. */
+  const shipCents = remaining > 0 ? shipRateCents : 0;
   const groups = groupLines(cart.lines);
 
   // Slim: meerdere maten van hetzelfde artikel → moedig "houd de beste, retour de rest" aan.
@@ -161,10 +176,17 @@ export function CartDrawer() {
                   {t("cart.freeShipping")}
                 </p>
               )}
-              <DeliveryEstimate
-                items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
-                className="mt-2 font-sans text-xs text-muted"
-              />
+              {levering.promise ? (
+                <p className="mt-2 font-sans text-xs text-muted">
+                  <span className="text-success">
+                    <Dot className="inline-block h-[7px] w-[7px]" />
+                  </span>{" "}
+                  {levering.promise}
+                </p>
+              ) : null}
+              {levering.perSku.size > 0 ? (
+                <p className="mt-1 font-sans text-xs text-muted">{t("cart.splitNote")}</p>
+              ) : null}
             </div>
 
             {/* Regels + suggesties (en de multi-maat-tip) samen in het scrollgebied:
@@ -198,7 +220,7 @@ export function CartDrawer() {
                     ) : null}
                     <ul className={g.groupId ? "space-y-3" : ""}>
                       {g.lines.map((line) => (
-                        <CartLineRow key={line.id} line={line} />
+                        <CartLineRow key={line.id} line={line} deliveryLabel={levering.perSku.get(line.sku) ?? null} />
                       ))}
                     </ul>
                   </li>
@@ -217,9 +239,23 @@ export function CartDrawer() {
             {/* Voettekst — één volle Afrekenen-knop (doorwinkelen is een tekstlink;
                 die halveerde de primaire CTA) + safe-area voor iPhone-thuisbalk. */}
             <div className="border-t border-line px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {/* Subtotaal → verzending → totaal. Eerder stond hier alleen een
+                  subtotaal met "excl. verzendkosten", wat botste met de melding
+                  bovenin dat verzending gratis is. Nu staat het bedrag er gewoon,
+                  ook als het € 0,00 is. */}
               <div className="flex items-center justify-between">
                 <span className="font-sans text-sm text-muted">{t("cart.subtotal")}</span>
-                <span className="font-display text-lg">{formatEuro(cart.subtotalCents)}</span>
+                <span className="font-sans text-sm">{formatEuro(cart.subtotalCents)}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="font-sans text-sm text-muted">{t("cart.shippingLine")}</span>
+                <span className={`font-sans text-sm ${shipCents === 0 ? "text-success" : ""}`}>
+                  {shipCents === 0 ? t("cart.shippingFree") : formatEuro(shipCents)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2">
+                <span className="font-sans text-sm">{t("cart.total")}</span>
+                <span className="font-display text-lg">{formatEuro(cart.subtotalCents + shipCents)}</span>
               </div>
               <p className="mt-1 font-sans text-xs text-muted">{t("cart.taxnote")}</p>
               <Link href="/afrekenen" onClick={cart.close} className="btn-primary mt-3 block w-full text-center">
@@ -236,7 +272,7 @@ export function CartDrawer() {
   );
 }
 
-function CartLineRow({ line }: { line: CartLine }) {
+function CartLineRow({ line, deliveryLabel }: { line: CartLine; deliveryLabel?: string | null }) {
   const cart = useCart();
   const t = useT();
   return (
@@ -257,6 +293,13 @@ function CartLineRow({ line }: { line: CartLine }) {
             <p className="font-sans text-xs text-muted">
               {[line.color, line.size && t("cart.added.sizeMeta", { size: line.size })].filter(Boolean).join(" · ")}
             </p>
+            {/* Alleen tonen als dit artikel op een ándere dag aankomt dan de rest
+                (gesplitste zending) — anders herhaalt het de kop-belofte. */}
+            {deliveryLabel ? (
+              <p className="mt-0.5 font-sans text-xs text-ink-soft">
+                {t("cart.line.deliveryPrefix")} {deliveryLabel}
+              </p>
+            ) : null}
           </div>
           <p className="shrink-0 font-sans text-sm">{formatEuro(line.priceCents * line.qty)}</p>
         </div>

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   };
   const kolommen = sql`v.product_id, p.handle, p.title, v.barcode, v.sku, v.size, v.color, v.price_cents,
       v.id as variant_id, v.shopify_variant_id, v.srs_artikel_id,
-      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img`;
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.is_packshot desc, pi.position asc limit 1), nullif(v.image_url, '')) img`;
 
   /* Cijfer-zoekopdrachten zijn codes (sku, barcode, SRS-artikelnummer), nooit
      titelwoorden. Een aparte, kale code-tak voorkomt twee problemen die de

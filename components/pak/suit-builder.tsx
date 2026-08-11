@@ -33,10 +33,9 @@ type Props = {
   /** Server-belofte uit de allocatie-engine (estimateDelivery) — net als de PDP. */
   deliveryPromise?: string | null;
   deliveryNote?: string | null;
-  cutoffHour?: number;
 };
 
-export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }: Props) {
+export function SuitBuilder({ suit, deliveryPromise, deliveryNote }: Props) {
   const cart = useCart();
   const t = useT();
   const colbert = suit.pieces.find((p) => p.role === "colbert")!;
@@ -300,7 +299,7 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
         </p>
 
         {/* Levertijd — onder de bestelknop (zoals gevraagd). */}
-        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
+        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} />
       </div>
 
       {/* Materiaal, onderhoud & pasvorm — net als op de productpagina */}

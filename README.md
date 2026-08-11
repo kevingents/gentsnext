@@ -60,10 +60,20 @@ npm run dev
 5. **Géén domein koppelen.** gents.nl blijft op Shopify tot de geplande
    atomische DNS-cutover; eventueel `next.gents.nl` als preview-domein.
 6. **Crons** (`vercel.json`): actief zijn `sync-reviews` (02:00), `blog`/stijlgids
-   (09:00 op de 1e + 15e) en `translate` (03:00 — UI + producttitels/-omschrijvingen
-   naar en/de/fr/es). Allemaal `CRON_SECRET`-gated. De **catalogus-cache-publicatie**
+   (09:00 op de 1e + 15e), `translate` (03:00 — UI + producttitels/-omschrijvingen
+   naar en/de/fr/es) en `verify-possales` (05:30 — kassabon-bewaking, zie hieronder).
+   Allemaal `CRON_SECRET`-gated. De **catalogus-cache-publicatie**
    (`npm run cache:publish`) blijft bewust handmatig tot er een doorlopende
    catalogus-sync naar deze database draait (de route weigert bij lege catalogus).
+7. **Kassabon-bewaking** (`/api/cron/verify-possales`): draait elke nacht dezelfde
+   vijf controles als `npm run verify:possales` en **mailt alleen als er iets is** —
+   bij een schone stand blijft het stil, anders wordt de melding weggeklikt. Twee
+   van die controles bewaken geld: bonnen die de dagstaat mist, en meer
+   geretourneerd dan verkocht. Zet daarom onder **Instellingen → Meldingen aan
+   onszelf** minstens één ontvanger (env `OPS_ALERT_EMAIL` is alleen de eerste
+   default). Kanaal testen: `/api/cron/verify-possales?test=1` mailt ook bij een
+   schone stand. Zonder `STOREGENTS_BLOB_READ_WRITE_TOKEN` draaien alleen de twee
+   Neon-controles — de cron meldt dat dan expliciet.
 
 ## Launch-checklist (pas bij cutover — NIET nu)
 

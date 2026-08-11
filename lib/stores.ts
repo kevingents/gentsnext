@@ -47,6 +47,34 @@ export function currentDayNL(): string {
   return nowNL().day;
 }
 
+/**
+ * Is de winkel op deze weekdag open? ÉÉN definitie voor de hele codebase.
+ *
+ * Waarom niet gewoon "staat er tekst": in content/stores.json staat op een
+ * gesloten dag het WOORD "gesloten" (Hilversum ma+zo, Delft zo, Antwerpen zo),
+ * geen lege string. Een niet-leeg-check las die dagen daardoor als open, en de
+ * allocatie stuurde er orders heen met een "vandaag verzonden"-belofte terwijl
+ * de deur dicht was. Open = er staat een leesbare tijdrange.
+ */
+export function isOpenOnDay(hours: Record<string, string> | undefined, dayName: string): boolean {
+  return parseRange(hours?.[dayName] || "") !== null;
+}
+
+/** Sluitingstijd in MINUTEN na middernacht, of null als de winkel dan dicht is.
+ *  Minuten en niet uren, zodat een marge ervan afgetrokken kan worden vóór er
+ *  afgerond wordt — anders kost een marge van een half uur bij een winkel die om
+ *  17:30 sluit een vol uur cutoff. */
+export function closingMinutesOnDay(hours: Record<string, string> | undefined, dayName: string): number | null {
+  const r = parseRange(hours?.[dayName] || "");
+  return r ? r[1] : null;
+}
+
+/** Sluitingsuur (0-24), naar beneden afgerond: 17:30 → 17, nooit 18. */
+export function closingHourOnDay(hours: Record<string, string> | undefined, dayName: string): number | null {
+  const m = closingMinutesOnDay(hours, dayName);
+  return m == null ? null : Math.floor(m / 60);
+}
+
 /** Open op dit moment? + de dag en tijden van vandaag. */
 export function openStatus(store: Store): { open: boolean; today: string; todayRange: string | null } {
   const { day, minutes } = nowNL();

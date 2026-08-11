@@ -71,7 +71,6 @@ export default async function SuitBuilderPage({ params }: Props) {
           suit={suit}
           deliveryPromise={delivery?.promise ?? null}
           deliveryNote={delivery?.note ?? null}
-          cutoffHour={settings.warehouseCutoffHour}
         />
       </div>
     </div>

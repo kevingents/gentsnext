@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletConfigured } from "@/lib/apple-wallet-config";
 import { pushPassUpdate } from "@/lib/apple-wallet-push";
+import { cronSecretOk } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,16 +26,8 @@ export const maxDuration = 60;
  * Vercel stuurt `Authorization: Bearer <CRON_SECRET>`. Env-gated: no-op zonder
  * pass-certificaat.
  */
-function authorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  const url = new URL(req.url);
-  const header = req.headers.get("authorization") || "";
-  return header === `Bearer ${secret}` || url.searchParams.get("secret") === secret;
-}
-
 export async function GET(req: Request) {
-  if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!cronSecretOk(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!walletConfigured()) return NextResponse.json({ ok: true, skipped: "wallet-niet-geconfigureerd", pushed: 0 });
 
   try {

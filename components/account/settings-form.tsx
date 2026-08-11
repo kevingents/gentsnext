@@ -42,6 +42,18 @@ type Settings = {
     signalMinRatePct: number;
     signalFastDays: number;
   };
+  alertEmails: string[];
+  paymentProvider: "mollie" | "worldline";
+};
+
+/** Stand van de betaalprovider — komt van de server (lib/payments). */
+type ProviderStatus = {
+  actief: "mollie" | "worldline";
+  bron: "env" | "instelling" | "standaard";
+  envWaarde: string;
+  ingesteld: "mollie" | "worldline";
+  mollieKlaar: boolean;
+  worldlineKlaar: boolean;
 };
 
 /** Groepen velden — euro's tonen we in euro (×100 bij opslaan).
@@ -90,13 +102,21 @@ const SECTIONS: { title: string; desc?: string; fields: { key: keyof Settings; l
   },
 ];
 
-export function SettingsForm({ initial }: { initial: Settings }) {
+export function SettingsForm({ initial, provider }: { initial: Settings; provider: ProviderStatus }) {
   const [s, setS] = useState<Settings>(initial);
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
   const [msg, setMsg] = useState("");
   const [presetText, setPresetText] = useState(
     initial.giftcardConfig.presetAmountsCents.map((c) => (c / 100).toString()).join(", ")
   );
+  /* Als tekst bewerkt, als lijst opgeslagen — anders kun je tijdens het typen
+     geen komma zetten zonder dat het veld onder je handen opsplitst. */
+  const [alertText, setAlertText] = useState((initial.alertEmails || []).join(", "));
+
+  function setAlerts(v: string) {
+    setAlertText(v);
+    setS((p) => ({ ...p, alertEmails: v.split(",").map((a) => a.trim()).filter(Boolean) }));
+  }
 
   function setGc(patch: Partial<Settings["giftcardConfig"]>) {
     setS((p) => ({ ...p, giftcardConfig: { ...p.giftcardConfig, ...patch } }));
@@ -240,6 +260,24 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         />
         <span className="font-sans text-sm">Onderbevoorrade winkels (tekort) niet laten meeleveren</span>
       </label>
+
+      <section>
+        <p className="label-brand mb-2">Meldingen aan onszelf</p>
+        <p className="mb-2 font-sans text-xs text-muted">
+          Waar de interne bewaking naartoe mag mailen — nu de nachtelijke
+          kassabon-controle, die alleen bericht stuurt als er iets níét klopt
+          (een bon die de dagstaat mist, of ergens meer geretourneerd dan
+          verkocht). Meerdere adressen: komma-gescheiden. Leeg = niemand krijgt
+          bericht en zo&apos;n bevinding blijft alleen in de cron-log staan.
+        </p>
+        <input
+          type="text"
+          value={alertText}
+          onChange={(e) => setAlerts(e.target.value)}
+          placeholder="kevin@gents.nl, backoffice@gents.nl"
+          className="w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none"
+        />
+      </section>
 
       <section>
         <p className="label-brand mb-2">Zoek-synoniemen</p>
@@ -399,6 +437,65 @@ export function SettingsForm({ initial }: { initial: Settings }) {
             <input type="number" step="1" min="1" defaultValue={s.returnConfig.signalFastDays} onChange={(e) => setRc({ signalFastDays: Math.max(1, Math.round(Number(e.target.value) || 7)) })} className="mt-1 w-full border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-ink focus:outline-none" />
           </label>
         </div>
+      </section>
+
+      <section>
+        <p className="label-brand mb-1">Betaalprovider webshop</p>
+        <p className="mb-3 max-w-2xl font-sans text-xs text-muted">
+          Welke partij de online betalingen afhandelt. Geldt alleen voor de webshop — de pinautomaten in de
+          winkels staan hier los van.
+        </p>
+
+        {provider.bron === "env" ? (
+          <p className="mb-3 max-w-2xl border border-danger/40 bg-danger/5 px-3 py-2 font-sans text-xs text-danger">
+            <strong>Deze keuze doet nu niets.</strong> In Vercel staat de instelling{" "}
+            <code>PAYMENT_PROVIDER={provider.envWaarde}</code>, en die gaat vóór op alles wat je hier kiest.
+            Haal die weg (of zet hem op de juiste waarde) en deploy opnieuw; daarna beslist deze knop.
+          </p>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {([
+            { id: "mollie", naam: "Mollie", klaar: provider.mollieKlaar, uitleg: "iDEAL, Bancontact, creditcard. Ook de rail voor de pinautomaat in de winkel." },
+            { id: "worldline", naam: "Worldline", klaar: provider.worldlineKlaar, uitleg: "Hosted Checkout. Alleen kiezen als de sleutels bij de juiste merchant horen." },
+          ] as const).map((p) => (
+            <label
+              key={p.id}
+              className={`flex cursor-pointer gap-3 border px-3 py-3 ${
+                s.paymentProvider === p.id ? "border-ink bg-canvas" : "border-line"
+              } ${p.klaar ? "" : "opacity-60"}`}
+            >
+              <input
+                type="radio"
+                name="paymentProvider"
+                value={p.id}
+                checked={s.paymentProvider === p.id}
+                disabled={!p.klaar}
+                onChange={() => setS((prev) => ({ ...prev, paymentProvider: p.id }))}
+                className="mt-1 accent-ink"
+              />
+              <span className="block">
+                <span className="block font-sans text-sm font-medium">{p.naam}</span>
+                <span className="mt-0.5 block font-sans text-xs text-muted">{p.uitleg}</span>
+                {p.klaar ? null : (
+                  <span className="mt-1 block font-sans text-xs text-danger">
+                    Sleutels ontbreken — niet te kiezen zolang die niet in Vercel staan.
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <p className="mt-3 font-sans text-xs text-muted">
+          Nu actief: <strong>{provider.actief === "mollie" ? "Mollie" : "Worldline"}</strong>
+          {provider.bron === "env"
+            ? " (afgedwongen in Vercel)"
+            : provider.bron === "standaard"
+              ? " (standaardwaarde — nog nooit ingesteld)"
+              : " (deze instelling)"}
+          .
+        </p>
       </section>
 
       {msg ? <p className={`font-sans text-sm ${state === "fail" ? "text-danger" : "text-success"}`}>{msg}</p> : null}
