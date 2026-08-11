@@ -179,10 +179,14 @@ function OnlineKaart({ order, returns, windowDays }: { order: OrderRow; returns:
   const betaald = BETAALD.includes(order.status);
   const mislukt = MISLUKT.includes(order.status);
   const lopendeRetour = returns.find((r) => r.orderNumber === order.orderNumber);
+  const binnenVenster = Date.now() - new Date(order.createdAt).getTime() <= windowDays * 86400000;
   // Retour mag zolang de order betaald is én binnen het venster valt; een lopende
   // retour vervangt de knop door z'n status (twee retouren op één order is ruis).
-  const magRetour =
-    betaald && !lopendeRetour && Date.now() - new Date(order.createdAt).getTime() <= windowDays * 86400000;
+  const magRetour = betaald && !lopendeRetour && binnenVenster;
+  /* Buiten de termijn lieten we de knop gewoon weg. Voor de klant is dat niet te
+     onderscheiden van een knop die kapot is — hij zoekt iets dat er hoort te zijn
+     en vindt niets. Eén regel uitleg scheelt dat hele raadsel. */
+  const termijnVerlopen = betaald && !lopendeRetour && !binnenVenster;
 
   return (
     <li className="border border-line p-4">
@@ -244,6 +248,8 @@ function OnlineKaart({ order, returns, windowDays }: { order: OrderRow; returns:
       </div>
       {lopendeRetour ? (
         <p className="mt-2 font-sans text-xs text-muted">{t("account.orders.returnRunning")}</p>
+      ) : termijnVerlopen ? (
+        <p className="mt-2 font-sans text-xs text-muted">{t("account.orders.returnWindowOver", { days: windowDays })}</p>
       ) : null}
     </li>
   );

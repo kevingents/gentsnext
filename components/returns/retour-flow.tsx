@@ -13,13 +13,22 @@ type Created = {
 };
 
 const euro = formatEuro;
+function nlDatum(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
 // Huisstijl-tokens (rounded-card/danger/success) — geen rauwe paletkleuren, zodat
 // de retourflow visueel aansluit op checkout en PDP.
 const inputCls = "w-full rounded-card border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
 
 type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };
+/** Retourneerbare bestellingen van de ingelogde klant — kiezen i.p.v. intikken. */
+type MineOrder = { orderNumber: string; createdAt: string; totalCents: number; items: number; titles: string[] };
 
-export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initialOrder?: string; prefill?: Prefill | null; stores?: string[] }) {
+export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] }: { initialOrder?: string; prefill?: Prefill | null; mine?: MineOrder[]; stores?: string[] }) {
   const t = useT();
   // Ingelogd vanaf de bestelpagina (prefill) → direct naar de artikelkeuze, géén e-mail nodig.
   const authed = Boolean(prefill);
@@ -74,13 +83,43 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
   /* ── Stap 1: opzoeken ───────────────────────────────────────────── */
   if (step === "lookup") {
     return (
-      <div className="space-y-4">
-        <p className="font-sans text-ink-soft">{t("retourneren.flow.introLookup")}</p>
+      <div className="space-y-6">
+        {/* Ingelogd: kiezen uit je eigen bestellingen. Wie al bewezen heeft wie hij
+            is, hoort geen bestelnummer en e-mailadres te hoeven opzoeken op het
+            moment dat hij iets wil terugsturen. */}
+        {mine.length > 0 && (
+          <section>
+            <p className="label-brand mb-2">{t("retourneren.flow.chooseOwnOrder")}</p>
+            <div className="space-y-2">
+              {mine.map((o) => (
+                <a
+                  key={o.orderNumber}
+                  href={`/retourneren?order=${encodeURIComponent(o.orderNumber)}`}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-3 py-2.5 hover:border-ink"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{t("account.orderNumber", { n: o.orderNumber })}</span>
+                    <span className="block truncate text-xs text-ink-soft">
+                      {nlDatum(o.createdAt)} · {euro(o.totalCents)} · {o.titles.join(", ")}
+                    </span>
+                  </span>
+                  <span aria-hidden className="shrink-0 text-ink-soft">→</span>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <div className="space-y-4">
+          <p className="font-sans text-ink-soft">
+            {mine.length > 0 ? t("retourneren.flow.introOtherOrder") : t("retourneren.flow.introLookup")}
+          </p>
         <div className="grid gap-3 sm:max-w-md">
           <input className={inputCls} placeholder={t("retourneren.flow.orderNumberPlaceholder")} value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
           <input className={inputCls} placeholder={t("retourneren.flow.emailPlaceholder")} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           {err && <p className="text-sm text-danger">{err}</p>}
           <button onClick={lookup} disabled={busy || !orderNumber || !email} className="btn-primary disabled:opacity-50">{busy ? t("retourneren.flow.searching") : t("retourneren.flow.findOrder")}</button>
+        </div>
         </div>
       </div>
     );
@@ -90,7 +129,15 @@ export function RetourFlow({ initialOrder = "", prefill, stores = [] }: { initia
   if (step === "select") {
     return (
       <div className="space-y-5">
-        {!withinWindow && <div className="rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink-soft">{t("retourneren.flow.windowWarning", { days: policy?.windowDays ?? "" })}</div>}
+        {/* Eerlijk zijn: createReturn() WEIGERT buiten de termijn. De oude tekst
+            ("je kunt het wel proberen, we beoordelen per geval") nodigde uit tot
+            een poging die de server daarna afkapt — dat is de vervelendste manier
+            om nee te horen. */}
+        {!withinWindow && (
+          <div className="rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink-soft">
+            {t("retourneren.flow.windowExpired", { days: policy?.windowDays ?? "" })}
+          </div>
+        )}
 
         <section>
           <p className="label-brand mb-2">{t("retourneren.flow.whichItems")}</p>

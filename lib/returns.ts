@@ -91,6 +91,73 @@ export async function getReturnableOrder(orderNumber: string, email: string): Pr
   return { ok: true, orderId: order.id, orderNumber: order.orderNumber, withinWindow, lines: returnable };
 }
 
+/**
+ * De bestellingen die deze klant NU kan retourneren — voor de retourpagina van
+ * een ingelogde klant.
+ *
+ * Waarom: de flow vroeg altijd om bestelnummer + e-mailadres, ook bij iemand die
+ * al ingelogd is en dus allang bewezen heeft wie hij is. Dat is niet alleen
+ * omslachtig, het is ook een drempel precies op het moment dat iemand iets wil
+ * terugsturen. De sessie is het bewijs; kiezen uit je eigen bestellingen hoort
+ * genoeg te zijn.
+ *
+ * Alleen wat écht kan: betaald, binnen de retourtermijn, en er moet nog iets te
+ * retourneren zijn. createReturn() weigert buiten de termijn alsnog, dus een
+ * order tonen die daar niet aan voldoet zou een knop zijn die doodloopt.
+ */
+export async function getReturnableOrdersForCustomer(
+  email: string,
+): Promise<{ orderNumber: string; createdAt: Date; totalCents: number; items: number; titles: string[] }[]> {
+  const mail = String(email || "").trim().toLowerCase();
+  if (!mail) return [];
+  const db = getDb();
+  const { returnConfig } = await getSettings();
+
+  const rows = await db
+    .select({ id: orders.id, orderNumber: orders.orderNumber, createdAt: orders.createdAt, paidAt: orders.paidAt, totalCents: orders.totalCents })
+    .from(orders)
+    .where(
+      and(
+        sql`lower(${orders.email}) = ${mail}`,
+        inArray(orders.status, ["paid", "shipped", "delivered", "ready_pickup"]),
+        sql`coalesce(${orders.paidAt}, ${orders.createdAt}) > now() - make_interval(days => ${returnConfig.windowDays})`,
+      ),
+    )
+    .orderBy(desc(orders.createdAt))
+    .limit(25);
+  if (!rows.length) return [];
+
+  const ids = rows.map((o) => o.id);
+  const lines = await db.select().from(orderLines).where(inArray(orderLines.orderId, ids));
+  const prior = await db
+    .select({ id: returns.id, orderId: returns.orderId })
+    .from(returns)
+    .where(and(inArray(returns.orderId, ids), sql`${returns.status} <> 'cancelled'`));
+  const priorByLine = new Map<string, number>();
+  if (prior.length) {
+    const rl = await db
+      .select({ orderLineId: returnLines.orderLineId, qty: returnLines.qty })
+      .from(returnLines)
+      .where(inArray(returnLines.returnId, prior.map((r) => r.id)));
+    for (const r of rl) if (r.orderLineId) priorByLine.set(r.orderLineId, (priorByLine.get(r.orderLineId) || 0) + r.qty);
+  }
+
+  const out = [];
+  for (const o of rows) {
+    const mijn = lines.filter((l) => l.orderId === o.id);
+    const open = mijn.filter((l) => l.quantity - (priorByLine.get(l.id) || 0) > 0);
+    if (!open.length) continue; // alles al retour → geen knop die niets oplevert
+    out.push({
+      orderNumber: o.orderNumber,
+      createdAt: o.createdAt,
+      totalCents: o.totalCents,
+      items: open.reduce((s, l) => s + (l.quantity - (priorByLine.get(l.id) || 0)), 0),
+      titles: open.slice(0, 3).map((l) => l.title),
+    });
+  }
+  return out;
+}
+
 export type CreateReturnInput = {
   orderNumber: string;
   email: string;
