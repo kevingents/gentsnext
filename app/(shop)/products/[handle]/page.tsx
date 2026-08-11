@@ -382,7 +382,7 @@ export default async function ProductPage({ params }: Props) {
 
   // Materiaal + Onderhoud automatisch uit de SRS-data (samenstelling + wasvoorschrift).
   const composition = parseComposition(String(attrs.samenstelling_materiaal ?? attrs.samenstelling ?? ""));
-  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), attrs);
+  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), { ...attrs, titel: product.title });
   const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
   const materiaal = String(attrs.materiaal ?? "").trim();
 
