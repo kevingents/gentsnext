@@ -1,4 +1,6 @@
-import { put, list } from "@vercel/blob";
+import { list } from "@vercel/blob";
+import { sql } from "drizzle-orm";
+import { getDb } from "@/db";
 
 /**
  * Lerende modellen-AI: aparte "learnings-store" voor de modelfoto's, los van de
@@ -25,7 +27,27 @@ import { put, list } from "@vercel/blob";
  *     POSITIEVE Engelse instructie (`directive`) — wat de foto wél moet tonen.
  *     Zonder ANTHROPIC/OPENAI-key valt hij terug op de ruwe notitie.
  *
- * Opslag = blob (model-learnings/store.json).
+ * Opslag = Neon (tabel model_learnings), niet meer de blob.
+ *
+ * WAAROM Neon: de blob-versie las het hele bestand, plakte er één regel bij en
+ * schreef alles terug. Twee mensen die tegelijk een foto beoordelen lezen dan
+ * dezelfde versie en de laatste schrijver gooit de ander weg — precies wat op
+ * 6 aug 2026 met de SRS-bonnummerteller misging (zie lib/bonnr-counter.ts: een
+ * stale blob-lees gaf twee keer 900001 en een verkoop van €249,90 verdween
+ * stil). Bij feedback op foto's kost dat geen geld, maar wél het vertrouwen dat
+ * de tool luistert: je typt iets, het lijkt opgeslagen, en het is weg. Sinds de
+ * notitie onderweg ook nog door een AI-omzetting gaat zit er bovendien een hele
+ * seconde tussen lezen en schrijven — het venster werd juist groter.
+ *
+ * Eén INSERT lost dat volledig op: geen lees-wijzig-schrijf, geen race, geen
+ * CDN-cache tussen jou en je eigen feedback.
+ *
+ * De tabel wordt lui aangemaakt (create table if not exists), zoals de
+ * bonnummerteller, zodat dit werkt zodra de deploy live is — migraties lopen
+ * hier bewust niet automatisch mee met de build. drizzle/0051_model-learnings.sql
+ * is de canonieke vorm. De oude blob wordt bij de eerste aanraking één keer
+ * ingelezen (legacy_key + on conflict do nothing, dus dubbel draaien is
+ * onschadelijk) en daarna met rust gelaten.
  */
 const PATH = "model-learnings/store.json";
 
@@ -99,16 +121,99 @@ export type ModelLearning = {
 export type ModelLearningsStore = { learnings: ModelLearning[]; updatedAt: string | null };
 const EMPTY: ModelLearningsStore = { learnings: [], updatedAt: null };
 
-export async function getModelLearnings(): Promise<ModelLearningsStore> {
+/** Hoeveel beoordelingen er maximaal in de prompt-opbouw meegenomen worden. */
+const LEES_LIMIET = 500;
+
+let tabelKlaar = false;
+
+async function zorgVoorTabel(): Promise<void> {
+  if (tabelKlaar) return;
+  const db = getDb();
+  await db.execute(sql`
+    create table if not exists model_learnings (
+      id bigserial primary key,
+      handle text,
+      url text,
+      topic text not null default 'model',
+      category text not null,
+      reason text not null default '',
+      directive text,
+      kind text not null default 'negative',
+      at timestamptz not null default now(),
+      legacy_key text unique
+    )
+  `);
+  await db.execute(sql`create index if not exists model_learnings_handle_idx on model_learnings (handle)`);
+  await db.execute(sql`create index if not exists model_learnings_at_idx on model_learnings (at desc)`);
+  tabelKlaar = true;
+  await importeerOudeBlob();
+}
+
+/**
+ * De beoordelingen die vóór de overstap in de blob stonden één keer overzetten.
+ * legacy_key is uniek en deterministisch, dus twee instances die dit tegelijk
+ * doen leveren geen dubbele regels op — en na de eerste keer is het een no-op.
+ * Faalt het (blob weg, token weg), dan gaat het gewoon door: liever de nieuwe
+ * feedback wél opslaan dan hierop blijven hangen.
+ */
+async function importeerOudeBlob(): Promise<void> {
   try {
+    const db = getDb();
+    const [rij] = (await db.execute<{ n: string }>(sql`select count(*) n from model_learnings`)).rows;
+    if (Number(rij?.n || 0) > 0) return;
+
     const { blobs } = await list({ prefix: PATH, limit: 1, token: blobToken() });
     const b = (blobs || []).find((x) => x.pathname === PATH);
-    if (!b) return { ...EMPTY };
+    if (!b) return;
     const res = await fetch(`${b.url}?_=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) return { ...EMPTY };
+    if (!res.ok) return;
     const data = (await res.json()) as ModelLearningsStore;
-    return { learnings: Array.isArray(data?.learnings) ? data.learnings : [], updatedAt: data?.updatedAt || null };
-  } catch {
+    const oud = Array.isArray(data?.learnings) ? data.learnings : [];
+    if (!oud.length) return;
+
+    for (const l of oud) {
+      const category = String(l.category || "kwaliteit");
+      const at = String(l.at || new Date().toISOString());
+      await db.execute(sql`
+        insert into model_learnings (handle, url, topic, category, reason, directive, kind, at, legacy_key)
+        values (${l.handle || null}, ${l.url || null}, ${l.topic || topicOf(category)}, ${category},
+                ${String(l.reason || "")}, ${l.directive || null},
+                ${l.kind === "positive" ? "positive" : "negative"}, ${at},
+                ${`${at}|${l.handle || ""}|${category}|${String(l.reason || "").slice(0, 60)}`})
+        on conflict (legacy_key) do nothing
+      `);
+    }
+    console.info(`[model-learnings] ${oud.length} oude beoordelingen uit de blob overgezet naar Neon.`);
+  } catch (e) {
+    console.warn("[model-learnings] blob-import overgeslagen:", (e as Error).message);
+  }
+}
+
+export async function getModelLearnings(): Promise<ModelLearningsStore> {
+  try {
+    await zorgVoorTabel();
+    const db = getDb();
+    const rows = (await db.execute<{
+      handle: string | null; url: string | null; topic: string; category: string;
+      reason: string; directive: string | null; kind: string; at: string;
+    }>(sql`
+      select handle, url, topic, category, reason, directive, kind, at
+      from model_learnings order by at desc, id desc limit ${LEES_LIMIET}`)).rows;
+
+    const learnings: ModelLearning[] = rows.map((r) => ({
+      handle: r.handle || undefined,
+      url: r.url || undefined,
+      topic: r.topic === "garment" ? "garment" : "model",
+      category: r.category,
+      reason: r.reason || "",
+      directive: r.directive || undefined,
+      kind: r.kind === "positive" ? "positive" : "negative",
+      at: new Date(r.at).toISOString(),
+    }));
+    return { learnings, updatedAt: learnings[0]?.at || null };
+  } catch (e) {
+    // Neon onbereikbaar → generen mag doorgaan met alleen de basisprompt.
+    console.warn("[model-learnings] lezen mislukt:", (e as Error).message);
     return { ...EMPTY };
   }
 }
@@ -192,33 +297,20 @@ export async function addModelLearning(input: {
   reason: string;
   kind?: "positive" | "negative";
 }): Promise<ModelLearningsStore> {
-  const store = await getModelLearnings();
   const category = String(input.category || "kwaliteit");
   const topic: LearningTopic = input.topic === "garment" || input.topic === "model" ? input.topic : topicOf(category);
   const reason = String(input.reason || "").trim().slice(0, 280);
-  const directive = (await toDirective(reason, category, topic)) || undefined;
-  const entry: ModelLearning = {
-    handle: input.handle,
-    url: input.url,
-    topic,
-    category,
-    reason,
-    directive,
-    kind: input.kind === "positive" ? "positive" : "negative",
-    at: new Date().toISOString(),
-  };
-  const next: ModelLearningsStore = {
-    learnings: [entry, ...store.learnings].slice(0, 500),
-    updatedAt: new Date().toISOString(),
-  };
-  await put(PATH, JSON.stringify(next, null, 2), {
-    access: "public",
-    allowOverwrite: true,
-    contentType: "application/json",
-    cacheControlMaxAge: 0,
-    token: blobToken(),
-  });
-  return next;
+  // Eerst de omzetting (die duurt een seconde), dán pas de database aanraken.
+  const directive = (await toDirective(reason, category, topic)) || null;
+
+  await zorgVoorTabel();
+  const db = getDb();
+  await db.execute(sql`
+    insert into model_learnings (handle, url, topic, category, reason, directive, kind)
+    values (${input.handle || null}, ${input.url || null}, ${topic}, ${category},
+            ${reason}, ${directive}, ${input.kind === "positive" ? "positive" : "negative"})
+  `);
+  return getModelLearnings();
 }
 
 /* ──────────────────────────── prompt-opbouw ──────────────────────────── */
