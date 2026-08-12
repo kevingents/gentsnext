@@ -20,6 +20,9 @@ export type Dagdeel = (typeof DAGDELEN)[number];
 export const APPOINTMENT_STATUSES = ["nieuw", "bevestigd", "afgerond", "no-show", "geannuleerd"] as const;
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 
+/** Afgesproken tijdstip: HH:MM, 24-uurs. Leeg = alleen het dagdeel is bekend. */
+export const TIJD_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 /** Hoe ver vooruit een klant mag boeken (dagen). */
 export const MAX_DAYS_AHEAD = 90;
 
@@ -56,10 +59,12 @@ export type CreateAppointmentInput = {
   viaWinkel?: boolean;
   /* Wie 'm inplande, voor het winkeloverzicht. */
   ingepland_door?: string;
+  /* Afgesproken tijdstip (HH:MM) — de winkel plant op een concrete tijd. */
+  tijd?: string;
 };
 
 export type CreateAppointmentResult =
-  | { ok: true; id: string; type: AppointmentType; store: string; preferredDate: string; dagdeel: Dagdeel }
+  | { ok: true; id: string; type: AppointmentType; store: string; preferredDate: string; dagdeel: Dagdeel; tijd: string }
   | { ok: false; error: string };
 
 /**
@@ -107,17 +112,23 @@ export async function createAppointment(input: CreateAppointmentInput): Promise<
   const wensen = String(input.wensen || "").trim().slice(0, 2000);
   const locale = String(input.locale || "nl").trim().slice(0, 5) || "nl";
 
+  /* Tijdstip: alleen de winkel geeft er een op (de klant kiest online een
+     dagdeel). Ongeldig formaat is een harde fout — een afspraak "om 25:70"
+     stil wegslikken zou als bevestigd zonder tijd de deur uit gaan. */
+  const tijd = String(input.tijd || "").trim();
+  if (tijd && !TIJD_RE.test(tijd)) return { ok: false, error: "Ongeldig tijdstip (gebruik HH:MM)." };
+
   const db = getDb();
   const rows = await db
     .insert(appointments)
     .values({
-      type, store: store.title, preferredDate, dagdeel, name, email, phone, wensen, locale,
+      type, store: store.title, preferredDate, dagdeel, name, email, phone, wensen, locale, tijd,
       /* Door de winkel ingepland = al afgestemd met de klant, dus meteen
          bevestigd. Een online aanvraag blijft 'nieuw' tot de winkel 'm oppakt. */
       ...(viaWinkel ? { status: "bevestigd" } : {}),
     })
     .returning({ id: appointments.id });
-  return { ok: true, id: rows[0].id, type, store: store.title, preferredDate, dagdeel };
+  return { ok: true, id: rows[0].id, type, store: store.title, preferredDate, dagdeel, tijd };
 }
 
 /**
@@ -130,6 +141,8 @@ export type StoreAppointment = {
   store: string;
   preferredDate: string;
   dagdeel: string;
+  /** Afgesproken tijdstip (HH:MM), leeg zolang alleen het dagdeel bekend is. */
+  tijd: string;
   name: string;
   phone: string;
   wensen: string;
@@ -155,6 +168,7 @@ export async function listAppointmentsForStore(storeName: string, from?: string,
       store: appointments.store,
       preferredDate: appointments.preferredDate,
       dagdeel: appointments.dagdeel,
+      tijd: appointments.tijd,
       name: appointments.name,
       phone: appointments.phone,
       wensen: appointments.wensen,
@@ -168,18 +182,55 @@ export async function listAppointmentsForStore(storeName: string, from?: string,
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
 }
 
-/** Status-update vanuit de winkel (kassa/portal). */
-export async function updateAppointmentStatus(id: string, status: string): Promise<{ ok: true } | { ok: false; error: string }> {
+/** Wat de mail-laag van een zojuist bijgewerkte afspraak nodig heeft. */
+export type UpdatedAppointment = {
+  id: string;
+  type: string;
+  store: string;
+  preferredDate: string;
+  dagdeel: string;
+  tijd: string;
+  name: string;
+  email: string;
+  locale: string;
+};
+
+/**
+ * Status-update vanuit de winkel (kassa/portal), optioneel mét het afgesproken
+ * tijdstip (bij bevestigen). Geeft de bijgewerkte afspraak terug — inclusief
+ * e-mailadres, zodat de core-route de definitieve bevestiging kan mailen. Dat
+ * adres blijft server-side: de kassa krijgt het bewust nooit te zien.
+ */
+export async function updateAppointmentStatus(
+  id: string,
+  status: string,
+  tijd?: string,
+): Promise<{ ok: true; appointment: UpdatedAppointment } | { ok: false; error: string }> {
   if (!APPOINTMENT_STATUSES.includes(status as AppointmentStatus)) return { ok: false, error: "Ongeldige status." };
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ""))) return { ok: false, error: "Ongeldig id." };
+  const nieuweTijd = String(tijd || "").trim();
+  if (nieuweTijd && !TIJD_RE.test(nieuweTijd)) return { ok: false, error: "Ongeldig tijdstip (gebruik HH:MM)." };
+
   const db = getDb();
   const rows = await db
     .update(appointments)
-    .set({ status, updatedAt: sql`now()` })
+    // Geen tijd meegegeven = de bestaande laten staan (een no-show-klik mag
+    // het eerder afgesproken tijdstip niet wissen).
+    .set({ status, updatedAt: sql`now()`, ...(nieuweTijd ? { tijd: nieuweTijd } : {}) })
     .where(eq(appointments.id, id))
-    .returning({ id: appointments.id });
+    .returning({
+      id: appointments.id,
+      type: appointments.type,
+      store: appointments.store,
+      preferredDate: appointments.preferredDate,
+      dagdeel: appointments.dagdeel,
+      tijd: appointments.tijd,
+      name: appointments.name,
+      email: appointments.email,
+      locale: appointments.locale,
+    });
   if (!rows.length) return { ok: false, error: "Afspraak niet gevonden." };
-  return { ok: true };
+  return { ok: true, appointment: rows[0] };
 }
 
 /**
