@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { getVisualLearnings, learningsPromptBlock } from "@/lib/visual-learnings";
+import { isBlackTie } from "@/lib/model-styling";
 
 /**
  * Herbruikbare sfeerbeeld-generatie per product (FASHN product-to-model), met de
@@ -171,10 +172,17 @@ export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): 
   if (!r) return { ok: false, error: "Product niet gevonden." };
   if (!r.img) return { ok: false, error: "Geen productfoto om op te baseren." };
 
+  // Rok/jacquet = white-tie (studentikoos), overige gala-artikelen = black-tie.
+  // Zonder die tweede tak kreeg een SMOKING-colbert gewoon de zomerse
+  // Colberts-styling uit CAT: "sand trousers and brown suede loafers". Dezelfde
+  // blinde vlek als bij de modelfoto's — zie isBlackTie in lib/model-styling.ts.
   const isStudent = /\brok|jacquet/i.test(`${r.handle} ${r.title}`);
+  const gala = !isStudent && isBlackTie(r.hg, r.title, r.handle);
   const conf = isStudent
     ? { mood: "student", wear: "A cheerful young Dutch student wearing THIS formal item as part of a full white-tie tailcoat outfit — crisp white dress shirt, white bow tie and formal black trousers" }
-    : CAT[r.hg];
+    : gala
+      ? { mood: "trouw", wear: "wearing THIS item as part of a complete black-tie tuxedo outfit — crisp white formal dress shirt, black bow tie, black tuxedo trousers and black patent leather shoes" }
+      : CAT[r.hg];
   if (!conf) return { ok: false, error: `Geen sfeer-config voor hoofdgroep "${r.hg || "?"}".` };
   const mood = MOODS[conf.mood] || MOODS.trouw;
   const scene = mood.scenes[Math.floor(Math.random() * mood.scenes.length)];

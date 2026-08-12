@@ -2,7 +2,7 @@ import { put, del } from "@vercel/blob";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { modelStylePrompt } from "@/lib/model-styling";
+import { modelStylePrompt, garmentSentence, frameFor } from "@/lib/model-styling";
 import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
 
 /**
@@ -15,51 +15,20 @@ import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
  */
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
-const POSE = "Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.";
 /**
- * Schoenen en riemen zijn kleine artikelen: het bulk-script (scripts/generate-
- * model-photos.ts, POSES_LOWER) fotografeert die vanaf het middel. Deze
- * hergenerator deed dat niet en zette er een héle man neer — dus beoordeelde je
- * bij een lakschoen ineens een compleet pak, en dan is er altijd wel iets mis.
+ * Het kader volgt frameFor() uit model-styling, zodat een hergenereerde foto
+ * dezelfde uitsnede krijgt als het bulk-script. Deze hergenerator zette altijd
+ * een héle man neer — dus beoordeelde je bij een lakschoen ineens een compleet
+ * pak, en dan is er altijd wel iets mis.
  */
-const POSE_ONDER = "Framed from the waist down, focus on the lower body and footwear, relaxed stance with weight on one leg and one foot slightly forward.";
-const ONDERLIJF = new Set(["Schoenen", "Riemen"]);
+const POSES: Record<string, string> = {
+  full: "Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.",
+  upper: "Relaxed pose framed from the knees up, one hand in his pocket, warm genuine smile, looking softly into the camera.",
+  lower: "Framed from the waist down, focus on the lower body and footwear, relaxed stance with weight on one leg and one foot slightly forward.",
+};
 
-type Styling = ReturnType<typeof modelStylePrompt>;
-
-/**
- * De zin die het kledingstuk beschrijft, mét de styling die modelStylePrompt
- * heeft uitgerekend.
- *
- * Die styling werd bij Overhemden, Truien, Polo's en T-shirts helemaal niet
- * gebruikt: daar stond een vaste zin zonder ${s.shirt}/${s.shoes}. Een SMOKING-
- * overhemd werd dus als los overhemd met een broek gestyled — geen strik, geen
- * smoking — terwijl de code allang wist dat het black-tie was. Vandaar dat
- * "het model moet ook een strik dragen" bij zo'n overhemd nergens landde.
- */
-function garmentFor(hg: string, s: Styling): string {
-  const das = s.neckwear ? ` with ${s.neckwear}` : "";
-  const broek = s.trousers;
-  switch (hg) {
-    case "Pakken": return `Male model wearing THIS suit, complete with ${s.shirt}${das} and ${s.shoes}.`;
-    case "Colberts": return `Male model wearing THIS blazer over ${s.shirt}${das}, with ${broek} and ${s.shoes}.`;
-    case "Gilets": return `Male model wearing THIS waistcoat over ${s.shirt}${das}, with ${broek} and ${s.shoes}. The lowest button of the waistcoat is left open.`;
-    case "Broeken": return `Male model wearing THESE trousers with ${s.shirt} tucked in${s.neckwear ? `, wearing ${s.neckwear}` : ""}, and ${s.shoes}.`;
-    case "Overhemden": return `Male model wearing THIS shirt${das}, neatly styled with ${s.blackTie ? "black tuxedo trousers" : "trousers"} and ${s.shoes}.`;
-    case "Truien": case "Vesten": return "Male model wearing THIS knitwear, styled with neat trousers.";
-    case "Polo-shirts": return "Male model wearing THIS polo shirt, styled with neat trousers.";
-    case "T-Shirts": return "Male model wearing THIS t-shirt, styled casually with neat trousers.";
-    case "Jassen": return "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.";
-    // Zonder eigen zin viel een schoen terug op "THIS item, neatly styled with
-    // matching menswear" — vaag, en "matching" is precies het woord dat de
-    // generator een compleet bij elkaar passend pak liet verzinnen.
-    case "Schoenen": return `Male model wearing THESE shoes with ${s.blackTie ? "black tuxedo trousers and dark dress socks" : "well-fitted trousers"}.`;
-    case "Riemen": return `Male model wearing THIS belt with well-fitted trousers, ${s.shirt} tucked in, and ${s.shoes}.`;
-    case "Stropdassen": return `Male model wearing THIS tie with ${s.shirt} and a classic jacket.`;
-    case "Strikken": return `Male model wearing THIS bow tie with ${s.shirt} and a black tuxedo jacket.`;
-    default: return "Male model wearing THIS item, neatly styled with classic menswear.";
-  }
-}
+/* De zin over het kledingstuk komt uit lib/model-styling.ts — één bron voor
+   deze hergenerator, de bulk-generator en de tweede pose. */
 
 async function runProductToModel(productImage: string, prompt: string, apiKey: string, faceRef = ""): Promise<string | null> {
   const inputs: Record<string, unknown> = { product_image: productImage, prompt, output_format: "jpeg", aspect_ratio: "4:5" };
@@ -110,9 +79,9 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   // geen broek, dus doe er een andere kleur broek onder"). De zin blijft heel,
   // de tegenspraak verdwijnt.
   const kledingZin = learn.fixTopics.garment
-    ? garmentFor(p.hg, style).replace(/with matching trousers/gi, "with trousers")
-    : garmentFor(p.hg, style);
-  const pose = ONDERLIJF.has(p.hg) ? POSE_ONDER : POSE;
+    ? garmentSentence(p.hg, style).replace(/with matching trousers/gi, "with trousers")
+    : garmentSentence(p.hg, style);
+  const pose = POSES[frameFor(p.hg)];
   const prompt = `${learn.lead}${kledingZin}${learn.garment} ${pose} ${STUDIO}${learn.model}${learn.fix}`;
 
   // face_reference houdt dezelfde man vast — prettig als je niets aan te merken
