@@ -118,24 +118,40 @@ function sanitizeOperational(input: unknown, huidig: Settings): Partial<Settings
       validityMonths: Math.max(1, Math.round(Number(g.validityMonths) || 24)),
     };
   }
-  /* Spaarpunten-bonussen (maatprofiel, Wallet-pas, compleet profiel). Alleen de
-     bonusbedragen zijn hier te zetten; vesting en inwisselkoers blijven buiten
-     de portal — dat raakt bestaande, al uitgegeven punten.
+  /* SPAARPUNTEN — alle knoppen, want elk bedrag dat een klant kan verdienen of
+     inwisselen moet in de tool te zetten zijn, niet in code.
      Bewust op de HUIDIGE loyaltyConfig gestapeld: updateSettings merget ondiep,
-     dus een los bonus-object zou de rest van de spaarpunt-instellingen wissen.
-     0 = die bonus staat uit. Plafond 5.000 punten: een tikfout mag geen
-     tegoedbon van honderden euro's per klant uitdelen. */
-  if (b.loyaltyBonusPoints && typeof b.loyaltyBonusPoints === "object") {
-    const lb = b.loyaltyBonusPoints as Record<string, unknown>;
-    const bedrag = (v: unknown, val: number) =>
-      Number.isFinite(Number(v)) ? Math.max(0, Math.min(5000, Math.round(Number(v)))) : val;
-    const nu = huidig.loyaltyConfig.bonusPoints;
+     dus een deel-object zou de rest van de spaarpunt-instellingen wissen.
+
+     Twee waarschuwingen die de portal bij deze velden hoort te tonen:
+     · `pointsPerEuro` geldt alleen voor de WEBSHOP. De kassa rekent in storegents
+       met een eigen regel; wie hier draait moet die meedraaien, anders spaart
+       dezelfde euro online anders dan in de winkel.
+     · `redeemCentsPerPoint` verandert wat AL GESPAARDE punten waard zijn — het
+       hele uitstaande saldo wordt in één klap meer of minder waard. */
+  if (b.loyaltyConfig && typeof b.loyaltyConfig === "object") {
+    const lc = b.loyaltyConfig as Record<string, unknown>;
+    const nu = huidig.loyaltyConfig;
+    /* Klemmen, niet weigeren — behalve buiten bereik: een vertypte 5000 mag geen
+       tegoedbon van honderden euro's per klant uitdelen, en een 0 of leeg veld
+       mag geen bestaande instelling stilletjes op nul zetten. */
+    const getal = (v: unknown, val: number, min: number, max: number) =>
+      Number.isFinite(Number(v)) ? Math.max(min, Math.min(max, Number(v))) : val;
+    const geheel = (v: unknown, val: number, min: number, max: number) => Math.round(getal(v, val, min, max));
+    const lb = (lc.bonusPoints || {}) as Record<string, unknown>;
     out.loyaltyConfig = {
-      ...huidig.loyaltyConfig,
+      ...nu,
+      pointsPerEuro: getal(lc.pointsPerEuro, nu.pointsPerEuro, 0.01, 100),
+      vestingDays: geheel(lc.vestingDays, nu.vestingDays, 0, 365),
+      redeemCentsPerPoint: getal(lc.redeemCentsPerPoint, nu.redeemCentsPerPoint, 0.01, 100),
+      redeemMinPoints: geheel(lc.redeemMinPoints, nu.redeemMinPoints, 1, 100000),
+      redeemStepPoints: geheel(lc.redeemStepPoints, nu.redeemStepPoints, 0, 100000),
+      redeemVoucherDays: geheel(lc.redeemVoucherDays, nu.redeemVoucherDays, 1, 3650),
       bonusPoints: {
-        sizeAdvice: bedrag(lb.sizeAdvice, nu.sizeAdvice),
-        walletPass: bedrag(lb.walletPass, nu.walletPass),
-        profileComplete: bedrag(lb.profileComplete, nu.profileComplete),
+        sizeAdvice: geheel(lb.sizeAdvice, nu.bonusPoints.sizeAdvice, 0, 5000),
+        walletPass: geheel(lb.walletPass, nu.bonusPoints.walletPass, 0, 5000),
+        favoriteStore: geheel(lb.favoriteStore, nu.bonusPoints.favoriteStore, 0, 5000),
+        profileComplete: geheel(lb.profileComplete, nu.bonusPoints.profileComplete, 0, 5000),
       },
     };
   }

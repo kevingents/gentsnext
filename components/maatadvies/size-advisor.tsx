@@ -113,8 +113,8 @@ export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
       }
       if (res.ok) {
         // De server bepaalt of hier punten bij horen (eenmalig per klant).
-        const d = (await res.json().catch(() => ({}))) as { bonus?: { points: number } | null };
-        setEarned(d.bonus?.points || 0);
+        const d = (await res.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
+        setEarned((d.bonuses ?? []).reduce((n, b) => n + (Number(b?.points) || 0), 0));
       }
       setSaveState(res.ok ? "saved" : "error");
     } catch {

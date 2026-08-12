@@ -21,15 +21,19 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, loyaltyEvents } from "@/db/schema";
 import { creditBonusOnce } from "@/lib/loyalty-claim";
-import { getSettings } from "@/lib/settings";
+import { getSettings, type Settings } from "@/lib/settings";
 import { isProfileComplete, sizeProfileComplete, type ProfilePreferences } from "@/lib/profiel-voorkeuren";
 
-export type BonusKind = "maatadvies" | "wallet" | "profiel";
+export type BonusKind = "maatadvies" | "wallet" | "winkel" | "profiel";
+
+/** Alle bonussen in de volgorde waarin de klant ze te zien krijgt. */
+export const BONUS_KINDS: BonusKind[] = ["maatadvies", "wallet", "winkel", "profiel"];
 
 /** refType per bonus. Vast — dit staat straks in het grootboek van elke klant. */
 const REF_TYPE: Record<BonusKind, string> = {
   maatadvies: "bonus_maatadvies",
   wallet: "bonus_wallet",
+  winkel: "bonus_winkel",
   // Bestaande sleutel uit de "+50 punten"-mail: dezelfde bonus, dus dezelfde
   // refType. Zo kan niemand hem twee keer pakken (mail én zelf invullen).
   profiel: "profile_completion",
@@ -38,14 +42,23 @@ const REF_TYPE: Record<BonusKind, string> = {
 const REASON: Record<BonusKind, string> = {
   maatadvies: "Maatprofiel ingevuld",
   wallet: "Spaarpas in Apple Wallet",
+  winkel: "Vaste winkel gekozen",
   profiel: "Profiel afgerond",
 };
 
+/** Welke instelling hoort bij welke bonus. */
+function bedrag(bp: Settings["loyaltyConfig"]["bonusPoints"] | undefined, kind: BonusKind): number {
+  const val =
+    kind === "maatadvies" ? bp?.sizeAdvice
+    : kind === "wallet" ? bp?.walletPass
+    : kind === "winkel" ? bp?.favoriteStore
+    : bp?.profileComplete;
+  return Math.max(0, Math.round(Number(val) || 0));
+}
+
 /** Wat deze bonus nu waard is (0 = uit). Instelbaar in de tool, niet in code. */
 export async function bonusPointsFor(kind: BonusKind): Promise<number> {
-  const bp = (await getSettings()).loyaltyConfig?.bonusPoints;
-  const val = kind === "maatadvies" ? bp?.sizeAdvice : kind === "wallet" ? bp?.walletPass : bp?.profileComplete;
-  return Math.max(0, Math.round(Number(val) || 0));
+  return bedrag((await getSettings()).loyaltyConfig?.bonusPoints, kind);
 }
 
 export type BonusResult = { awarded: boolean; points: number };
@@ -114,6 +127,18 @@ export async function awardSizeAdviceBonusIfEarned(c: CustomerLike): Promise<Bon
   return awardBonus(c.id, "maatadvies");
 }
 
+/**
+ * Bonus voor het kiezen van een vaste winkel. Aparte, kleine stap: het is één
+ * klik, en hij levert meteen iets op (overal "ligt het in mijn winkel?"). De
+ * winkel telt óók mee voor "profiel compleet" — dat is geen dubbeltelling maar
+ * twee verschillende beloningen: de eerste stap en de hele set.
+ */
+export async function awardStoreBonusIfEarned(c: CustomerLike): Promise<BonusResult> {
+  const prefs = (c.preferences || {}) as ProfilePreferences;
+  if (!String(prefs.favoriteStore || "").trim()) return { awarded: false, points: 0 };
+  return awardBonus(c.id, "winkel");
+}
+
 /** Bonus voor een compleet profiel — de checklist uit lib/profiel-voorkeuren. */
 export async function awardProfileBonusIfEarned(c: CustomerLike): Promise<BonusResult> {
   const compleet = isProfileComplete({
@@ -138,26 +163,26 @@ export type BonusTask = {
 };
 
 /**
- * De drie taken met hun stand, voor het "verdien punten"-blok op de accountpagina.
+ * De vier taken met hun stand, voor het "verdien punten"-blok op de accountpagina.
  * `done` leest de vlag/het grootboek, zodat een klant die z'n punten al kreeg de
  * taak afgevinkt ziet — ook als hij z'n profiel later weer uitkleedt.
  */
 export async function bonusTasks(c: CustomerLike, walletInstalled: boolean): Promise<BonusTask[]> {
-  const { loyaltyConfig } = await getSettings();
-  const bp = loyaltyConfig?.bonusPoints;
+  const bp = (await getSettings()).loyaltyConfig?.bonusPoints;
   const claimed = await claimedBonusKinds(c.id, Boolean(c.profileCompletionBonusClaimed));
-  const sizeOk = sizeProfileComplete(c.sizeProfile as Record<string, unknown>);
-  const profielOk = isProfileComplete({
-    firstName: c.firstName,
-    lastName: c.lastName,
-    phone: c.phone,
-    preferences: (c.preferences || {}) as ProfilePreferences,
-  });
-  return [
-    { kind: "maatadvies", points: Math.max(0, Number(bp?.sizeAdvice) || 0), done: claimed.has("maatadvies"), earned: sizeOk },
-    { kind: "wallet", points: Math.max(0, Number(bp?.walletPass) || 0), done: claimed.has("wallet"), earned: walletInstalled },
-    { kind: "profiel", points: Math.max(0, Number(bp?.profileComplete) || 0), done: claimed.has("profiel"), earned: profielOk },
-  ];
+  const prefs = (c.preferences || {}) as ProfilePreferences;
+  const voorwaarde: Record<BonusKind, boolean> = {
+    maatadvies: sizeProfileComplete(c.sizeProfile as Record<string, unknown>),
+    wallet: walletInstalled,
+    winkel: Boolean(String(prefs.favoriteStore || "").trim()),
+    profiel: isProfileComplete({ firstName: c.firstName, lastName: c.lastName, phone: c.phone, preferences: prefs }),
+  };
+  return BONUS_KINDS.map((kind) => ({
+    kind,
+    points: bedrag(bp, kind),
+    done: claimed.has(kind),
+    earned: voorwaarde[kind],
+  }));
 }
 
 /** Welke bonussen staan er al in het grootboek van deze klant? */

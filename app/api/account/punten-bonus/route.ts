@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletAppleRegistrations } from "@/db/schema";
 import { getSessionCustomer } from "@/lib/account";
-import { awardBonus, awardProfileBonusIfEarned, awardSizeAdviceBonusIfEarned, type BonusKind } from "@/lib/loyalty-bonus";
+import {
+  awardBonus,
+  awardProfileBonusIfEarned,
+  awardSizeAdviceBonusIfEarned,
+  awardStoreBonusIfEarned,
+  type BonusKind,
+} from "@/lib/loyalty-bonus";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +37,7 @@ export async function POST() {
   };
 
   push("maatadvies", await awardSizeAdviceBonusIfEarned(customer));
+  push("winkel", await awardStoreBonusIfEarned(customer));
   push("profiel", await awardProfileBonusIfEarned(customer));
 
   // Wallet: de registratie van het toestel is het bewijs dat de pas erop staat.

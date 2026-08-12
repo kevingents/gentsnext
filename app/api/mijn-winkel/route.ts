@@ -35,13 +35,27 @@ export async function POST(req: Request) {
   const store = storeByPageHandle(raw) ?? storeByName(raw);
   if (!store) return NextResponse.json({ ok: false, error: "onbekende winkel" }, { status: 400 });
 
-  const res = NextResponse.json({ ok: true, store: { pageHandle: store.pageHandle, title: store.title, city: store.city } });
+  const customer = await getSessionCustomer().catch(() => null);
+  /* Ook hier de eenmalige winkel-bonus toekennen. Een klant die z'n vaste winkel
+     op een productpagina kiest hoort dezelfde punten te krijgen als iemand die
+     'm in z'n profiel zet — welk formulier je gebruikt mag niet uitmaken. */
+  let bonus: { kind: string; points: number } | null = null;
+  if (customer) {
+    await updatePreference(customer.id, "favoriteStore", store.pageHandle).catch(() => {});
+    const { awardStoreBonusIfEarned } = await import("@/lib/loyalty-bonus");
+    const r = await awardStoreBonusIfEarned({ id: customer.id, preferences: { favoriteStore: store.pageHandle } });
+    if (r.awarded) bonus = { kind: "winkel", points: r.points };
+  }
+
+  const res = NextResponse.json({
+    ok: true,
+    store: { pageHandle: store.pageHandle, title: store.title, city: store.city },
+    bonus,
+  });
   res.cookies.set(STORE_COOKIE, store.pageHandle, {
     path: "/",
     maxAge: STORE_COOKIE_MAX_AGE,
     sameSite: "lax",
   });
-  const customer = await getSessionCustomer().catch(() => null);
-  if (customer) await updatePreference(customer.id, "favoriteStore", store.pageHandle).catch(() => {});
   return res;
 }

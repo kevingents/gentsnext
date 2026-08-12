@@ -16,11 +16,31 @@ import { verifyReceiptToken, receiptSecretConfigured } from "@/lib/receipt-token
 import { getSettings } from "@/lib/settings";
 import { formatEuro } from "@/lib/format";
 
-const POINTS_PER_EURO = 1; // pilot — zelfde regel als de kassa (pointsForAmount)
+/** Standaard-spaarsnelheid als de instellingen onbereikbaar zijn: 1 punt per euro. */
+export const DEFAULT_POINTS_PER_EURO = 1;
 
-/** 1 punt per hele euro. */
-export function pointsForCents(cents: number): number {
-  return Math.max(0, Math.floor((Number(cents) || 0) / 100)) * POINTS_PER_EURO;
+/**
+ * Punten voor een bedrag, bij een GEGEVEN spaarsnelheid. Puur, zodat een rapport
+ * of een backfill dezelfde rekenregel kan spiegelen zonder de instellingen nóg
+ * een keer te lezen. Altijd hele euro's naar beneden.
+ */
+export function pointsForCents(cents: number, pointsPerEuro: number = DEFAULT_POINTS_PER_EURO): number {
+  const rate = Number(pointsPerEuro) > 0 ? Number(pointsPerEuro) : DEFAULT_POINTS_PER_EURO;
+  // Ook de uitkomst afronden naar beneden: bij een halve punt per euro is 12,5
+  // geen geldige waarde voor een integer-kolom, en naar boven afronden zou de
+  // klant punten geven die hij niet besteed heeft.
+  return Math.floor(Math.max(0, Math.floor((Number(cents) || 0) / 100)) * rate);
+}
+
+/** De spaarsnelheid uit de instellingen (in de tool aanpasbaar, niet in code). */
+export async function pointsPerEuro(): Promise<number> {
+  const v = Number((await getSettings()).loyaltyConfig?.pointsPerEuro);
+  return v > 0 ? v : DEFAULT_POINTS_PER_EURO;
+}
+
+/** Punten voor een bedrag tegen de ACTUELE spaarsnelheid. */
+export async function earnedPointsFor(cents: number): Promise<number> {
+  return pointsForCents(cents, await pointsPerEuro());
 }
 
 export type ClaimResult = {
@@ -254,7 +274,7 @@ export async function claimReceiptPoints(input: { saleId: string; token: string;
       balance: await ledgerBalance(customerId),
     };
   }
-  const points = pointsForCents(Math.round((Number(s.total) || 0) * 100));
+  const points = await earnedPointsFor(Math.round((Number(s.total) || 0) * 100));
   const saleDate = (sale as { createdAt?: string }).createdAt ? new Date(String((sale as { createdAt?: string }).createdAt)) : null;
   return creditOnce(customerId, points, "Kassabon gekoppeld", "pos_receipt", saleId, await vestsAtFrom(saleDate));
 }
@@ -270,7 +290,7 @@ export async function creditOrderLoyalty(
 ): Promise<ClaimResult> {
   const paidish = ["paid", "shipped", "ready_pickup", "delivered"];
   if (!paidish.includes(String(order.status))) return { ok: false, error: "Order nog niet betaald." };
-  const points = pointsForCents(order.totalCents);
+  const points = await earnedPointsFor(order.totalCents);
   // Vesting vanaf de betaaldatum (betaald + N dagen); val bij ontbrekende paidAt terug
   // op de orderdatum (niet nu) zodat oude/geïmporteerde orders niet onterecht weer
   // een vol venster "in behandeling" gaan.
@@ -281,14 +301,20 @@ export async function creditOrderLoyalty(
  * Draai (een deel van) de order-punten terug bij een retour — idempotent per retour
  * (refType 'loyalty_reversal', refId = retour-id). De punten staan normaal nog "in
  * behandeling" (binnen het vesting-venster), dus dit geeft geen negatief saldo.
- * Reverseert pointsForCents(itemsCents) — de waarde van de geretourneerde artikelen.
+ * Reverseert de puntwaarde van de geretourneerde artikelen.
+ *
+ * Rekent met de spaarsnelheid van NU, niet die van het moment van kopen. Bij een
+ * verlaagde snelheid draait dat te weinig terug; bij een verhoogde te veel — maar
+ * dat laatste vangt de cap hieronder al af (nooit meer dan er voor deze order is
+ * bijgeschreven). Een snelheid per order bewaren zou dat exact maken; zolang de
+ * snelheid zelden verandert weegt dat niet op tegen een extra kolom.
  */
 export async function reverseOrderLoyalty(customerId: string, orderId: string, basisCents: number, returnId: string): Promise<void> {
   const cid = String(customerId || "").trim();
   const oid = String(orderId || "").trim();
   const rid = String(returnId || "").trim();
   if (!cid || !oid || !rid) return;
-  const requested = pointsForCents(basisCents);
+  const requested = await earnedPointsFor(basisCents);
   if (requested <= 0) return;
   const db = getDb();
   const refKey = `${oid}:${rid}`; // per order + per retour → idempotent én optelbaar per order
