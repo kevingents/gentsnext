@@ -1270,6 +1270,68 @@ export const posClosings = pgTable(
 );
 
 /**
+ * Kasmutaties (IN/UIT KAS, IN/UIT KLUIS tijdens de dag) — bron-van-waarheid in de
+ * Neon-core. Vervangt de storegents-blob admin/pos-kas-mutaties.json. Dit is een
+ * GELDSPOOR: append-only (fout = tegenmutatie boeken, geen bewerken/wissen) en
+ * zonder de 2000-records-cap van de blob — kasadministratie knip je niet af.
+ * Zelfde mirror-opzet als pos_sales: queryable kolommen + het volledige record
+ * als jsonb `data`; idempotent op id (retry/backfill boekt nooit dubbel).
+ */
+export const posKasMutaties = pgTable(
+  "pos_kas_mutaties",
+  {
+    id: text("id").primaryKey(), // km-<...> id van de kassa
+    store: text("store").notNull(),
+    date: text("date").notNull(), // YYYY-MM-DD (Europa/Amsterdam)
+    type: text("type").notNull(), // inkas | uitkas | kluis-in | kluis-uit
+    amountCents: integer("amount_cents").notNull().default(0),
+    data: jsonb("data").notNull(), // de volledige mutatie (incl. reason + actor)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pos_kas_mutaties_store_date_idx").on(t.store, t.date)],
+);
+
+/**
+ * Kas-openingen (beginkas/wisselgeld-telling per winkel per dag) — bron-van-waarheid
+ * in de Neon-core. Vervangt de storegents-blob admin/kassa-openings.json. Unieke
+ * (store, date) → één telling per dag; een hertelling overschrijft mét audit-spoor
+ * (`previous` in de data-jsonb). De SRS-claim (data->'srs') wordt hier ATOMAIR gezet
+ * (één conditionele update) — de blob-claim had een read-modify-write-venster waarin
+ * twee gelijktijdige tellingen allebei konden boeken.
+ */
+export const posOpenings = pgTable(
+  "pos_openings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    store: text("store").notNull(),
+    date: text("date").notNull(), // YYYY-MM-DD (Europa/Amsterdam)
+    amountCents: integer("amount_cents").notNull().default(0),
+    data: jsonb("data").notNull(), // de volledige opening (coupures/actor/previous/srs)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("pos_openings_store_date_unique").on(t.store, t.date)],
+);
+
+/**
+ * Geparkeerde kassa-mandjes (held sales / drafts) — bron-van-waarheid in de
+ * Neon-core. Vervangt de storegents-blob admin/pos-sales-drafts.json. Een concept
+ * boekt niets (geen voorraad/loyalty); zichtbaar over devices/locaties omdat de
+ * opslag centraal is. Upsert op id (het draft-id van de kassa).
+ */
+export const posDrafts = pgTable(
+  "pos_drafts",
+  {
+    id: text("id").primaryKey(), // draft-<...> id van de kassa
+    store: text("store").notNull(),
+    data: jsonb("data").notNull(), // het volledige concept (lines/klant/label/…)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pos_drafts_store_updated_idx").on(t.store, t.updatedAt)],
+);
+
+/**
  * Inbound goederenontvangst — een zending naar een winkel (replenishment vanuit
  * het magazijn, leverancier-levering of winkel→winkel-herverdeling). DE ASN: wat
  * verwacht wordt + de status (gepickt → onderweg → ontvangen). Gespiegeld op
