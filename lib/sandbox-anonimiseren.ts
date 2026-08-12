@@ -186,6 +186,101 @@ export const ANONIMISEER_STAPPEN: Stap[] = [
     `,
   },
 
+  /* ── 4b. Het 360-profiel (CDP) ───────────────────────────────────────────
+     customer_profiles is de leescopie waar elke doelgroepregel op draait: een
+     tweede exemplaar van de klantidentiteit, náást `customers`. Zonder deze stap
+     stond het hele klantenbestand alsnog in de sandbox, ook al waren de klanten
+     zelf netjes geschoond.
+
+     De _sha256-velden verdienen aparte aandacht. Dat is precies wat er naar Meta
+     en Google Ads gaat, en een hash van een echt mailadres is gewoon herleidbaar
+     (hash je een bekend adres, dan match je de klant). Ze blijven dus niet staan
+     en worden ook niet leeggemaakt, maar OPNIEUW BEREKEND over de nepwaarden —
+     dan blijft de uitlevering in de sandbox testbaar met hashes die buiten de
+     sandbox niemand aanwijzen. Het mailadres volgt exact de vorm uit stap 2,
+     zodat profiel en klant aan elkaar gekoppeld blijven. */
+  {
+    naam: "360-profielen anonimiseren",
+    sql: `
+      UPDATE customer_profiles SET
+        email = 'klant-' || customer_id || '@sandbox.invalid',
+        email_sha256 = encode(sha256(convert_to('klant-' || customer_id || '@sandbox.invalid', 'UTF8')), 'hex'),
+        phone_e164 = '+31600000000',
+        phone_sha256 = encode(sha256(convert_to('+31600000000', 'UTF8')), 'hex'),
+        voornaam_sha256 = encode(sha256(convert_to('klant', 'UTF8')), 'hex'),
+        achternaam_sha256 = encode(sha256(convert_to(substr(customer_id::text, 1, 8), 'UTF8')), 'hex'),
+        postcode = '1000 AA',
+        plaats = 'Sandbox',
+        srs_customer_id = '';
+    `,
+  },
+  {
+    /* De doelgroep zelf is geen persoonsgegeven — naam en definitie blijven dus
+       staan, anders test je met lege doelgroepen. Alleen wie hem aanmaakte is
+       een persoon (een medewerker), en een sync-fout kan een klantadres in de
+       tekst hebben staan. */
+    naam: "Doelgroepen ontdoen van namen",
+    sql: `
+      UPDATE audiences SET aangemaakt_door = '' WHERE aangemaakt_door <> '';
+      UPDATE audience_syncs SET fout = '' WHERE fout <> '';
+    `,
+  },
+
+  /* ── 4c. Wat van buiten binnenkomt ───────────────────────────────────────
+     Bol-orders, Returnista-retouren en de Spotler-mailstatistiek. Allemaal met
+     échte adressen erin, inclusief de rauwe payload in `regels`/`data` — die
+     gaat door dezelfde recursieve JSON-schoonmaker als de kassabonnen.
+
+     externe_orders en externe_retouren koppelen aan een klant via customer_id,
+     niet via het adres; daar mag het mailadres dus gewoon vervangen worden
+     zonder dat het 360-profiel z'n koppeling kwijtraakt. */
+  {
+    naam: "Externe orders en retouren anonimiseren",
+    sql: `
+      UPDATE externe_orders SET
+        email = 'extern-' || id || '@sandbox.invalid',
+        telefoon = '',
+        postcode = '1000 AA',
+        plaats = 'Sandbox',
+        regels = sandbox_schoon_json(regels),
+        data = sandbox_schoon_json(data);
+      UPDATE externe_retouren SET
+        email = 'retour-' || id || '@sandbox.invalid',
+        regels = sandbox_schoon_json(regels),
+        data = sandbox_schoon_json(data);
+    `,
+  },
+  {
+    /* mail_engagement is het buitenbeentje: het MAILADRES is de primaire sleutel
+       én de manier waarop customer-360 deze cijfers aan een profiel hangt. Puur
+       overschrijven zou dus twee dingen slopen — de unieke sleutel en de join.
+       Daarom krijgt een rij mét customer_id exact hetzelfde nepadres als de klant
+       zelf ('klant-<id>@sandbox.invalid'), zodat de koppeling in de sandbox
+       blijft werken. Twee rijen op één klant (twee adressen, één persoon) zouden
+       dan botsen op de primaire sleutel; het rangnummer vangt dat af. De rest —
+       adressen die geen klant zijn, bv. alleen-nieuwsbrief — wordt doorgenummerd,
+       zonder hash: een md5 van een echt adres is gewoon terug te zoeken. */
+    naam: "Mailstatistiek anonimiseren",
+    sql: `
+      UPDATE mail_engagement m SET email = CASE
+          WHEN s.rn = 1 THEN 'klant-' || m.customer_id || '@sandbox.invalid'
+          ELSE 'klant-' || m.customer_id || '-' || s.rn || '@sandbox.invalid'
+        END
+      FROM (
+        SELECT email, row_number() OVER (PARTITION BY customer_id ORDER BY email) rn
+        FROM mail_engagement WHERE customer_id IS NOT NULL
+      ) s
+      WHERE s.email = m.email AND m.customer_id IS NOT NULL;
+
+      UPDATE mail_engagement m SET email = 'mail-' || s.rn || '@sandbox.invalid'
+      FROM (
+        SELECT email, row_number() OVER (ORDER BY email) rn
+        FROM mail_engagement WHERE customer_id IS NULL
+      ) s
+      WHERE s.email = m.email AND m.customer_id IS NULL;
+    `,
+  },
+
   /* ── 5. Alles wat een klant kan bereiken of aanwijzen ────────────────── */
   {
     naam: "Nieuwsbrief-inschrijvingen anonimiseren",
@@ -300,6 +395,9 @@ export const CONTROLE_SQL = `
     (SELECT count(*) FROM customers WHERE email NOT LIKE '%@sandbox.invalid') AS klanten,
     (SELECT count(*) FROM orders WHERE email NOT LIKE '%@sandbox.invalid') AS orders,
     (SELECT count(*) FROM newsletter_subscribers WHERE email NOT LIKE '%@sandbox.invalid') AS nieuwsbrief,
+    (SELECT count(*) FROM customer_profiles WHERE email NOT LIKE '%@sandbox.invalid') AS profielen,
+    (SELECT count(*) FROM mail_engagement WHERE email NOT LIKE '%@sandbox.invalid') AS mailstatistiek,
+    (SELECT count(*) FROM externe_orders WHERE email NOT LIKE '%@sandbox.invalid') AS externe_orders,
     (SELECT count(*) FROM customer_sessions) AS sessies,
     (SELECT count(*) FROM wallet_apple_registrations) AS pushtokens
 `;
