@@ -18,9 +18,12 @@ export function ProductCard({
   position,
   listId,
   sort,
+  inMyStore,
 }: {
   product: ProductCardData;
   priority?: boolean;
+  /** Ligt dit artikel in (één van) de winkels van deze klant? Stad of "jouw winkel". */
+  inMyStore?: string | null;
   /** 1-gebaseerde plek in de lijst — zonder positie beloont een populariteits-
    *  ranking alleen wat toevallig bovenaan stond (positie-bias). */
   position?: number;
@@ -83,6 +86,17 @@ export function ProductCard({
         ) : null}
       </div>
       <div className="flex flex-col gap-0.5">
+        {/* "Ligt in jouw winkel" — de vraag die je anders alleen op de
+            productpagina beantwoord kreeg. Alleen tonen als de klant een winkel
+            heeft; het is een persoonlijk feit, geen algemene claim. */}
+        {inMyStore ? (
+          <p className="flex items-center gap-1 font-sans text-xs text-success">
+            <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M3 9l1.5-4.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 20v-6h6v6" />
+            </svg>
+            {t("plp.card.inMyStore", { store: inMyStore })}
+          </p>
+        ) : null}
         {/* Eigen merk niet op elke kaart herhalen — dat is ruis; alleen externe
             merken (bv. een gastlabel) zijn het vermelden waard. Ook niet tonen
             als de titel al met het merk begint (dubbel "Blumfontain"). */}

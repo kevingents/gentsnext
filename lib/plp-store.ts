@@ -32,6 +32,8 @@ export type PlpStoreProps = {
   storeOptions: PlpStoreOption[];
   /** Winkelnamen van de klant — voor de kiezer (die werkt op naam). */
   myStoreTitles: string[];
+  /** Filialen van de klant — voor het label op de producttegel. */
+  myBranches: { branchId: string; city: string }[];
 };
 
 /**
@@ -65,5 +67,8 @@ export async function plpStoreProps(
       };
     }),
   );
-  return { storeOptions, myStoreTitles: mijn.map((s) => s.title) };
+  const myBranches = mijn
+    .map((store) => ({ branchId: branchIdForStore(store), city: store.city }))
+    .filter((b): b is { branchId: string; city: string } => Boolean(b.branchId));
+  return { storeOptions, myStoreTitles: mijn.map((s) => s.title), myBranches };
 }

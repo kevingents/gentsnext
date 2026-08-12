@@ -15,7 +15,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.3508,
+    "lng": 5.2647
   },
   {
     "pageHandle": "gents-amersfoort",
@@ -33,7 +35,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.1561,
+    "lng": 5.3878
   },
   {
     "pageHandle": "gents-amsterdam",
@@ -51,7 +55,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.3676,
+    "lng": 4.9041
   },
   {
     "pageHandle": "gents-antwerpen-herenpakken-trouwpakken-herenmode",
@@ -69,7 +75,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-18:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.2194,
+    "lng": 4.4025
   },
   {
     "pageHandle": "gents-arnhem",
@@ -87,7 +95,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.9851,
+    "lng": 5.8987
   },
   {
     "pageHandle": "gents-breda",
@@ -105,7 +115,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.5719,
+    "lng": 4.7683
   },
   {
     "pageHandle": "gents-delft",
@@ -123,7 +135,9 @@
       "vrijdag": "10:00-17:30",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–17:30"
+    "today": "vrijdag: 10:00–17:30",
+    "lat": 52.0116,
+    "lng": 4.3571
   },
   {
     "pageHandle": "gents-den-bosch",
@@ -141,7 +155,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.6978,
+    "lng": 5.3037
   },
   {
     "pageHandle": "gents-enschede",
@@ -159,7 +175,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.2215,
+    "lng": 6.8937
   },
   {
     "pageHandle": "gents-groningen",
@@ -177,7 +195,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 53.2194,
+    "lng": 6.5665
   },
   {
     "pageHandle": "gents-hilversum",
@@ -195,7 +215,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.2292,
+    "lng": 5.1669
   },
   {
     "pageHandle": "gents-leiden",
@@ -213,7 +235,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.1601,
+    "lng": 4.497
   },
   {
     "pageHandle": "gents-maastricht",
@@ -231,7 +255,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 50.8514,
+    "lng": 5.691
   },
   {
     "pageHandle": "gents-nijmegen",
@@ -249,7 +275,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.8126,
+    "lng": 5.8372
   },
   {
     "pageHandle": "gents-rotterdam",
@@ -267,7 +295,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.9244,
+    "lng": 4.4777
   },
   {
     "pageHandle": "gents-tilburg",
@@ -285,7 +315,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 51.5555,
+    "lng": 5.0913
   },
   {
     "pageHandle": "gents-utrecht",
@@ -303,7 +335,9 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-18:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.0907,
+    "lng": 5.1214
   },
   {
     "pageHandle": "gents-zoetermeer",
@@ -321,7 +355,9 @@
       "vrijdag": "10:00-20:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–20:00"
+    "today": "vrijdag: 10:00–20:00",
+    "lat": 52.0575,
+    "lng": 4.4931
   },
   {
     "pageHandle": "gents-zwolle",
@@ -339,6 +375,8 @@
       "vrijdag": "10:00-18:00",
       "zaterdag": "10:00-17:00"
     },
-    "today": "vrijdag: 10:00–18:00"
+    "today": "vrijdag: 10:00–18:00",
+    "lat": 52.5168,
+    "lng": 6.083
   }
 ]

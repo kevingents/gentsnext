@@ -379,7 +379,7 @@ export function BuyBox({
                 {geen && elders > 0 ? <span>{t("myStore.elsewhereFull", { count: elders })}</span> : null}
                 {/* Zichtbaar kunnen wisselen: zonder deze knop is "mijn winkel"
                     een instelling die je alleen terugvindt waar je 'm ooit zette. */}
-                <StoreChooser myStores={myStores} variant="link" />
+                <StoreChooser myStores={myStores} variant="link" bron="pdp" />
               </p>
             </div>
           );
@@ -387,7 +387,7 @@ export function BuyBox({
         {/* Nog géén winkel gekozen? Dan stond er tot nu toe niets — de hele
             functie bestond alleen voor wie 'm al gevonden had. Deze regel vraagt
             het gewoon, op de plek waar de vraag speelt (onder je maat). */}
-        {myStores.length === 0 && storeCount > 0 ? <StoreChooser /> : null}
+        {myStores.length === 0 && storeCount > 0 ? <StoreChooser bron="pdp" /> : null}
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (

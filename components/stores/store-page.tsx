@@ -60,7 +60,7 @@ export async function StorePage({ store }: { store: Store }) {
               precies díé winkel. Mét de opbrengst erbij, anders is het een knop
               zonder reden. */}
           <div className="mt-4 border border-line bg-surface p-4">
-            <MyStoreToggle value={store.pageHandle} active={isMine} />
+            <MyStoreToggle value={store.pageHandle} active={isMine} bron="winkelpagina" />
             <p className="mt-2 font-sans text-xs text-ink-soft">{t("myStore.explain", locale)}</p>
           </div>
 

@@ -15,6 +15,8 @@ export type LocatorStore = {
   phone: string;
   open: boolean;
   todayRange: string | null;
+  /** Hemelsbrede afstand tot de bezoeker (km) — null als we die niet kennen. */
+  distanceKm?: number | null;
 };
 
 export function StoreLocator({ stores, myStores = [] }: { stores: LocatorStore[]; myStores?: string[] }) {
@@ -32,7 +34,9 @@ export function StoreLocator({ stores, myStores = [] }: { stores: LocatorStore[]
           (!needle || `${s.city} ${s.title} ${s.address}`.toLowerCase().includes(needle)) &&
           (!openOnly || s.open)
       )
-      // Eigen winkels bovenaan — dat zijn de winkels waar je naartoe gaat.
+      /* Eigen winkels bovenaan — dat zijn de winkels waar je naartoe gaat. De
+         server levert de rest al op afstand gesorteerd, dus die volgorde laten
+         we staan (sort is stabiel). */
       .sort((a, b) => Number(favorites.includes(b.pageHandle)) - Number(favorites.includes(a.pageHandle)));
   }, [stores, q, openOnly, favorites]);
 
@@ -56,7 +60,7 @@ export function StoreLocator({ stores, myStores = [] }: { stores: LocatorStore[]
             ))}
             {/* Wisselen is hier de zinnige actie (wissen kan via de kaart zelf). */}
             <span className="ml-auto">
-              <StoreChooser myStores={mine.map((s) => s.title)} variant="link" />
+              <StoreChooser myStores={mine.map((s) => s.title)} variant="link" bron="winkels" />
             </span>
           </p>
         ) : (
@@ -100,7 +104,12 @@ export function StoreLocator({ stores, myStores = [] }: { stores: LocatorStore[]
                     <span className="shrink-0 font-sans text-xs text-muted">{t("stores.closed")}</span>
                   )}
                 </div>
-                <p className="mt-1 font-sans text-sm text-ink-soft">{s.address}</p>
+                <p className="mt-1 font-sans text-sm text-ink-soft">
+                  {s.address}
+                  {typeof s.distanceKm === "number" ? (
+                    <span className="text-muted"> · {t("myStore.km", { km: s.distanceKm })}</span>
+                  ) : null}
+                </p>
                 {s.todayRange ? (
                   <p className="mt-2 font-sans text-xs text-muted">{t("stores.today")}: {s.todayRange}</p>
                 ) : null}
@@ -110,6 +119,7 @@ export function StoreLocator({ stores, myStores = [] }: { stores: LocatorStore[]
                     active={isMine}
                     onChange={(list) => setFavorites(list.map((x) => x.pageHandle))}
                     variant="inline"
+                    bron="winkels"
                   />
                   <Link href={`/pages/${s.pageHandle}`} className="font-sans text-sm text-ink underline underline-offset-4">
                     {t("stores.locator.viewStore")} →

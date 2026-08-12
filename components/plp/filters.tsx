@@ -179,7 +179,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
               ))}
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <StoreChooser myStores={myStoreTitles} variant="link" />
+              <StoreChooser myStores={myStoreTitles} variant="link" bron="plp" />
               {selection.stores.length ? (
                 <button
                   type="button"
@@ -196,7 +196,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
           </>
         ) : (
           /* Nog geen winkel gekozen: hier hoort de uitnodiging, geen lege lijst. */
-          <StoreChooser />
+          <StoreChooser bron="plp" />
         )}
       </div>
 

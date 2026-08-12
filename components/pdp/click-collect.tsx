@@ -201,6 +201,7 @@ export function ClickAndCollect({
                         active={favorites.includes(b.store)}
                         onChange={(list) => setFavorites(list.map((x) => x.title))}
                         variant="inline"
+                        bron="pdp-lade"
                         className="mt-1.5"
                       />
                       {selected ? (

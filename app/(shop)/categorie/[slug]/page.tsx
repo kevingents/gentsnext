@@ -6,7 +6,7 @@ import { TrackLijst } from "@/components/analytics/track-lijst";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
-import { getFilteredProducts, getFacets, getCustomerTasteCats } from "@/lib/catalog";
+import { getFilteredProducts, getFacets, getCustomerTasteCats, handlesInStores } from "@/lib/catalog";
 import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
@@ -86,6 +86,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     pinnedHandles,
     regels,
   });
+  const { myBranches, ...filterProps } = storeProps;
+  /* "Ligt in jouw winkel" op de tegel: één query voor de hele pagina, dezelfde
+     bron en regels als het filter. Zonder winkel geen query en geen label. */
+  const inMyStore = myBranches.length
+    ? await handlesInStores(items.map((p) => p.handle), myBranches.map((b) => b.branchId))
+    : new Set<string>();
+  // Eén winkel? Dan de stad ("In Utrecht"). Meerdere: geen stad noemen, want dan
+  // zouden we moeten zeggen wélke — en dat weet dit label niet.
+  const storeLabel = myBranches.length === 1 ? myBranches[0].city : t("plp.card.inMyStoreGeneric");
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   function pageHref(p: number): string {
@@ -129,7 +138,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             onderaan buiten beeld hangen: je kon er pas bij nadat je langs álle
             producten had gescrold. */}
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} {...storeProps} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} {...filterProps} />
         </aside>
 
         <div>
@@ -153,7 +162,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                   alleen wát er geklikt werd, niet wat er getóónd werd. */}
               <TrackLijst producten={items} listId={`categorie:${cat.slug}`} listName={catLabel} />
               {items.map((product, i) => (
-                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * PER_PAGE + i + 1} listId={`categorie:${cat.slug}`} sort={sel.sort} />
+                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * PER_PAGE + i + 1} listId={`categorie:${cat.slug}`} sort={sel.sort} inMyStore={inMyStore.has(product.handle) ? storeLabel : null} />
               ))}
             </div>
           )}
