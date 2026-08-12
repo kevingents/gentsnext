@@ -77,16 +77,26 @@ function boordToken(token: string): string {
 }
 
 /**
- * Terugval voor maten ZONDER bekende familie (losse producten zonder hoofdgroep).
- * De kledingreeks wint bij een botsing — 42/44/46/48/50/52/54 zijn dan pakmaten.
- * De boordmaten die nergens mee botsen (33–41, 43, 45, 47, 49, 51, 53) vullen we
- * wél aan, want daar is maar één lezing mogelijk. Mengen zónder deze voorrang
- * maakte van elke pakmaat 42 een boordmaat L.
+ * Terugval voor maten ZONDER bekende familie (losse producten zonder hoofdgroep):
+ * de kledingreeks, aangevuld met de boordmaten die de oude tabel ook al kende.
+ *
+ * Bewust NIET de hele boordreeks: die aanvullen leek onschuldig ("36–53 botst
+ * nergens mee") maar geldt alleen voor overhemden. Bij een andere familie is 47
+ * een schoenmaat en 33/34 een broekmaat — die werden dan 3XL en XXS. De
+ * boordreeks hoort achter de familie-check te blijven, niet in de terugval.
  */
 const ROW_MAP: Record<string, string> = {
-  ...Object.fromEntries(Object.entries(BOORD_ROW_MAP).filter(([k]) => !(k in CLOTHING_ROW_MAP))),
+  "36": "XS", "37": "S", "38": "S", "39": "M", "40": "M", "41": "L", "43": "XL", "45": "XXL",
   ...CLOTHING_ROW_MAP,
 };
+
+/**
+ * Families met een EIGEN matensysteem: een schoenmaat, riemmaat of sokmaat is
+ * geen lettermaat en hoort er ook niet naartoe vertaald te worden. Zonder deze
+ * uitzondering werd schoenmaat 43 als "XL" weggeschreven, waardoor "nieuw in
+ * jouw maat" bij schoenmaat 43 ook alle XL-kleding aandroeg.
+ */
+const EIGEN_MAATSYSTEEM = new Set(["schoen", "riem", "sok"]);
 
 export const ROW_ORDER = ["XXS", "XS", "S", "M", "M/L", "L", "XL", "XXL", "3XL", "4XL", "5XL", "6XL"];
 
@@ -106,11 +116,17 @@ export function sizeToken(value: string): string {
 export function sizeRowLabel(value: string, family = ""): string {
   const token = sizeToken(value);
   if (!token) return "";
+  const fam = familyClass(family);
   // Overhemd: kale (boord)maten lezen we uit de boordreeks, niet uit de
   // pakkenreeks. "39-7" = boordmaat 39 met mouwlengte 7 → dezelfde rij als 39.
-  if (familyClass(family) === "overhemd") {
+  if (fam === "overhemd") {
     const boord = boordToken(token);
     if (boord) return BOORD_ROW_MAP[boord];
+  }
+  // Schoen/riem/sok houden hun eigen getal; alleen echte lettermaten (sokken
+  // komen ook als S/M/L) gaan door de kledingtabel.
+  if (EIGEN_MAATSYSTEEM.has(fam)) {
+    return /^\d/.test(token) ? token : CLOTHING_ROW_MAP[token] || token;
   }
   // Mouwlengte-7 variant ("M7","XL7","3XL7","S7 37/38") → lettermaat zonder de 7.
   if (token.length > 1 && token.endsWith("7")) {
