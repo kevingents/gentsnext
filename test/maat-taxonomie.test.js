@@ -75,3 +75,20 @@ test("schoenmaat en boordmaat blijven gescheiden systemen", () => {
   assert.deepEqual(sizeFacetFor("schoenen", "43"), { system: "schoen", value: "43" });
   assert.deepEqual(sizeFacetFor("overhemden", "43"), { system: "boord", value: "43" });
 });
+
+test("schoen, riem en sok houden hun eigen getal", () => {
+  // Schoenmaat 43 werd "XL" — dan droeg "nieuw in jouw maat" bij schoenmaat 43
+  // ook alle XL-kleding aan. En 47 werd na het aanvullen van de boordreeks 3XL.
+  assert.equal(sizeRowLabel("43", "Schoenen"), "43");
+  assert.equal(sizeRowLabel("47", "Schoenen"), "47");
+  assert.equal(sizeRowLabel("100", "Riemen"), "100");
+  assert.equal(sizeRowLabel("39-42", "Sokken"), "39-42");
+  assert.equal(sizeRowLabel("M", "Sokken"), "M"); // lettermaat mag wél
+});
+
+test("broek- en colbertmaten buiten de reeks blijven staan zoals ze zijn", () => {
+  // 33/34 zijn dames-/inchmaten bij broeken, geen boordmaten.
+  assert.equal(sizeRowLabel("33", "Broeken"), "33");
+  assert.equal(sizeRowLabel("34", "Colberts"), "34");
+  assert.equal(sizeRowLabel("34", "Gilets"), "34");
+});
