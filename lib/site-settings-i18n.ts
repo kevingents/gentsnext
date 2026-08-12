@@ -30,6 +30,12 @@ function heroEntries(s: SiteSettings): TransEntry[] {
   add("hero.subtitle", s.hero.subtitle);
   add("hero.primary.label", s.hero.primary?.label);
   add("hero.secondary.label", s.hero.secondary?.label);
+  // Aankondigingsbalk en USP's staan óók in dit document en worden sinds de
+  // homepage-indeling écht op de site gebruikt. Zonder deze regels zou een
+  // portal-wijziging de Nederlandse tekst op /en en /de zetten.
+  add("announcement.text", s.announcement?.text);
+  add("announcement.linkLabel", s.announcement?.linkLabel);
+  (s.usps || []).forEach((u, i) => add(`usps.${i}`, u));
   return list;
 }
 
@@ -62,5 +68,11 @@ export async function getLocalizedSiteSettings(locale: Locale): Promise<SiteSett
         ? { ...s.hero.secondary, label: pick("hero.secondary.label", s.hero.secondary.label) || s.hero.secondary.label }
         : s.hero.secondary,
     },
+    announcement: {
+      ...s.announcement,
+      text: pick("announcement.text", s.announcement?.text) || s.announcement?.text || "",
+      linkLabel: pick("announcement.linkLabel", s.announcement?.linkLabel) || s.announcement?.linkLabel,
+    },
+    usps: (s.usps || []).map((u, i) => pick(`usps.${i}`, u) || u),
   };
 }
