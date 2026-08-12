@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { MenuItem } from "@/lib/main-menu";
+import type { MenuItem, MenuLink } from "@/lib/main-menu";
 import { useLocale, useT } from "@/components/i18n/locale-provider";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { track } from "@/lib/track-client";
@@ -135,7 +135,15 @@ function DesktopItem({ item }: { item: MenuItem }) {
 }
 
 /** Mobiel: hamburger + uitklap-drawer met kolommen. */
-export function MegaMenuMobile({ items, myStoreCity }: { items: MenuItem[]; myStoreCity?: string | null }) {
+export function MegaMenuMobile({
+  items,
+  serviceLinks = [],
+  myStoreCity,
+}: {
+  items: MenuItem[];
+  serviceLinks?: MenuLink[];
+  myStoreCity?: string | null;
+}) {
   const t = useT();
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
@@ -146,12 +154,24 @@ export function MegaMenuMobile({ items, myStoreCity }: { items: MenuItem[]; mySt
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
       </button>
-      {mobileOpen ? <MobileDrawer items={items} myStoreCity={myStoreCity} onClose={() => setMobileOpen(false)} /> : null}
+      {mobileOpen ? (
+        <MobileDrawer items={items} serviceLinks={serviceLinks} myStoreCity={myStoreCity} onClose={() => setMobileOpen(false)} />
+      ) : null}
     </>
   );
 }
 
-function MobileDrawer({ items, myStoreCity, onClose }: { items: MenuItem[]; myStoreCity?: string | null; onClose: () => void }) {
+function MobileDrawer({
+  items,
+  serviceLinks,
+  myStoreCity,
+  onClose,
+}: {
+  items: MenuItem[];
+  serviceLinks: MenuLink[];
+  myStoreCity?: string | null;
+  onClose: () => void;
+}) {
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState<string | null>(null);
@@ -269,18 +289,26 @@ function MobileDrawer({ items, myStoreCity, onClose }: { items: MenuItem[]; mySt
             );
           })}
         </ul>
-        {/* Voetblok: wat op mobiel uit de header is gehaald (account, favorieten,
-            taal) + service-links. Zo blijft de balk zelf minimaal. */}
+        {/* Voetblok: servicelinks + taal. De links komen uit de content-store
+            (content:menu-service) zodat ze zonder deploy te wijzigen zijn;
+            favorieten staat er níét meer bij — dat is nu een eigen icoon in de
+            mobiele header. */}
         <div className="border-t border-line px-5 py-4">
-          <Link href="/account" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("common.account")}</Link>
-          <Link href="/favorieten" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("common.wishlist")}</Link>
-          {/* Mét de gekozen winkel erachter: op mobiel is dit de enige plek waar
-              je ziet dát je er een hebt (en waar je 'm kunt wijzigen). */}
-          <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">
-            {t("nav.stores")}
-            {myStoreCity ? <span className="text-muted"> · {myStoreCity}</span> : null}
-          </Link>
-          <Link href="/maatadvies" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.sizeAdvice")}</Link>
+          {serviceLinks.map((l) => (
+            <Link
+              key={`${l.label}-${l.href}`}
+              href={l.href}
+              onClick={() => { trackNav(l.label, l.href, "menu-service"); onClose(); }}
+              className="block py-1.5 font-sans text-sm text-ink-soft"
+            >
+              {l.label}
+              {/* Achter de winkellink de gekozen winkel: op mobiel is dit de
+                  enige plek waar je ziet dát je er een hebt. */}
+              {myStoreCity && l.href.startsWith("/pages/winkels") ? (
+                <span className="text-muted"> · {myStoreCity}</span>
+              ) : null}
+            </Link>
+          ))}
           <div className="mt-2 border-t border-line/60 pt-2">
             <LanguageSwitcher current={locale} variant="inline" />
           </div>

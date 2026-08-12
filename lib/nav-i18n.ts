@@ -1,10 +1,10 @@
 import type { Locale } from "@/lib/i18n";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
-import { getMenu } from "@/lib/menu-server";
+import { getMenu, getServiceLinks } from "@/lib/menu-server";
 import { getFooter, type FooterDoc } from "@/lib/footer-server";
 import { CATEGORIES } from "@/lib/categories";
 import { ensureEntries, getTranslationStore, pickFreshTranslation, type TransEntry, type Store } from "@/lib/translate";
-import type { MenuItem } from "@/lib/main-menu";
+import type { MenuItem, MenuLink } from "@/lib/main-menu";
 
 /**
  * i18n-laag over de navigatie-CONTENT: hoofdmenu, footer-kolommen en de
@@ -21,7 +21,7 @@ import type { MenuItem } from "@/lib/main-menu";
 
 const NS = "nav";
 
-function collectTexts(menu: MenuItem[], footer: FooterDoc): string[] {
+function collectTexts(menu: MenuItem[], footer: FooterDoc, serviceLinks: MenuLink[]): string[] {
   const out = new Set<string>();
   const add = (v?: string) => {
     const s = (v || "").trim();
@@ -43,14 +43,15 @@ function collectTexts(menu: MenuItem[], footer: FooterDoc): string[] {
     add(col.title);
     for (const l of col.links) add(l.label);
   }
+  for (const l of serviceLinks) add(l.label);
   for (const c of CATEGORIES) add(c.label);
   return [...out];
 }
 
 /** Voor de vertaal-cron: vertaal de actuele nav-teksten (delta) naar één locale. */
 export async function ensureNavContent(locale: Locale): Promise<{ translated: number; total: number }> {
-  const [menu, footer] = await Promise.all([getMenu(), getFooter()]);
-  const entries: TransEntry[] = collectTexts(menu, footer).map((s) => ({ ns: NS, key: s, source: s }));
+  const [menu, footer, serviceLinks] = await Promise.all([getMenu(), getFooter(), getServiceLinks()]);
+  const entries: TransEntry[] = collectTexts(menu, footer, serviceLinks).map((s) => ({ ns: NS, key: s, source: s }));
   return ensureEntries(entries, locale, "ui");
 }
 
@@ -75,6 +76,14 @@ export async function getLocalizedMenu(locale: Locale): Promise<MenuItem[]> {
       caption: f.caption ? pick(store, f.caption) : f.caption,
     })),
   }));
+}
+
+/** Servicelinks onderin de mobiele drawer, vertaald (NL = pass-through). */
+export async function getLocalizedServiceLinks(locale: Locale): Promise<MenuLink[]> {
+  const links = await getServiceLinks();
+  if (locale === DEFAULT_LOCALE) return links;
+  const store = await getTranslationStore(locale);
+  return links.map((l) => ({ ...l, label: pick(store, l.label) }));
 }
 
 /** Footer-doc met vertaalde intro/kolommen (NL = pass-through). */

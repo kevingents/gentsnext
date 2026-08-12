@@ -154,12 +154,16 @@ export function ClickAndCollect({
                   const selected = selStore === b.store;
                   return (
                     <li key={b.store} className="px-5 py-3 font-sans text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="min-w-0">
+                      {/* Op mobiel krijgt de winkelnaam een eigen regel: naast
+                          voorraad + ster + "Leg voor mij klaar" bleef er anders
+                          "GENTS G…" van over, en dan weet je niet wélke winkel
+                          je favoriet is. Vanaf sm past alles weer op één regel. */}
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                        <span className="min-w-0 basis-full sm:basis-auto">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-ink">{b.store}</span>
                             {favorites.includes(b.store) ? (
-                              <span className="shrink-0 border border-line px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-ink-soft">
+                              <span className="shrink-0 border border-line px-1 py-px text-[0.6rem] uppercase tracking-wide text-muted">
                                 {t("myStore.badge")}
                               </span>
                             ) : null}

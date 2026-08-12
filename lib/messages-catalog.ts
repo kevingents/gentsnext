@@ -326,6 +326,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "checkout.payment_canceled_note": "Er is niets afgeschreven en je winkelwagen staat nog klaar — je kunt het zo opnieuw proberen.",
   "checkout.payment_method": "Betaalmethode",
   "checkout.payment_note": "totaal incl. btw · 14 dagen retourrecht.",
+  "checkout.payment_other": "Overige betaalmethoden",
+  "checkout.payment_other_via": "de betaalpagina van Mollie",
   "checkout.payment_via": "Je rondt af via",
   "checkout.phone_optional": "Telefoon (optioneel)",
   "checkout.pickup_all_in_stock": "alles op voorraad",
@@ -904,7 +906,6 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.size.soldout": "Tijdelijk uitverkocht.",
   "pdp.size.soldoutHint": "Uitverkocht — klik om je te laten tippen zodra deze maat terug is",
   "pdp.size.soldoutTile": "Uitverkocht",
-  "pdp.size.soldoutRowHint": "Uitverkochte maat? Klik 'm aan en we tippen je zodra 'ie terug is.",
   "pdp.rating.readReviews": "Lees reviews",
   "pdp.rating.beFirst": "Schrijf de eerste review",
   "pdp.fit.prefix": "Pasvorm:",
@@ -912,12 +913,9 @@ export const SITE_CATALOG: Record<string, string> = {
   "pdp.payment.label": "Veilig betalen met",
   "pdp.freeShip.now": "Gratis verzending",
   "pdp.freeShip.from": "Gratis verzending vanaf {amount}",
-  "pdp.storeStock.any": "Ook op voorraad in {count} winkels",
-  "pdp.storeStock.anyOne": "Ook op voorraad in 1 winkel",
-  // mine/mineOne zijn vervallen: het winkelkader rendert alleen nog zónder
-  // maatkeuze (daarna neemt "Passen & afhalen" het over), dus de per-maat-tekst
-  // was onbereikbaar en werd voor niets in vier talen vertaald.
-  "pdp.storeStock.hint": "Kies je maat om te zien welke.",
+  // any/anyOne/hint/mine/mineOne zijn vervallen met het winkelkader boven de
+  // maatkiezer: "Passen & afhalen" onder de bestelknop vertelt hetzelfde verhaal
+  // per gekozen maat, en dat kader las als een tweede, afwijkend feit.
   "pdp.storeStock.sizeNone": "Maat {size} ligt momenteel in geen enkele winkel.",
   "pdp.specs.brand": "Merk",
   "pdp.specs.closure": "Sluiting",

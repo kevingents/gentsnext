@@ -27,13 +27,16 @@ export function SizeFinderButton() {
         ? createPortal(
             <div className="fixed inset-0 z-[60]" role="dialog" aria-label={t("pdp.size.finder")} aria-modal="true">
               <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
-              <div ref={panelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col bg-canvas shadow-drawer focus:outline-none">
+              {/* max-w-xl i.p.v. lg: het maatformulier heeft twee invoervelden
+                  en drie pasvorm-knoppen naast elkaar; onder ~570px werd dat
+                  woord-voor-woord afbrekende soep. */}
+              <div ref={panelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-canvas shadow-drawer focus:outline-none">
                 <div className="flex items-center justify-between border-b border-line px-5 py-4">
                   <p className="font-display text-lg">{t("pdp.size.finder")}</p>
                   <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">{t("common.close")}</button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-5 py-4">
-                  <SizeAdvisor />
+                <div className="flex-1 overflow-y-auto px-5 py-5">
+                  <SizeAdvisor variant="drawer" />
                 </div>
               </div>
             </div>,

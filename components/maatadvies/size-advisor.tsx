@@ -63,9 +63,21 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
  * de tool). Optioneel, want op de PDP zit de adviseur in een client-modal en is
  * er geen server-component om de instelling door te geven; daar noemen we het
  * bedrag pas ná het opslaan — de server stuurt het dan mee.
+ *
+ * `variant`:
+ *  - "page"   → twee kolommen naast elkaar op groot scherm (/maatadvies).
+ *  - "drawer" → één kolom. In de PDP-overlay geldt de lg-breakpoint van het
+ *    VENSTER, niet van de smalle drawer: het formulier werd daar in twee
+ *    kolommen van ~230px geperst en brak per twee woorden af. In de drawer
+ *    tonen we ook geen lege placeholder — het advies verschijnt gewoon
+ *    onder het formulier zodra het berekend is.
  */
-export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
+export function SizeAdvisor({
+  bonusPoints = 0,
+  variant = "page",
+}: { bonusPoints?: number; variant?: "page" | "drawer" } = {}) {
   const t = useT();
+  const drawer = variant === "drawer";
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [fit, setFit] = useState<FitPreference>("regular");
@@ -146,7 +158,7 @@ export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
   }
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className={drawer ? "space-y-8" : "grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"}>
       {/* ── Formulier ──────────────────────────────────────────────── */}
       <form
         onSubmit={(e) => {
@@ -253,7 +265,7 @@ export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
                 type="button"
                 onClick={() => setFit(f.key)}
                 aria-pressed={fit === f.key}
-                className={`border px-3 py-3 text-left transition-colors ${
+                className={`border px-2 py-3 text-left transition-colors sm:px-3 ${
                   fit === f.key ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"
                 }`}
               >
@@ -314,7 +326,8 @@ export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
       </form>
 
       {/* ── Resultaat ──────────────────────────────────────────────── */}
-      <div className="lg:border-l lg:border-line lg:pl-10">
+      {drawer && !advice ? null : (
+      <div className={drawer ? undefined : "lg:border-l lg:border-line lg:pl-10"}>
         {advice ? (
           <div className="space-y-4">
             <div>
@@ -385,6 +398,7 @@ export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { adminOrToken } from "@/lib/studio-token";
 import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
 import { isFulfillable } from "@/lib/fulfillment-config";
+import { MOLLIE_METHOD_IDS } from "@/lib/payment-methods";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +40,34 @@ function sanitizeOperational(input: unknown, huidig: Settings): Partial<Settings
   }
   if (b.protectUnderstockedRetail !== undefined) {
     out.protectUnderstockedRetail = Boolean(b.protectUnderstockedRetail);
+  }
+  /* Betaalkeuze: per land een geordend lijstje Mollie-method-id's dat bovenaan
+     de afrekenpagina komt te staan. Onbekende id's weigeren we hier al — die
+     zouden in de checkout stil wegvallen en er in de portal uitzien alsof ze
+     ingesteld staan. Een leeg lijstje betekent "geen voorkeur voor dat land",
+     dus die laten we vallen in plaats van 'm als lege regel te bewaren. */
+  if (b.paymentTop && typeof b.paymentTop === "object") {
+    const pt = b.paymentTop as Record<string, unknown>;
+    const perLand: Record<string, string[]> = {};
+    if (pt.topByCountry && typeof pt.topByCountry === "object") {
+      for (const [land, ids] of Object.entries(pt.topByCountry as Record<string, unknown>)) {
+        const code = String(land).trim() === "*" ? "*" : String(land).trim().toUpperCase().slice(0, 2);
+        const lijst = (Array.isArray(ids) ? ids : [])
+          .map((x) => String(x).trim().toLowerCase())
+          .filter((x): x is (typeof MOLLIE_METHOD_IDS)[number] => (MOLLIE_METHOD_IDS as readonly string[]).includes(x))
+          .slice(0, 6);
+        if (code && lijst.length) perLand[code] = lijst;
+      }
+      out.paymentTop = {
+        topByCountry: perLand,
+        maxVisible: Math.max(1, Math.min(6, Math.round(Number(pt.maxVisible) || huidig.paymentTop.maxVisible))),
+      };
+    } else if (pt.maxVisible !== undefined) {
+      out.paymentTop = {
+        topByCountry: huidig.paymentTop.topByCountry,
+        maxVisible: Math.max(1, Math.min(6, Math.round(Number(pt.maxVisible) || huidig.paymentTop.maxVisible))),
+      };
+    }
   }
   if (b.dispatchOnSunday !== undefined) out.dispatchOnSunday = Boolean(b.dispatchOnSunday);
   if (b.dispatchOnSaturdayStores !== undefined) out.dispatchOnSaturdayStores = Boolean(b.dispatchOnSaturdayStores);
