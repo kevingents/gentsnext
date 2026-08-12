@@ -1856,6 +1856,15 @@ export const customerProfiles = pgTable(
     tegoedCents: integer("tegoed_cents").notNull().default(0),
     actieveVouchers: integer("actieve_vouchers").notNull().default(0),
     walletPas: boolean("wallet_pas").notNull().default(false),
+    /** Punten die uit de eenmalige actie-bonussen kwamen — wie reageert op een prikkel. */
+    bonusPunten: integer("bonus_punten").notNull().default(0),
+    /** Heeft de klant ZELF z'n maten opgegeven? Iets anders dan `maten` hieronder:
+     *  dat zijn de maten die hij gekocht heeft, afgeleid uit de orderregels.
+     *  Zonder opgegeven maat is een verkeerde-maat-retour veel waarschijnlijker,
+     *  dus dit is de doelgroep waar de retour-campagnes op mikken. */
+    maatprofiel: boolean("maatprofiel").notNull().default(false),
+    /** Voldoet aan de profiel-checklist (lib/profiel-voorkeuren). */
+    profielCompleet: boolean("profiel_compleet").notNull().default(false),
 
     sessies30d: integer("sessies_30d").notNull().default(0),
     productviews30d: integer("productviews_30d").notNull().default(0),
@@ -1943,6 +1952,8 @@ export const customerProfiles = pgTable(
     index("customer_profiles_optin_idx").on(t.marketingOptIn),
     index("customer_profiles_winkel_idx").on(t.favorieteWinkel),
     index("customer_profiles_rfm_idx").on(t.rfmR, t.rfmF, t.rfmM),
+    index("customer_profiles_maatprofiel_idx").on(t.maatprofiel, t.marketingOptIn),
+    index("customer_profiles_compleet_idx").on(t.profielCompleet, t.marketingOptIn),
   ]
 );
 

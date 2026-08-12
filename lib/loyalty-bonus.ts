@@ -1,11 +1,13 @@
 /**
  * lib/loyalty-bonus.ts
  *
- * Eenmalige spaarpunten-bonussen die RETOUREN moeten terugdringen. Drie acties,
- * één keer per klant, direct besteedbaar:
+ * Eenmalige spaarpunten-bonussen die RETOUREN moeten terugdringen. Eén keer per
+ * klant, direct besteedbaar:
  *
+ *   account    → profiel aangemaakt, online (eerste bevestigde login) of aan de kassa
  *   maatadvies → de klant heeft z'n maten bewaard (via /maatadvies of Mijn maten)
  *   wallet     → de spaarpas staat écht in Apple Wallet (device-registratie)
+ *   winkel     → er staat een vaste winkel in het profiel
  *   profiel    → leeftijd, kleuren, vaste winkel en gelegenheden zijn ingevuld
  *
  * Waarom dit werkt tegen retouren: de duurste retour is "verkeerde maat besteld".
@@ -24,13 +26,25 @@ import { creditBonusOnce } from "@/lib/loyalty-claim";
 import { getSettings, type Settings } from "@/lib/settings";
 import { isProfileComplete, sizeProfileComplete, type ProfilePreferences } from "@/lib/profiel-voorkeuren";
 
-export type BonusKind = "maatadvies" | "wallet" | "winkel" | "profiel";
+export type BonusKind = "account" | BonusTaakKind;
 
-/** Alle bonussen in de volgorde waarin de klant ze te zien krijgt. */
-export const BONUS_KINDS: BonusKind[] = ["maatadvies", "wallet", "winkel", "profiel"];
+/**
+ * De TAKEN: dingen die een klant nog kán doen, in de volgorde waarin hij ze ziet.
+ *
+ * "account" hoort hier bewust niet bij, en het typesysteem houdt dat vast. Dat is
+ * een gebeurtenis, geen taak: wie de accountpagina bekijkt hééft al een account,
+ * dus als openstaand klusje zou hij er eeuwig blijven staan. Hij verschijnt
+ * gewoon in de puntenhistorie.
+ */
+export type BonusTaakKind = "maatadvies" | "wallet" | "winkel" | "profiel";
+export const BONUS_KINDS: BonusTaakKind[] = ["maatadvies", "wallet", "winkel", "profiel"];
+
+/** Alles wat punten oplevert, inclusief de welkomstbonus — voor rapportage. */
+export const ALLE_BONUSSEN: BonusKind[] = ["account", ...BONUS_KINDS];
 
 /** refType per bonus. Vast — dit staat straks in het grootboek van elke klant. */
 const REF_TYPE: Record<BonusKind, string> = {
+  account: "bonus_account",
   maatadvies: "bonus_maatadvies",
   wallet: "bonus_wallet",
   winkel: "bonus_winkel",
@@ -40,6 +54,7 @@ const REF_TYPE: Record<BonusKind, string> = {
 };
 
 const REASON: Record<BonusKind, string> = {
+  account: "Welkom bij GENTS",
   maatadvies: "Maatprofiel ingevuld",
   wallet: "Spaarpas in Apple Wallet",
   winkel: "Vaste winkel gekozen",
@@ -49,7 +64,8 @@ const REASON: Record<BonusKind, string> = {
 /** Welke instelling hoort bij welke bonus. */
 function bedrag(bp: Settings["loyaltyConfig"]["bonusPoints"] | undefined, kind: BonusKind): number {
   const val =
-    kind === "maatadvies" ? bp?.sizeAdvice
+    kind === "account" ? bp?.accountCreated
+    : kind === "maatadvies" ? bp?.sizeAdvice
     : kind === "wallet" ? bp?.walletPass
     : kind === "winkel" ? bp?.favoriteStore
     : bp?.profileComplete;
@@ -121,6 +137,23 @@ type CustomerLike = {
   profileCompletionBonusClaimed?: boolean | null;
 };
 
+/**
+ * Welkomstbonus bij het aanmaken van een profiel — online én aan de kassa.
+ *
+ * Bewust op twee plekken aangeroepen die allebei een ECHT nieuw account
+ * betekenen: de eerste e-mailbevestiging (magic-link) en het aanmaken van een
+ * klant vanaf de kassa. Niet bij `findOrCreateCustomer`: dat maakt al een rij
+ * zodra iemand een adres intikt op het inlogformulier, dus dan kon je met
+ * honderd verzonnen adressen honderd bonussen "verdienen" zonder ooit één
+ * mailbox te openen. De unieke index op (ref_type, ref_id) zorgt dat een klant
+ * die aan de kassa is aangemaakt en later online inlogt, hem één keer krijgt.
+ *
+ * Geen `IfEarned`-variant: de aanroeper wéét dat het account net is ontstaan.
+ */
+export async function awardAccountBonus(customerId: string): Promise<BonusResult> {
+  return awardBonus(customerId, "account");
+}
+
 /** Bonus voor het maatprofiel — alleen als het profiel er ook écht staat. */
 export async function awardSizeAdviceBonusIfEarned(c: CustomerLike): Promise<BonusResult> {
   if (!sizeProfileComplete(c.sizeProfile as Record<string, unknown>)) return { awarded: false, points: 0 };
@@ -154,7 +187,7 @@ export async function awardProfileBonusIfEarned(c: CustomerLike): Promise<BonusR
 /* ── Status voor de klant-UI ──────────────────────────────────────────────── */
 
 export type BonusTask = {
-  kind: BonusKind;
+  kind: BonusTaakKind;
   points: number;
   /** Al uitbetaald? */
   done: boolean;
@@ -171,7 +204,7 @@ export async function bonusTasks(c: CustomerLike, walletInstalled: boolean): Pro
   const bp = (await getSettings()).loyaltyConfig?.bonusPoints;
   const claimed = await claimedBonusKinds(c.id, Boolean(c.profileCompletionBonusClaimed));
   const prefs = (c.preferences || {}) as ProfilePreferences;
-  const voorwaarde: Record<BonusKind, boolean> = {
+  const voorwaarde: Record<BonusTaakKind, boolean> = {
     maatadvies: sizeProfileComplete(c.sizeProfile as Record<string, unknown>),
     wallet: walletInstalled,
     winkel: Boolean(String(prefs.favoriteStore || "").trim()),

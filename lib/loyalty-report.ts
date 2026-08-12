@@ -22,7 +22,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getSettings } from "@/lib/settings";
-import { BONUS_KINDS, type BonusKind } from "@/lib/loyalty-bonus";
+import { ALLE_BONUSSEN, BONUS_KINDS, type BonusKind } from "@/lib/loyalty-bonus";
 
 export type Range = { from: Date; to: Date };
 
@@ -30,6 +30,7 @@ export type Range = { from: Date; to: Date };
    en niet geëxporteerd uit die module: dit rapport leest historie, en een
    hernoemde refType mag de oude regels niet onzichtbaar maken. */
 const REF_TYPE: Record<BonusKind, string> = {
+  account: "bonus_account",
   maatadvies: "bonus_maatadvies",
   wallet: "bonus_wallet",
   winkel: "bonus_winkel",
@@ -108,8 +109,8 @@ export async function bonusReport(r: Range): Promise<BonusReport> {
   const db = getDb();
   const lc = (await getSettings()).loyaltyConfig;
   const centsPerPoint = Number(lc?.redeemCentsPerPoint) > 0 ? Number(lc.redeemCentsPerPoint) : 5;
-  const refs = BONUS_KINDS.map((k) => REF_TYPE[k]);
-  const kindVanRef = new Map(BONUS_KINDS.map((k) => [REF_TYPE[k], k]));
+  const refs = ALLE_BONUSSEN.map((k) => REF_TYPE[k]);
+  const kindVanRef = new Map(ALLE_BONUSSEN.map((k) => [REF_TYPE[k], k]));
 
   const [adoptieRijen, trechterRijen, effectRijen] = await Promise.all([
     db.execute<{ ref_type: string; klanten: number; nieuw: number; punten: number }>(sql`
@@ -186,7 +187,7 @@ export async function bonusReport(r: Range): Promise<BonusReport> {
       redeemCentsPerPoint: centsPerPoint,
       bonusPoints: { ...(lc?.bonusPoints as unknown as Record<string, number>) },
     },
-    adoptie: BONUS_KINDS.map((kind) => {
+    adoptie: ALLE_BONUSSEN.map((kind) => {
       const row = adoptieMap.get(REF_TYPE[kind]);
       const punten = Number(row?.punten) || 0;
       return {
@@ -198,13 +199,16 @@ export async function bonusReport(r: Range): Promise<BonusReport> {
         waardeCents: punten * centsPerPoint,
       };
     }),
+    /* Alleen de TAKEN hebben een trechter. De welkomstbonus krijg je bij het
+       aanmaken van je account; daar valt geen "gezien maar niet gedaan" op te
+       meten, dus die zou hier altijd een lege regel opleveren. */
     trechter: BONUS_KINDS.map((kind) => ({
       kind,
       gezien: Number(trechterMap.get(kind)?.gezien) || 0,
       geklikt: Number(trechterMap.get(kind)?.geklikt) || 0,
       gehaald: Number(adoptieMap.get(REF_TYPE[kind])?.nieuw) || 0,
     })),
-    effect: BONUS_KINDS.map((kind) => {
+    effect: ALLE_BONUSSEN.map((kind) => {
       const rijen = effectRijen.rows.filter((x) => kindVanRef.get(x.ref_type) === kind);
       return {
         kind,
@@ -219,6 +223,10 @@ export async function bonusReport(r: Range): Promise<BonusReport> {
 function puntenVoor(bp: unknown, kind: BonusKind): number {
   const b = (bp || {}) as Record<string, unknown>;
   const sleutel =
-    kind === "maatadvies" ? "sizeAdvice" : kind === "wallet" ? "walletPass" : kind === "winkel" ? "favoriteStore" : "profileComplete";
+    kind === "account" ? "accountCreated"
+    : kind === "maatadvies" ? "sizeAdvice"
+    : kind === "wallet" ? "walletPass"
+    : kind === "winkel" ? "favoriteStore"
+    : "profileComplete";
   return Math.max(0, Math.round(Number(b[sleutel]) || 0));
 }

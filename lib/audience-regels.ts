@@ -91,6 +91,18 @@ export const VELDEN: VeldDef[] = [
   { key: "tegoed_cents", label: "Openstaand tegoed", type: "bedrag", kolom: "tegoed_cents" },
   { key: "actieve_vouchers", label: "Actieve vouchers", type: "getal", kolom: "actieve_vouchers" },
   { key: "wallet_pas", label: "Heeft Apple Wallet-pas", type: "jaNee", kolom: "wallet_pas" },
+  {
+    key: "maatprofiel", label: "Heeft maten opgegeven", type: "jaNee", kolom: "maatprofiel",
+    uitleg: "Minstens twee van colbert/broek/overhemd/schoen zelf ingevuld. Nee = de groep waar de meeste verkeerde-maat-retouren vandaan komen.",
+  },
+  {
+    key: "profiel_compleet", label: "Profiel compleet", type: "jaNee", kolom: "profiel_compleet",
+    uitleg: "Naam, telefoon, leeftijd, kleuren, vaste winkel en gelegenheden — de checklist waar de puntenbonus op staat.",
+  },
+  {
+    key: "bonus_punten", label: "Punten uit bonusacties", type: "getal", kolom: "bonus_punten",
+    uitleg: "Hoeveel van z'n punten uit de eenmalige acties komen. Hoog = reageert op een prikkel.",
+  },
 
   /* Binding & toestemming */
   { key: "marketing_opt_in", label: "Marketing-toestemming", type: "jaNee", kolom: "marketing_opt_in" },

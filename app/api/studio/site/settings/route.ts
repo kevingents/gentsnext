@@ -177,6 +177,7 @@ function sanitizeOperational(input: unknown, huidig: Settings): Partial<Settings
       redeemStepPoints: geheel(lc.redeemStepPoints, nu.redeemStepPoints, 0, 100000),
       redeemVoucherDays: geheel(lc.redeemVoucherDays, nu.redeemVoucherDays, 1, 3650),
       bonusPoints: {
+        accountCreated: geheel(lb.accountCreated, nu.bonusPoints.accountCreated, 0, 5000),
         sizeAdvice: geheel(lb.sizeAdvice, nu.bonusPoints.sizeAdvice, 0, 5000),
         walletPass: geheel(lb.walletPass, nu.bonusPoints.walletPass, 0, 5000),
         favoriteStore: geheel(lb.favoriteStore, nu.bonusPoints.favoriteStore, 0, 5000),
