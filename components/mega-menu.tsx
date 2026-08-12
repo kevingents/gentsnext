@@ -135,7 +135,7 @@ function DesktopItem({ item }: { item: MenuItem }) {
 }
 
 /** Mobiel: hamburger + uitklap-drawer met kolommen. */
-export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
+export function MegaMenuMobile({ items, myStoreCity }: { items: MenuItem[]; myStoreCity?: string | null }) {
   const t = useT();
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
@@ -146,12 +146,12 @@ export function MegaMenuMobile({ items }: { items: MenuItem[] }) {
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
         <span className="mt-1.5 block h-0.5 w-6 bg-ink" />
       </button>
-      {mobileOpen ? <MobileDrawer items={items} onClose={() => setMobileOpen(false)} /> : null}
+      {mobileOpen ? <MobileDrawer items={items} myStoreCity={myStoreCity} onClose={() => setMobileOpen(false)} /> : null}
     </>
   );
 }
 
-function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
+function MobileDrawer({ items, myStoreCity, onClose }: { items: MenuItem[]; myStoreCity?: string | null; onClose: () => void }) {
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState<string | null>(null);
@@ -274,7 +274,12 @@ function MobileDrawer({ items, onClose }: { items: MenuItem[]; onClose: () => vo
         <div className="border-t border-line px-5 py-4">
           <Link href="/account" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("common.account")}</Link>
           <Link href="/favorieten" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("common.wishlist")}</Link>
-          <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.stores")}</Link>
+          {/* Mét de gekozen winkel erachter: op mobiel is dit de enige plek waar
+              je ziet dát je er een hebt (en waar je 'm kunt wijzigen). */}
+          <Link href="/pages/winkels" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">
+            {t("nav.stores")}
+            {myStoreCity ? <span className="text-muted"> · {myStoreCity}</span> : null}
+          </Link>
           <Link href="/maatadvies" onClick={onClose} className="block py-1.5 font-sans text-sm text-ink-soft">{t("nav.sizeAdvice")}</Link>
           <div className="mt-2 border-t border-line/60 pt-2">
             <LanguageSwitcher current={locale} variant="inline" />

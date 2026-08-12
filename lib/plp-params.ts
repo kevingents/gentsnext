@@ -12,6 +12,12 @@ export type PlpSelection = {
   fits: string[];
   priceMin?: number; // euro's
   priceMax?: number; // euro's
+  /**
+   * "Alleen op voorraad in deze winkel" — pageHandle van de winkel. Bewust in de
+   * URL en niet alleen in de cookie: een gefilterde lijst moet deelbaar zijn en
+   * met de terugknop kloppen, net als elk ander filter.
+   */
+  store?: string;
   sort: ProductSort;
   page: number;
 };
@@ -47,6 +53,7 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
     fits: csv(get("pasvorm")),
     priceMin: Number.isFinite(pMin) && pMin > 0 ? pMin : undefined,
     priceMax: Number.isFinite(pMax) && pMax > 0 ? pMax : undefined,
+    store: (get("winkel") || "").trim().toLowerCase() || undefined,
     sort: sortRaw && SORTS.includes(sortRaw) ? sortRaw : "aanbevolen",
     page: Math.max(1, Math.floor(Number(get("page")) || 1)),
   };
@@ -64,15 +71,22 @@ export function buildPlpQuery(sel: Partial<PlpSelection>): string {
   if (sel.sizes?.length) p.set("maat", sel.sizes.join(","));
   if (sel.fits?.length) p.set("pasvorm", sel.fits.join(","));
   if (sel.priceMin || sel.priceMax) p.set("prijs", `${sel.priceMin ?? 0}-${sel.priceMax ?? 0}`);
+  if (sel.store) p.set("winkel", sel.store);
   if (sel.sort && sel.sort !== "aanbevolen") p.set("sort", sel.sort);
   if (sel.page && sel.page > 1) p.set("page", String(sel.page));
   return p.toString();
 }
 
-/** Selectie → ProductFilters (cents) voor de query-laag. */
+/**
+ * Selectie → ProductFilters (cents) voor de query-laag.
+ *
+ * `storeBranchId` komt uit `base` en niet uit de selectie: het filiaalnummer
+ * hoort bij de winkel-data (server), niet bij de URL. Onbekende winkel in de
+ * URL → geen branchId → filter valt stil weg i.p.v. een lege lijst.
+ */
 export function selectionToFilters(
   sel: PlpSelection,
-  base: { collectionId?: string; category?: string }
+  base: { collectionId?: string; category?: string; storeBranchId?: string }
 ): ProductFilters {
   return {
     ...base,

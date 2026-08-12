@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLocale, useT } from "@/components/i18n/locale-provider";
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { MyStoreToggle } from "@/components/stores/my-store-toggle";
 
 type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: string };
 
@@ -48,21 +49,6 @@ export function ClickAndCollect({
       Number(b.openNow) - Number(a.openNow) ||
       b.qty - a.qty
   );
-
-  async function pickFavorite(store: string) {
-    // Aan/uit: nogmaals klikken wist de voorkeur.
-    const next = favorite === store ? "" : store;
-    setFavorite(next || null);
-    try {
-      await fetch("/api/mijn-winkel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store: next }),
-      });
-    } catch {
-      /* voorkeur is comfort, geen blocker */
-    }
-  }
 
   async function submitReserve() {
     if (!reserve || !selStore || busy) return;
@@ -135,6 +121,12 @@ export function ClickAndCollect({
             {reserve && !done ? (
               <p className="border-b border-line bg-surface px-5 py-3 font-sans text-xs text-ink-soft">{t("reserve.intro")}</p>
             ) : null}
+            {/* Wat "mijn winkel" oplevert, vóór je de knoppen in de lijst ziet. */}
+            {!done ? (
+              <p className="border-b border-line px-5 py-2.5 font-sans text-xs text-muted">
+                {favorite ? `${t("myStore.locator.current")} ${favorite}` : t("myStore.explain")}
+              </p>
+            ) : null}
             {done ? (
               /* Bevestiging — vervangt de lijst zodat de klant niet dubbel reserveert. */
               <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
@@ -183,18 +175,6 @@ export function ClickAndCollect({
                           ) : (
                             <span className="text-xs text-muted">{t("clickCollect.modal.outOfStock")}</span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => pickFavorite(b.store)}
-                            aria-pressed={b.store === favorite}
-                            title={b.store === favorite ? t("myStore.unset") : t("myStore.set")}
-                            className="flex h-11 w-8 shrink-0 items-center justify-center text-ink-soft hover:text-ink"
-                          >
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill={b.store === favorite ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" aria-hidden>
-                              <path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z" strokeLinejoin="round" />
-                            </svg>
-                            <span className="sr-only">{b.store === favorite ? t("myStore.unset") : t("myStore.set")}</span>
-                          </button>
                           {reserve && inStock ? (
                             <button
                               type="button"
@@ -207,6 +187,16 @@ export function ClickAndCollect({
                           ) : null}
                         </span>
                       </div>
+                      {/* Eigen regel, mét tekst. Als kále ster naast de voorraad
+                          vond niemand 'm — en een icoon zonder label zegt niet
+                          wát je instelt. */}
+                      <MyStoreToggle
+                        value={b.store}
+                        active={b.store === favorite}
+                        onChange={setFavorite}
+                        variant="inline"
+                        className="mt-1.5"
+                      />
                       {selected ? (
                         <div className="mt-3 border border-line bg-surface p-3">
                           <p className="font-sans text-xs text-ink-soft">{t("reserve.formIntro", { store: b.store })}</p>

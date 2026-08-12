@@ -11,6 +11,7 @@ import { StudentsLanding } from "@/components/landings/students-landing";
 import { KlantenserviceLanding } from "@/components/landings/klantenservice-landing";
 import { HerroepingLanding } from "@/components/landings/herroeping-landing";
 import { getStores, getStoreByPageHandle, openStatus, type Store } from "@/lib/stores";
+import { getMyStore } from "@/lib/store-preference";
 import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getMigratedPage } from "@/lib/migrated-pages";
@@ -184,7 +185,7 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
           België.
         </p>
         <div className="mt-10">
-          <StoreLocator stores={stores} />
+          <StoreLocator stores={stores} myStore={(await getMyStore())?.pageHandle ?? null} />
         </div>
       </div>
     );

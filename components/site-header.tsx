@@ -11,6 +11,7 @@ import { TrackLink } from "@/components/analytics/track-link";
 import { getLocale } from "@/lib/locale-server";
 import { getLocalizedMenu } from "@/lib/nav-i18n";
 import { getT } from "@/lib/t-server";
+import { getMyStoreFromCookie } from "@/lib/store-preference";
 import type { MenuItem } from "@/lib/main-menu";
 
 export async function SiteHeader() {
@@ -18,18 +19,29 @@ export async function SiteHeader() {
   // Vertaald menu (ns "nav" via de vertaal-cron) — het menu is portal-data en
   // lekte anders Nederlands op /en /de.
   const menu = await getLocalizedMenu(locale);
+  // Bewust de cookie-variant: de kop rendert op élke pagina, en getMyStore()
+  // valt terug op het profiel — dat zou een DB-vraag per paginaweergave zijn.
+  const myStore = await getMyStoreFromCookie();
   return (
     <>
       {/* Checkout = afleidingsvrij: geen campagne-balk met exit-link. */}
       <HideOnCheckout>
         <AnnouncementBar />
       </HideOnCheckout>
-      <SiteHeaderInner locale={locale} menu={menu} />
+      <SiteHeaderInner locale={locale} menu={menu} myStoreCity={myStore?.city ?? null} />
     </>
   );
 }
 
-async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").Locale; menu: MenuItem[] }) {
+async function SiteHeaderInner({
+  locale,
+  menu,
+  myStoreCity,
+}: {
+  locale: import("@/lib/i18n").Locale;
+  menu: MenuItem[];
+  myStoreCity: string | null;
+}) {
   const t = await getT(locale);
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
@@ -39,7 +51,7 @@ async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").
           <div className="lg:hidden">
             {/* Op de checkout geen menu — logo (naar home) is de enige uitgang. */}
             <HideOnCheckout>
-              <MegaMenuMobile items={menu} />
+              <MegaMenuMobile items={menu} myStoreCity={myStoreCity} />
             </HideOnCheckout>
           </div>
         </div>
@@ -81,6 +93,9 @@ async function SiteHeaderInner({ locale, menu }: { locale: import("@/lib/i18n").
               className="hidden font-sans text-sm text-ink-soft transition-colors hover:text-ink lg:block"
             >
               {t("nav.stores")}
+              {/* Gekozen winkel meteen zichtbaar — anders is "mijn winkel" een
+                  instelling die alleen bestaat op de plek waar je 'm zette. */}
+              {myStoreCity ? <span className="text-muted"> · {myStoreCity}</span> : null}
             </TrackLink>
             {/* Mobiel bewust minimaal (à la MR MARVIS): hamburger · logo · zoeken ·
                 tas. Taal, account en favorieten staan daar in de menu-drawer. */}
