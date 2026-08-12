@@ -61,11 +61,15 @@ export type AbVariant = {
   overrides?: AbOverrides;
 };
 
+export type AbDoel = "purchase" | "add_to_cart" | "checkout_start";
+
 export type Experiment = {
   id: string;
   naam: string;
   /** concept = onzichtbaar; actief = draait; gestopt = telt niet meer mee. */
   status: "concept" | "actief" | "gestopt";
+  /** Waarop de significantie gerekend wordt; aankoop is eerlijk maar traag. */
+  doel: AbDoel;
   /** ISO-2-landcodes (NL, BE, DE). Leeg = alle landen. */
   landen?: string[];
   /** Regiocodes binnen het land (Vercel: NB, ZH, …). Leeg = alle regio's. */
@@ -73,12 +77,22 @@ export type Experiment = {
   varianten: AbVariant[];
   /** Vrije notitie: wat test dit, en wanneer is het geslaagd? */
   hypothese?: string;
+  /** Meetvenster — door de server gestempeld bij een statuswissel. */
+  gestartOp?: string;
+  gestoptOp?: string;
 };
 
 export type ExperimentsDoc = { experimenten: Experiment[] };
-export type AbAssignment = { id: string; variant: string; overrides?: AbOverrides };
+export type AbAssignment = {
+  id: string;
+  variant: string;
+  overrides?: AbOverrides;
+  /** Geforceerd via de preview-cookie — telt NIET mee in de meting. */
+  forced?: boolean;
+};
 
 export const AB_COOKIE = "gents_ab";
+export const AB_FORCE_COOKIE = "gents_ab_force";
 
 export { schoonExperimentsDoc };
 
@@ -107,12 +121,21 @@ export async function resolveAb(): Promise<{ assignments: AbAssignment[]; overri
     const land = (h.get("x-vercel-ip-country") || "").toUpperCase();
     const regio = (h.get("x-vercel-ip-country-region") || "").toUpperCase();
 
+    // Preview: ?ab=<experiment>:<variant> zet (via de middleware) een korte
+    // force-cookie. Die wint van de bucket én van de targeting — je wil variant
+    // B kunnen nakijken vanaf kantoor, ook als de test op Duitsland mikt.
+    // Geforceerde toewijzingen loggen géén exposure (zie TrackAb-aanroepers).
+    const force = (c.get(AB_FORCE_COOKIE)?.value || "").split(":");
+    const forceExp = force[0] || "";
+    const forceVariant = (force[1] || "").toUpperCase();
+
     const assignments: AbAssignment[] = [];
     const overrides: AbOverrides = {};
     for (const exp of actief) {
-      if (!doetMee(exp, land, regio)) continue;
-      const variant = variantVoorBucket(exp, bucketVoor(bezoeker, exp.id)) as AbVariant;
-      assignments.push({ id: exp.id, variant: variant.key, overrides: variant.overrides });
+      const geforceerd = exp.id === forceExp ? exp.varianten.find((v) => v.key === forceVariant) : undefined;
+      if (!geforceerd && !doetMee(exp, land, regio)) continue;
+      const variant = geforceerd ?? (variantVoorBucket(exp, bucketVoor(bezoeker, exp.id)) as AbVariant);
+      assignments.push({ id: exp.id, variant: variant.key, overrides: variant.overrides, forced: Boolean(geforceerd) });
       if (variant.overrides) Object.assign(overrides, variant.overrides);
     }
     return { assignments, overrides };

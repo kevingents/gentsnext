@@ -25,7 +25,8 @@ export async function AnnouncementBar() {
   // A/B: de balk staat op elke pagina, dus een balk-experiment logt zijn
   // exposure hier (site-breed) — niet op de homepage.
   const ab = await resolveAb();
-  const balkAb = ab.assignments.filter((a) => a.overrides?.announcement);
+  // Geforceerde previews (?ab=…) tellen niet mee in de meting.
+  const balkAb = ab.assignments.filter((a) => !a.forced && a.overrides?.announcement);
 
   const tekst = (ab.overrides.announcement?.text || settings?.announcement?.text)?.trim();
   const linkLabel = (ab.overrides.announcement?.linkLabel || settings?.announcement?.linkLabel)?.trim();

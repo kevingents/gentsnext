@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
 import { setContentDoc } from "@/lib/content-store";
 import { docVersion, CONFLICT_MESSAGE } from "@/lib/content-version";
-import { getExperiments, schoonExperimentsDoc } from "@/lib/experiments";
+import { getExperiments, schoonExperimentsDoc, type ExperimentsDoc } from "@/lib/experiments";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,13 +42,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Ongeldige lijst." }, { status: 400 });
   }
   try {
+    const bestaand = await getExperiments();
     if (typeof body.version === "string" && body.version) {
-      const huidig = docVersion((await getExperiments()).experimenten);
-      if (body.version !== huidig) {
+      if (body.version !== docVersion(bestaand.experimenten)) {
         return NextResponse.json({ ok: false, error: CONFLICT_MESSAGE, conflict: true }, { status: 409 });
       }
     }
-    const doc = schoonExperimentsDoc({ experimenten: body.experimenten });
+    const doc = schoonExperimentsDoc({ experimenten: body.experimenten }) as ExperimentsDoc;
+
+    // Meetvenster: de SERVER stempelt bij een statuswissel; wat de client aan
+    // datums stuurt wordt overschreven. Zonder venster tellen exposures van
+    // een vorige run mee en is de uitslag van een herstart vervuild.
+    const oud = new Map(bestaand.experimenten.map((e) => [e.id, e]));
+    for (const e of doc.experimenten) {
+      const vorige = oud.get(e.id);
+      if (e.status === "actief") {
+        // Al actief = venster loopt door; (her)start = nieuw venster.
+        e.gestartOp = vorige?.status === "actief" && vorige.gestartOp ? vorige.gestartOp : new Date().toISOString();
+        e.gestoptOp = undefined;
+      } else if (e.status === "gestopt") {
+        e.gestartOp = vorige?.gestartOp;
+        e.gestoptOp = vorige?.status === "gestopt" && vorige.gestoptOp ? vorige.gestoptOp : new Date().toISOString();
+      } else {
+        // Concept: schone lei — de volgende start opent een vers venster.
+        e.gestartOp = undefined;
+        e.gestoptOp = undefined;
+      }
+    }
+
     await setContentDoc("experiments", doc);
     const { experimenten } = await getExperiments();
     return NextResponse.json({ ok: true, experimenten, version: docVersion(experimenten) });

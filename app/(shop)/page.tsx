@@ -67,8 +67,9 @@ export default async function Home() {
   // experimenten loggen in de balk zelf (die staat op elke pagina).
   const ab = await resolveAb();
   const eigenIndeling = [...ab.assignments].reverse().find((a) => a.overrides?.eigenIndeling);
+  // Geforceerde previews (?ab=…) tellen niet mee in de meting.
   const homepageAb = ab.assignments.filter(
-    (a) => !a.overrides || a.overrides.eigenIndeling || a.overrides.hero || a.overrides.usps,
+    (a) => !a.forced && (!a.overrides || a.overrides.eigenIndeling || a.overrides.hero || a.overrides.usps),
   );
 
   const { secties } = await getHomeLayout(
