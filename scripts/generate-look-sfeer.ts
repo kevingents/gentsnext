@@ -54,6 +54,64 @@ function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
   }
 }
 
+/**
+ * Wat de rest van de look moet tonen. Zonder dit beschreef de prompt alléén het
+ * hoofdgarment en verzon het model de rest: bij "Driedelig klassiek" verdween
+ * het gilet (tweedelig pak op de foto) en werd "Gala & black tie" een effen
+ * zwart pak met wit overhemd — geen strik, geen satijnen revers.
+ *
+ * Volgorde = hoe je het aankleedt, van binnen naar buiten.
+ */
+const ROL_TEKST: Record<string, (titel: string) => string> = {
+  Overhemden: () => "a crisp white dress shirt with a proper collar",
+  Gilets: () => "a matching waistcoat in the same cloth, lowest button left open",
+  Stropdassen: () => "a silk necktie",
+  Strikken: () => "a black self-tie bow tie",
+  Pochet: () => "a neatly folded pocket square",
+  Broeken: () => "matching trousers of the same cloth",
+  Riemen: () => "a leather belt",
+  Schoenen: () => "polished leather shoes",
+};
+
+/**
+ * Dresscode-regels per look. Deze staan LOS van de losse artikelen omdat ze
+ * juist gaan over wat er NIET mag: een riem bij een smokingbroek, een stropdas
+ * bij black tie, een rokvest zonder rokjas.
+ */
+const DRESSCODE: Record<string, string> = {
+  "gala-black-tie":
+    "Strict BLACK TIE: a black dinner jacket with satin peak lapels, a black self-tie bow tie (never a necktie), a white dress shirt, black patent leather shoes and NO belt.",
+  "smoking-compleet":
+    "Strict BLACK TIE: a black dinner jacket with satin lapels, a black self-tie bow tie (never a necktie), a pleated white dress shirt, black patent leather shoes and NO belt.",
+  "rokkostuum-compleet":
+    "Strict WHITE TIE: a black tailcoat worn OPEN over a white piqué waistcoat, a white wing-collar shirt, a white self-tie bow tie, black patent leather shoes and NO belt. The waistcoat is never worn without the tailcoat.",
+  "driedelig-klassiek":
+    "A THREE-PIECE suit: jacket, matching waistcoat and trousers in the same cloth. The waistcoat must be clearly visible under the open jacket, with its lowest button left open.",
+  "communie-lentefeest":
+    "A THREE-PIECE suit: jacket, matching waistcoat and trousers in the same cloth, the waistcoat clearly visible with its lowest button open.",
+  examengala:
+    "Formal evening wear: a dark dinner-style suit with a black bow tie and a white dress shirt, no necktie.",
+  uitvaart:
+    "Sober and correct: a dark suit, a white dress shirt, a plain dark necktie and black leather shoes. Nothing shiny or festive.",
+};
+
+/**
+ * Beschrijft de héle look — het hoofdgarment zit al in de productfoto, de rest
+ * benoemen we zodat het model 'm niet zelf invult.
+ */
+function outfitTekst(items: { hg: string; title: string }[], mainHandleHg: string): string {
+  const gezien = new Set<string>([mainHandleHg]);
+  const delen: string[] = [];
+  for (const rol of Object.keys(ROL_TEKST)) {
+    if (gezien.has(rol)) continue;
+    const item = items.find((i) => i.hg === rol);
+    if (!item) continue;
+    gezien.add(rol);
+    delen.push(ROL_TEKST[rol](item.title));
+  }
+  return delen.length ? ` The complete outfit also includes ${delen.join(", ")}.` : "";
+}
+
 async function run(productImage: string, prompt: string, key: string): Promise<string | null> {
   let s: Response;
   try {
@@ -112,17 +170,20 @@ async function main() {
 
   async function worker(slice: typeof looks) {
     for (const look of slice) {
-      const main = [...new Set(look.hotspots.map((h) => h.handle))]
+      const items = [...new Set(look.hotspots.map((h) => h.handle))]
         .map((h) => byHandle.get(h))
-        .filter((r): r is Main => Boolean(r && r.img))
-        .sort((a, b) => order(a.hg) - order(b.hg))[0];
+        .filter((r): r is Main => Boolean(r));
+      const main = items.filter((r) => r.img).sort((a, b) => order(a.hg) - order(b.hg))[0];
       if (!main) { console.error(`  geen hoofdgarment voor ${look.slug}`); err++; continue; }
       const scene = SCENE_BY_SLUG[look.slug] || SCENE_BY_OCCASION[look.occasion] || DEFAULT_SCENE;
       const style = modelStylePrompt(main.hg, main.vcl, main.title, main.handle);
-      const base = garmentFor(main.hg, style);
+      // Hoofdgarment (uit de productfoto) + de rest van de look + de dresscode.
+      // Alleen het hoofdgarment beschrijven leverde halve outfits op.
+      const base = garmentFor(main.hg, style) + outfitTekst(items, main.hg);
+      const regels = DRESSCODE[look.slug] ? ` ${DRESSCODE[look.slug]}` : "";
       const urls: string[] = [];
       for (let n = 0; n < PER_LOOK; n++) {
-        const prompt = `${base} ${POSES[n % POSES.length]} The model is ${scene.scene}. ${scene.light}. Premium GENTS menswear editorial, authentic real natural man, candid moment, sharp high-end fashion photography.${learn}`;
+        const prompt = `${base}${regels} ${POSES[n % POSES.length]} The model is ${scene.scene}. ${scene.light}. Premium GENTS menswear editorial, authentic real natural man, candid moment, sharp high-end fashion photography.${learn}`;
         const out = await run(main.img, prompt, key);
         if (!out) { err++; continue; }
         try {

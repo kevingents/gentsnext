@@ -78,13 +78,16 @@ export const LANDINGS: Record<string, Landing> = {
         body: "We begrijpen dat tijd vaak kort is. In onze winkels staan we voor u klaar met direct leverbare maten en, waar nodig, snelle vermaakservice.",
       },
     ],
+    // Er staan drie gecureerde uitvaart-collecties in de catalogus die nergens
+    // vandaan bereikbaar waren; deze pagina stuurde je naar álle 62 pakken. Op
+    // een gelegenheidspagina is juist de selectie het antwoord.
     shop: [
-      { label: "Pakken", href: "/collections/pakken" },
-      { label: "Colberts", href: "/collections/colberts" },
-      { label: "Overhemden", href: "/collections/overhemden" },
-      { label: "Stropdassen", href: "/collections/stropdassen" },
+      { label: "Uitvaart premium", href: "/collections/uitvaart" },
+      { label: "Uitvaart casual", href: "/collections/uitvaart-casual" },
+      { label: "Accessoires", href: "/collections/accessoires-uitvaart" },
+      { label: "Alle pakken", href: "/collections/pakken" },
     ],
-    cta: { label: "Bekijk pakken", href: "/collections/pakken" },
+    cta: { label: "Bekijk uitvaartpakken", href: "/collections/uitvaart" },
     seoDescription:
       "Sobere, respectvolle uitvaartkleding bij GENTS. Donkere pakken, overhemden en accessoires, met rustig en deskundig advies — vaak dezelfde dag mee te nemen.",
   },

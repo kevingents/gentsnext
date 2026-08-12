@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { products, productVariants, productImages } from "@/db/schema";
 import { availableForSkus } from "@/lib/stock-reservations";
-import { deriveVariant, MAX_GROUP_SIZE } from "@/lib/variant-grouping";
+import { deriveVariant, MAX_GROUP_SIZE, colorIsArticle } from "@/lib/variant-grouping";
 
 /**
  * De gedenormaliseerde catalogus-vlaggen: has_image, in_stock, stock_qty (product
@@ -133,6 +133,10 @@ export async function syncCatalogFlags(): Promise<CatalogFlagsSamenvatting> {
     const distinctColors = new Set(members.map((m) => m.color)).size;
     if (members.length < 2 || members.length > MAX_GROUP_SIZE || distinctColors < 2) continue;
     realGroups++;
+    // Bij accessoires IS de kleur het artikel (pochet, das, strik, sokken):
+    // daar blijft élk lid primair, zodat de klant alle kleuren in het overzicht
+    // ziet. De groep zelf blijft staan — de kleurenbalk op de PDP werkt gewoon.
+    const alleKleurenTonen = colorIsArticle(meta.get(members[0].id)!.hoofdgroep);
     // Primair = best zichtbare (foto+voorraad) met meeste voorraad.
     const ranked = [...members].sort((a, b) => {
       const ma = meta.get(a.id)!;
@@ -145,7 +149,7 @@ export async function syncCatalogFlags(): Promise<CatalogFlagsSamenvatting> {
     const primaryId = ranked[0].id;
     for (const m of members) {
       groupKeyById.set(m.id, key);
-      isPrimaryById.set(m.id, m.id === primaryId);
+      isPrimaryById.set(m.id, alleKleurenTonen || m.id === primaryId);
       colorCountById.set(m.id, members.length);
     }
   }

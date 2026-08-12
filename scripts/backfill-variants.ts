@@ -163,6 +163,8 @@ async function main() {
         barcode: String(v.barcode || "").trim(),
         position: Number(v.position) || i,
         size: det.size,
+        // Zonder hoofdgroep valt een boordmaat in de pakkenreeks; deze eenmalige
+        // Shopify-backfill kent die niet. Draai daarna npm run backfill:sizelabel.
         sizeLabel: det.size ? sizeRowLabel(det.size) : "",
         color,
         colorFamily: color ? colorFamily(color) : "",

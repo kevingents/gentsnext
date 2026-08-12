@@ -5,6 +5,7 @@ import type { BuySize } from "@/components/pdp/buy-box";
 import {
   sizeLayoutFor,
   sizeRowLabel,
+  sizeSleeveBase,
   sizeGroup,
   sizeToken,
   rowSortIndex,
@@ -69,7 +70,7 @@ export function SizeMatrix({
     const sorted = [...list].sort((a, b) =>
       allNumeric
         ? num(a.size) - num(b.size)
-        : rowSortIndex(sizeRowLabel(a.size)) - rowSortIndex(sizeRowLabel(b.size))
+        : rowSortIndex(sizeRowLabel(a.size, hoofdgroep)) - rowSortIndex(sizeRowLabel(b.size, hoofdgroep))
     );
     // Rustig, uniform grid — zelfde beeldtaal als de pakken-matrix: doorgestreept
     // + klein belletje voor uitverkocht (geen "Uitverkocht"-woord per tegel; de
@@ -168,7 +169,7 @@ function GroupedSizes({
   // Onder de mouwlengte-tab de kale lettermaat tonen (S i.p.v. S7) — de tab
   // benoemt de mouwlengte al. Bij Regular/Long/Short blijft het échte
   // confectienummer staan (48 vs 98 zijn verschillende maten voor de klant).
-  const display = layout === "extra-sleeve" && activeCol.key === "long" ? sizeRowLabel : sizeToken;
+  const display = layout === "extra-sleeve" && activeCol.key === "long" ? sizeSleeveBase : sizeToken;
 
   return (
     <div className="mt-2">

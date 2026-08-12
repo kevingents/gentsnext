@@ -22,6 +22,8 @@ import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { NEW_COLLECTION_HANDLE } from "@/lib/new-collection";
+import { colorIsArticle } from "@/lib/variant-grouping";
+import { crossSellDoelen, isFormeel, FORMELE_KLEUREN } from "@/lib/cross-sell-regels";
 import { mySizeBuckets } from "@/lib/size-match";
 import {
   rowSortIndex,
@@ -282,7 +284,11 @@ async function buildProductCards(
     const tl = titleTl.get(p.id);
     // Bij een kleurgroep tonen we de BASISnaam op de kaart (kleur weg uit titel),
     // zodat "Stropdas PE lichtblauw" → "Stropdas PE · In 19 kleuren".
-    const cnt = colorCount.get(p.id) ?? 1;
+    // Behalve waar de kleur HET artikel is (pochet/das/strik): daar staat elke
+    // kleur als eigen kaart in het overzicht, en zouden 19 kaarten allemaal
+    // "Pochet PE · In 19 kleuren" heten. Kleur in de titel, geen telling.
+    const kleurIsArtikel = colorIsArticle(categoryById.get(p.id) || "");
+    const cnt = kleurIsArtikel ? 1 : colorCount.get(p.id) ?? 1;
     const lbl = (colorLabel.get(p.id) || "").trim();
     let displayTitle = p.title;
     if (cnt > 1 && lbl && p.title.toLowerCase().endsWith(lbl.toLowerCase())) {
@@ -308,7 +314,7 @@ async function buildProductCards(
       isNew: newFlag.get(p.id) ?? false,
       hasSale: saleRefCents.has(p.id),
       referenceCents: saleRefCents.get(p.id),
-      colorCount: colorCount.get(p.id) ?? 1,
+      colorCount: cnt,
       lowStock: (() => {
         const q = stockQtyById.get(p.id) ?? 0;
         return q > 0 && q <= 5;
@@ -1153,8 +1159,8 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
  */
 const _facetsCached = unstable_cache(
   (collectionId: string, category: string) => getFacetsUncached({ collectionId: collectionId || undefined, category: category || undefined }),
-  // v3: maat-facetten dragen nu hun matensysteem mee (sc.41 ≠ bo.41).
-  ["plp-facets-v3"],
+  // v4: boordmaten lezen nu uit de boordreeks (44 = hals XL, niet pakmaat XS).
+  ["plp-facets-v4"],
   { revalidate: 180 },
 );
 export function getFacets(f: ProductFilters): Promise<Facets> {
@@ -1187,40 +1193,45 @@ export function getStoreStockCount(f: ProductFilters, branchId: string): Promise
 
 /* ─────────────────────────── Bijverkoop / cross-sell ──────────────────── */
 
-// Slimme categorie-regels: wat past bij wat ("maak de look compleet").
-const CROSS_SELL: Record<string, string[]> = {
-  Pakken: ["Overhemden", "Stropdassen", "Schoenen", "Pochet"],
-  Colberts: ["Overhemden", "Stropdassen", "Pochet"],
-  Broeken: ["Riemen", "Overhemden", "Schoenen"],
-  Overhemden: ["Stropdassen", "Manchetknopen", "Colberts"],
-  Stropdassen: ["Pochet", "Overhemden", "Dasspelden"],
-  Strikken: ["Pochet", "Overhemden", "Manchetknopen"],
-  Gilets: ["Overhemden", "Stropdassen"],
-  Schoenen: ["Riemen", "Sokken"],
-  Truien: ["Overhemden", "Broeken"],
-  "Polo-shirts": ["Broeken", "Riemen"],
-};
-const DEFAULT_CROSS = ["Overhemden", "Stropdassen", "Pochet"];
-
 /**
  * Aanbevelingen om "de look compleet te maken": producten uit complementaire
  * categorieën, met afbeelding, gebalanceerd over de doelcategorieën.
+ *
+ * `subgroep` + `attrs` bepalen mee wát er past: bij een LAKSCHOEN werden een riem
+ * en turquoise sokken aangeboden, omdat alleen de hoofdgroep "Schoenen" telde.
+ * Bij black tie hoort geen riem en geen vrolijke kleur — zie lib/cross-sell-regels.
  */
 export async function getRecommendations(
   hoofdgroep: string,
   excludeProductId: string | null,
-  limit = 4
+  limit = 4,
+  opts: { subgroep?: string; attrs?: Record<string, unknown> } = {}
 ): Promise<ProductCardData[]> {
   const db = getDb();
-  const targets = CROSS_SELL[hoofdgroep] || DEFAULT_CROSS;
+  const attrs = opts.attrs ?? {};
+  const subgroep = opts.subgroep ?? String(attrs.subgroep ?? "");
+  const targets = crossSellDoelen(hoofdgroep, subgroep, attrs);
   const exclude = excludeProductId || "00000000-0000-0000-0000-000000000000";
+  // Formeel artikel → alleen sobere kleuren, behalve bij artikelen die zélf voor
+  // die gelegenheid zijn (een smokingoverhemd of strik is per definitie goed).
+  const formeel = isFormeel(hoofdgroep, subgroep, attrs);
+  const kleurCond = formeel
+    ? sql` and (
+        p.attributes ->> 'subgroep' in ('Smoking','Rokkostuum')
+        or exists (
+          select 1 from ${productVariants} v
+          where v.product_id = p.id and v.stock_qty > 0
+            and v.color_family in (${sql.join(FORMELE_KLEUREN.map((c: string) => sql`${c}`), sql`, `)})
+        )
+      )`
+    : sql``;
 
   const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string; hg: string }>(sql`
     select p.id, p.handle, p.title, p.vendor, p.attributes ->> 'hoofdgroep_omschrijving' as hg
     from ${products} p
     where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
       and p.attributes ->> 'hoofdgroep_omschrijving' in (${sql.join(targets.map((t) => sql`${t}`), sql`, `)})
-      and p.id <> ${exclude}
+      and p.id <> ${exclude}${kleurCond}
     order by p.source_created_at desc nulls last
     limit 60
   `);
@@ -1256,8 +1267,9 @@ export async function getRecommendations(
  */
 export async function getOrderCrossSell(orderId: string, limit = 3): Promise<ProductCardData[]> {
   const db = getDb();
-  const ordered = await db.execute<{ product_id: string; hg: string }>(sql`
-    select distinct v.product_id, p.attributes ->> 'hoofdgroep_omschrijving' as hg
+  const ordered = await db.execute<{ product_id: string; hg: string; sg: string; attrs: Record<string, unknown> }>(sql`
+    select distinct v.product_id, p.attributes ->> 'hoofdgroep_omschrijving' as hg,
+           coalesce(p.attributes ->> 'subgroep','') as sg, p.attributes as attrs
     from ${orderLines} ol
     join ${productVariants} v on v.sku = ol.sku
     join ${products} p on p.id = v.product_id
@@ -1267,7 +1279,11 @@ export async function getOrderCrossSell(orderId: string, limit = 3): Promise<Pro
   const orderedIds = ordered.rows.map((r) => r.product_id).filter(Boolean);
   const orderedCats = new Set(ordered.rows.map((r) => r.hg).filter(Boolean));
   const targets = new Set<string>();
-  for (const r of ordered.rows) for (const t of CROSS_SELL[r.hg] || DEFAULT_CROSS) if (!orderedCats.has(t)) targets.add(t);
+  // Zelfde regels als op de productpagina — wie een smoking bestelde krijgt in de
+  // bevestigingsmail geen riem aangeboden.
+  for (const r of ordered.rows) {
+    for (const t of crossSellDoelen(r.hg, r.sg, r.attrs ?? {})) if (!orderedCats.has(t)) targets.add(t);
+  }
   const targetList = [...targets];
   if (!targetList.length || !orderedIds.length) return [];
 

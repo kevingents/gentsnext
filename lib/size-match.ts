@@ -52,7 +52,8 @@ export function mySizeBuckets(profile: unknown): string[] {
   for (const field of ["colbert", "broek", "overhemd", "schoen"] as const) {
     const raw = String(p[field] ?? "").trim();
     if (!raw) continue;
-    const bucket = sizeRowLabel(raw);
+    // Mét familie: een bewaarde overhemdmaat "44" is boordmaat XL, niet pakmaat XS.
+    const bucket = sizeRowLabel(raw, RULES.find((r) => r.field === field)?.family ?? "");
     if (bucket) out.add(bucket);
   }
   return [...out];
@@ -75,7 +76,7 @@ export function resolveMySize(hoofdgroep: string, profile: unknown): MySize | nu
     category: rule.cat,
     field: rule.field,
     raw,
-    row: sizeRowLabel(raw),
+    row: sizeRowLabel(raw, rule.family),
     facet: hit ? sizeFacetKey(hit) : "",
   };
 }
