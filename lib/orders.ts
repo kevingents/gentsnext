@@ -382,10 +382,25 @@ export async function createOrder(
       firstName: contact.firstName.trim(),
       lastName: contact.lastName.trim(),
       phone: (contact.phone || "").trim(),
-      street: contact.street.trim(),
-      houseNumber: contact.houseNumber.trim(),
-      postalCode: contact.postalCode.trim(),
-      city: contact.city.trim(),
+      /* ADRESVELDEN OPTIONEEL BIJ AFHALEN (12 aug 2026). Deze vier stonden als
+         enige zónder `|| ""` — alle buurvelden hebben 'm wel. Op de webcheckout
+         valt dat niet op: daar zijn ze verplicht en dus altijd gevuld. Maar bij een
+         AFHAALORDER slaat de kassa-route de adresvalidatie bewust over (geen
+         bezorging, geen adres nodig) en stuurt de kassa alleen naam, e-mail en
+         telefoon mee. Dan is contact.street undefined en klapt het hier op
+         "Cannot read properties of undefined (reading 'trim')".
+
+         Gevonden toen Kevin een VOORVERKOOP in de Showroom testte: die is per
+         definitie een afhaalorder, dus die liep hier altijd stuk — de bestelling
+         werd nooit aangemaakt en de kassa toonde de kale JS-fout. Er ging geen geld
+         verloren (dit is de eerste stap, vóór het afrekenen), maar voorverkoop via
+         de afrekentegel kan hier nooit doorheen gekomen zijn.
+
+         Leeg opslaan is hier het juiste: een afhaalorder hééft geen bezorgadres. */
+      street: (contact.street || "").trim(),
+      houseNumber: (contact.houseNumber || "").trim(),
+      postalCode: (contact.postalCode || "").trim(),
+      city: (contact.city || "").trim(),
       country: (contact.country || "NL").trim(),
       locale: isLocale(locale) ? locale : DEFAULT_LOCALE,
       companyName: (contact.companyName || "").trim(),
