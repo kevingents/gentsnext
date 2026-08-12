@@ -646,9 +646,13 @@ function CheckoutForm() {
         </div>
       ) : null}
 
+      {/* min-w-0 op de twee kolommen: zonder dat staat hun minimumbreedte op
+          "auto" en bepaalt het breedste onbreekbare stukje tekst diep in de
+          kolom hoe breed de héle pagina wordt. Eén regel met white-space:nowrap
+          blies de checkout op een telefoon van 375 naar 704px op. */}
       <div className="mt-5 grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Formulier */}
-        <form onSubmit={submit} noValidate>
+        <form onSubmit={submit} noValidate className="min-w-0">
           {step === "gegevens" ? (
           <>
           {/* Particulier / Zakelijk */}
@@ -883,9 +887,15 @@ function CheckoutForm() {
                     <circle cx="12" cy="12" r="1.6" />
                     <circle cx="19" cy="12" r="1.6" />
                   </svg>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block">{t("checkout.payment_other")}</span>
-                    <span className="block truncate text-xs text-muted">
+                    {/* Afbreken over twee regels, NIET truncate. `truncate` zet
+                        white-space:nowrap, en die min-content (hier ruim 600px
+                        aan methodenamen) duwt de hele checkout-grid open: op een
+                        telefoon van 375px werd de pagina 704px breed en liep
+                        álles buiten beeld. Klemmen op twee regels toont boven-
+                        dien meer dan een afgekapt "PayPal · Bancon…". */}
+                    <span className="mt-0.5 block overflow-hidden text-xs leading-snug text-muted [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box]">
                       {payRest.map((m) => m.description).join(" · ")}
                     </span>
                   </span>
@@ -1000,7 +1010,7 @@ function CheckoutForm() {
 
         {/* Overzicht — op mobiel als inklapbaar blok bóven het formulier, zodat de
             bezorgkeuze en het kortingscode-veld vóór de betaalknop zichtbaar zijn. */}
-        <aside className="order-first lg:order-none lg:sticky lg:top-20 lg:h-fit">
+        <aside className="order-first min-w-0 lg:order-none lg:sticky lg:top-20 lg:h-fit">
           <button
             type="button"
             onClick={() => setSummaryOpen((v) => !v)}
