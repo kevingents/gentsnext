@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { validateVoucher, redeemVoucherForRef, releaseVoucherForRef, activeVouchersForCustomer } from "@/lib/vouchers";
-import { redeemableBalance, redeemPointsForVoucher } from "@/lib/loyalty-claim";
+import { redeemableBalance, pendingBalance, redeemPointsForVoucher } from "@/lib/loyalty-claim";
+import { getDb } from "@/db";
+import { loyaltyEvents } from "@/db/schema";
+import { and, eq, gt, min, sql } from "drizzle-orm";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +84,18 @@ export async function POST(req: Request) {
         const centsPerPoint = Number(lc?.redeemCentsPerPoint) > 0 ? Number(lc.redeemCentsPerPoint) : 5;
         const minPoints = Number(lc?.redeemMinPoints) > 0 ? Number(lc.redeemMinPoints) : 500;
         const stepPoints = lc?.redeemStepPoints == null ? 500 : Math.max(0, Number(lc.redeemStepPoints));
-        const besteedbaar = Math.max(0, await redeemableBalance(klant));
+        /* Besteedbaar EN in behandeling. Zonder dat tweede getal ziet de kassier
+           "507 spaarpunten" (het totaal, uit api/store/loyalty) maar verschijnt er
+           geen inwissel-knop, omdat er maar 303 gevest zijn — en dan lijkt het kapot.
+           Met de vestdatum erbij kan 'ie het gewoon uitleggen aan de klant. */
+        const [besteedbaar, inBehandeling, [vest]] = await Promise.all([
+          redeemableBalance(klant).then((n) => Math.max(0, n)),
+          pendingBalance(klant).then((n) => Math.max(0, n)),
+          getDb()
+            .select({ eerst: min(loyaltyEvents.vestsAt) })
+            .from(loyaltyEvents)
+            .where(and(eq(loyaltyEvents.customerId, klant), gt(loyaltyEvents.vestsAt, sql`now()`))),
+        ]);
         /* Alleen hele stappen die de klant ECHT heeft. Zelfde regels als de
            webshop-inwissel; de server rekent, de kassa toont alleen. Bewust
            afgekapt op 5 keuzes: een kassascherm is geen keuzemenu. */
@@ -93,7 +107,16 @@ export async function POST(req: Request) {
           }
           opties.reverse(); // hoogste eerst: dat is wat de klant meestal wil
         }
-        return NextResponse.json({ ok: true, besteedbaar, minPoints, stepPoints, centsPerPoint, opties });
+        return NextResponse.json({
+          ok: true,
+          besteedbaar,
+          inBehandeling,
+          besteedbaarVanaf: vest?.eerst ? new Date(vest.eerst as unknown as string).toISOString() : null,
+          minPoints,
+          stepPoints,
+          centsPerPoint,
+          opties,
+        });
       }
       case "punten-inwisselen": {
         const klant = String(b.customerId || "");
