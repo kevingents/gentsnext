@@ -224,7 +224,10 @@ export async function ververs(opties: Opties = {}): Promise<Uitslag> {
   return {
     ok: true,
     stap: "klaar",
-    melding: `Sandbox ververst vanaf "${branch.name}" en geanonimiseerd in ${ANONIMISEER_STAPPEN.length} stappen.`,
+    /* `branch` is het DOEL (de sandbox); de bron is zijn ouder — productie. De
+       eerdere tekst noemde de doelnaam ("ververst vanaf sandbox"), en dat las
+       alsof er niets gebeurd was. */
+    melding: `Sandbox-branch "${branch.name}" ververst vanaf productie en geanonimiseerd in ${ANONIMISEER_STAPPEN.length} stappen.`,
     duurMs: Date.now() - begin,
     stappen: gedaan,
     controle,
