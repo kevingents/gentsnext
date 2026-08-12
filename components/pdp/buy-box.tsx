@@ -12,6 +12,7 @@ import { SizeFinderButton } from "@/components/pdp/size-finder-modal";
 import { ColorSiblings, type SiblingItem } from "@/components/pdp/color-siblings";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
+import { StoreChooser } from "@/components/stores/store-chooser";
 import { StockNotify } from "@/components/pdp/stock-notify";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { RatingStars } from "@/components/rating-stars";
@@ -356,7 +357,7 @@ export function BuyBox({
           const hit = (selectedSize.branches ?? []).find((b) => b.store === myStore);
           const others = (selectedSize.branches ?? []).filter((b) => b.qty > 0 && b.store !== myStore).length;
           return hit && hit.qty > 0 ? (
-            <p className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs text-success">
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-xs text-success">
               <StoreIcon className="h-3.5 w-3.5 shrink-0" />
               <span>
                 {/* "Vandaag ophalen" alleen als de winkel nu open is — anders
@@ -366,17 +367,25 @@ export function BuyBox({
                 </span>
                 {hit.openLabel ? <span className="text-muted"> · {hit.openLabel}</span> : null}
               </span>
+              {/* Zichtbaar kunnen wisselen: zonder deze knop is "mijn winkel"
+                  een instelling die je alleen terugvindt waar je 'm ooit zette. */}
+              <StoreChooser myStore={myStore} variant="link" />
             </p>
           ) : (
-            <p className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs text-muted">
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-xs text-muted">
               <StoreIcon className="h-3.5 w-3.5 shrink-0" />
               <span>
                 {t("myStore.notInStock", { store: myStore })}
                 {others > 0 ? <span> · {t("myStore.elsewhere", { count: others })}</span> : null}
               </span>
+              <StoreChooser myStore={myStore} variant="link" />
             </p>
           );
         })() : null}
+        {/* Nog géén winkel gekozen? Dan stond er tot nu toe niets — de hele
+            functie bestond alleen voor wie 'm al gevonden had. Deze regel vraagt
+            het gewoon, op de plek waar de vraag speelt (onder je maat). */}
+        {!myStore && storeCount > 0 ? <StoreChooser myStore={null} /> : null}
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (

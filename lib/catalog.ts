@@ -14,6 +14,8 @@ import {
   orders,
   orderLines,
   events,
+  srsStock,
+  srsStockMeta,
 } from "@/db/schema";
 import { buildRegelScore, type MerchRegel } from "@/lib/merchandising-regels";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
@@ -476,6 +478,8 @@ export type ProductFilters = {
   fits?: string[];
   priceMinCents?: number;
   priceMaxCents?: number;
+  /** Filiaalnummer: alleen artikelen die in dát filiaal op voorraad liggen. */
+  storeBranchId?: string;
 };
 
 export type Facets = {
@@ -720,6 +724,27 @@ function sizeCondition(values: string[]): SQL {
 }
 
 /**
+ * "Ligt dit in filiaal X?" — EXISTS op de SRS-voorraadbaseline, joined op de
+ * variant-sku (dé sleutel; zie db/schema: barcode is de leveranciers-EAN en
+ * matcht níét). `gen` uit srs_stock_meta zodat een half geschreven sync
+ * onzichtbaar blijft, precies zoals lib/srs-stock-core leest.
+ *
+ * Dit is de BRUTO baseline (3×/dag ververst), zonder kassa-delta, web-
+ * reserveringen of veiligheidsmarge — voor een filter "wat hangt er in mijn
+ * winkel" is dat de juiste maat: het is een reisbeslissing, geen verkoop. De
+ * harde belofte per maat blijft op de PDP staan (availableForSkus).
+ */
+function storeStockExists(branchId: string): SQL {
+  return sql`exists (
+    select 1 from ${srsStock} s
+    where s.sku = v.sku
+      and s.gen = (select active_gen from ${srsStockMeta} where id = 'latest')
+      and s.branch_id = ${branchId}
+      and s.qty > 0
+  )`;
+}
+
+/**
  * Variant-niveau EXISTS — één variant moet aan álle gekozen variant-filters
  * voldoen ÉN op voorraad zijn. Filter je op maat S, dan zie je geen producten
  * waar S uitverkocht is (de matchende variant moet leverbaar zijn).
@@ -729,6 +754,13 @@ function variantExists(f: ProductFilters): SQL | null {
   let active = false;
   if (f.colorFamilies?.length) {
     parts.push(inList(sql`v.color_family`, f.colorFamilies));
+    active = true;
+  }
+  if (f.storeBranchId) {
+    // Bewust in DEZELFDE exists als maat/kleur/prijs: "maat 52 in Utrecht" moet
+    // één variant zijn die allebei waarmaakt, niet "heeft 52" én "heeft íéts in
+    // Utrecht".
+    parts.push(storeStockExists(f.storeBranchId));
     active = true;
   }
   if (f.sizes?.length) {
@@ -745,7 +777,10 @@ function variantExists(f: ProductFilters): SQL | null {
   }
   if (!active) return null;
   // De matchende variant moet op voorraad zijn (geen uitverkochte maten tonen).
-  parts.push(sql`v.stock_qty > 0`);
+  // Filtert de klant op een winkel, dan IS de winkelvoorraad die eis: het hangt
+  // daar en je kunt het passen — of het online nog leverbaar is, doet dan niet
+  // ter zake (stock_qty is de online-pool).
+  if (!f.storeBranchId) parts.push(sql`v.stock_qty > 0`);
   return sql`exists (select 1 from ${productVariants} v where ${sql.join(parts, sql` and `)})`;
 }
 
@@ -1124,6 +1159,30 @@ const _facetsCached = unstable_cache(
 );
 export function getFacets(f: ProductFilters): Promise<Facets> {
   return _facetsCached(f.collectionId || "", f.category || "");
+}
+
+/**
+ * Hoeveel artikelen uit deze context liggen er in dat filiaal? Puur voor het
+ * label bij het winkelfilter ("Utrecht · 37") — een filter zonder telling laat
+ * de klant op goed geluk klikken.
+ *
+ * Zelfde cache-profiel als de facetten (per context + filiaal, 3 min): de
+ * baseline ververst maar 3×/dag, dus vaker tellen levert niets op. De telling
+ * negeert de overige filters, net als elk ander facet-getal.
+ */
+async function getStoreStockCountUncached(collectionId: string, category: string, branchId: string): Promise<number> {
+  if (!branchId) return 0;
+  const f: ProductFilters = { collectionId: collectionId || undefined, category: category || undefined, storeBranchId: branchId };
+  const ve = variantExists(f);
+  if (!ve) return 0;
+  const db = getDb();
+  const where = sql.join([...contextConditions(f), ve], sql` and `);
+  const res = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${products} where ${where}`);
+  return Number(res.rows[0]?.n ?? 0);
+}
+const _storeStockCountCached = unstable_cache(getStoreStockCountUncached, ["plp-store-stock-count-v1"], { revalidate: 180 });
+export function getStoreStockCount(f: ProductFilters, branchId: string): Promise<number> {
+  return _storeStockCountCached(f.collectionId || "", f.category || "", branchId);
 }
 
 /* ─────────────────────────── Bijverkoop / cross-sell ──────────────────── */

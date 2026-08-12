@@ -18,6 +18,7 @@ import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
 import { getActieveRegels } from "@/lib/merchandising-regels";
+import { plpStoreProps, storeFilterBranchId } from "@/lib/plp-store";
 
 export const dynamic = "force-dynamic";
 
@@ -68,12 +69,19 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const colTitle = await localizeCollectionText(locale, "ct", collection.handle, collection.title);
   const colDesc = await localizeCollectionText(locale, "cd", collection.handle, collection.descriptionHtml || "");
 
-  const filters = selectionToFilters(sel, { collectionId: collection.id });
+  const filters = selectionToFilters(sel, {
+    collectionId: collection.id,
+    storeBranchId: storeFilterBranchId(sel.store),
+  });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
   const [sessionCustomer, facets] = await Promise.all([
     getSessionCustomer(),
     getFacets({ collectionId: collection.id }).then((fc) => localizeFacets(locale, fc)),
   ]);
+  // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
+  const storeProps = await plpStoreProps(sel.store, (sessionCustomer?.preferences as { favoriteStore?: unknown } | null)?.favoriteStore, {
+    collectionId: collection.id,
+  });
   // Shop in jouw maat: leid de categorie af uit de collectie-naam (gemengde
   // collecties matchen niet → geen chip).
   const my = resolveMySize(`${collection.handle} ${collection.title}`, sessionCustomer?.sizeProfile);
@@ -142,7 +150,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         {/* Zie de categoriepagina: eigen schuifbalk, anders is het onderste deel
             van een lange filterlijst pas bereikbaar ná alle producten. */}
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} {...storeProps} />
         </aside>
 
         {/* Grid */}

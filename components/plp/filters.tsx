@@ -25,6 +25,12 @@ type Props = {
   /** Actieve sortering — de sticky pil belooft "Filter & sorteer", dus de mobiele
       drawer moet óók een sorteer-keuze bevatten. */
   sort?: ProductSort;
+  /** Winkels waar op voorraad gefilterd kan worden (alleen die mét filiaalnummer). */
+  stores?: { pageHandle: string; city: string; title: string }[];
+  /** "Mijn winkel" van deze bezoeker (cookie/profiel) — pageHandle. */
+  myStore?: string | null;
+  /** Aantal artikelen in de gekozen winkel binnen deze categorie/collectie. */
+  storeCount?: number | null;
 };
 
 function priceBrackets(
@@ -47,12 +53,18 @@ function trackFilter(facet: string, value: string, on: boolean) {
   track("filter", { props: { facet, value, on } });
 }
 
-export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
+export function PlpFilters({ facets, selection, total, mySize, sort, stores = [], myStore, storeCount }: Props) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [openMobile, setOpenMobile] = useState(false);
+  // De winkel in de keuzelijst: het filter uit de URL, anders "mijn winkel".
+  // Lokale staat, want de keuze zet óók de cookie (mijn winkel) — de serverprop
+  // komt pas bij de volgende render mee.
+  const [pickedStore, setPickedStore] = useState<string>(selection.store || myStore || "");
+  const storeOn = Boolean(selection.store);
+  const chosenStore = stores.find((s) => s.pageHandle === pickedStore) ?? null;
   // De zwevende pil pas tonen als de top-filterbalk uit beeld is gescrold —
   // bovenaan de pagina stonden anders twee bedieningslagen tegelijk.
   const topBarRef = useRef<HTMLDivElement>(null);
@@ -103,6 +115,24 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
 
+  /**
+   * Winkel kiezen = filter aan én winkel onthouden. Bewust één begrip: de winkel
+   * die je hier kiest is dezelfde "mijn winkel" die op de productpagina zegt of
+   * je maat er ligt. Twee losse instellingen zou niemand snappen.
+   */
+  function pickStore(handle: string) {
+    setPickedStore(handle);
+    trackFilter("winkel", handle, Boolean(handle));
+    fetch("/api/mijn-winkel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ store: handle }),
+    }).catch(() => {
+      /* onthouden is comfort; het filter werkt sowieso (staat in de URL) */
+    });
+    apply({ store: handle || undefined });
+  }
+
   const maxEuro = Math.ceil(facets.priceMaxCents / 100);
   const activeCount =
     selection.types.length +
@@ -113,7 +143,8 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
     selection.colors.length +
     selection.sizes.length +
     selection.fits.length +
-    (selection.priceMin || selection.priceMax ? 1 : 0);
+    (selection.priceMin || selection.priceMax ? 1 : 0) +
+    (selection.store ? 1 : 0);
 
   const body = (
     <div className={pending ? "opacity-60 transition-opacity" : ""}>
@@ -140,6 +171,49 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
             {myActive ? t("plp.filters.clear") : t("plp.filters.show")}
           </span>
         </button>
+      ) : null}
+
+      {/* Winkelvoorraad — "ligt dit in mijn winkel?" is een andere vraag dan
+          "is het leverbaar", en de winkel die je hier kiest is dezelfde die op
+          de productpagina per maat meldt of 'ie er ligt. */}
+      {stores.length ? (
+        <div className="mb-4 border border-line p-3">
+          <p className="label-brand">{t("plp.filters.storeStock")}</p>
+          <select
+            value={pickedStore}
+            onChange={(e) => pickStore(e.target.value)}
+            aria-label={t("plp.filters.storePick")}
+            className="mt-2 h-11 w-full border border-line bg-canvas px-2 font-sans text-sm focus:border-ink focus:outline-none"
+          >
+            <option value="">{t("plp.filters.storePick")}</option>
+            {stores.map((s) => (
+              <option key={s.pageHandle} value={s.pageHandle}>{s.city}</option>
+            ))}
+          </select>
+          {chosenStore ? (
+            <button
+              type="button"
+              onClick={() => {
+                trackFilter("winkel", chosenStore.pageHandle, !storeOn);
+                apply({ store: storeOn ? undefined : chosenStore.pageHandle });
+              }}
+              aria-pressed={storeOn}
+              className={`mt-2 flex min-h-11 w-full items-center justify-between gap-2 border px-3 py-2 text-left font-sans text-sm transition-colors ${
+                storeOn ? "border-ink bg-ink text-canvas" : "border-line hover:border-ink"
+              }`}
+            >
+              <span>{storeOn ? t("plp.filters.storeAll") : t("plp.filters.storeOnly", { city: chosenStore.city })}</span>
+              {!storeOn && typeof storeCount === "number" ? (
+                <span className="shrink-0 text-muted">{storeCount}</span>
+              ) : null}
+            </button>
+          ) : (
+            <p className="mt-1.5 font-sans text-xs text-muted">{t("plp.filters.storeHint")}</p>
+          )}
+          {storeOn ? (
+            <p className="mt-1.5 font-sans text-xs text-muted">{t("plp.filters.storeDisclaimer")}</p>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Maat staat bewust bovenaan en open: is het er niet in jouw maat, dan
@@ -323,7 +397,9 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {activeCount > 0 ? (
         <button
           type="button"
-          onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
+          // Wist het winkel-FILTER, niet je winkelkeuze zelf: die blijft in de
+          // keuzelijst staan (en in de cookie) zodat één klik 'm terugzet.
+          onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined, store: undefined })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
           {t("plp.filters.clearAllPrefix")} ({activeCount})

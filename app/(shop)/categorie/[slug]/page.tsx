@@ -19,6 +19,7 @@ import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
 import { getActieveRegels } from "@/lib/merchandising-regels";
+import { plpStoreProps, storeFilterBranchId } from "@/lib/plp-store";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +54,19 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // Vertaald categorie-label (ns "nav") voor kop + breadcrumb.
   const catLabel = (await getCategoryLabels(locale)).get(cat.slug) ?? cat.label;
 
-  const filters = selectionToFilters(sel, { category: cat.hoofdgroep });
+  const filters = selectionToFilters(sel, {
+    category: cat.hoofdgroep,
+    storeBranchId: storeFilterBranchId(sel.store),
+  });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
   const [sessionCustomer, facets] = await Promise.all([
     getSessionCustomer(),
     getFacets({ category: cat.hoofdgroep }).then((fc) => localizeFacets(locale, fc)),
   ]);
+  // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
+  const storeProps = await plpStoreProps(sel.store, (sessionCustomer?.preferences as { favoriteStore?: unknown } | null)?.favoriteStore, {
+    category: cat.hoofdgroep,
+  });
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
   const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);
   // facet = maat mét matensysteem (`kl.M/L`, `sc.43`) — dat is de waarde waarop
@@ -120,7 +128,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             onderaan buiten beeld hangen: je kon er pas bij nadat je langs álle
             producten had gescrold. */}
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} {...storeProps} />
         </aside>
 
         <div>
