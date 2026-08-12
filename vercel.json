@@ -39,6 +39,14 @@
     {
       "path": "/api/cron/punten-bijboeken",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/klantprofielen",
+      "schedule": "40 4 * * *"
+    },
+    {
+      "path": "/api/cron/klantprofielen",
+      "schedule": "0 7,12,17 * * *"
     }
   ],
   "regions": [

@@ -521,6 +521,15 @@ export const orders = pgTable(
     fulfillmentStatus: text("fulfillment_status").notNull().default("pending"),
     /** Orderbevestigingsmail verstuurd (idempotent — webhook kan dubbel komen). */
     confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
+    /** De aanraking die déze order opleverde, vastgevroren bij het bestellen:
+     *  {source, medium, campaign, gclid, fbclid, …}. Bewust een kopie en geen
+     *  verwijzing naar visitorAttribution — die beweegt mee met het volgende
+     *  bezoek, terwijl een order toegerekend moet blijven aan de campagne die
+     *  'm bracht. Voedt ook de server-side conversie naar Google/Meta. */
+    attributie: jsonb("attributie").notNull().default({}),
+    /** Het device (gents-sid) waarop besteld is — koppelt de order aan het
+     *  gedrag ervoor (welke producten bekeken, welke zoekopdracht). */
+    sessionId: text("session_id").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -610,6 +619,14 @@ export const events = pgTable(
     query: text("query").notNull().default(""),
     valueCents: integer("value_cents").notNull().default(0),
     props: jsonb("props").notNull().default({}),
+    /** Bekende klant achter dit event; NULL zolang het device anoniem is. Wordt
+     *  óók met terugwerkende kracht ingevuld zodra een device bekend wordt
+     *  (lib/identity: koppelDevice), want de eerste sessie is meestal de sessie
+     *  waarin de klant zich oriënteerde — juist die wil je in het profiel. */
+    customerId: uuid("customer_id"),
+    /** 'web' | 'pos' | 'server' | 'app' — anders vallen kassa- en webevents in
+     *  dezelfde emmer en klopt elke funnel-telling niet meer. */
+    bron: text("bron").notNull().default("web"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -617,7 +634,45 @@ export const events = pgTable(
     index("events_handle_idx").on(t.handle),
     index("events_query_idx").on(t.query),
     index("events_session_idx").on(t.sessionId),
+    index("events_klant_time_idx").on(t.customerId, t.createdAt),
+    index("events_session_time_idx").on(t.sessionId, t.createdAt),
   ]
+);
+
+/**
+ * Eerste én laatste aanraking per device (het anonieme gents-sid).
+ *
+ * Attributie hoort bij het DEVICE, niet bij elk los event — daarom een aparte
+ * tabel in plaats van nog vijftien kolommen op `events` (die tabel groeit het
+ * hardst en moet smal blijven). De klik-id's zijn wat Google en Meta nodig
+ * hebben om een server-side of offline conversie aan de juiste advertentieklik
+ * te hangen; die werden tot nu toe nergens bewaard, waardoor élke conversie
+ * ongeattribueerd was.
+ */
+export const visitorAttribution = pgTable(
+  "visitor_attribution",
+  {
+    sessionId: text("session_id").primaryKey(),
+    firstSource: text("first_source").notNull().default(""),
+    firstMedium: text("first_medium").notNull().default(""),
+    firstCampaign: text("first_campaign").notNull().default(""),
+    firstTerm: text("first_term").notNull().default(""),
+    firstContent: text("first_content").notNull().default(""),
+    firstReferrer: text("first_referrer").notNull().default(""),
+    firstLanding: text("first_landing").notNull().default(""),
+    lastSource: text("last_source").notNull().default(""),
+    lastMedium: text("last_medium").notNull().default(""),
+    lastCampaign: text("last_campaign").notNull().default(""),
+    gclid: text("gclid").notNull().default(""),
+    gbraid: text("gbraid").notNull().default(""),
+    wbraid: text("wbraid").notNull().default(""),
+    fbclid: text("fbclid").notNull().default(""),
+    ttclid: text("ttclid").notNull().default(""),
+    msclkid: text("msclkid").notNull().default(""),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("visitor_attribution_bron_idx").on(t.firstSource, t.firstMedium)]
 );
 
 /**
@@ -1695,4 +1750,229 @@ export const loyaltyMutations = pgTable(
     index("loyalty_mutations_customer_idx").on(t.customerId),
     index("loyalty_mutations_sale_idx").on(t.saleId),
   ]
+);
+
+/* ─────────────── Klantprofiel 360 & doelgroepen (CDP-laag) ──────────────── */
+
+/**
+ * Identiteitsgrafiek: alle sleutels waarmee één klant herkend kan worden.
+ *
+ * De aanleiding staat in het geheugen als "identiteitsprobleem SRS-nr vs uuid":
+ * dezelfde persoon leefde als uuid (orders, loyalty, posSales), als
+ * SRS-klantnummer (storePurchases), als los e-mailadres (tickets, retouren,
+ * afspraken, nieuwsbrief) en als wallet-pascode. Elke koppeling werd ad hoc op
+ * e-mail gedaan, met een stille terugval op "de eerste treffer" als dat niet
+ * lukte. Dit is de ene plek waar die sleutels bij elkaar komen.
+ *
+ * Uniek op (kind, value): een device of e-mailadres hangt aan precies één
+ * klant. Botst een nieuwe koppeling, dan wint de bestaande en waarschuwt de
+ * code — stil overschrijven zou de historie van de vórige klant naar de nieuwe
+ * verhuizen, en dat is een privacylek, geen datafoutje.
+ */
+export const customerIdentities = pgTable(
+  "customer_identities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    /** 'device' | 'email' | 'srs' | 'phone' | 'wallet' | 'pos'. */
+    kind: text("kind").notNull(),
+    /** Genormaliseerd: e-mail lowercase+trim, telefoon E.164, device = rauwe sid. */
+    value: text("value").notNull(),
+    /** 'zeker' (ingelogd/afgerekend) of 'afgeleid' (op e-mail gematcht zonder
+     *  login). Doelgroepen die geld kosten mogen kiezen om alleen 'zeker' mee te
+     *  nemen — een verkeerd gekoppeld device is een advertentie aan de verkeerde
+     *  persoon. */
+    zekerheid: text("zekerheid").notNull().default("zeker"),
+    bron: text("bron").notNull().default(""),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customer_identities_uniek").on(t.kind, t.value),
+    index("customer_identities_klant_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Het 360-profiel, platgeslagen en per nacht herbouwd.
+ *
+ * Waarom gematerialiseerd en niet live: het profiel raakt twaalf tabellen
+ * (orders, orderregels, posSales, storePurchases, returns, loyalty, vouchers,
+ * cadeaubonnen, tickets, afspraken, reviews, events). Dat is prima voor één
+ * klantkaart, maar een doelgroep telt over 46.000 klanten en moet in de portal
+ * binnen een seconde een aantal tonen. Deze tabel is de leescopie waar élke
+ * doelgroepregel op draait; lib/customer-360 bouwt hem.
+ *
+ * De _sha256-velden zijn wat naar Meta en Google Ads gaat: die matchen op een
+ * genormaliseerde hash, nooit op het rauwe adres. Vooraf berekend, zodat een
+ * uitlevering van 20k klanten niet 20k keer staat te hashen.
+ */
+export const customerProfiles = pgTable(
+  "customer_profiles",
+  {
+    customerId: uuid("customer_id")
+      .primaryKey()
+      .references(() => customers.id, { onDelete: "cascade" }),
+
+    email: text("email").notNull().default(""),
+    emailSha256: text("email_sha256").notNull().default(""),
+    phoneE164: text("phone_e164").notNull().default(""),
+    phoneSha256: text("phone_sha256").notNull().default(""),
+    voornaamSha256: text("voornaam_sha256").notNull().default(""),
+    achternaamSha256: text("achternaam_sha256").notNull().default(""),
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    land: text("land").notNull().default("NL"),
+    srsCustomerId: text("srs_customer_id").notNull().default(""),
+
+    ordersOnline: integer("orders_online").notNull().default(0),
+    ordersWinkel: integer("orders_winkel").notNull().default(0),
+    ordersTotaal: integer("orders_totaal").notNull().default(0),
+    besteedOnlineCents: integer("besteed_online_cents").notNull().default(0),
+    besteedWinkelCents: integer("besteed_winkel_cents").notNull().default(0),
+    besteedTotaalCents: integer("besteed_totaal_cents").notNull().default(0),
+    gemOrderwaardeCents: integer("gem_orderwaarde_cents").notNull().default(0),
+    eersteAankoop: timestamp("eerste_aankoop", { withTimezone: true }),
+    laatsteAankoop: timestamp("laatste_aankoop", { withTimezone: true }),
+    dagenSindsAankoop: integer("dagen_sinds_aankoop"),
+    klantwaardeCents: integer("klantwaarde_cents").notNull().default(0),
+
+    /** Retourquote in hele procenten. Een klant met 60% retour is een ándere
+     *  doelgroep dan zijn omzet suggereert; zonder dit veld adverteer je je
+     *  verlies groter. */
+    retouren: integer("retouren").notNull().default(0),
+    retourCents: integer("retour_cents").notNull().default(0),
+    retourquote: integer("retourquote").notNull().default(0),
+
+    punten: integer("punten").notNull().default(0),
+    puntenBeschikbaar: integer("punten_beschikbaar").notNull().default(0),
+    tegoedCents: integer("tegoed_cents").notNull().default(0),
+    actieveVouchers: integer("actieve_vouchers").notNull().default(0),
+    walletPas: boolean("wallet_pas").notNull().default(false),
+
+    sessies30d: integer("sessies_30d").notNull().default(0),
+    productviews30d: integer("productviews_30d").notNull().default(0),
+    zoekopdrachten30d: integer("zoekopdrachten_30d").notNull().default(0),
+    laatstGezien: timestamp("laatst_gezien", { withTimezone: true }),
+    /** Laatste add_to_cart zónder aankoop erna — de winkelwagenverlaters. */
+    karVerlatenOp: timestamp("kar_verlaten_op", { withTimezone: true }),
+    laatstBekeken: jsonb("laatst_bekeken").notNull().default([]),
+
+    tickets: integer("tickets").notNull().default(0),
+    afspraken: integer("afspraken").notNull().default(0),
+    reviews: integer("reviews").notNull().default(0),
+
+    topCategorieen: jsonb("top_categorieen").notNull().default([]),
+    topMerken: jsonb("top_merken").notNull().default([]),
+    topKleuren: jsonb("top_kleuren").notNull().default([]),
+    maten: jsonb("maten").notNull().default({}),
+    favorieteWinkel: text("favoriete_winkel").notNull().default(""),
+    /** 'online' | 'winkel' | 'omni' | 'geen'. */
+    kanaal: text("kanaal").notNull().default("geen"),
+
+    /** Drie losse waarheden die tot nu toe door elkaar liepen. Een doelgroep die
+     *  naar een advertentieplatform of de mail gaat mag alleen op de eerste twee
+     *  leunen; de cookie-marketingkeuze geldt voor tags op de site. */
+    marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    nieuwsbrief: text("nieuwsbrief").notNull().default("geen"),
+    whatsappOptIn: boolean("whatsapp_opt_in").notNull().default(false),
+
+    rfmR: integer("rfm_r").notNull().default(0),
+    rfmF: integer("rfm_f").notNull().default(0),
+    rfmM: integer("rfm_m").notNull().default(0),
+    /** nieuw | trouw | vip | slapend | risico | eenmalig | verloren | geen. */
+    segment: text("segment").notNull().default("geen"),
+
+    attributie: jsonb("attributie").notNull().default({}),
+    berekendOp: timestamp("berekend_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_profiles_segment_idx").on(t.segment),
+    index("customer_profiles_kanaal_idx").on(t.kanaal),
+    index("customer_profiles_besteed_idx").on(t.besteedTotaalCents),
+    index("customer_profiles_laatste_idx").on(t.laatsteAankoop),
+    index("customer_profiles_optin_idx").on(t.marketingOptIn),
+    index("customer_profiles_winkel_idx").on(t.favorieteWinkel),
+    index("customer_profiles_rfm_idx").on(t.rfmR, t.rfmF, t.rfmM),
+  ]
+);
+
+/**
+ * Doelgroep: een herbruikbare selectie klanten die naar één of meer kanalen
+ * uitgeleverd wordt (mail, Meta, Google Ads, of gewoon een export).
+ *
+ * `definitie` is een regelBOOM als data, geen SQL-string. De regels worden in de
+ * portal geklikt en server-side vertaald tegen een vaste veldenlijst
+ * (lib/audience-regels). Vrije SQL in een kolom is een injectiedeur die vanzelf
+ * een keer opengaat.
+ */
+export const audiences = pgTable(
+  "audiences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    naam: text("naam").notNull(),
+    omschrijving: text("omschrijving").notNull().default(""),
+    definitie: jsonb("definitie").notNull().default({}),
+    /** 'dynamisch' = elke nacht opnieuw bepaald, 'statisch' = eenmalig vastgezet. */
+    soort: text("soort").notNull().default("dynamisch"),
+    actief: boolean("actief").notNull().default(true),
+    /** {"resend":{...},"meta":{...},"google":{...}} — per kanaal de instellingen. */
+    kanalen: jsonb("kanalen").notNull().default({}),
+    aantal: integer("aantal").notNull().default(0),
+    /** Hoeveel daarvan daadwerkelijk te bereiken zijn (opt-in + adres bekend).
+     *  Het verschil met `aantal` is precies waar een campagne op stukloopt. */
+    aantalBereikbaar: integer("aantal_bereikbaar").notNull().default(0),
+    laatstGebouwd: timestamp("laatst_gebouwd", { withTimezone: true }),
+    aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("audiences_slug_uniek").on(t.slug), index("audiences_actief_idx").on(t.actief)]
+);
+
+export const audienceMembers = pgTable(
+  "audience_members",
+  {
+    audienceId: uuid("audience_id")
+      .notNull()
+      .references(() => audiences.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    toegevoegdOp: timestamp("toegevoegd_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "audience_members_pk", columns: [t.audienceId, t.customerId] }),
+    index("audience_members_klant_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Uitleverlogboek: per kanaal per keer hoeveel erbij kwamen, hoeveel eraf
+ * gingen en wat er misging. Zonder dit logboek weet je bij een scheve
+ * Meta-doelgroep nooit of het aan de regel lag of aan de uitlevering.
+ */
+export const audienceSyncs = pgTable(
+  "audience_syncs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    audienceId: uuid("audience_id")
+      .notNull()
+      .references(() => audiences.id, { onDelete: "cascade" }),
+    /** 'resend' | 'meta' | 'google' | 'csv'. */
+    kanaal: text("kanaal").notNull(),
+    /** 'bezig' | 'klaar' | 'fout'. */
+    status: text("status").notNull().default("bezig"),
+    toegevoegd: integer("toegevoegd").notNull().default(0),
+    verwijderd: integer("verwijderd").notNull().default(0),
+    /** Overgeslagen wegens ontbrekende toestemming of onbruikbaar adres. */
+    overgeslagen: integer("overgeslagen").notNull().default(0),
+    fout: text("fout").notNull().default(""),
+    externId: text("extern_id").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audience_syncs_audience_idx").on(t.audienceId, t.createdAt)]
 );

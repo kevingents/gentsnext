@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { createStockNotification } from "@/lib/stock-notify";
+import { recordEvents } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +28,22 @@ export async function POST(req: Request) {
     color: String(body.color || ""),
   });
   if (!res.ok) return NextResponse.json(res, { status: 400 });
+
+  // `stock_notify` stond al jaren in de toegestane lijst maar werd NERGENS
+  // gevuurd — het sterkste vraagsignaal dat we hebben (klant wil dit artikel,
+  // in deze maat, en laat er zijn adres voor achter) werd dus nooit geteld.
+  // Server-side, zodat het ook telt bij wie analytics weigerde: dit is de
+  // registratie van een aanvraag, geen gedragsmeting.
+  recordEvents([
+    {
+      sessionId: "server",
+      type: "stock_notify",
+      path: "/api/stock-notify",
+      handle: String(body.productHandle || ""),
+      bron: "server",
+      props: { sku: String(body.sku || ""), size: String(body.size || ""), kanaal: String(body.channel || "email") },
+    },
+  ]).catch(() => {});
+
   return NextResponse.json({ ok: true });
 }

@@ -17,6 +17,7 @@ import {
   returnLines,
 } from "@/db/schema";
 import { getGiftcardsForCustomer } from "@/lib/giftcards";
+import { koppelDevice, synchroniseerKlantIdentiteiten } from "@/lib/identity";
 import { creditOrderLoyalty, reverseOrderLoyalty, redeemableBalance, pendingBalance } from "@/lib/loyalty-claim";
 import { listStoreBuysForProfileCore } from "@/lib/pos-sales-core";
 import { mediaByHandle, mediaByArticleCode } from "@/lib/order-media";
@@ -260,6 +261,19 @@ export async function createSession(customerId: string): Promise<void> {
     path: "/",
     maxAge: SESSION_DAYS * 86400,
   });
+
+  // Inloggen is hét moment waarop een anoniem apparaat een naam krijgt. Koppel
+  // het device en kleur zijn verleden in — juist de oriëntatiesessie vóór het
+  // inloggen (welke pakken bekeken, waarop gezocht) is het interessantst, en
+  // die zou anders voorgoed anoniem blijven. Non-fataal: een mislukte koppeling
+  // mag nooit een login blokkeren.
+  try {
+    const sid = jar.get("gents-sid")?.value;
+    if (sid) await koppelDevice(customerId, decodeURIComponent(sid), "login");
+    await synchroniseerKlantIdentiteiten(customerId, "login");
+  } catch (e) {
+    console.warn("[account] device koppelen mislukt:", e instanceof Error ? e.message : e);
+  }
 }
 
 export async function logout(): Promise<void> {

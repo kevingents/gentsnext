@@ -47,6 +47,18 @@ export function LookDetail({
   const t = useT();
   const [picked, setPicked] = useState<Record<number, string>>({});
   const [added, setAdded] = useState<Record<number, boolean>>({});
+
+  // Een look is een productLIJST: hij hoort in GA4 als view_item_list, met de
+  // look als lijstnaam. Zo wordt zichtbaar wat looks daadwerkelijk opleveren —
+  // tot nu toe telde alleen het toevoegen aan de wagen, dus een look die veel
+  // bekeken werd maar niets opleverde was niet te onderscheiden van een look
+  // die niemand zag.
+  useEffect(() => {
+    track("look_bekeken", {
+      handle: look.slug,
+      props: { listId: `look:${look.slug}`, listName: look.title || look.slug },
+    });
+  }, [look.slug, look.title]);
   const [colorSel, setColorSel] = useState<Record<number, string>>({});
   const [sizeDrawer, setSizeDrawer] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<LightboxState>(null);
@@ -122,7 +134,10 @@ export function LookDetail({
       { quiet: true },
     );
     setAdded((p) => ({ ...p, [i]: true }));
-    track("add_to_cart", { handle, props: { fromLook: look.slug } });
+    // Géén tweede add_to_cart hier: cart.add() vuurt hem al, mét bedrag. Dit
+    // event stond er ooit náást, waardoor elke toevoeging vanuit een look
+    // dubbel telde — één keer met waarde en één keer zonder, wat de
+    // wagenwaarde in de funnel structureel verlaagde.
     setTimeout(() => setAdded((p) => ({ ...p, [i]: false })), 1800);
   }
 
