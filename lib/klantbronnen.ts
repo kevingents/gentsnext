@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { customers, externeRetouren } from "@/db/schema";
+import { customers, externeRetouren, mailEngagement } from "@/db/schema";
 import { koppelIdentiteit } from "@/lib/identity";
 
 /**
@@ -141,4 +141,89 @@ export async function haalReturnistaRetouren(dagen = 180): Promise<{ opgehaald: 
     .returning({ id: externeRetouren.id });
 
   return { opgehaald: data.retouren.length, nieuw: uit.length };
+}
+
+/* ────────────────────────────── Spotler ─────────────────────────────────── */
+
+/**
+ * Contacten en hun toestemmingsstand uit Spotler.
+ *
+ * Dit is de waardevolste informatie die we misten. Voor "mag ik deze klant
+ * mailen" leunden we op `newsletter_subscribers` (drie rijen) en op een
+ * opt-in-vlag die uit de Shopify-import kwam. Spotler is de plek waar de klant
+ * daadwerkelijk op "uitschrijven" klikt — dat is de enige stand die telt, en we
+ * kenden hem niet.
+ *
+ * Over de open- en klikcijfers ben ik eerlijk: die staan NIET in de
+ * gedocumenteerde REST-API per contact. Veel MailPlus-inrichtingen zetten ze
+ * wel als custom contact-property; de storegents-kant mapt een reeks
+ * waarschijnlijke veldnamen en geeft daarnaast terug wélke velden dit account
+ * per contact bijhoudt. Levert dat niets op, dan blijven de tellers 0 en zegt
+ * `veldnamen` waarom — beter dan een koppeling die stil nullen produceert en
+ * eruitziet alsof niemand ooit een mail opent.
+ */
+export async function haalSpotlerContacten(maxPaginas = 20): Promise<{
+  opgehaald: number;
+  afgekapt: boolean;
+  veldnamen: string[];
+  metEngagement: number;
+  gekoppeld: number;
+}> {
+  const data = await haal<{
+    aantal: number;
+    afgekapt: boolean;
+    veldnamen: string[];
+    contacten: {
+      email: string; afgemeld: boolean;
+      verstuurd: number; geopend: number; geklikt: number; laatstGeopend: string;
+    }[];
+  }>("spotler", { maxPaginas: String(maxPaginas) });
+
+  if (!data.contacten.length) {
+    return { opgehaald: 0, afgekapt: data.afgekapt, veldnamen: data.veldnamen, metEngagement: 0, gekoppeld: 0 };
+  }
+  const db = getDb();
+
+  const rijen = data.contacten.map((c) => ({
+    email: c.email,
+    bron: "spotler",
+    verstuurd: Math.max(0, Math.round(c.verstuurd || 0)),
+    geopend: Math.max(0, Math.round(c.geopend || 0)),
+    geklikt: Math.max(0, Math.round(c.geklikt || 0)),
+    afgemeld: Boolean(c.afgemeld),
+    laatstGeopend: c.laatstGeopend ? new Date(c.laatstGeopend) : null,
+  }));
+
+  await db
+    .insert(mailEngagement)
+    .values(rijen)
+    .onConflictDoUpdate({
+      target: mailEngagement.email,
+      set: {
+        verstuurd: sql`greatest(${mailEngagement.verstuurd}, excluded.verstuurd)`,
+        geopend: sql`greatest(${mailEngagement.geopend}, excluded.geopend)`,
+        geklikt: sql`greatest(${mailEngagement.geklikt}, excluded.geklikt)`,
+        // De afmelding is de enige waarde die MAG terugvallen naar false: een
+        // klant kan zich opnieuw inschrijven, en dan is de nieuwe stand leidend.
+        afgemeld: sql`excluded.afgemeld`,
+        laatstGeopend: sql`greatest(${mailEngagement.laatstGeopend}, excluded.laatst_geopend)`,
+        bijgewerktOp: sql`now()`,
+      },
+    });
+
+  // Klant-id's in één statement koppelen: per adres een losse query zou bij
+  // tienduizenden contacten tienduizenden roundtrips kosten.
+  const gekoppeld = await db.execute(sql`
+    update ${mailEngagement} m set customer_id = c.id
+    from ${customers} c
+    where lower(c.email) = m.email and m.customer_id is null
+  `);
+
+  return {
+    opgehaald: data.contacten.length,
+    afgekapt: data.afgekapt,
+    veldnamen: data.veldnamen,
+    metEngagement: rijen.filter((r) => r.verstuurd > 0 || r.geopend > 0).length,
+    gekoppeld: Number((gekoppeld as { rowCount?: number }).rowCount ?? 0),
+  };
 }

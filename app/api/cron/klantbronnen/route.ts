@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { cronSecretOk } from "@/lib/cron-auth";
-import { bronnenGeconfigureerd, haalReturnistaRetouren, koppelSrsKlantnummers } from "@/lib/klantbronnen";
+import {
+  bronnenGeconfigureerd,
+  haalReturnistaRetouren,
+  haalSpotlerContacten,
+  koppelSrsKlantnummers,
+} from "@/lib/klantbronnen";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -40,6 +45,16 @@ export async function GET(req: Request) {
     uit.retouren = await haalReturnistaRetouren(dagen);
   } catch (e) {
     uit.retouren = { fout: (e as Error).message };
+  }
+  try {
+    // `veldnamen` komt bewust mee in het antwoord: per-contact open- en
+    // klikcijfers staan niet in de gedocumenteerde Spotler-API, en of dit
+    // account ze als custom property bijhoudt zie je pas bij de eerste échte
+    // call. Zo vertelt de eerste run zelf wat er beschikbaar is, in plaats van
+    // stil nullen te produceren.
+    uit.spotler = await haalSpotlerContacten();
+  } catch (e) {
+    uit.spotler = { fout: (e as Error).message };
   }
   if (metSrs) {
     try {
