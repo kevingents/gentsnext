@@ -1632,3 +1632,64 @@ export const exactState = pgTable("exact_state", {
   value: jsonb("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ── Loyalty-core: kassa-spaarpunten (verhuisd uit Vercel Blob, aug 2026) ──────
+   Vervangt de storegents-blob admin/loyalty-core.json (saldo + mutaties per
+   klant, MAX 500 mutaties → historie werd afgekapt; mutateJsonBlob = last-
+   writer-wins → gelijktijdige boekingen konden elkaar overschrijven). Dit is de
+   belangrijkste GELD-store van de kassa: hier telt élke mutatie.
+
+   Sleutel = het kassa-klant-id zoals storegents het aanlevert (TEXT): meestal
+   het numerieke SRS-klantnummer, soms een gents.nl-klant-uuid. Bewust GEEN FK
+   naar `customers` — de kassa kent klanten die (nog) geen gents.nl-account
+   hebben; unificatie kan later via customers.srsCustomerId. Dit grootboek staat
+   dus NAAST loyaltyEvents (dat is het gents.nl-web-spaarprogramma op
+   customers.id); samenvoegen is een aparte stap.
+
+   Saldo-consistentie: het saldo staat gematerialiseerd op loyalty_accounts en
+   wordt SAMEN met de ledger-insert gemuteerd in ÉÉN data-modifying-CTE-statement
+   (zie lib/loyalty-core.ts). Eén statement = één impliciete transactie, ook over
+   de neon-http-driver (die kent geen multi-statement-transacties). De ledger is
+   append-only (geen cap) en blijft de audit-bron; NB: saldo ≠ SUM(ledger) is
+   mogelijk door de 0-vloer (blob-pariteit: saldo kan nooit negatief) en doordat
+   de blob-backfill alleen de laatste ≤500 mutaties per klant heeft. */
+export const loyaltyAccounts = pgTable(
+  "loyalty_accounts",
+  {
+    /** Kassa-klant-id (SRS-klantnummer of gents.nl-uuid) — zoals storegents 'm aanlevert. */
+    customerId: text("customer_id").primaryKey(),
+    name: text("name").notNull().default(""),
+    balance: integer("balance").notNull().default(0),
+    /** Gezet zodra de blob-baseline voor dit account is bijgeteld — maakt de
+     *  backfill idempotent én race-veilig (tweede backfill telt niet dubbel). */
+    backfilledAt: timestamp("backfilled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  }
+);
+
+export const loyaltyMutations = pgTable(
+  "loyalty_mutations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: text("customer_id").notNull(),
+    /** Punten-delta: positief = verdiend, negatief = ingewisseld/retour/terugdraai. */
+    delta: integer("delta").notNull(),
+    reason: text("reason").notNull().default(""),
+    /** Referentie naar de kassa-bon (sale-id); leeg bij handmatige correcties. */
+    saleId: text("sale_id").notNull().default(""),
+    store: text("store").notNull().default(""),
+    actor: text("actor").notNull().default(""),
+    /** Idempotentie-sleutel: met saleId = `<customerId>|<saleId>|<reason>` (zelfde
+     *  dedup als de blob: één earn/inwissel/terugdraai per bon per reden); zonder
+     *  saleId = het gegenereerde mutatie-id (correcties mogen altijd); backfill
+     *  zonder saleId = `blob:<mutatie-id>`. Herhaalde POST boekt nooit dubbel. */
+    mutationKey: text("mutation_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("loyalty_mutations_key_uq").on(t.mutationKey),
+    index("loyalty_mutations_customer_idx").on(t.customerId),
+    index("loyalty_mutations_sale_idx").on(t.saleId),
+  ]
+);
