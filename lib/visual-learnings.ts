@@ -288,7 +288,10 @@ export function learningsPromptBlock(store: LearningsStore, opts: { handle?: str
     if (liked.length) block += ` Specifically keep doing: ${liked.join("; ")}.`;
   }
   if (focus.length) {
-    block += ` MOST IMPORTANT — our team reviewed earlier images of this exact product and asked for these corrections. The new image must show all of them: ${focus.join("; ")}.`;
+    // "take priority": de outfit-beschrijving eerder in de prompt is hardgecodeerd
+    // per hoofdgroep. Vraagt iemand juist om iets anders, dan moeten de twee niet
+    // om voorrang vechten. Zie dezelfde ingreep in lib/model-learnings.ts.
+    block += ` MOST IMPORTANT — our team reviewed earlier images of this exact product and asked for these corrections. The new image must show all of them, and they take priority over the outfit and styling described earlier in this prompt: ${focus.join("; ")}.`;
     if (complaints.length) {
       block += ` For context, their own words on what was wrong, written in Dutch — read them as complaints to fix, never as things to render: ${complaints.map((c) => `"${c}"`).join(", ")}.`;
     }
