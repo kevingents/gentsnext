@@ -30,16 +30,6 @@ function Dot() {
   );
 }
 
-/** Belletje — signaleert de terug-op-voorraad-tip. */
-function BellIcon({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-    </svg>
-  );
-}
-
 /** Winkelpui — omnichannel-voorraad (19 winkels). */
 function StoreIcon({ className }: { className?: string }) {
   return (
@@ -173,27 +163,14 @@ export function BuyBox({
     () => active?.sizes.find((s) => s.size === size) ?? null,
     [active, size]
   );
-  // Omnichannel-USP: aantal winkels met voorraad over ALLE maten van deze kleur.
-  // Bewust niet per gekozen maat: het kader hieronder rendert alleen zónder
-  // maatkeuze (daarna neemt "Passen & afhalen" het over), dus een per-maat-tak
-  // hier was dode code.
+  // Aantal winkels met voorraad over ALLE maten van deze kleur. Alleen nog nodig
+  // om te weten óf de omnichannel-boodschap überhaupt geldt: "Passen & afhalen"
+  // onder de bestelknop vertelt het verhaal per gekozen maat.
   const storeCount = useMemo(() => {
     const set = new Set<string>();
     for (const s of active?.sizes ?? []) for (const b of s.branches ?? []) if (b.qty > 0) set.add(b.store);
     return set.size;
   }, [active]);
-  // Deze maten worden ná hydratie automatisch voorgeselecteerd (één maat, of de
-  // opgeslagen maat van de klant). Het winkelkader zou dan server-side gerenderd
-  // worden en client-side meteen weer verdwijnen — een zichtbare flits plus een
-  // layout-sprong. Server en client kunnen dit allebei uit de props afleiden,
-  // dus verbergen we het kader dan van meet af aan.
-  const zalAutoSelecteren =
-    singleSize ||
-    Boolean(
-      mySize &&
-        active &&
-        active.sizes.some((s) => (!s.known || s.qty > 0) && (s.size === mySize || sizeRowLabel(s.size, hoofdgroep) === myBucket)),
-    );
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? `${t("product.from")} ` : "") + formatEuro(priceCents);
   // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
@@ -221,6 +198,37 @@ export function BuyBox({
       hoofdgroep,
     });
   }
+
+  // Ophalen in de winkel. Staat pal ónder de bestelknop: het is de tweede
+  // koopkeuze ("nu online, of vandaag passen?"), niet een voetnoot onder de
+  // betaaliconen. Als variabele omdat de uitverkocht-tak 'm op een andere plek
+  // zet.
+  const winkelBlok = (
+    <>
+      {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
+        <ClickAndCollect
+          // key per sku: maatwissel = verse component-staat (geen oude
+          // bevestiging/fout van een andere maat).
+          key={selectedSize.sku || selectedSize.size}
+          // Bij écht one-size geen maat meesturen — "Maat One ligt in 5 winkels"
+          // is onzin voor een accessoire; de generieke regel volstaat dan.
+          size={oneSize ? undefined : selectedSize.size}
+          branches={selectedSize.branches}
+          myStores={myStores}
+          reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
+        />
+      ) : null}
+      {/* De gekozen maat ligt in geen enkele winkel terwijl andere maten dat wél
+          doen: dan rendert ClickAndCollect niets en lost de omnichannel-boodschap
+          stil op. Zeg het dan gewoon. */}
+      {selectedSize && !oneSize && !soldOut && storeCount > 0 && !(selectedSize.branches ?? []).some((b) => b.qty > 0) ? (
+        <p className="mt-3 flex items-start gap-2 font-sans text-xs text-muted">
+          <StoreIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          {t("pdp.storeStock.sizeNone", { size: selectedSize.size })}
+        </p>
+      ) : null}
+    </>
+  );
 
   return (
     <div>
@@ -294,25 +302,6 @@ export function BuyBox({
           <span className="text-muted">{t("pdp.color.prefix")} </span>
           <span className="font-medium">{active.color}</span>
         </p>
-      ) : null}
-
-      {/* Omnichannel-USP: winkelvoorraad zichtbaar vanaf de eerste scroll —
-          maar ALLEEN zolang er nog geen maat gekozen is. Daarna vertelt de
-          "Passen & afhalen"-regel onder de bestelknop precies hetzelfde, en die
-          kun je ook aanklikken. Twee keer hetzelfde aantal winkels boven elkaar
-          las als twee verschillende feiten. Bij een maat die automatisch
-          voorgeselecteerd gaat worden renderen we 'm ook niet (zie
-          zalAutoSelecteren) — anders flitst het kader op en verdwijnt weer. */}
-      {hasStock && !oneSize && storeCount > 0 && !selectedSize && !zalAutoSelecteren ? (
-        <div className="mt-6 flex items-start gap-2.5 rounded-card border border-line px-3 py-2.5">
-          <StoreIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink" />
-          <p className="font-sans text-sm">
-            <span className="font-medium text-ink">
-              {t(storeCount === 1 ? "pdp.storeStock.anyOne" : "pdp.storeStock.any", { count: storeCount })}
-            </span>
-            <span className="block text-xs text-muted">{t("pdp.storeStock.hint")}</span>
-          </p>
-        </div>
       ) : null}
 
       {/* Maat — verborgen bij one-size (niets te kiezen). */}
@@ -412,13 +401,6 @@ export function BuyBox({
             )}
           </p>
         ) : null}
-        {/* Uitverkochte-maat-hint: maakt de terug-op-voorraad-tip vindbaar. */}
-        {hasStock && !oneSize && !soldOut && active && active.sizes.some((s) => s.known && s.qty <= 0) ? (
-          <p className="mt-2 flex items-center gap-1.5 font-sans text-xs text-muted">
-            <BellIcon className="h-3 w-3 shrink-0" />
-            {t("pdp.size.soldoutRowHint")}
-          </p>
-        ) : null}
         {/* Pasvorm-noot — pal onder de maatkiezer, op het beslismoment. */}
         {fitNote ? (
           <p className="mt-2 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
@@ -472,6 +454,7 @@ export function BuyBox({
               variant="block"
             />
           ) : null}
+          {winkelBlok}
         </div>
       ) : (
         <>
@@ -480,12 +463,27 @@ export function BuyBox({
               type="button"
               onClick={addToCart}
               disabled={!size || soldOut}
-              className="btn-primary w-full"
+              className="btn-primary w-full !px-4 sm:!px-6"
             >
-              {!size ? t("pdp.cta.chooseSize") : soldOut ? t("pdp.button.sold") : oneSize ? t("pdp.cta.addToCart") : t("pdp.cta.addToCartWithSize", { size })}
+              {!size ? (
+                t("pdp.cta.chooseSize")
+              ) : soldOut ? (
+                t("pdp.button.sold")
+              ) : oneSize ? (
+                t("pdp.cta.addToCart")
+              ) : (
+                <>
+                  {/* Op smalle schermen zonder maat-achtervoegsel: "In winkelwagen
+                      — maat XL7 43/44" paste niet op één regel. De gekozen maat
+                      licht vlak hierboven al op in de maatkiezer. */}
+                  <span className="sm:hidden">{t("pdp.cta.addToCart")}</span>
+                  <span className="hidden sm:inline">{t("pdp.cta.addToCartWithSize", { size })}</span>
+                </>
+              )}
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
+          {winkelBlok}
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted">
             <span>{t("pdp.payment.label")}</span>
             {["iDEAL", "Visa", "Mastercard", "Bancontact", "Apple Pay"].map((m) => (
@@ -494,31 +492,6 @@ export function BuyBox({
           </div>
         </>
       )}
-
-      {/* Ophalen in de winkel — secundaire optie, ónder de bestelknop. Met een
-          gekozen maat (sku) kan de klant er ook "reserveer om te passen". */}
-      {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
-        <ClickAndCollect
-          // key per sku: maatwissel = verse component-staat (geen oude
-          // bevestiging/fout van een andere maat).
-          key={selectedSize.sku || selectedSize.size}
-          // Bij écht one-size geen maat meesturen — "Maat One ligt in 5 winkels"
-          // is onzin voor een accessoire; de generieke regel volstaat dan.
-          size={oneSize ? undefined : selectedSize.size}
-          branches={selectedSize.branches}
-          myStores={myStores}
-          reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
-        />
-      ) : null}
-      {/* De gekozen maat ligt in geen enkele winkel terwijl andere maten dat wél
-          doen: dan verdween hierboven het winkelkader en rendert ClickAndCollect
-          niets — de omnichannel-boodschap loste stil op. Zeg het dan gewoon. */}
-      {selectedSize && !oneSize && !soldOut && storeCount > 0 && !(selectedSize.branches ?? []).some((b) => b.qty > 0) ? (
-        <p className="mt-3 flex items-start gap-2 font-sans text-xs text-muted">
-          <StoreIcon className="mt-0.5 h-4 w-4 shrink-0" />
-          {t("pdp.storeStock.sizeNone", { size: selectedSize.size })}
-        </p>
-      ) : null}
 
       {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is
           én de footer nog niet in beeld is (anders blijft de onderkant bedekt). */}

@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { DEFAULT_SYNONYMS } from "@/lib/search-helpers";
+import { DEFAULT_PAYMENT_TOP, type PaymentTopConfig } from "@/lib/payment-methods";
 
 /**
  * Centrale, in de backend instelbare configuratie. Eén bron van waarheid
@@ -250,6 +251,12 @@ export type Settings = {
    * Env OPS_ALERT_EMAIL is alleen de initiële default.
    */
   alertEmails: string[];
+  /**
+   * Betaalkeuze op de afrekenpagina: welke methoden per land als knop bovenaan
+   * staan en hoeveel dat er zijn. Een A/B op die volgorde loopt niet hier maar
+   * via de experimenten-rail (lib/experiments, override `betaalmethoden`).
+   */
+  paymentTop: PaymentTopConfig;
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -385,6 +392,7 @@ export const DEFAULT_SETTINGS: Settings = {
     .split(",")
     .map((a) => a.trim())
     .filter(Boolean),
+  paymentTop: DEFAULT_PAYMENT_TOP,
 };
 
 let _cache: Settings | null = null;
@@ -427,6 +435,14 @@ export async function getSettings(): Promise<Settings> {
          en mag dus niet stil terugvallen op de env-default; alleen als het veld
          nooit gezet is telt die default nog. */
       alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
+      paymentTop: {
+        ...DEFAULT_SETTINGS.paymentTop,
+        ...(stored.paymentTop || {}),
+        // De landenlijst is een VERVANGING, geen samenvoeging: een land dat in de
+        // tool weggehaald is moet ook echt weg zijn en niet uit de code-default
+        // terugkomen. Alleen als er nog nooit iets is ingesteld valt hij terug.
+        topByCountry: stored.paymentTop?.topByCountry ?? DEFAULT_SETTINGS.paymentTop.topByCountry,
+      },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

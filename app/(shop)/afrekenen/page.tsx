@@ -10,8 +10,10 @@ import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
 import { huidigeAttributie } from "@/lib/attributie-client";
+import { TrackAb } from "@/components/analytics/track-ab";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
 import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
+import { splitMethods, type PaymentChoice } from "@/lib/payment-methods";
 
 type Field = {
   name: string;
@@ -137,18 +139,41 @@ function CheckoutForm() {
     track("checkout_stap", { props: { stap: "gegevens" } });
   }, [cart.hydrated, cart.lines.length, cart.subtotalCents, cart.count]);
 
-  // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm).
+  // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm). Alleen de
+  // kopgroep krijgt een knop; payMethod "" betekent "geen methode meesturen" en
+  // dát is precies de Mollie-pagina met álle methoden — zie "Overige" hieronder.
   type PayMethod = { id: string; description: string; image: string };
-  const [methods, setMethods] = useState<PayMethod[]>([]);
+  const [pay, setPay] = useState<PaymentChoice>({ methods: [], top: [], maxVisible: 3, ab: [] });
   const [payMethod, setPayMethod] = useState("");
+  // Heeft de klant zelf een keuze gemaakt? Zo niet, dan mag een landwissel de
+  // voorselectie nog verzetten (BE → Bancontact); daarna nooit meer.
+  const payTouched = useRef(false);
+  // De kopgroep hangt aan het BEZORGLAND, en een lopend experiment kan de
+  // volgorde overschrijven. Beide weet alleen de server (instellingen + de
+  // ab-cookie), dus we halen de uitkomst op in plaats van 'm hier na te rekenen.
   useEffect(() => {
     let active = true;
-    fetch("/api/payment-methods")
+    fetch(`/api/payment-methods?land=${encodeURIComponent(country)}`)
       .then((r) => r.json())
-      .then((d) => { if (active) { const ms: PayMethod[] = d.methods || []; setMethods(ms); setPayMethod((cur) => cur || ms[0]?.id || ""); } })
+      .then((d) => { if (active && d?.ok !== false) setPay(d as PaymentChoice); })
       .catch(() => {});
     return () => { active = false; };
-  }, []);
+  }, [country]);
+
+  const methods = pay.methods;
+  const { visible: payVisible, rest: payRest } = useMemo(
+    () => splitMethods(pay.methods, pay.top, pay.maxVisible),
+    [pay],
+  );
+
+  // Voorselectie = de eerste knop van de kopgroep, zolang de klant zelf nog niets
+  // koos. Zonder dit stond de keuze op de eerste methode die Mollie toevallig
+  // teruggaf, wat in België iDEAL kon zijn.
+  useEffect(() => {
+    if (payTouched.current) return;
+    setPayMethod(payVisible[0]?.id || "");
+  }, [payVisible]);
+
 
   const [delivery, setDelivery] = useState<"standard" | "express">("standard");
   const [expressSurcharge, setExpressSurcharge] = useState(0);
@@ -495,7 +520,12 @@ function CheckoutForm() {
     // afhaak in de checkout per definitie onzichtbaar.
     track("betaalkeuze", {
       valueCents: payableCents,
-      props: { items: cart.lines.length, methode: pickupMode ? "pickup" : delivery, coupon: voucher?.code || "" },
+      props: {
+        items: cart.lines.length,
+        methode: pickupMode ? "pickup" : delivery,
+        coupon: voucher?.code || "",
+        betaalmethode: payMethod || "overig",
+      },
     });
     // Niet-voorgevinkte nieuwsbrief-opt-in (AVG): alleen bij expliciete keuze.
     if (newsletter && form.email) {
@@ -814,16 +844,22 @@ function CheckoutForm() {
             {t("checkout.back_to_details")}
           </button>
 
-          {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm. */}
-          {payableCents > 0 && methods.length ? (
+          {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm.
+              Alleen de kopgroep (per land instelbaar) krijgt een knop; al het
+              andere zit onder één regel "Overige betaalmethoden" die zónder
+              gekozen methode naar Mollie gaat — dáár staat de volledige lijst. */}
+          {payableCents > 0 && payVisible.length ? (
             <>
+              {/* Exposure pas hier: wie de betaalstap nooit haalde heeft de proef
+                  niet gezien en hoort niet in de noemer van de conversie. */}
+              {pay.ab.length ? <TrackAb assignments={pay.ab} /> : null}
               <p className="label-brand mt-4">{t("checkout.payment_method")}</p>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {methods.map((m) => (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {payVisible.map((m) => (
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setPayMethod(m.id)}
+                    onClick={() => { payTouched.current = true; setPayMethod(m.id); }}
                     aria-pressed={payMethod === m.id}
                     className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-left font-sans text-sm transition-colors ${payMethod === m.id ? "border-ink bg-surface" : "border-line hover:border-ink"}`}
                   >
@@ -835,6 +871,26 @@ function CheckoutForm() {
                   </button>
                 ))}
               </div>
+              {payRest.length ? (
+                <button
+                  type="button"
+                  onClick={() => { payTouched.current = true; setPayMethod(""); }}
+                  aria-pressed={payMethod === ""}
+                  className={`mt-2 flex w-full items-center gap-2.5 rounded-card border px-3 py-2.5 text-left font-sans text-sm transition-colors ${payMethod === "" ? "border-ink bg-surface" : "border-line hover:border-ink"}`}
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+                    <circle cx="5" cy="12" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="19" cy="12" r="1.6" />
+                  </svg>
+                  <span className="min-w-0">
+                    <span className="block">{t("checkout.payment_other")}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {payRest.map((m) => m.description).join(" · ")}
+                    </span>
+                  </span>
+                </button>
+              ) : null}
             </>
           ) : null}
 
@@ -907,19 +963,36 @@ function CheckoutForm() {
             </div>
           ) : null}
 
-          <button type="submit" disabled={busy} className="btn-primary mt-4 w-full">
-            {busy
-              ? t("common.processing")
-              : payableCents === 0
-                ? t("checkout.complete_with_giftcard")
-                : `${t("checkout.pay_securely")} ${formatEuro(payableCents)}`}
+          {/* Slotje = "veilig", draaiend rondje = "er gebeurt iets". Zonder die
+              tweede stond de knop na de klik seconden lang stil terwijl de order
+              werd aangemaakt, en klikten mensen nog eens. */}
+          <button type="submit" disabled={busy} aria-busy={busy} className="btn-primary mt-4 w-full">
+            {busy ? (
+              <>
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 animate-spin" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" opacity="0.3" />
+                  <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+                {t("common.processing")}
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <rect x="4.5" y="10.5" width="15" height="10" rx="1.5" />
+                  <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" strokeLinecap="round" />
+                </svg>
+                {payableCents === 0
+                  ? t("checkout.complete_with_giftcard")
+                  : `${t("checkout.pay_securely")} ${formatEuro(payableCents)}`}
+              </>
+            )}
           </button>
           {/* Geen FooterPayments-strip hier: die chips zijn wit-op-wit buiten de
               donkere footer, en de gekozen methode staat al in het betaalgrid. */}
           <p className="mt-3 font-sans text-xs text-muted">
             {payableCents === 0
               ? t("checkout.giftcard_covers_full")
-              : `${t("checkout.payment_via")} ${methods.find((m) => m.id === payMethod)?.description || "Mollie"} · ${t("checkout.payment_note")}`}
+              : `${t("checkout.payment_via")} ${payMethod ? methods.find((m) => m.id === payMethod)?.description || "Mollie" : t("checkout.payment_other_via")} · ${t("checkout.payment_note")}`}
           </p>
           </>
           )}

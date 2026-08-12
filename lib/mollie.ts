@@ -8,6 +8,8 @@
  * als string met exact 2 decimalen.
  */
 
+import { MOLLIE_METHOD_IDS } from "@/lib/payment-methods";
+
 const API = "https://api.mollie.com/v2";
 
 /**
@@ -188,11 +190,9 @@ export async function createMolliePayment(input: {
 export type MollieMethod = { id: string; description: string; image: string };
 
 // Bekende Mollie-method-id's — we geven alleen een gevalideerde method door.
-const KNOWN_METHODS = new Set([
-  "ideal", "creditcard", "paypal", "bancontact", "banktransfer", "kbc", "belfius",
-  "eps", "przelewy24", "applepay", "giftcard", "in3", "klarna", "billie",
-  "klarnapaylater", "klarnasliceit", "paysafecard", "sofort", "trustly",
-]);
+// De lijst zelf staat in lib/payment-methods, want de instellingen-UI moet
+// dezelfde id's accepteren als wij hier doorlaten.
+const KNOWN_METHODS = new Set<string>(MOLLIE_METHOD_IDS);
 export function isKnownMethod(m: string | undefined | null): boolean {
   return Boolean(m) && KNOWN_METHODS.has(String(m));
 }

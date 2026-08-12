@@ -47,6 +47,12 @@ export type AbOverrides = {
   /** Vervangt de hele USP-strip. */
   usps?: string[];
   /**
+   * Andere volgorde van de betaalmethoden in de checkout. Per landcode een
+   * geordend lijstje Mollie-id's (of "*" voor alle landen); wat de variant niet
+   * noemt houdt de ingestelde volgorde. Zie lib/payment-methods.
+   */
+  betaalmethoden?: { topByCountry?: Record<string, string[]>; maxVisible?: number };
+  /**
    * Variant heeft een eigen homepage-indeling. Die leeft als apart document
    * (content:homepage:exp:<id>:<variant>) en wordt bewerkt met dezelfde
    * editor als de live indeling — geen tweede bewerkmodel.

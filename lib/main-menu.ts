@@ -131,3 +131,17 @@ export const MAIN_MENU: MenuItem[] = [
   { label: "Looks", href: "/looks" },
   { label: "Sale", href: "/collections/sale" },
 ];
+
+/**
+ * De servicelinks ónderin de mobiele menu-drawer. Stonden hardgecodeerd in de
+ * drawer; nu content (content:menu-service) zodat ze zonder deploy te wijzigen
+ * zijn. "Favorieten" hoort hier niet meer bij: dat is sinds de nieuwe mobiele
+ * header een eigen icoon in de balk, en twee ingangen naar dezelfde pagina las
+ * als twee verschillende dingen.
+ */
+export const MENU_SERVICE_LINKS: MenuLink[] = [
+  { label: "Account", href: "/account" },
+  { label: "Klantenservice", href: "/pages/service" },
+  { label: "Onze winkels", href: "/pages/winkels" },
+  { label: "Maatadvies", href: "/maatadvies" },
+];
