@@ -168,6 +168,22 @@ export type Settings = {
      * de volledige historie alsnog wilt uitkeren.
      */
     backfillLookbackDays: number;
+    /*
+     * Eenmalige actie-bonussen die RETOUREN moeten terugdringen. Alle drie zorgen
+     * dat we (en de klant zelf) weten wat er past: een bewaard maatprofiel, de
+     * spaarpas in Wallet en een compleet profiel. Eén keer per klant, direct
+     * besteedbaar — er hangt geen aankoop aan die teruggestuurd kan worden, dus
+     * geen vesting. 0 = die bonus staat uit; de taak verdwijnt dan uit de
+     * klant-UI (bestaande toekenningen blijven staan).
+     */
+    bonusPoints: {
+      /** Maatprofiel bewaard — via /maatadvies of het tabblad Mijn maten. */
+      sizeAdvice: number;
+      /** Spaarpas écht toegevoegd aan Apple Wallet (device-registratie). */
+      walletPass: number;
+      /** Profiel compleet: leeftijd, kleuren, vaste winkel, gelegenheden. */
+      profileComplete: number;
+    };
   };
   /**
    * Terug-op-voorraad-meldingen: aan/uit + welke kanalen (mail/WhatsApp) mogen
@@ -330,6 +346,11 @@ export const DEFAULT_SETTINGS: Settings = {
     redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
     redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
     backfillLookbackDays: num(process.env.GENTS_LOYALTY_BACKFILL_LOOKBACK_DAYS, 30),
+    bonusPoints: {
+      sizeAdvice: num(process.env.GENTS_LOYALTY_BONUS_SIZE_ADVICE, 50),
+      walletPass: num(process.env.GENTS_LOYALTY_BONUS_WALLET, 50),
+      profileComplete: num(process.env.GENTS_LOYALTY_BONUS_PROFILE, 50),
+    },
   },
   stockNotifyConfig: {
     enabled: true,
@@ -372,6 +393,14 @@ export async function getSettings(): Promise<Settings> {
       giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
       tieredDiscount: { ...DEFAULT_SETTINGS.tieredDiscount, ...(stored.tieredDiscount || {}) },
       returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
+      /* Twee niveaus diep: een opgeslagen loyaltyConfig van vóór de actie-bonussen
+         heeft nog geen `bonusPoints`, en een ondiepe merge zou die dan op undefined
+         zetten — een klant kreeg dan stil 0 punten voor z'n maatprofiel. */
+      loyaltyConfig: {
+        ...DEFAULT_SETTINGS.loyaltyConfig,
+        ...(stored.loyaltyConfig || {}),
+        bonusPoints: { ...DEFAULT_SETTINGS.loyaltyConfig.bonusPoints, ...(stored.loyaltyConfig?.bonusPoints || {}) },
+      },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },

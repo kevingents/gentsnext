@@ -1,9 +1,29 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { walletAppleRegistrations } from "@/db/schema";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
 import { getNewArrivalsInSize, getRecommendedFromHistory } from "@/lib/catalog";
 import { walletConfigured } from "@/lib/apple-wallet";
+import { bonusTasks } from "@/lib/loyalty-bonus";
+import type { ProfilePreferences } from "@/lib/profiel-voorkeuren";
+import { getStores } from "@/lib/stores";
 import { ProfileClient } from "@/components/account/profile-client";
+
+/** Staat de spaarpas op minstens één toestel? serialNumber = het klant-id. */
+async function walletInstalled(customerId: string): Promise<boolean> {
+  try {
+    const rows = await getDb()
+      .select({ d: walletAppleRegistrations.deviceLibraryIdentifier })
+      .from(walletAppleRegistrations)
+      .where(eq(walletAppleRegistrations.serialNumber, customerId))
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +36,13 @@ export default async function AccountPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
 
-  const [data, newInSize, recommended] = await Promise.all([
+  const [data, newInSize, recommended, walletOnDevice] = await Promise.all([
     getProfileData(customer.id, customer.email),
     getNewArrivalsInSize(customer.sizeProfile, 4),
     getRecommendedFromHistory(customer.id, customer.sizeProfile, 4),
+    walletInstalled(customer.id),
   ]);
+  const bonussen = await bonusTasks(customer, walletOnDevice);
 
   // Serialiseer naar plain JSON (datums → ISO) voor de client component.
   const safe = JSON.parse(JSON.stringify({ ...data, newInSize, recommended }));
@@ -32,6 +54,7 @@ export default async function AccountPage() {
     phone: customer.phone,
     loyaltyPoints: data.pointsBalance,
     sizeProfile: (customer.sizeProfile ?? {}) as Record<string, string>,
+    preferences: (customer.preferences ?? {}) as ProfilePreferences,
     marketingOptIn: customer.marketingOptIn,
     // Het beheer zit in de portal; hier hangt er nog één ingang naartoe. Welke
     // pagina's iemand daar mag zien bepaalt de portal zelf, dus we hoeven hier
@@ -39,5 +62,13 @@ export default async function AccountPage() {
     isStaff: Boolean(customer.isAdmin),
   };
 
-  return <ProfileClient customer={safeCustomer} data={safe} walletEnabled={walletConfigured()} />;
+  return (
+    <ProfileClient
+      customer={safeCustomer}
+      data={safe}
+      walletEnabled={walletConfigured()}
+      bonuses={bonussen}
+      stores={getStores().map((s) => ({ pageHandle: s.pageHandle, title: s.title, city: s.city }))}
+    />
+  );
 }

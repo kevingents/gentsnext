@@ -115,7 +115,6 @@ export async function updatePosCustomer(customerId: string, input: { firstName?:
 }
 
 /* ── "Rond je profiel af voor +50 punten" ── */
-const PROFILE_BONUS_POINTS = 50;
 
 /** Geef een (gehasht opgeslagen) profiel-afrond-token uit voor de incentive-mail. */
 export async function issueProfileCompletionToken(customerId: string): Promise<string> {
@@ -125,7 +124,14 @@ export async function issueProfileCompletionToken(customerId: string): Promise<s
   return raw;
 }
 
-/** Verzilver het token: profiel bijwerken + éénmalig +50 punten (idempotent). */
+/**
+ * Verzilver het token: profiel bijwerken + éénmalig de profielbonus (idempotent).
+ *
+ * De toekenning zelf loopt via lib/loyalty-bonus, dezelfde route als het
+ * zelfservice-formulier op /account. Dat is nodig én bewust: anders kon dezelfde
+ * klant de bonus twee keer pakken (één keer via deze mail, één keer door z'n
+ * profiel in te vullen). Bedrag komt uit de instellingen, niet uit code.
+ */
 export async function redeemProfileCompletionBonus(
   rawToken: string,
   profile?: { firstName?: string; lastName?: string; phone?: string; sizeProfile?: Record<string, unknown> },
@@ -142,23 +148,24 @@ export async function redeemProfileCompletionBonus(
   if (profile?.sizeProfile && typeof profile.sizeProfile === "object") {
     patch.sizeProfile = { ...((c.sizeProfile as Record<string, unknown>) || {}), ...profile.sizeProfile };
   }
+  await db.update(customers).set(patch).where(eq(customers.id, c.id));
 
-  if (c.profileCompletionBonusClaimed) {
-    await db.update(customers).set(patch).where(eq(customers.id, c.id)); // wel profiel, geen dubbele bonus
-    return { ok: true, alreadyClaimed: true, customerId: c.id };
+  const { awardBonus, awardSizeAdviceBonusIfEarned, bonusPointsFor, markProfileBonusClaimed } =
+    await import("@/lib/loyalty-bonus");
+  const bonus = await awardBonus(c.id, "profiel");
+  if (bonus.awarded) {
+    /* Vulde hij hier ook z'n maten in? Dan heeft hij de maatprofiel-bonus óók
+       verdiend — anders moet hij daarvoor nóg een keer langs /account. */
+    const [na] = await db.select({ sizeProfile: customers.sizeProfile }).from(customers).where(eq(customers.id, c.id)).limit(1);
+    await awardSizeAdviceBonusIfEarned({ id: c.id, sizeProfile: na?.sizeProfile });
+    return { ok: true, points: bonus.points, customerId: c.id };
   }
-
-  await db.insert(loyaltyEvents).values({ customerId: c.id, points: PROFILE_BONUS_POINTS, reason: "Profiel afgerond", refType: "profile_completion" });
-  await db.update(customers).set({
-    ...patch,
-    loyaltyPoints: sql`${customers.loyaltyPoints} + ${PROFILE_BONUS_POINTS}`, // atomair (geen lost-update bij gelijktijdige claim)
-    profileCompletionBonusClaimed: true,
-    profileCompletionTokenHash: null,
-  }).where(eq(customers.id, c.id));
-  // Apple-Wallet pas verversen (best-effort). Dynamische import zodat de
-  // passkit-afhankelijkheid niet in de graph van deze brede kernmodule belandt.
-  try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(c.id); } catch { /* best-effort */ }
-  return { ok: true, points: PROFILE_BONUS_POINTS, customerId: c.id };
+  /* Geen uitbetaling: al gehad, óf de bonus staat op 0. Het token is hoe dan ook
+     verbruikt, maar de "al gehad"-vlag zetten we alleen als er iets te halen
+     viel — een tijdelijk uitgezette bonus mag hem niet voorgoed blokkeren. */
+  if ((await bonusPointsFor("profiel")) > 0) await markProfileBonusClaimed(c.id);
+  else await db.update(customers).set({ profileCompletionTokenHash: null }).where(eq(customers.id, c.id));
+  return { ok: true, alreadyClaimed: true, customerId: c.id };
 }
 
 /**
@@ -537,6 +544,35 @@ export async function updatePreference(customerId: string, key: string, value: s
       updatedAt: sql`now()`,
     })
     .where(eq(customers.id, customerId));
+}
+
+/**
+ * Meerdere voorkeuren in één keer bijwerken (het voorkeuren-formulier op
+ * /account). Merge op jsonb-niveau in de database zelf, zodat sleutels die dit
+ * formulier niet kent — of die een ander apparaat net zette — blijven staan;
+ * een lees-wijzig-schrijf ronde zou die stil overschrijven.
+ *
+ * Leegmaken doe je door de sleutel met een lege waarde mee te sturen ("" of
+ * []). Alle lezers behandelen leeg als "niet ingevuld", dus dat wist de
+ * voorkeur zonder dat we sleutels hoeven te verwijderen.
+ *
+ * Retourneert de NIEUWE voorkeuren, zodat de aanroeper meteen kan beoordelen of
+ * het profiel daarmee compleet is (scheelt een tweede leesronde).
+ */
+export async function mergePreferences(
+  customerId: string,
+  patch: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const db = getDb();
+  const [row] = await db
+    .update(customers)
+    .set({
+      preferences: sql`coalesce(${customers.preferences}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(customers.id, customerId))
+    .returning({ preferences: customers.preferences });
+  return (row?.preferences ?? {}) as Record<string, unknown>;
 }
 
 /* ── AVG: inzage & verwijdering ───────────────────────────────────────────── */

@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckIcon } from "@/components/icons";
 import { useT } from "@/components/i18n/locale-provider";
 import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
 import { PORTAL_URL } from "@/lib/portal";
+import { COLOR_FAMILIES } from "@/lib/colors";
+import {
+  AGE_RANGES,
+  SHOP_OCCASIONS,
+  ageRangeFromBirthDate,
+  profileChecklist,
+  type ProfilePreferences,
+} from "@/lib/profiel-voorkeuren";
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
@@ -33,9 +42,14 @@ type Address = {
 type Customer = {
   id: string; email: string; firstName: string; lastName: string; phone: string;
   loyaltyPoints: number; sizeProfile: Record<string, string>; marketingOptIn: boolean;
+  /** Stijlvoorkeuren (geboortedatum, kleuren, vaste winkel, gelegenheden). */
+  preferences: ProfilePreferences;
   /** Medewerker? Bepaalt alleen of we de ingang naar de portal tonen. */
   isStaff?: boolean;
 };
+/** Eenmalige puntenbonus per actie — de server bepaalt stand en bedrag. */
+export type BonusTask = { kind: "maatadvies" | "wallet" | "profiel"; points: number; done: boolean; earned: boolean };
+type StoreOption = { pageHandle: string; title: string; city: string };
 type ReturnRow = {
   id: string; orderNumber: string; status: string; method: "dhl" | "store"; refundType: "money" | "credit";
   itemsCents: number; shippingCostCents: number; refundedCents: number; creditCode: string;
@@ -78,7 +92,19 @@ const RET_STATUS_NL = RETURN_STATUS_NL;
 
 const NEXT_TIER = 500; // punten voor de volgende beloning
 
-export function ProfileClient({ customer, data, walletEnabled = false }: { customer: Customer; data: Data; walletEnabled?: boolean }) {
+export function ProfileClient({
+  customer,
+  data,
+  walletEnabled = false,
+  bonuses = [],
+  stores = [],
+}: {
+  customer: Customer;
+  data: Data;
+  walletEnabled?: boolean;
+  bonuses?: BonusTask[];
+  stores?: StoreOption[];
+}) {
   const t = useT();
   const [tab, setTab] = useState<TabKey>("overzicht");
   const name = customer.firstName || customer.email.split("@")[0];
@@ -129,13 +155,13 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
       </nav>
 
       <div className="mt-8">
-        {tab === "overzicht" && <Overzicht customer={customer} data={data} onTab={setTab} />}
+        {tab === "overzicht" && <Overzicht customer={customer} data={data} bonuses={bonuses} onTab={setTab} />}
         {tab === "bestellingen" && <BestellingenTab data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
-        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} />}
+        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} bonuses={bonuses} onTab={setTab} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
-        {tab === "gegevens" && <Gegevens customer={customer} />}
+        {tab === "gegevens" && <Gegevens customer={customer} stores={stores} />}
         {tab === "adressen" && <Adressen data={data} />}
         {tab === "vragen" && <SupportTickets />}
         {tab === "privacy" && <Privacy />}
@@ -144,8 +170,97 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
   );
 }
 
+/* ── Punten verdienen zonder te kopen ─────────────────────────────────────────
+   Drie eenmalige acties die een retour helpen voorkomen: je maten bewaren, je
+   pas in Wallet zetten en je profiel afmaken. Wat elke actie oplevert komt van
+   de server (instelbaar), dus hier staat nergens een hardgecodeerde 50. Een
+   bonus op 0 punten valt automatisch uit de lijst. */
+const BONUS_COPY: Record<BonusTask["kind"], { title: string; body: string; cta: string; tab: TabKey }> = {
+  maatadvies: { title: "account.bonus.size.title", body: "account.bonus.size.body", cta: "account.bonus.size.cta", tab: "maten" },
+  wallet: { title: "account.bonus.wallet.title", body: "account.bonus.wallet.body", cta: "account.bonus.wallet.cta", tab: "punten" },
+  profiel: { title: "account.bonus.profile.title", body: "account.bonus.profile.body", cta: "account.bonus.profile.cta", tab: "gegevens" },
+};
+
+function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[]; onTab: (t: TabKey) => void; compact?: boolean }) {
+  const t = useT();
+  const router = useRouter();
+  const [ophalen, setOphalen] = useState(false);
+  // Een bonus op 0 punten staat uit → helemaal niet tonen, ook niet als 'gedaan'.
+  const zichtbaar = bonuses.filter((b) => b.points > 0);
+  const open = zichtbaar.filter((b) => !b.done);
+  if (!zichtbaar.length) return null;
+  // Op het overzicht alleen tonen zolang er nog iets te halen is.
+  if (compact && !open.length) return null;
+  const lijst = compact ? open : zichtbaar;
+  const teHalen = open.reduce((n, b) => n + b.points, 0);
+  /* Deed de klant dit al vóórdat de bonus bestond? Dan is de voorwaarde gehaald
+     maar staat er nog niets in het grootboek — één knop haalt ze alsnog op. */
+  const klaarOmOpTeHalen = open.filter((b) => b.earned);
+
+  async function haalOp() {
+    setOphalen(true);
+    try {
+      await fetch("/api/account/punten-bonus", { method: "POST" });
+      router.refresh();
+    } finally {
+      setOphalen(false);
+    }
+  }
+
+  return (
+    <div className="border border-line p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="label-brand">{t("account.bonus.title")}</p>
+        {teHalen > 0 ? <p className="font-sans text-xs text-ink-soft">{t("account.bonus.toEarn", { n: teHalen })}</p> : null}
+      </div>
+      <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.bonus.intro")}</p>
+      {klaarOmOpTeHalen.length ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-line bg-surface p-4">
+          <p className="font-sans text-sm text-ink-soft">
+            {t("account.bonus.readyToClaim", { n: klaarOmOpTeHalen.reduce((n, b) => n + b.points, 0) })}
+          </p>
+          <button type="button" onClick={haalOp} disabled={ophalen} className="btn-primary shrink-0 !py-2 disabled:opacity-50">
+            {ophalen ? t("common.processing") : t("account.bonus.claim")}
+          </button>
+        </div>
+      ) : null}
+      <ul className="mt-4 divide-y divide-line border-t border-line">
+        {lijst.map((b) => {
+          const copy = BONUS_COPY[b.kind];
+          return (
+            <li key={b.kind} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <span
+                  aria-hidden
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                    b.done ? "border-success bg-success text-canvas" : "border-line text-transparent"
+                  }`}
+                >
+                  <CheckIcon className="h-3 w-3" />
+                </span>
+                <div className="min-w-0">
+                  <p className={`font-sans text-sm ${b.done ? "text-muted line-through" : "text-ink"}`}>{t(copy.title)}</p>
+                  <p className="mt-0.5 font-sans text-xs text-ink-soft">{b.done ? t("account.bonus.done") : t(copy.body)}</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className={`font-sans text-sm ${b.done ? "text-muted" : "text-ink"}`}>+{b.points}</span>
+                {b.done ? null : (
+                  <button type="button" onClick={() => onTab(copy.tab)} className="btn-ghost !py-1.5 !text-xs">
+                    {t(copy.cta)}
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /* ── Overzicht ────────────────────────────────────────────────────────────── */
-function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; onTab: (t: TabKey) => void }) {
+function Overzicht({ customer, data, bonuses, onTab }: { customer: Customer; data: Data; bonuses: BonusTask[]; onTab: (t: TabKey) => void }) {
   const t = useT();
   const totalOrders = data.onlineOrders.length + data.storeBuys.length;
   const toNext = Math.max(0, NEXT_TIER - data.pointsBalance);
@@ -157,6 +272,8 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
         <Stat label={t("account.overview.activeVouchers")} value={String(data.activeVouchers.length)} sub={t("account.overview.viewCredit")} onClick={() => onTab("vouchers")} />
         <Stat label={t("account.overview.purchases")} value={String(totalOrders)} sub={t("account.overview.onlinePlusStore")} onClick={() => onTab("bestellingen")} />
       </div>
+
+      <PuntenActies bonuses={bonuses} onTab={onTab} compact />
 
       <div>
         <p className="label-brand mb-3">{t("account.overview.quickNav")}</p>
@@ -414,8 +531,9 @@ function RedeemPoints({ available }: { available: number }) {
   );
 }
 
-function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean }) {
+function Punten({ data, walletEnabled, bonuses, onTab }: { data: Data; walletEnabled: boolean; bonuses: BonusTask[]; onTab: (t: TabKey) => void }) {
   const t = useT();
+  const walletBonus = bonuses.find((b) => b.kind === "wallet");
   return (
     <div className="space-y-6">
       <div className="border border-line p-6">
@@ -428,10 +546,16 @@ function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean })
         {walletEnabled && (
           <div className="mt-5">
             <AppleWalletButton />
-            <p className="mt-2 font-sans text-xs text-muted">{t("account.points.walletHint")}</p>
+            <p className="mt-2 font-sans text-xs text-muted">
+              {t("account.points.walletHint")}
+              {walletBonus && !walletBonus.done && walletBonus.points > 0
+                ? ` ${t("account.bonus.walletInline", { n: walletBonus.points })}`
+                : ""}
+            </p>
           </div>
         )}
       </div>
+      <PuntenActies bonuses={bonuses} onTab={onTab} />
       <RedeemPoints available={data.pointsAvailable} />
       {data.loyalty.length ? (
         <ul className="divide-y divide-line border-y border-line">
@@ -525,8 +649,10 @@ const SIZE_FIELDS: { key: string; label: string; placeholder: string }[] = [
 
 function Maten({ customer }: { customer: Customer }) {
   const t = useT();
+  const router = useRouter();
   const [size, setSize] = useState<Record<string, string>>(customer.sizeProfile || {});
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [bonus, setBonus] = useState(0);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -543,7 +669,13 @@ function Maten({ customer }: { customer: Customer }) {
         setState("error");
         return;
       }
+      const d = (await res.json().catch(() => ({}))) as { bonus?: { points: number } | null };
       setState("done");
+      if (d.bonus?.points) {
+        setBonus(d.bonus.points);
+        // Saldo, puntenhistorie en het takenlijstje komen van de server.
+        router.refresh();
+      }
       setTimeout(() => setState("idle"), 2500);
     } catch {
       setState("error");
@@ -556,6 +688,7 @@ function Maten({ customer }: { customer: Customer }) {
         {t("account.sizes.intro1")} <span className="text-ink">&ldquo;{t("plp.filters.shopMySize")}&rdquo;</span>.{" "}
         {t("account.sizes.intro2")}
       </p>
+      {bonus > 0 ? <BonusMelding points={bonus} /> : null}
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {SIZE_FIELDS.map((f) => (
           <label key={f.key} className="block">
@@ -653,19 +786,44 @@ function Privacy() {
 }
 
 /* ── Gegevens ─────────────────────────────────────────────────────────────── */
-function Gegevens({ customer }: { customer: Customer }) {
+function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOption[] }) {
   const t = useT();
+  const router = useRouter();
   const [form, setForm] = useState({
     firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone,
     marketingOptIn: customer.marketingOptIn,
   });
+  const [prefs, setPrefs] = useState<ProfilePreferences>({
+    birthDate: customer.preferences?.birthDate ?? "",
+    ageRange: customer.preferences?.ageRange ?? "",
+    favoriteColors: customer.preferences?.favoriteColors ?? [],
+    favoriteStore: customer.preferences?.favoriteStore ?? "",
+    occasions: customer.preferences?.occasions ?? [],
+    styleNote: customer.preferences?.styleNote ?? "",
+  });
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [bonus, setBonus] = useState(0);
+
+  // Live meelezende checklist — de klant ziet wat er nog mist vóór hij opslaat.
+  const checks = profileChecklist({ ...form, preferences: prefs });
+  const open = checks.filter((c) => !c.done).length;
+  // Geboortedatum ingevuld? Dan is de leeftijdsgroep afgeleid en niet los te kiezen.
+  const afgeleideGroep = prefs.birthDate ? ageRangeFromBirthDate(prefs.birthDate) : "";
+
+  const toggle = (veld: "favoriteColors" | "occasions", key: string) =>
+    setPrefs((p) => {
+      const huidig = p[veld] ?? [];
+      return { ...p, [veld]: huidig.includes(key) ? huidig.filter((k) => k !== key) : [...huidig, key] };
+    });
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setState("busy");
+    setBonus(0);
     // res.ok checken + netwerkfouten opvangen — geen vals "Opgeslagen" bij 4xx/5xx.
     try {
+      // Eerst de persoonsgegevens, dan de voorkeuren: de bonus-check bij het
+      // tweede verzoek ziet zo de zojuist opgeslagen naam en telefoon staan.
       const res = await fetch("/api/account/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -675,7 +833,23 @@ function Gegevens({ customer }: { customer: Customer }) {
         setState("error");
         return;
       }
+      const eerste = (await res.json().catch(() => ({}))) as { bonus?: { points: number } | null };
+      const res2 = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "preferences", preferences: prefs }),
+      });
+      if (!res2.ok) {
+        setState("error");
+        return;
+      }
+      const tweede = (await res2.json().catch(() => ({}))) as { bonus?: { points: number } | null };
+      const punten = eerste.bonus?.points || tweede.bonus?.points || 0;
       setState("done");
+      if (punten) {
+        setBonus(punten);
+        router.refresh();
+      }
       setTimeout(() => setState("idle"), 2500);
     } catch {
       setState("error");
@@ -684,6 +858,7 @@ function Gegevens({ customer }: { customer: Customer }) {
 
   return (
     <form onSubmit={save} className="max-w-xl space-y-4">
+      {bonus > 0 ? <BonusMelding points={bonus} /> : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="font-sans text-sm">{t("checkout.firstname")}</span>
@@ -706,6 +881,120 @@ function Gegevens({ customer }: { customer: Customer }) {
         <input type="checkbox" checked={form.marketingOptIn} onChange={(e) => setForm((p) => ({ ...p, marketingOptIn: e.target.checked }))} />
         <span className="font-sans text-sm">{t("account.details.marketingOptIn")}</span>
       </label>
+
+      {/* ── Voorkeuren ─────────────────────────────────────────────────────────
+          Hoe beter dit staat, hoe gerichter we tonen wat er in jouw maat, kleur
+          en winkel ligt — en hoe minder er terug hoeft. De nieuwsbrief-opt-in
+          hierboven telt bewust NIET mee voor de bonus: toestemming die je met
+          punten koopt is geen vrije toestemming. */}
+      <div className="!mt-8 border-t border-line pt-6">
+        <p className="label-brand">{t("account.prefs.title")}</p>
+        <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.prefs.intro")}</p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="font-sans text-sm">{t("account.prefs.birthDate")}</span>
+            {/* Geen `max`-attribuut: dat zou uit de "datum van nu" komen en
+                server en browser kunnen daar rond middernacht over verschillen
+                (hydratiefout). De server weigert een datum in de toekomst. */}
+            <input
+              type="date"
+              value={prefs.birthDate || ""}
+              onChange={(e) => setPrefs((p) => ({ ...p, birthDate: e.target.value }))}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            />
+            <span className="mt-1 block font-sans text-xs text-muted">{t("account.prefs.birthDateHint")}</span>
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">{t("account.prefs.ageRange")}</span>
+            <select
+              value={afgeleideGroep || prefs.ageRange || ""}
+              disabled={Boolean(afgeleideGroep)}
+              onChange={(e) => setPrefs((p) => ({ ...p, ageRange: e.target.value }))}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none disabled:bg-surface disabled:text-muted"
+            >
+              <option value="">{t("account.prefs.choose")}</option>
+              {AGE_RANGES.map((a) => (
+                <option key={a.key} value={a.key}>{a.label}</option>
+              ))}
+            </select>
+            <span className="mt-1 block font-sans text-xs text-muted">
+              {afgeleideGroep ? t("account.prefs.ageFromBirthDate") : t("account.prefs.ageRangeHint")}
+            </span>
+          </label>
+        </div>
+
+        <fieldset className="mt-5">
+          <legend className="font-sans text-sm">{t("account.prefs.colors")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {COLOR_FAMILIES.filter((c) => c.key !== "multi").map((c) => {
+              const aan = (prefs.favoriteColors ?? []).includes(c.key);
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => toggle("favoriteColors", c.key)}
+                  aria-pressed={aan}
+                  className={`flex items-center gap-2 border px-3 py-1.5 font-sans text-sm transition-colors ${aan ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"}`}
+                >
+                  <span aria-hidden className="h-3.5 w-3.5 rounded-full border border-line" style={{ backgroundColor: c.hex }} />
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="mt-5">
+          <legend className="font-sans text-sm">{t("account.prefs.occasions")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {SHOP_OCCASIONS.map((o) => {
+              const aan = (prefs.occasions ?? []).includes(o.key);
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => toggle("occasions", o.key)}
+                  aria-pressed={aan}
+                  className={`border px-3 py-1.5 font-sans text-sm transition-colors ${aan ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"}`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <label className="mt-5 block">
+          <span className="font-sans text-sm">{t("account.prefs.store")}</span>
+          <select
+            value={prefs.favoriteStore || ""}
+            onChange={(e) => setPrefs((p) => ({ ...p, favoriteStore: e.target.value }))}
+            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          >
+            <option value="">{t("account.prefs.choose")}</option>
+            {stores.map((s) => (
+              <option key={s.pageHandle} value={s.pageHandle}>{s.title}</option>
+            ))}
+          </select>
+          <span className="mt-1 block font-sans text-xs text-muted">{t("account.prefs.storeHint")}</span>
+        </label>
+
+        <label className="mt-5 block">
+          <span className="font-sans text-sm">{t("account.prefs.note")}</span>
+          <textarea
+            rows={2}
+            value={prefs.styleNote || ""}
+            maxLength={400}
+            placeholder={t("account.prefs.notePh")}
+            onChange={(e) => setPrefs((p) => ({ ...p, styleNote: e.target.value }))}
+            className="mt-1 w-full resize-y border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+
+        <ProfielChecklist checks={checks} open={open} />
+      </div>
+
       <button type="submit" disabled={state === "busy"} className="btn-primary">
         {state === "busy" ? t("account.form.saving") : state === "done" ? <>{t("account.form.saved")} <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" /></> : t("account.details.save")}
       </button>
@@ -721,7 +1010,39 @@ function Adressen({ data }: { data: Data }) {
   return <AddressBook addresses={data.addresses} />;
 }
 
-/* ── Helper ───────────────────────────────────────────────────────────────── */
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+
+/** "+N punten bijgeschreven" na een opslag die een bonus opleverde. */
+function BonusMelding({ points }: { points: number }) {
+  const t = useT();
+  return (
+    <p role="status" className="flex items-center gap-2 border border-success/40 bg-success/5 px-4 py-3 font-sans text-sm text-ink">
+      <CheckIcon className="h-4 w-4 shrink-0 text-success" />
+      {t("account.bonus.awarded", { n: points })}
+    </p>
+  );
+}
+
+/** Wat er nog mist voor "profiel compleet" — meeschrijvend terwijl je invult. */
+function ProfielChecklist({ checks, open }: { checks: { key: string; labelKey: string; done: boolean }[]; open: number }) {
+  const t = useT();
+  return (
+    <div className="mt-6 border border-line bg-surface p-4">
+      <p className="font-sans text-sm font-medium text-ink">
+        {open === 0 ? t("account.prefs.checklistComplete") : t("account.prefs.checklistOpen", { n: open })}
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {checks.map((c) => (
+          <li key={c.key} className={`flex items-center gap-1.5 font-sans text-xs ${c.done ? "text-muted" : "text-ink"}`}>
+            <CheckIcon className={`h-3 w-3 ${c.done ? "text-success" : "text-line"}`} />
+            {t(c.labelKey)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Empty({ title, body }: { title: string; body: string }) {
   return (
     <div className="border border-dashed border-line p-10 text-center">

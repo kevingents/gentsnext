@@ -58,7 +58,13 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
   );
 }
 
-export function SizeAdvisor() {
+/**
+ * `bonusPoints` = wat het bewaren van je maten eenmalig oplevert (instelbaar in
+ * de tool). Optioneel, want op de PDP zit de adviseur in een client-modal en is
+ * er geen server-component om de instelling door te geven; daar noemen we het
+ * bedrag pas ná het opslaan — de server stuurt het dan mee.
+ */
+export function SizeAdvisor({ bonusPoints = 0 }: { bonusPoints?: number }) {
   const t = useT();
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
@@ -70,6 +76,7 @@ export function SizeAdvisor() {
   const [advice, setAdvice] = useState<SizeAdvice | null>(null);
   const [error, setError] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "login" | "error">("idle");
+  const [earned, setEarned] = useState(0);
 
   const heightCm = num(height);
   const weightKg = num(weight);
@@ -103,6 +110,11 @@ export function SizeAdvisor() {
       if (res.status === 401) {
         setSaveState("login");
         return;
+      }
+      if (res.ok) {
+        // De server bepaalt of hier punten bij horen (eenmalig per klant).
+        const d = (await res.json().catch(() => ({}))) as { bonus?: { points: number } | null };
+        setEarned(d.bonus?.points || 0);
       }
       setSaveState(res.ok ? "saved" : "error");
     } catch {
@@ -324,7 +336,10 @@ export function SizeAdvisor() {
                 <div className="flex items-start gap-3">
                   <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
                   <div>
-                    <p className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.savedToProfile")}</p>
+                    <p className="font-sans text-sm font-medium text-ink">
+                      {t("sizeAdvisor.savedToProfile")}
+                      {earned > 0 ? <span className="ml-2 text-success">{t("sizeAdvisor.savedBonus", { n: earned })}</span> : null}
+                    </p>
                     <p className="mt-1 font-sans text-xs text-ink-soft">
                       {t("sizeAdvisor.savedMessage")}
                     </p>
@@ -344,6 +359,7 @@ export function SizeAdvisor() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-sans text-sm text-ink-soft">
                     <span className="font-medium text-ink">{t("sizeAdvisor.saveSizeLabel")}</span> — {t("sizeAdvisor.saveSizeHint")}
+                    {bonusPoints > 0 ? <span className="mt-1 block text-ink">{t("sizeAdvisor.saveBonusHint", { n: bonusPoints })}</span> : null}
                   </p>
                   <button
                     type="button"
