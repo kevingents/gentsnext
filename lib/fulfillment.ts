@@ -27,7 +27,14 @@ import { type Locale } from "@/lib/i18n";
  */
 
 export type OrderLineInput = { sku: string; qty: number; title?: string; groupId?: string };
-export type AllocateOptions = { country?: string; postalCode?: string; excludeBranchIds?: string[] };
+export type AllocateOptions = {
+  country?: string;
+  postalCode?: string;
+  excludeBranchIds?: string[];
+  /** Intern (tweede ronde): voor deze sku's mag óók uit een onderbevoorrade winkel
+   *  geput worden. Zie het laatste-redmiddel-blok onderaan allocateOrder. */
+  ontgrendelBeschermd?: Set<string>;
+};
 
 export type ShipmentLine = { sku: string; qty: number; title?: string };
 export type Shipment = {
@@ -116,7 +123,7 @@ function dispatchInfo(branchId: string, settings: Settings) {
 }
 
 /* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
-async function buildBranches(skus: string[], settings: Settings): Promise<Branch[]> {
+async function buildBranches(skus: string[], settings: Settings, ontgrendel = new Set<string>()): Promise<Branch[]> {
   const [stock, safety] = await Promise.all([stockForSkus(skus), safetyAllocationFor(skus)]);
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
@@ -133,8 +140,15 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
     for (const b of entry.byBranch) {
       if (!isFulfillable(b.branchId)) continue;
       if (gepauzeerd.has(String(b.branchId))) continue;
-      // Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
-      if (settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0) continue;
+      /* Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
+         Bewust een VOORKEUR en geen verbod (Kevin, 12 aug: "laatste redmiddel").
+         Als een harde uitsluiting bleef er voorraad over die de PDP wél verkocht
+         maar de allocatie nooit pakte — 44 varianten die na betaling op 'review'
+         belandden. De tweede ronde ontgrendelt deze winkels alleen voor de sku's
+         die anders tekort blijven; zie onderaan allocateOrder. */
+      const beschermd =
+        settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0;
+      if (beschermd && !ontgrendel.has(sku)) continue;
       // Zelfde vastgelegde stuks als de PDP ziet (budget per artikel, niet per
       // maat) — anders belooft de site voorraad die de allocatie niet mag pakken.
       const net = b.qty - (safety.get(safetyKey(b.branchId, sku)) || 0);
@@ -232,7 +246,7 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
   }
 
   const settings = await getSettings();
-  let branches = await buildBranches(skus, settings);
+  let branches = await buildBranches(skus, settings, opts.ontgrendelBeschermd);
   // Her-allocatie na 'niet leverbaar': de meldende winkel(s) overslaan zodat de
   // order niet terugkaatst naar dezelfde locatie.
   if (opts.excludeBranchIds?.length) {
@@ -363,7 +377,7 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
     .filter(([, q]) => q > 0)
     .map(([sku, q]) => ({ sku, qtyShort: q, title: titleBySku.get(sku) }));
 
-  return {
+  const plan: FulfillmentPlan = {
     shipments,
     splitCount: shipments.length,
     fullyAllocated: shortages.length === 0,
@@ -371,6 +385,26 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
     strategy: shortages.length && !shipments.length ? "unfulfillable" : "least-split",
     computedAt,
   };
+
+  /* LAATSTE REDMIDDEL. Blijft er iets tekort en is dat alleen omdat we
+     onderbevoorrade winkels overslaan? Dan opnieuw, met die winkels ontgrendeld
+     voor uitsluitend de sku's die tekort bleven. De bescherming blijft daarmee een
+     voorkeur (gezonde winkels en het magazijn gaan altijd eerst) zonder dat we een
+     klant laten betalen voor iets wat we wél in huis hebben.
+
+     Eén ronde diep: de tweede aanroep heeft ontgrendelBeschermd gezet en komt hier
+     dus niet nog eens binnen. We nemen het nieuwe plan alleen als het écht minder
+     tekort heeft — nooit een slechtere uitkomst terug.
+
+     Kanttekening: in ronde twee mag de greedy een ontgrendelde regel ook uit die
+     winkel vullen waar ronde één 'm deels uit een gezonde winkel haalde. Dat scheelt
+     een split; het kost de beschermde winkel hooguit de stuks van die ene regel. */
+  if (!plan.fullyAllocated && !opts.ontgrendelBeschermd && settings.protectUnderstockedRetail) {
+    const kort = new Set(plan.shortages.map((s) => s.sku));
+    const tweede = await allocateOrder(lines, { ...opts, ontgrendelBeschermd: kort });
+    if (tweede.shortages.length < plan.shortages.length) return tweede;
+  }
+  return plan;
 }
 
 function toShipment(b: Branch, lines: ShipmentLine[]): Shipment {
