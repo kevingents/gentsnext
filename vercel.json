@@ -13,6 +13,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/sync-catalog",
+      "schedule": "20 */4 * * *"
+    },
+    {
       "path": "/api/cron/stock-check",
       "schedule": "0 */4 * * *"
     },
