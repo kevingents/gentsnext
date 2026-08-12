@@ -9,7 +9,6 @@ import {
   type DeliveryMethod,
 } from "@/lib/orders";
 import { mollieConfigured, createMolliePayment } from "@/lib/mollie";
-import { recordPosOrder } from "@/lib/pos-orders-store";
 import { getOrderByNumber } from "@/lib/orders";
 import { sendConceptOrderMail } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
@@ -22,7 +21,8 @@ export const maxDuration = 30;
  * POST /api/studio/pos/order — KASSA-bestelling (endless aisle): item niet in de
  * winkel → bestel uit een ander filiaal/magazijn → bezorgen bij klant. Maakt een
  * normale order (incl. fulfillment-allocatie) + Mollie-betaling en geeft de
- * BETAALLINK terug; de winkel-attributie wordt vastgelegd (omzet op het filiaal).
+ * BETAALLINK terug; de winkel-attributie (omzet op het filiaal) landt als kolom
+ * `orders.sold_by_store` via createOrder — geen aparte sidecar meer.
  * Auth: admin OF STUDIO_API_TOKEN (de portal-kassa proxyt met de token).
  */
 export async function POST(req: Request) {
@@ -33,7 +33,8 @@ export async function POST(req: Request) {
     contact?: Record<string, string>;
     items?: CheckoutItem[];
     storeName?: string;
-    staff?: string;
+    /** `staff` mag de kassa nog meesturen maar wordt niet meer vastgelegd
+     *  (de blob-sidecar pos/orders.json is opgeruimd; attributie = sold_by_store). */
     deliveryMethod?: string;
     pickupStore?: string;
     paymentMode?: string;
@@ -86,9 +87,6 @@ export async function POST(req: Request) {
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Bestelling mislukt." }, { status: 400 });
   }
-
-  // Winkel-attributie vastleggen (best-effort; mag de bestelling niet blokkeren).
-  await recordPosOrder({ orderNumber: order.orderNumber, storeName, staff: body?.staff }).catch(() => {});
 
   const origin = getSiteUrl(); // canonieke site-URL, niet de client-Host (webhook-kaping)
   const confirmUrl = `${origin}/bestelling/${order.orderNumber}?t=${order.accessToken}`;
