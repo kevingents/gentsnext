@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon } from "@/components/icons";
+import { track } from "@/lib/track-client";
 import { useT } from "@/components/i18n/locale-provider";
 import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
@@ -48,7 +49,7 @@ type Customer = {
   isStaff?: boolean;
 };
 /** Eenmalige puntenbonus per actie — de server bepaalt stand en bedrag. */
-export type BonusTask = { kind: "maatadvies" | "wallet" | "profiel"; points: number; done: boolean; earned: boolean };
+export type BonusTask = { kind: "maatadvies" | "wallet" | "winkel" | "profiel"; points: number; done: boolean; earned: boolean };
 type StoreOption = { pageHandle: string; title: string; city: string };
 type ReturnRow = {
   id: string; orderNumber: string; status: string; method: "dhl" | "store"; refundType: "money" | "credit";
@@ -178,8 +179,12 @@ export function ProfileClient({
 const BONUS_COPY: Record<BonusTask["kind"], { title: string; body: string; cta: string; tab: TabKey }> = {
   maatadvies: { title: "account.bonus.size.title", body: "account.bonus.size.body", cta: "account.bonus.size.cta", tab: "maten" },
   wallet: { title: "account.bonus.wallet.title", body: "account.bonus.wallet.body", cta: "account.bonus.wallet.cta", tab: "punten" },
+  winkel: { title: "account.bonus.store.title", body: "account.bonus.store.body", cta: "account.bonus.store.cta", tab: "gegevens" },
   profiel: { title: "account.bonus.profile.title", body: "account.bonus.profile.body", cta: "account.bonus.profile.cta", tab: "gegevens" },
 };
+
+/** Welke taken deze paginasessie al als "gezien" gemeld zijn (zie useEffect hieronder). */
+const GEZIEN = new Set<string>();
 
 function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[]; onTab: (t: TabKey) => void; compact?: boolean }) {
   const t = useT();
@@ -188,6 +193,23 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
   // Een bonus op 0 punten staat uit → helemaal niet tonen, ook niet als 'gedaan'.
   const zichtbaar = bonuses.filter((b) => b.points > 0);
   const open = zichtbaar.filter((b) => !b.done);
+  const openKinds = open.map((b) => b.kind).join(",");
+
+  /* Meten: welke openstaande taken heeft deze klant gezién? Zonder dat weet je
+     alleen hoeveel mensen een bonus haalden, niet hoeveel er de kans op kregen —
+     en dus niets over of de taak overtuigt. Het toekennen zélf loggen we NIET als
+     event: dat staat al in het grootboek, en twee tellingen kunnen gaan verschillen.
+     `GEZIEN` ontdubbelt binnen deze paginasessie: het blok staat zowel op het
+     overzicht als op het puntentabblad, en dat is één kans, niet twee. */
+  useEffect(() => {
+    if (!openKinds) return;
+    for (const kind of openKinds.split(",")) {
+      if (GEZIEN.has(kind)) continue;
+      GEZIEN.add(kind);
+      track("bonus_shown", { handle: kind, path: "/account" });
+    }
+  }, [openKinds]);
+
   if (!zichtbaar.length) return null;
   // Op het overzicht alleen tonen zolang er nog iets te halen is.
   if (compact && !open.length) return null;
@@ -199,6 +221,7 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
 
   async function haalOp() {
     setOphalen(true);
+    track("bonus_click", { handle: "ophalen", path: "/account" });
     try {
       await fetch("/api/account/punten-bonus", { method: "POST" });
       router.refresh();
@@ -246,7 +269,14 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
               <div className="flex shrink-0 items-center gap-3">
                 <span className={`font-sans text-sm ${b.done ? "text-muted" : "text-ink"}`}>+{b.points}</span>
                 {b.done ? null : (
-                  <button type="button" onClick={() => onTab(copy.tab)} className="btn-ghost !py-1.5 !text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      track("bonus_click", { handle: b.kind, path: "/account" });
+                      onTab(copy.tab);
+                    }}
+                    className="btn-ghost !py-1.5 !text-xs"
+                  >
                     {t(copy.cta)}
                   </button>
                 )}
@@ -669,10 +699,11 @@ function Maten({ customer }: { customer: Customer }) {
         setState("error");
         return;
       }
-      const d = (await res.json().catch(() => ({}))) as { bonus?: { points: number } | null };
+      const d = (await res.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
       setState("done");
-      if (d.bonus?.points) {
-        setBonus(d.bonus.points);
+      const punten = puntenUit(d.bonuses);
+      if (punten) {
+        setBonus(punten);
         // Saldo, puntenhistorie en het takenlijstje komen van de server.
         router.refresh();
       }
@@ -833,7 +864,7 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
         setState("error");
         return;
       }
-      const eerste = (await res.json().catch(() => ({}))) as { bonus?: { points: number } | null };
+      const eerste = (await res.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
       const res2 = await fetch("/api/account/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -843,8 +874,10 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
         setState("error");
         return;
       }
-      const tweede = (await res2.json().catch(() => ({}))) as { bonus?: { points: number } | null };
-      const punten = eerste.bonus?.points || tweede.bonus?.points || 0;
+      const tweede = (await res2.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
+      // Optellen, niet "de eerste die er is": één opslag kan de winkel-bonus én
+      // de profielbonus opleveren, en dan hoort er 100 te staan, geen 50.
+      const punten = puntenUit(eerste.bonuses) + puntenUit(tweede.bonuses);
       setState("done");
       if (punten) {
         setBonus(punten);
@@ -1011,6 +1044,11 @@ function Adressen({ data }: { data: Data }) {
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
+
+/** Totaal aan punten dat één opslag opleverde (0, één of meerdere bonussen). */
+function puntenUit(bonuses: { points: number }[] | undefined): number {
+  return (bonuses ?? []).reduce((n, b) => n + (Number(b?.points) || 0), 0);
+}
 
 /** "+N punten bijgeschreven" na een opslag die een bonus opleverde. */
 function BonusMelding({ points }: { points: number }) {

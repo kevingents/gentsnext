@@ -15,7 +15,8 @@ import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
  *
  * De bijschrijving zelf gebeurt in SQL en niet via creditOnce(): 28k orders × vier
  * losse round-trips over neon-http duurt uren. De regel is triviaal genoeg om exact
- * te spiegelen — pointsForCents() is floor(cents/100) × 1 punt per euro. Idempotentie
+ * te spiegelen — pointsForCents() is floor(floor(cents/100) × spaarsnelheid), en die
+ * snelheid komt uit dezelfde instelling als de live-flow (zie `tarief`). Idempotentie
  * komt van de unieke index op (ref_type, ref_id), dezelfde die creditOnce gebruikt,
  * dus dit kan niet dubbel boeken en mag zo vaak draaien als je wilt.
  */
@@ -34,6 +35,19 @@ export type BackfillResult = {
   dryRun: boolean;
 };
 
+/**
+ * De spaarsnelheid als SQL-fragment. De bijschrijving hierboven gebeurt in SQL en
+ * niet via creditOnce(), dus de rekenregel staat hier een tweede keer — dan moet
+ * hij wél dezelfde instelling gebruiken, anders boekt een backfill tegen een
+ * andere koers dan de live-flow. `floor` na de vermenigvuldiging, net als
+ * pointsForCents(): geen halve punten in een integer-kolom.
+ */
+async function tarief() {
+  const v = Number((await getSettings()).loyaltyConfig?.pointsPerEuro);
+  return v > 0 ? v : 1;
+}
+const puntenSql = (rate: number, kolom: ReturnType<typeof sql>) => sql`floor((${kolom} / 100) * ${rate})::int`;
+
 /** Alleen orders binnen het terugkijkvenster meenemen (undefined = hele historie). */
 function venster(lookbackDays?: number) {
   return lookbackDays == null
@@ -44,9 +58,10 @@ function venster(lookbackDays?: number) {
 /** Wat staat er nog open: hoeveel orders, hoeveel punten, hoeveel klanten. */
 export async function openstaandeOrders(lookbackDays?: number): Promise<{ orders: number; punten: number; klanten: number }> {
   const db = getDb();
+  const rate = await tarief();
   const r = await db.execute<{ n: number; punten: number; klanten: number }>(sql`
     select count(*)::int n,
-           coalesce(sum(o.total_cents / 100), 0)::int punten,
+           coalesce(sum(${puntenSql(rate, sql`o.total_cents`)}), 0)::int punten,
            count(distinct o.customer_id)::int klanten
     from orders o
     where o.customer_id is not null
@@ -70,9 +85,10 @@ export async function inwisselraming(): Promise<{ klanten: number; punten: numbe
   const drempel = Number(lc?.redeemMinPoints) > 0 ? Number(lc.redeemMinPoints) : 500;
   const stap = lc?.redeemStepPoints == null ? 500 : Math.max(1, Number(lc.redeemStepPoints));
   const db = getDb();
+  const rate = await tarief();
   const r = await db.execute<{ klanten: number; punten: number }>(sql`
     with per_klant as (
-      select o.customer_id, sum(o.total_cents / 100)::int nieuw
+      select o.customer_id, sum(${puntenSql(rate, sql`o.total_cents`)})::int nieuw
       from orders o
       where o.customer_id is not null
         and o.status in (${sql.join(PAID.map((s) => sql`${s}`), sql`, `)})
@@ -106,6 +122,7 @@ export async function backfillOrderLoyalty(opts: { limit?: number; dryRun?: bool
   }
 
   const days = Math.max(0, (await getSettings()).loyaltyConfig?.vestingDays ?? 21);
+  const rate = await tarief();
   const ins = await db.execute<{ regels: number; punten: number; klanten: number }>(sql`
     with kandidaten as (
       select o.id, o.customer_id, o.total_cents, coalesce(o.paid_at, o.created_at) basis
@@ -119,7 +136,7 @@ export async function backfillOrderLoyalty(opts: { limit?: number; dryRun?: bool
       limit ${lim}
     ), geboekt as (
       insert into loyalty_events (customer_id, points, reason, ref_type, ref_id, vests_at)
-      select k.customer_id, (k.total_cents / 100)::int, 'Weborder gekoppeld', 'web_order', k.id::text,
+      select k.customer_id, ${puntenSql(rate, sql`k.total_cents`)}, 'Weborder gekoppeld', 'web_order', k.id::text,
              k.basis + make_interval(days => ${days})
       from kandidaten k
       on conflict (ref_type, ref_id) do nothing

@@ -152,6 +152,16 @@ export type Settings = {
   // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
   loyaltyConfig: {
     vestingDays: number;
+    /**
+     * Spaarsnelheid: punten per hele bestede euro (1 = € 1 → 1 punt). De ANDERE
+     * kant van de koers; samen met redeemCentsPerPoint bepaalt dit wat sparen
+     * een klant waard is (1 punt/euro × 5 cent/punt = 5% terug).
+     *
+     * LET OP: dit geldt voor de webshop. De kassa rekent in storegents met een
+     * eigen regel (pointsForAmount); wie hier draait moet die meedraaien, anders
+     * spaart dezelfde euro online anders dan in de winkel.
+     */
+    pointsPerEuro: number;
     /** Inwisselkoers: centen tegoedbon per punt (5 = 500 punten → € 25). */
     redeemCentsPerPoint: number;
     /** Minimaal in te wisselen punten. */
@@ -169,18 +179,20 @@ export type Settings = {
      */
     backfillLookbackDays: number;
     /*
-     * Eenmalige actie-bonussen die RETOUREN moeten terugdringen. Alle drie zorgen
+     * Eenmalige actie-bonussen die RETOUREN moeten terugdringen. Alle vier zorgen
      * dat we (en de klant zelf) weten wat er past: een bewaard maatprofiel, de
-     * spaarpas in Wallet en een compleet profiel. Eén keer per klant, direct
-     * besteedbaar — er hangt geen aankoop aan die teruggestuurd kan worden, dus
-     * geen vesting. 0 = die bonus staat uit; de taak verdwijnt dan uit de
-     * klant-UI (bestaande toekenningen blijven staan).
+     * spaarpas in Wallet, een vaste winkel en een compleet profiel. Eén keer per
+     * klant, direct besteedbaar — er hangt geen aankoop aan die teruggestuurd kan
+     * worden, dus geen vesting. 0 = die bonus staat uit; de taak verdwijnt dan
+     * uit de klant-UI (bestaande toekenningen blijven staan).
      */
     bonusPoints: {
       /** Maatprofiel bewaard — via /maatadvies of het tabblad Mijn maten. */
       sizeAdvice: number;
       /** Spaarpas écht toegevoegd aan Apple Wallet (device-registratie). */
       walletPass: number;
+      /** Vaste winkel gekozen ("Mijn winkel"). */
+      favoriteStore: number;
       /** Profiel compleet: leeftijd, kleuren, vaste winkel, gelegenheden. */
       profileComplete: number;
     };
@@ -341,6 +353,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   loyaltyConfig: {
     vestingDays: num(process.env.GENTS_LOYALTY_VESTING_DAYS, 21),
+    pointsPerEuro: num(process.env.GENTS_LOYALTY_POINTS_PER_EURO, 1),
     redeemCentsPerPoint: num(process.env.GENTS_LOYALTY_REDEEM_CENTS_PER_POINT, 5), // 500 punten = € 25
     redeemMinPoints: num(process.env.GENTS_LOYALTY_REDEEM_MIN_POINTS, 500),
     redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
@@ -349,6 +362,7 @@ export const DEFAULT_SETTINGS: Settings = {
     bonusPoints: {
       sizeAdvice: num(process.env.GENTS_LOYALTY_BONUS_SIZE_ADVICE, 50),
       walletPass: num(process.env.GENTS_LOYALTY_BONUS_WALLET, 50),
+      favoriteStore: num(process.env.GENTS_LOYALTY_BONUS_STORE, 50),
       profileComplete: num(process.env.GENTS_LOYALTY_BONUS_PROFILE, 50),
     },
   },

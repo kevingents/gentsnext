@@ -42,6 +42,12 @@ const ALLOWED = new Set([
   // Conversie wordt NIET apart gelogd — dat zijn de bestaande purchase-events
   // van dezelfde sessie, zodat er nooit twee tellingen kunnen verschillen.
   "ab_exposure",
+  // Puntenbonussen (maatprofiel/Wallet/winkel/profiel), handle = de soort.
+  // Alleen de KANS en de KLIK: het toekennen staat al in het spaarpunten-
+  // grootboek, en dat overtypen naar events zou een tweede telling maken die
+  // ermee kan gaan verschillen. Zonder bonus_shown weet je alleen hoeveel
+  // mensen een bonus haalden, niet hoeveel er de kans op kregen.
+  "bonus_shown", "bonus_click",
 ]);
 
 export async function recordEvents(list: IncomingEvent[]): Promise<number> {

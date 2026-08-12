@@ -6,25 +6,33 @@ import {
   updateSizeProfile,
   type SizeProfile,
 } from "@/lib/account";
-import { awardProfileBonusIfEarned, awardSizeAdviceBonusIfEarned, type BonusKind } from "@/lib/loyalty-bonus";
+import {
+  awardProfileBonusIfEarned,
+  awardSizeAdviceBonusIfEarned,
+  awardStoreBonusIfEarned,
+  type BonusKind,
+} from "@/lib/loyalty-bonus";
 import { cleanPreferences, type ProfilePreferences } from "@/lib/profiel-voorkeuren";
 import { getStores } from "@/lib/stores";
 import { STORE_COOKIE, STORE_COOKIE_MAX_AGE } from "@/lib/store-preference";
 
 export const dynamic = "force-dynamic";
 
-type BonusPayload = { kind: BonusKind; points: number } | null;
+type Toegekend = { kind: BonusKind; points: number };
 
-/** Alleen een NIEUW toegekende bonus melden — anders juicht de UI bij elke opslag. */
-function payload(res: { awarded: boolean; points: number }, kind: BonusKind): BonusPayload {
-  return res.awarded ? { kind, points: res.points } : null;
+/** Alleen NIEUW toegekende bonussen melden — anders juicht de UI bij elke opslag. */
+function toegekend(...paren: [BonusKind, { awarded: boolean; points: number }][]): Toegekend[] {
+  return paren.filter(([, r]) => r.awarded).map(([kind, r]) => ({ kind, points: r.points }));
 }
 
 /**
  * Werkt persoonsgegevens, maatprofiel of stijlvoorkeuren bij voor de ingelogde
- * klant. Levert `bonus` terug zodra deze opslag een eenmalige spaarpunten-bonus
- * verdient (maatprofiel of compleet profiel) — de server beslist dat, niet de
- * client: het formulier kan hooguit vragen om op te slaan.
+ * klant. Levert `bonuses` terug met elke eenmalige spaarpunten-bonus die déze
+ * opslag oplevert — de server beslist dat, niet de client: het formulier kan
+ * hooguit vragen om op te slaan.
+ *
+ * Het zijn er méér dan één tegelijk: wie in één keer z'n vaste winkel kiest én
+ * daarmee z'n profiel afmaakt, verdient beide bonussen.
  */
 export async function POST(req: Request) {
   const customer = await getSessionCustomer();
@@ -55,7 +63,7 @@ export async function POST(req: Request) {
     await updateSizeProfile(customer.id, saved);
     // Bonus is best-effort: mislukt hij, dan is het maatprofiel wél bewaard.
     const bonus = await awardSizeAdviceBonusIfEarned({ id: customer.id, sizeProfile: saved as Record<string, unknown> });
-    return NextResponse.json({ ok: true, bonus: payload(bonus, "maatadvies") });
+    return NextResponse.json({ ok: true, bonuses: toegekend(["maatadvies", bonus]) });
   }
 
   if (body.section === "preferences") {
@@ -75,9 +83,13 @@ export async function POST(req: Request) {
       occasions: schoon.occasions ?? [],
     };
     const preferences = await mergePreferences(customer.id, patch);
-    const bonus = await awardProfileBonusIfEarned({ ...customer, preferences });
+    /* Volgorde telt: eerst de winkel-bonus, dan de profielbonus. Wie in één keer
+       z'n winkel kiest én daarmee z'n profiel afmaakt, hoort beide te krijgen —
+       en de klant leest ze dan in de logische volgorde (kleine stap, hele set). */
+    const winkel = await awardStoreBonusIfEarned({ ...customer, preferences });
+    const profiel = await awardProfileBonusIfEarned({ ...customer, preferences });
 
-    const res = NextResponse.json({ ok: true, bonus: payload(bonus, "profiel") });
+    const res = NextResponse.json({ ok: true, bonuses: toegekend(["winkel", winkel], ["profiel", profiel]) });
     /* "Mijn winkel" leest primair een cookie (server kent de keuze dan al bij de
        eerste render). Die hier meteen meezetten, anders kiest de klant hier een
        vaste winkel en blijft de rest van de site z'n oude keuze tonen. */
@@ -103,5 +115,5 @@ export async function POST(req: Request) {
     lastName: patch.lastName ?? customer.lastName,
     phone: patch.phone ?? customer.phone,
   });
-  return NextResponse.json({ ok: true, bonus: payload(bonus, "profiel") });
+  return NextResponse.json({ ok: true, bonuses: toegekend(["profiel", bonus]) });
 }
