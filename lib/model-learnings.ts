@@ -265,13 +265,21 @@ const meaningful = (s: string) => s.length > 2 && !NOISE.has(s.toLowerCase());
 const uniq = (a: string[]) => [...new Set(a)];
 
 export type ModelPromptBlocks = {
+  /**
+   * Korte kop vóór de rest van de prompt. De standaard-styling is namelijk
+   * hardgecodeerd — "Male model wearing THIS blazer …, with matching trousers" —
+   * en die zin staat er vóór de correctie. Vraagt iemand juist om een ándere
+   * broekkleur, dan spreken de twee elkaar tegen en wint de eerste. Vandaar: de
+   * correcties óók vooraan, mét de mededeling dat zij voorgaan.
+   */
+  lead: string;
   /** Generieke kleding-regels, hoort achter de zin die het kledingstuk beschrijft. */
   garment: string;
   /** Generieke model-regels + wat het team goed vond. */
   model: string;
   /** Correcties voor precies deze foto — als laatste in de prompt, hoogste prioriteit. */
   fix: string;
-  /** Waar de correcties voor deze foto over gaan. Stuurt of we dezelfde man vasthouden. */
+  /** Waar de correcties voor deze foto over gaan. */
   fixTopics: { model: boolean; garment: boolean };
 };
 
@@ -357,14 +365,22 @@ export function modelPromptBlocks(store: ModelLearningsStore, opts: { handle?: s
 
   const fixes = [...garment.fixes, ...model.fixes];
   const complaints = [...garment.complaints, ...model.complaints];
+  // De correcties staan zowel vooraan (lead) als achteraan (fix), met er expliciet
+  // bij dat zij winnen van de standaard-styling. Zonder dat verloor "doe er een
+  // andere kleur broek onder" het van de vaste zin "with matching trousers" die
+  // eerder in de prompt staat — zes afkeuringen op hetzelfde colbert lang.
+  const lead = fixes.length
+    ? `CORRECTIONS REQUESTED BY OUR TEAM, these override any styling described later in this prompt: ${fixes.join("; ")}. `
+    : "";
   let fix = fixes.length
-    ? ` MOST IMPORTANT — our team reviewed the previous version of this exact photo and asked for these corrections. The new photo must show all of them: ${fixes.join("; ")}.`
+    ? ` MOST IMPORTANT — our team reviewed the previous version of this exact photo and asked for these corrections. The new photo must show all of them, and they take priority over the default styling described earlier (shirt, trousers, shoes): ${fixes.join("; ")}.`
     : "";
   if (fix && complaints.length) {
     fix += ` For context, their own words on what was wrong last time, written in Dutch — read them as complaints to fix, never as things to render: ${complaints.map((c) => `"${c}"`).join(", ")}.`;
   }
 
   return {
+    lead,
     garment: garment.block,
     model: modelBlock,
     fix,
@@ -382,4 +398,9 @@ export function modelPromptBlocks(store: ModelLearningsStore, opts: { handle?: s
 export function modelLearningsBlock(store: ModelLearningsStore, opts: { handle?: string } = {}): string {
   const b = modelPromptBlocks(store, opts);
   return `${b.garment}${b.model}${b.fix}`;
+}
+
+/** De kop die vóór de prompt hoort (correcties die de standaard-styling overrulen). */
+export function modelPromptLead(store: ModelLearningsStore, opts: { handle?: string } = {}): string {
+  return modelPromptBlocks(store, opts).lead;
 }

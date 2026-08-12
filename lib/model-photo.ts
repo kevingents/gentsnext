@@ -10,8 +10,8 @@ import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
  * smaak (modelPromptBlocks), kleur-bewuste styling (modelStylePrompt) en native
  * 4:5. Gebruikt door de portal "Modellen-studio" (regenerate-knop).
  *
- * Gaat de feedback alleen over de kleding, dan houden we via face_reference
- * dezelfde man vast — zie de toelichting bij regenerateModelPhoto.
+ * Staat er geen enkele correctie open, dan houden we via face_reference dezelfde
+ * man vast — zie de toelichting bij regenerateModelPhoto.
  */
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
@@ -71,19 +71,25 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   if (!p?.img) return { ok: false, error: "Product of productfoto niet gevonden." };
 
   const style = modelStylePrompt(p.hg, p.vcl, p.title, handle);
-  // Kleding-regels vlak achter de zin over het kledingstuk, model-regels achter
-  // de pose/studio-zinnen, en de correcties voor precies dit product als laatste
-  // — daar leest de generator ze het scherpst en verdrinken ze niet tussen de
-  // algemene huisregels. Zie de toelichting in lib/model-learnings.ts.
+  // Correcties staan zowel vooraan (lead) als achteraan (fix). De zin over het
+  // kledingstuk is hardgecodeerd — bij Colberts letterlijk "with matching
+  // trousers" — en stond vóór de correctie. Wie om een ándere broekkleur vroeg,
+  // verloor het van die vaste zin. Zie lib/model-learnings.ts.
   const learn = modelPromptBlocks(await getModelLearnings(), { handle });
-  const prompt = `${garmentFor(p.hg, style)}${learn.garment} ${POSE} ${STUDIO}${learn.model}${learn.fix}`;
+  // En bij een openstaande kleding-correctie laten we "matching" vallen: dat ene
+  // bijvoeglijk naamwoord is precies waar de klacht over ging ("dit colbert heeft
+  // geen broek, dus doe er een andere kleur broek onder"). De zin blijft heel,
+  // de tegenspraak verdwijnt.
+  const kledingZin = learn.fixTopics.garment
+    ? garmentFor(p.hg, style).replace(/with matching trousers/gi, "with trousers")
+    : garmentFor(p.hg, style);
+  const prompt = `${learn.lead}${kledingZin}${learn.garment} ${POSE} ${STUDIO}${learn.model}${learn.fix}`;
 
-  // FASHN maakt elke keer een compleet nieuwe foto vanaf de packshot: vraag je om
-  // kortere mouwen, dan krijg je óók een andere man. Gaat alle openstaande
-  // feedback over de kleding en niets over de persoon, dan geven we de huidige
-  // foto mee als face_reference — zelfde man, alleen de kleding verandert. Is er
-  // wél model-feedback, dan moet die man juist wég en laten we hem los.
-  const zelfdeMan = learn.fixTopics.garment && !learn.fixTopics.model ? p.huidig || "" : "";
+  // face_reference houdt dezelfde man vast — prettig als je niets aan te merken
+  // hebt en gewoon een andere take wilt. Maar het referentiebeeld is de foto die
+  // NET is afgekeurd, en die als "hier moet het op lijken" meegeven werkt tegen
+  // elke correctie in. Dus alleen vasthouden als er niets openstaat.
+  const zelfdeMan = !learn.fixTopics.garment && !learn.fixTopics.model ? p.huidig || "" : "";
   const out = await runProductToModel(p.img, prompt, apiKey, zelfdeMan);
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
   try {

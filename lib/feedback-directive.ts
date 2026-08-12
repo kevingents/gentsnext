@@ -29,10 +29,45 @@ export function hasDirectiveProvider(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY);
 }
 
+/**
+ * De omzetter kreeg te horen dat hij geen ontkenningen mag gebruiken, maar deed
+ * het toch: 11 van de eerste 26 omgezette notities eindigden alsnog op "…, not
+ * matching the jacket" of "…, not smooth or flat". Precies de vorm die we wilden
+ * wegnemen. Vragen is dus niet genoeg — we controleren het na.
+ */
+export const NEGATIE = /\b(not|never|avoid|avoids|avoiding|without|no|nor|less|isn't|aren't|don't|doesn't)\b/i;
+
+/** Knipt een ontkennende staart eraf: "X, not Y" → "X". */
+export function knipOntkenning(s: string): string {
+  const zonder = s
+    .replace(/\s*[,;–—-]\s*(?:and\s+|but\s+|so\s+)?(?:not|never|without|avoiding|no longer)\b.*$/i, "")
+    .replace(/\s+(?:and|but)\s+(?:not|never|without)\b.*$/i, "")
+    .trim()
+    .replace(/[,;]$/, "");
+  return zonder;
+}
+
 export async function toDirective(reason: string, category: string, topic: string): Promise<string | null> {
   const text = String(reason || "").trim();
   if (text.length < 3) return null;
 
+  const eerste = await vraagOmzetting(reason, category, topic, false);
+  if (eerste === null) return null;
+  if (!NEGATIE.test(eerste)) return eerste;
+
+  // Ontkenning erin: één keer opnieuw, nu met de fout er expliciet bij.
+  const tweede = await vraagOmzetting(reason, category, topic, true);
+  if (tweede && !NEGATIE.test(tweede)) return tweede;
+
+  // Nog steeds ontkennend → de staart eraf. Blijft er niets bruikbaars over, dan
+  // liever null: de aanroeper valt dan terug op de categorie-regel, en die is
+  // altijd positief geformuleerd.
+  const geknipt = knipOntkenning(tweede || eerste);
+  return geknipt.length > 8 && !NEGATIE.test(geknipt) ? geknipt : null;
+}
+
+async function vraagOmzetting(reason: string, category: string, topic: string, strenger: boolean): Promise<string | null> {
+  const text = String(reason || "").trim();
   const subject = DIRECTIVE_SUBJECTS[topic] || DIRECTIVE_SUBJECTS.beeld;
   const sys =
     `You rewrite Dutch feedback from a menswear photo studio into ONE short English instruction for an AI image generator. ` +
@@ -40,7 +75,13 @@ export async function toDirective(reason: string, category: string, topic: strin
     `phrase it POSITIVELY as what the new photo MUST show — never use "no", "not", "avoid", "without" or "less", because image models ignore negations and render exactly what you name ` +
     `(example: "het jasje is te lang" becomes "jacket length ends just below the seat, classic menswear proportions"); ` +
     `note that the feedback may already be phrased as a wish ("het is beter als de kraag een beetje open staat") — then simply restate it as the instruction; ` +
-    `stay concrete and visual; max 20 words; no quotes, no explanation, no trailing period. Return ONLY the instruction.`;
+    `stay concrete and visual; max 20 words; no quotes, no explanation, no trailing period. Return ONLY the instruction.` +
+    (strenger
+      ? ` Your previous answer contained a negation. State ONLY the desired end state. ` +
+        `"trousers in a contrasting colour, not matching the jacket" must become "trousers in a contrasting colour"; ` +
+        `"fabric shows texture, not smooth" must become "fabric shows visible woven texture". ` +
+        `The words no, not, never, avoid, without and less may NOT appear anywhere in your answer.`
+      : "");
   const user = `Categorie: ${category}\nNotitie: ${text}`;
 
   const anth = process.env.ANTHROPIC_API_KEY;
