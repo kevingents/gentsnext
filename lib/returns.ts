@@ -158,6 +158,83 @@ export async function getReturnableOrdersForCustomer(
   return out;
 }
 
+export type CustomerReturnStatus = {
+  id: string;
+  status: string;
+  method: string;
+  refundType: string;
+  pickupStore: string;
+  itemsCents: number;
+  refundedCents: number;
+  dhlTracking: string;
+  createdAt: string;
+  updatedAt: string;
+  lines: { title: string; size: string; qty: number }[];
+};
+
+/**
+ * Retouren van deze klant op één bestelling — voor "waar is mijn retour/geld?"
+ * in de klant-chat en het account. Zelfde gate als getReturnableOrder
+ * (bestelnummer + e-mailadres moeten matchen). Bewust ZONDER creditCode: een
+ * tegoedbon-code is drager-geld en gaat alleen per mail naar de klant zelf.
+ */
+export async function listReturnsForOrder(orderNumber: string, email: string): Promise<
+  | { ok: true; orderNumber: string; returns: CustomerReturnStatus[] }
+  | { ok: false; error: string }
+> {
+  const nr = String(orderNumber || "").trim();
+  const mail = String(email || "").trim().toLowerCase();
+  if (!nr || !mail) return { ok: false, error: "Vul je bestelnummer en e-mailadres in." };
+
+  const db = getDb();
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.orderNumber, nr), sql`lower(${orders.email}) = ${mail}`))
+    .limit(1);
+  if (!order) return { ok: false, error: "Geen bestelling gevonden met dit nummer + e-mailadres." };
+
+  const rows = await db
+    .select()
+    .from(returns)
+    .where(and(eq(returns.orderId, order.id), sql`${returns.status} <> 'cancelled'`))
+    .orderBy(desc(returns.createdAt));
+  if (!rows.length) return { ok: true, orderNumber: order.orderNumber, returns: [] };
+
+  const rls = await db
+    .select()
+    .from(returnLines)
+    .where(inArray(returnLines.returnId, rows.map((r) => r.id)));
+  const ols = await db.select().from(orderLines).where(eq(orderLines.orderId, order.id));
+  const olById = new Map(ols.map((l) => [l.id, l]));
+  const linesByReturn = new Map<string, { title: string; size: string; qty: number }[]>();
+  for (const rl of rls) {
+    /* return_lines draagt titel/maat zelf; oudere rijen vallen terug op de orderregel. */
+    const ol = rl.orderLineId ? olById.get(rl.orderLineId) : undefined;
+    const list = linesByReturn.get(rl.returnId) || [];
+    list.push({ title: rl.title || ol?.title || "Artikel", size: rl.size || ol?.size || "", qty: rl.qty });
+    linesByReturn.set(rl.returnId, list);
+  }
+
+  return {
+    ok: true,
+    orderNumber: order.orderNumber,
+    returns: rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      method: r.method,
+      refundType: r.refundType,
+      pickupStore: r.pickupStore || "",
+      itemsCents: r.itemsCents,
+      refundedCents: r.refundedCents || 0,
+      dhlTracking: r.dhlTracking || "",
+      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
+      updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : "",
+      lines: linesByReturn.get(r.id) || [],
+    })),
+  };
+}
+
 export type CreateReturnInput = {
   orderNumber: string;
   email: string;

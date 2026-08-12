@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getReturnableOrder, createReturn, type ReturnMethod, type RefundType } from "@/lib/returns";
+import { getReturnableOrder, createReturn, listReturnsForOrder, type ReturnMethod, type RefundType } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
 import { getStores } from "@/lib/stores";
 
@@ -12,6 +12,9 @@ export const runtime = "nodejs";
  *        → { ok, orderNumber, withinWindow, lines:[…], policy:{ windowDays, dhlReturnCostCents, freeOnCredit } }
  *   POST { action:"create", orderNumber, email, items:[{orderLineId,qty}], method, refundType, pickupStore?, reason? }
  *        → { ok, id, status, itemsCents, shippingCostCents, refundType, method, label, labelPending }
+ *   POST { action:"status", orderNumber, email }
+ *        → { ok, orderNumber, returns:[{ status, method, refundType, refundedCents, lines, … }] }
+ *        (zonder creditCode — die gaat alleen per mail naar de klant zelf)
  */
 export async function POST(req: Request) {
   let body: Record<string, unknown>;
@@ -31,6 +34,11 @@ export async function POST(req: Request) {
     /* stores: voor flows die namens de klant een inleverwinkel kiezen (o.a. de
        helpdesk-agent) — de klant-flow krijgt de lijst al via de pagina-props. */
     return NextResponse.json({ ...res, policy: returnConfig, stores: getStores().map((s) => s.title) });
+  }
+
+  if (action === "status") {
+    const res = await listReturnsForOrder(orderNumber, email);
+    return NextResponse.json(res, { status: res.ok ? 200 : 404 });
   }
 
   if (action === "create") {
