@@ -2,8 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { storeStockMovements } from "@/db/schema";
 import { stockForSkus, stockSyncedAt } from "@/lib/stock";
-import { getSettings } from "@/lib/settings";
-import { safetyStockFor, type StockChannel } from "@/lib/fulfillment-config";
+import { type StockChannel } from "@/lib/fulfillment-config";
+import { safetyAllocationFor, safetyKey } from "@/lib/safety-stock";
 
 /**
  * Omnichannel voorraad-core (Fase A). De zelfgebouwde kassa (storegents) én de
@@ -214,17 +214,17 @@ export async function availableInStore(location: string, keys: string[], opts: {
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, number>();
   if (!clean.length) return out;
-  const [stock, delta, webRes, settings] = await Promise.all([
+  const [stock, delta, webRes, safetyAlloc] = await Promise.all([
     stockForSkus(clean),
     coreDeltaForKeys(loc, clean),
     webReservedForLocation(loc),
-    getSettings(),
+    safetyAllocationFor(clean, { channel: opts.channel }),
   ]);
   for (const key of clean) {
     const st = stock.get(key);
     const branch = st ? st.byBranch.find((b) => lower(b.store) === lower(loc)) : undefined;
     const baseline = branch?.qty ?? 0;
-    const safety = branch ? safetyStockFor(branch.branchId, settings, opts.channel) : 0;
+    const safety = branch ? safetyAlloc.get(safetyKey(branch.branchId, key)) || 0 : 0;
     const net = baseline + (delta.get(lower(key)) || 0) - (webRes.get(lower(key)) || 0) - safety;
     out.set(key, Math.max(0, net));
   }
@@ -245,17 +245,17 @@ export async function availableBreakdown(
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, { baseline: number; posDelta: number; webReserved: number; safety: number; available: number }>();
   if (!clean.length) return out;
-  const [stock, delta, webRes, settings] = await Promise.all([
+  const [stock, delta, webRes, safetyAlloc] = await Promise.all([
     stockForSkus(clean),
     coreDeltaForKeys(loc, clean),
     webReservedForLocation(loc),
-    getSettings(),
+    safetyAllocationFor(clean, { channel: opts.channel }),
   ]);
   for (const key of clean) {
     const st = stock.get(key);
     const branch = st ? st.byBranch.find((b) => lower(b.store) === lower(loc)) : undefined;
     const baseline = branch?.qty ?? 0;
-    const safety = branch ? safetyStockFor(branch.branchId, settings, opts.channel) : 0;
+    const safety = branch ? safetyAlloc.get(safetyKey(branch.branchId, key)) || 0 : 0;
     const posDelta = delta.get(lower(key)) || 0;
     const webReserved = webRes.get(lower(key)) || 0;
     out.set(key, { baseline, posDelta, webReserved, safety, available: Math.max(0, baseline + posDelta - webReserved - safety) });
@@ -294,11 +294,11 @@ export async function availableByBranch(keys: string[], opts: { channel?: StockC
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, BranchAvailability[]>();
   if (!clean.length) return out;
-  const [stock, posByLoc, webByLoc, settings] = await Promise.all([
+  const [stock, posByLoc, webByLoc, safetyAlloc] = await Promise.all([
     stockForSkus(clean),
     posDeltaByLocationKey(clean),
     webReservedAllLocations(),
-    getSettings(),
+    safetyAllocationFor(clean, { channel: opts.channel }),
   ]);
   for (const key of clean) {
     const st = stock.get(key);
@@ -314,7 +314,7 @@ export async function availableByBranch(keys: string[], opts: { channel?: StockC
       const loc = lower(b.store);
       const posDelta = posByLoc.get(loc)?.get(lk) || 0;
       const webReserved = webByLoc.get(loc)?.get(lk) || 0;
-      const safety = safetyStockFor(b.branchId, settings, opts.channel);
+      const safety = safetyAlloc.get(safetyKey(b.branchId, key)) || 0;
       list.push({
         branchId: b.branchId,
         store: b.store,

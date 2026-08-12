@@ -3,7 +3,8 @@ import { getDb } from "@/db";
 import { stockForSkus, stockSyncedAt, onlineBranchSet, type SkuStock } from "@/lib/stock";
 import { posDeltaByLocationKey, webReservedAllLocations } from "@/lib/store-core";
 import { getSettings } from "@/lib/settings";
-import { safetyStockFor } from "@/lib/fulfillment-config";
+import { safetyAllocationFor, safetyKey } from "@/lib/safety-stock";
+import { isFulfillable } from "@/lib/fulfillment-config";
 
 /**
  * Order-bewuste voorraad. SRS is alleen WMS/voorraadbron en ziet de webverkopen
@@ -84,7 +85,7 @@ async function storeHoldsByLocationKey(skus: string[]): Promise<Map<string, Map<
 /**
  * Beschikbaar per artikel voor klant-weergave (PDP/maat), uit de gedeelde core:
  *   per locatie: net = SRS-baseline + kassa/pos-delta − web-reservering − holds
- * total = som over alle locaties; online = som over de online-filialen.
+ * total = som over de LEVERBARE locaties; online = daarvan de online-filialen.
  * Zo ziet de webshop óók de winkelverkopen (pos), z'n eigen web-reserveringen én
  * apart-gelegde stuks (reserveer-om-te-passen) — één waarheid met de kassa,
  * geen dubbelverkoop. byBranch.qty wordt netto.
@@ -93,12 +94,13 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
   const clean = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];
   const out = new Map<string, SkuStock>();
   if (!clean.length) return out;
-  const [gross, posDelta, webRes, holds, settings] = await Promise.all([
+  const [gross, posDelta, webRes, holds, settings, safety] = await Promise.all([
     stockForSkus(clean),
     posDeltaByLocationKey(clean),
     webReservedAllLocations(),
     storeHoldsByLocationKey(clean),
     getSettings(),
+    safetyAllocationFor(clean),
   ]);
   const online = onlineBranchSet(); // Set<branchId> of null = alle filialen
   /* Tijdelijk gepauzeerde filialen (verbouwing/vakantie) tellen NIET mee als
@@ -115,11 +117,21 @@ export async function availableForSkus(skus: string[]): Promise<Map<string, SkuS
       const pd = posDelta.get(locL)?.get(keyL) || 0; // negatief = kassa-verkoop
       const wr = webRes.get(locL)?.get(keyL) || 0; // door web gereserveerd
       const held = holds.get(locL)?.get(keyL) || 0; // apart-gelegd (reservering/c&c)
-      // Voorraad-veiligheid (safety stock) per filiaal: de laatste N stuks blijven
-      // buiten verkoop/reservering (buffer tegen miteltelling/displaystuk).
-      const net = Math.max(0, b.qty + pd - wr - held - safetyStockFor(b.branchId, settings));
-      total += net;
-      if ((!online || online.has(b.branchId)) && !gepauzeerd.has(String(b.branchId))) onlineQty += net;
+      // Veiligheidsvoorraad: het budget is PER ARTIKEL over alle maten en winkels
+      // samen (lib/safety-stock), niet per maat per filiaal. Hier trekken we enkel
+      // het deel af dat op déze (filiaal, maat)-regel is vastgelegd.
+      const vast = safety.get(safetyKey(b.branchId, sku)) || 0;
+      const net = Math.max(0, b.qty + pd - wr - held - vast);
+      /* Alleen LEVERBARE filialen (magazijn ∪ retail) tellen mee als voorraad die
+         we mogen verkopen. Showroom, Klachten/Schade/Herstel, Lost & Found,
+         Afkeur/Derving en de transfilialen staan wél in de SRS-baseline maar slaat
+         de allocatie over — 1.896 stuks over 876 varianten. Die telden tot nu toe
+         gewoon mee in de online-pool: klant betaalt, en er komt geen plan.
+         byBranch houden we compleet (kassa/andere lezers zien alles). */
+      if (isFulfillable(b.branchId)) {
+        total += net;
+        if ((!online || online.has(b.branchId)) && !gepauzeerd.has(String(b.branchId))) onlineQty += net;
+      }
       return { ...b, qty: net };
     });
     out.set(sku, { total, online: onlineQty, byBranch });

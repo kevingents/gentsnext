@@ -161,9 +161,22 @@ export function branchPriority(branchId: string): number {
  */
 export type StockChannel = "web" | "store";
 
-export function safetyStockFor(branchId: string, s: Settings, channel: StockChannel = "web"): number {
-  if (channel === "store") return s.storeChannelSafetyStock;
-  return isWarehouse(branchId) ? s.warehouseSafetyStock : s.retailSafetyStock;
+/**
+ * De veiligheidsmarges als BUDGET PER ARTIKEL — "2 stuks totaal over alle maten"
+ * (Kevin, 12 aug), niet 2 per maat per filiaal. Het verdelen van dat budget over
+ * de voorraadregels doet lib/safety-stock; die is de enige aanroeper, zodat de
+ * PDP, de allocatie en de kassa-lezing gegarandeerd dezelfde stuks vasthouden.
+ *
+ * "web"   — een klant koopt op afstand. De marge beschermt tegen een mistelling
+ *           of een displaystuk: verkoop je een stuk dat er niet blijkt te zijn,
+ *           dan volgt een annulering bij een klant die het schap nooit zag.
+ * "store" — winkels onderling / de kassa. De verkoper staat bij het rek en heeft
+ *           het artikel in z'n handen. Kevin, 6 aug: "mag eraf voor winkels
+ *           onderling" → default 0.
+ */
+export function safetyBudgets(s: Settings, channel: StockChannel = "web"): { retail: number; warehouse: number } {
+  if (channel === "store") return { retail: s.storeChannelSafetyStock, warehouse: s.storeChannelSafetyStock };
+  return { retail: s.retailSafetyStock, warehouse: s.warehouseSafetyStock };
 }
 export function cutoffHourFor(branchId: string, s: Settings, dayName?: string): number {
   if (s.branchCutoffs && s.branchCutoffs[branchId] != null) return s.branchCutoffs[branchId];
