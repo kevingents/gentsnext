@@ -102,7 +102,9 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const dagen = Math.min(Math.max(parseInt(url.searchParams.get("dagen") || "30", 10) || 30, 1), 90);
-  const vanaf = sql`(now() at time zone 'utc')::date - ${dagen}`;
+  /* ::int is verplicht: neon-http bindt de parameter als tekst en Postgres
+     kent geen `date - text` — zonder cast faalt elke GET. */
+  const vanaf = sql`(now() at time zone 'utc')::date - ${dagen}::int`;
 
   try {
     const db = getDb();
