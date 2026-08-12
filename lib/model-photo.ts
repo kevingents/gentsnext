@@ -25,13 +25,27 @@ const POSE = "Relaxed full-length pose, one hand casually in his trouser pocket,
 const POSE_ONDER = "Framed from the waist down, focus on the lower body and footwear, relaxed stance with weight on one leg and one foot slightly forward.";
 const ONDERLIJF = new Set(["Schoenen", "Riemen"]);
 
-function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
+type Styling = ReturnType<typeof modelStylePrompt>;
+
+/**
+ * De zin die het kledingstuk beschrijft, mét de styling die modelStylePrompt
+ * heeft uitgerekend.
+ *
+ * Die styling werd bij Overhemden, Truien, Polo's en T-shirts helemaal niet
+ * gebruikt: daar stond een vaste zin zonder ${s.shirt}/${s.shoes}. Een SMOKING-
+ * overhemd werd dus als los overhemd met een broek gestyled — geen strik, geen
+ * smoking — terwijl de code allang wist dat het black-tie was. Vandaar dat
+ * "het model moet ook een strik dragen" bij zo'n overhemd nergens landde.
+ */
+function garmentFor(hg: string, s: Styling): string {
+  const das = s.neckwear ? ` with ${s.neckwear}` : "";
+  const broek = s.trousers;
   switch (hg) {
-    case "Pakken": return `Male model wearing THIS suit, complete with ${s.shirt} and ${s.shoes}.`;
-    case "Colberts": return `Male model wearing THIS blazer over ${s.shirt}, with matching trousers and ${s.shoes}.`;
-    case "Gilets": return `Male model wearing THIS waistcoat over ${s.shirt}, with matching trousers and ${s.shoes}. The lowest button of the waistcoat is left open.`;
-    case "Broeken": return `Male model wearing THESE trousers with a tucked ${s.shirt} and ${s.shoes}.`;
-    case "Overhemden": return "Male model wearing THIS shirt, neatly styled with trousers.";
+    case "Pakken": return `Male model wearing THIS suit, complete with ${s.shirt}${das} and ${s.shoes}.`;
+    case "Colberts": return `Male model wearing THIS blazer over ${s.shirt}${das}, with ${broek} and ${s.shoes}.`;
+    case "Gilets": return `Male model wearing THIS waistcoat over ${s.shirt}${das}, with ${broek} and ${s.shoes}. The lowest button of the waistcoat is left open.`;
+    case "Broeken": return `Male model wearing THESE trousers with ${s.shirt} tucked in${s.neckwear ? `, wearing ${s.neckwear}` : ""}, and ${s.shoes}.`;
+    case "Overhemden": return `Male model wearing THIS shirt${das}, neatly styled with ${s.blackTie ? "black tuxedo trousers" : "trousers"} and ${s.shoes}.`;
     case "Truien": case "Vesten": return "Male model wearing THIS knitwear, styled with neat trousers.";
     case "Polo-shirts": return "Male model wearing THIS polo shirt, styled with neat trousers.";
     case "T-Shirts": return "Male model wearing THIS t-shirt, styled casually with neat trousers.";
@@ -39,8 +53,8 @@ function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
     // Zonder eigen zin viel een schoen terug op "THIS item, neatly styled with
     // matching menswear" — vaag, en "matching" is precies het woord dat de
     // generator een compleet bij elkaar passend pak liet verzinnen.
-    case "Schoenen": return "Male model wearing THESE shoes with well-fitted trousers.";
-    case "Riemen": return `Male model wearing THIS belt with well-fitted trousers, a tucked ${s.shirt} and ${s.shoes}.`;
+    case "Schoenen": return `Male model wearing THESE shoes with ${s.blackTie ? "black tuxedo trousers and dark dress socks" : "well-fitted trousers"}.`;
+    case "Riemen": return `Male model wearing THIS belt with well-fitted trousers, ${s.shirt} tucked in, and ${s.shoes}.`;
     case "Stropdassen": return `Male model wearing THIS tie with ${s.shirt} and a classic jacket.`;
     case "Strikken": return `Male model wearing THIS bow tie with ${s.shirt} and a black tuxedo jacket.`;
     default: return "Male model wearing THIS item, neatly styled with classic menswear.";
