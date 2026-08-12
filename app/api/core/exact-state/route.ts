@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  *   get             { key }               → { ok, value }        (value = null als afwezig)
  *   put             { key, value }        → { ok }
  *   del             { key }               → { ok }
- *   claim-refresh   { owner, leaseMs? }   → { ok, won }
+ *   claim-refresh   { owner, leaseMs?, lockKey? } → { ok, won }   (slot per verbinding: gents/antwerpen)
  *   release-refresh { owner }             → { ok }
  *
  * De values zijn hier opaak: de OAuth-tokens komen al AES-versleuteld binnen
@@ -31,7 +31,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; key?: string; value?: unknown; owner?: string; leaseMs?: number };
+  let b: { action?: string; key?: string; value?: unknown; owner?: string; leaseMs?: number; lockKey?: string };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
   const key = String(b?.key || "").trim();
@@ -56,13 +56,13 @@ export async function POST(req: Request) {
       case "claim-refresh": {
         const owner = String(b.owner || "").trim();
         if (!owner) return NextResponse.json({ ok: false, error: "owner is verplicht." }, { status: 400 });
-        const won = await claimExactRefresh(owner, Number(b.leaseMs) || 25_000);
+        const won = await claimExactRefresh(owner, Number(b.leaseMs) || 25_000, b.lockKey);
         return NextResponse.json({ ok: true, won });
       }
       case "release-refresh": {
         const owner = String(b.owner || "").trim();
         if (!owner) return NextResponse.json({ ok: false, error: "owner is verplicht." }, { status: 400 });
-        await releaseExactRefresh(owner);
+        await releaseExactRefresh(owner, b.lockKey);
         return NextResponse.json({ ok: true });
       }
       default:
