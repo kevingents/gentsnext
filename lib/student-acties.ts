@@ -1,6 +1,10 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { studentActies, studentActieVerkopen, studentLeden } from "@/db/schema";
+import {
+  berekenKorting, doetMeeAanLijst, isKortingSoort, kortingOmschrijving,
+  type ActieKorting, type KortingSoort,
+} from "@/lib/student-korting";
 
 /**
  * lib/student-acties.ts — verenigingskorting aan de kassa.
@@ -25,7 +29,15 @@ export type StudentActie = {
   vereniging: string;
   winkels: string[];
   producten: string[];
+  kortingSoort: KortingSoort;
   kortingPct: number;
+  kortingCent: number;
+  koopAantal: number;
+  gratisAantal: number;
+  herhalen: boolean;
+  cadeauProducten: string[];
+  /** Leesbare samenvatting ("2+1 gratis") — de kassa toont dit bij de actie. */
+  omschrijving: string;
   vanaf: string | null;
   tot: string | null;
   actief: boolean;
@@ -39,13 +51,23 @@ const lijst = (v: unknown): string[] =>
   Array.isArray(v) ? [...new Set(v.map((x) => clean(x)).filter(Boolean))] : [];
 
 function toActie(r: typeof studentActies.$inferSelect): StudentActie {
+  const korting: ActieKorting = {
+    kortingSoort: isKortingSoort(r.kortingSoort) ? r.kortingSoort : "percent",
+    kortingPct: Number(r.kortingPct) || 0,
+    kortingCent: Number(r.kortingCent) || 0,
+    koopAantal: Number(r.koopAantal) || 0,
+    gratisAantal: Number(r.gratisAantal) || 0,
+    herhalen: r.herhalen !== false,
+    producten: lijst(r.producten),
+    cadeauProducten: lijst(r.cadeauProducten),
+  };
   return {
     id: r.id,
     naam: r.naam,
     vereniging: r.vereniging,
     winkels: lijst(r.winkels),
-    producten: lijst(r.producten),
-    kortingPct: Number(r.kortingPct) || 0,
+    ...korting,
+    omschrijving: kortingOmschrijving(korting),
     vanaf: r.vanaf ? String(r.vanaf) : null,
     tot: r.tot ? String(r.tot) : null,
     actief: Boolean(r.actief),
@@ -77,12 +99,7 @@ export function geldtInWinkel(a: Pick<StudentActie, "winkels">, store: string): 
 
 /** Doet dit artikel mee? (lege productlijst = alles). Match op sku óf barcode. */
 export function doetMee(a: Pick<StudentActie, "producten">, sku: string, barcode = ""): boolean {
-  if (!a.producten.length) return true;
-  const s = lower(sku), b = lower(barcode);
-  return a.producten.some((p) => {
-    const q = lower(p);
-    return Boolean(q) && (q === s || (Boolean(b) && q === b));
-  });
+  return doetMeeAanLijst(a.producten, sku, barcode);
 }
 
 /* ── Beheer (portal) ─────────────────────────────────────────────────────── */
@@ -104,7 +121,9 @@ export async function getStudentActie(id: string): Promise<StudentActie | null> 
 
 export type ActieInvoer = {
   naam?: string; vereniging?: string; winkels?: unknown; producten?: unknown;
-  kortingPct?: unknown; vanaf?: string | null; tot?: string | null; actief?: unknown; aangemaaktDoor?: string;
+  kortingSoort?: unknown; kortingPct?: unknown; kortingCent?: unknown;
+  koopAantal?: unknown; gratisAantal?: unknown; herhalen?: unknown; cadeauProducten?: unknown;
+  vanaf?: string | null; tot?: string | null; actief?: unknown; aangemaaktDoor?: string;
 };
 
 /** Percentage begrenzen: 0-100, hele procenten. 0 = geen korting (dan heeft de actie geen zin). */
@@ -113,6 +132,11 @@ function pct(v: unknown): number {
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, n));
 }
+/** Hele, niet-negatieve getallen — centen en aantallen kennen geen halven. */
+function heel(v: unknown): number {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 const datum = (v: unknown): string | null => (/^\d{4}-\d{2}-\d{2}$/.test(clean(v)) ? clean(v) : null);
 
 export async function saveStudentActie(id: string | null, input: ActieInvoer): Promise<{ ok: boolean; actie?: StudentActie; error?: string }> {
@@ -120,8 +144,27 @@ export async function saveStudentActie(id: string | null, input: ActieInvoer): P
   const vereniging = clean(input.vereniging).slice(0, 120);
   if (!naam) return { ok: false, error: "Geef de actie een naam." };
   if (!vereniging) return { ok: false, error: "Kies of typ een vereniging." };
+
+  const kortingSoort: KortingSoort = isKortingSoort(input.kortingSoort) ? input.kortingSoort : "percent";
   const kortingPct = pct(input.kortingPct);
-  if (!kortingPct) return { ok: false, error: "Vul een kortingspercentage in (1-100)." };
+  const kortingCent = heel(input.kortingCent);
+  const koopAantal = heel(input.koopAantal);
+  const gratisAantal = heel(input.gratisAantal);
+  const producten = lijst(input.producten);
+  const cadeauProducten = lijst(input.cadeauProducten);
+
+  /* Per soort afdwingen wat 'ie nodig heeft. Een actie die niets doet is erger dan
+     een foutmelding: de kassier vertrouwt erop dat de korting eraf gaat. */
+  if (kortingSoort === "percent" && !kortingPct) return { ok: false, error: "Vul een kortingspercentage in (1-100)." };
+  if (kortingSoort === "bedrag" && !kortingCent) return { ok: false, error: "Vul een kortingsbedrag in." };
+  if (kortingSoort === "nplusm" && (koopAantal < 1 || gratisAantal < 1)) {
+    return { ok: false, error: "Vul in hoeveel de klant koopt en hoeveel er gratis is (bv. 2 + 1)." };
+  }
+  if (kortingSoort === "cadeau") {
+    if (gratisAantal < 1) return { ok: false, error: "Vul in hoeveel cadeau-artikelen de klant gratis krijgt." };
+    if (!cadeauProducten.length) return { ok: false, error: "Kies minstens één cadeau-artikel, anders krijgt de klant niets." };
+  }
+
   const vanaf = datum(input.vanaf);
   const tot = datum(input.tot);
   if (vanaf && tot && tot < vanaf) return { ok: false, error: "De einddatum ligt vóór de startdatum." };
@@ -129,8 +172,14 @@ export async function saveStudentActie(id: string | null, input: ActieInvoer): P
   const waarden = {
     naam, vereniging,
     winkels: lijst(input.winkels),
-    producten: lijst(input.producten),
-    kortingPct,
+    producten,
+    kortingSoort,
+    kortingPct: kortingSoort === "percent" ? kortingPct : 0,
+    kortingCent: kortingSoort === "bedrag" ? kortingCent : 0,
+    koopAantal: kortingSoort === "nplusm" || kortingSoort === "cadeau" ? Math.max(1, koopAantal) : 0,
+    gratisAantal: kortingSoort === "nplusm" || kortingSoort === "cadeau" ? gratisAantal : 0,
+    herhalen: input.herhalen == null ? true : Boolean(input.herhalen),
+    cadeauProducten: kortingSoort === "cadeau" ? cadeauProducten : [],
     vanaf, tot,
     actief: input.actief == null ? true : Boolean(input.actief),
     aangemaaktDoor: clean(input.aangemaaktDoor).slice(0, 80),
@@ -184,14 +233,21 @@ export async function registreerStudentVerkoop(input: {
     return { ok: false, error: "Zonder klant met e-mailadres kan de verkoop niet aan de vereniging gekoppeld worden." };
   }
 
+  /* De hele berekening (percentage, vast bedrag, 2+1, cadeau) staat in
+     lib/student-korting.ts en draait hier op de actie uit de DATABASE — niet op
+     wat de kassa meestuurt. De kassa rekent 'm ook uit om het bedrag te tonen;
+     wat hier uitkomt is wat in de rapportage belandt. */
+  const invoer = Array.isArray(input.regels) ? input.regels : [];
+  const kortingen = berekenKorting(actie, invoer);
+
   let kortingCent = 0;
   let omzetCent = 0;
-  const regels = (Array.isArray(input.regels) ? input.regels : []).map((l) => {
+  const regels = invoer.map((l, i) => {
     const qty = Math.max(1, Math.round(Number(l.qty) || 1));
     const priceCent = Math.max(0, Math.round(Number(l.priceCent) || 0));
     const meedoen = doetMee(actie, clean(l.sku), clean(l.barcode));
     const regelCent = priceCent * qty;
-    const korting = meedoen ? Math.round((regelCent * actie.kortingPct) / 100) : 0;
+    const korting = Math.max(0, Math.min(regelCent, kortingen[i] || 0));
     kortingCent += korting;
     omzetCent += regelCent - korting;
     return { sku: clean(l.sku), title: clean(l.title), qty, priceCent, kortingCent: korting, meedoen };
