@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, returns, returnLines, giftcards } from "@/db/schema";
+import { releaseVoucher } from "@/lib/vouchers";
 import { getSettings } from "@/lib/settings";
 import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
 import { refundMolliePayment } from "@/lib/mollie";
@@ -465,6 +466,7 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
       firstName: orders.firstName,
       subtotalCents: orders.subtotalCents,
       discountCents: orders.discountCents,
+      voucherCode: orders.voucherCode,
       giftcardCents: orders.giftcardCents,
       shippingCents: orders.shippingCents,
       totalCents: orders.totalCents,
@@ -475,6 +477,63 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
 
   // Bij een mislukte verwerking terug naar 'received' zodat het opnieuw kan.
   const unclaim = () => db.update(returns).set({ status: "received", updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+
+  /**
+   * Tegoedbon terug bij een retour. Zonder dit was een ingezette code definitief
+   * weg: de refund is PRO-RATA (itemsCents = brutowaarde minus het evenredige deel
+   * van de kortingscode), dus de klant krijgt alleen terug wat 'ie betaald heeft.
+   * Van een tegoedbon van EUR 25 op een order van EUR 100 bleef bij volledige
+   * retour EUR 75 over en verdampte de EUR 25.
+   *
+   * Het aandeel van DEZE retour = brutowaarde van de teruggestuurde regels minus
+   * het al pro-rata gekorte itemsCents. discountCents komt in deze rail uitsluitend
+   * uit de kortingscode (createOrder zet 'm alleen daar), dus dat verschil IS de
+   * code-waarde en niets anders.
+   *
+   * Gaat de hele order terug én is dit de eerste retour erop, dan zetten we de
+   * ORIGINELE code weer op actief — dat is wat de klant verwacht, en er ontstaat
+   * geen nieuwe waarde. In elk ander geval kan dat niet (je kunt een code niet half
+   * activeren) en geven we het onbenutte deel als tegoedbon terug. De
+   * eerste-retour-eis voorkomt dat een deelretour eerst tegoed krijgt en de
+   * afsluitende retour daarna ook nog de volle code terugzet.
+   */
+  async function tegoedbonTerug(): Promise<void> {
+    const code = (order?.voucherCode || "").trim();
+    if (!code) return;
+
+    const [bruto] = await db
+      .select({ cents: sql<number>`coalesce(sum(${returnLines.qty} * ${returnLines.unitPriceCents}), 0)::int` })
+      .from(returnLines)
+      .where(eq(returnLines.returnId, ret.id));
+    const aandeel = Math.max(0, (Number(bruto?.cents) || 0) - ret.itemsCents);
+    if (aandeel <= 0) return;
+
+    const [besteld] = await db
+      .select({ stuks: sql<number>`coalesce(sum(${orderLines.quantity}), 0)::int` })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, ret.orderId));
+    // Alle retouren op deze order behalve geannuleerde — inclusief deze.
+    const [retour] = await db.execute<{ stuks: number; retouren: number }>(sql`
+      select coalesce(sum(rl.qty), 0)::int as stuks, count(distinct r.id)::int as retouren
+      from returns r join return_lines rl on rl.return_id = r.id
+      where r.order_id = ${ret.orderId} and r.status <> 'cancelled'`).then((x) => x.rows);
+
+    const allesTerug = (Number(besteld?.stuks) || 0) > 0 && Number(retour?.stuks) >= Number(besteld?.stuks);
+    const eersteRetour = Number(retour?.retouren) <= 1;
+
+    if (allesTerug && eersteRetour) {
+      await releaseVoucher(code);
+      console.info(`[returns] tegoedbon ${code} weer actief na volledige retour ${ret.orderNumber}`);
+      return;
+    }
+    const nieuw = await issueStoreCredit(
+      aandeel,
+      ret.email,
+      order?.customerId ?? null,
+      `Onbenut deel van code ${code} (retour ${ret.orderNumber})`,
+    );
+    console.info(`[returns] onbenut deel van ${code} (${aandeel} cent) teruggegeven als ${nieuw} bij retour ${ret.orderNumber}`);
+  }
 
   async function mailRefunded(refundType: RefundType, amountCents: number, code: string) {
     try {
@@ -491,6 +550,7 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
       try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
       catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
     }
+    try { await tegoedbonTerug(); } catch (e) { console.error("[returns] tegoedbon teruggeven mislukt:", (e as Error).message); }
     await mailRefunded("credit", ret.itemsCents, code);
     return { ok: true, status: "completed", refundedCents: ret.itemsCents, creditCode: code };
   }
@@ -530,6 +590,7 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
     try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
     catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
   }
+  try { await tegoedbonTerug(); } catch (e) { console.error("[returns] tegoedbon teruggeven mislukt:", (e as Error).message); }
   await mailRefunded("money", cashRefund, creditCode);
   return { ok: true, status: "completed", refundedCents, creditCode };
 }
