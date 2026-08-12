@@ -3,24 +3,25 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { events } from "@/db/schema";
 import { adminOrToken } from "@/lib/studio-token";
+import { getExperiments, type AbDoel } from "@/lib/experiments";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET /api/studio/site/experiments/results?id=<experiment> — de uitslag:
- * per variant het aantal bezoekers (sessies met een exposure), kopers,
- * conversie, omzet, en de vergelijking met de eerste variant (de controle).
+ * GET /api/studio/site/experiments/results?id=<experiment> — de uitslag.
  *
- * Bezoekers = DISTINCT sessies; een dubbele exposure (privémodus, gewist
- * localStorage) telt dus niet dubbel. Kwam een sessie ooit in twee varianten
- * terecht (gewichten tussentijds gewijzigd), dan telt hij deterministisch bij
- * de alfabetisch eerste — nooit bij allebei.
+ * Per variant: bezoekers (DISTINCT sessies met een exposure binnen het
+ * meetvenster), de funnel (winkelwagen → checkout → aankoop), omzet en omzet
+ * per bezoeker. De significantie is een tweezijdige z-toets op het DOEL van
+ * het experiment (aankoop, winkelwagen of checkout) tegen de eerste variant.
  *
- * De significantie is een tweezijdige z-toets op conversie tegen de controle.
- * "significant" = 95%. Belangrijker dan het vinkje: bij kleine aantallen zegt
- * de uitslag niets — daarom gaat het aantal bezoekers altijd mee terug en
- * rekent de portal pas een oordeel als beide kanten er minstens 100 hebben.
+ * Meetvenster: alleen exposures ná gestartOp (en vóór gestoptOp) tellen — een
+ * herstart begint met een schone lei, oude runs vervuilen de uitslag niet.
+ *
+ * SRM-waakhond: wijkt de gemeten verdeling af van de ingestelde gewichten
+ * (chi-kwadraat, p < 0,001), dan klopt er iets aan de toewijzing of targeting
+ * en is de hele uitslag verdacht — dat signaal gaat vóór elke significantie.
  *
  * Auth: gentsnext-admin OF STUDIO_API_TOKEN.
  */
@@ -36,6 +37,15 @@ function phi(x: number): number {
   return x >= 0 ? 0.5 * (1 + y) : 0.5 * (1 - y);
 }
 
+/** Kritieke chi-kwadraatwaarden bij p=0,001 voor df 1..5 (SRM-drempel). */
+const CHI2_KRITIEK = [10.83, 13.82, 16.27, 18.47, 20.52];
+
+const DOEL_LABEL: Record<AbDoel, string> = {
+  purchase: "aankoop",
+  add_to_cart: "in winkelwagen",
+  checkout_start: "checkout gestart",
+};
+
 export async function GET(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
@@ -46,52 +56,110 @@ export async function GET(req: Request) {
   }
 
   try {
+    const { experimenten } = await getExperiments();
+    const exp = experimenten.find((e) => e.id === id);
+    const doel: AbDoel = exp?.doel ?? "purchase";
+    // Zonder venster (experiment van vóór de stempel, of verwijderd): alles.
+    const vanaf = exp?.gestartOp ?? "1970-01-01T00:00:00.000Z";
+    const tot = exp?.gestoptOp ?? "9999-01-01T00:00:00.000Z";
+
     const db = getDb();
     const rows = (
-      await db.execute<{ variant: string; bezoekers: number; kopers: number; omzet_cents: string }>(sql`
+      await db.execute<{
+        variant: string;
+        bezoekers: number;
+        winkelwagen: number;
+        checkout: number;
+        kopers: number;
+        omzet_cents: string;
+      }>(sql`
         with exposed as (
           select session_id, min(split_part(handle, ':', 2)) as variant
           from ${events}
-          where type = 'ab_exposure' and split_part(handle, ':', 1) = ${id} and session_id <> ''
+          where type = 'ab_exposure'
+            and split_part(handle, ':', 1) = ${id}
+            and session_id <> ''
+            and created_at >= ${vanaf}::timestamptz
+            and created_at <= ${tot}::timestamptz
           group by session_id
         ),
-        koop as (
-          select e.session_id, coalesce(sum(e.value_cents), 0) as cents
+        stappen as (
+          select x.variant,
+                 count(distinct e.session_id) filter (where e.type = 'add_to_cart') as winkelwagen,
+                 count(distinct e.session_id) filter (where e.type = 'checkout_start') as checkout,
+                 count(distinct e.session_id) filter (where e.type = 'purchase') as kopers,
+                 coalesce(sum(e.value_cents) filter (where e.type = 'purchase'), 0) as omzet_cents
           from ${events} e
           join exposed x on x.session_id = e.session_id
-          where e.type = 'purchase'
-          group by e.session_id
+          where e.type in ('add_to_cart', 'checkout_start', 'purchase')
+            and e.created_at >= ${vanaf}::timestamptz
+          group by x.variant
         )
         select x.variant,
                count(*)::int as bezoekers,
-               count(k.session_id)::int as kopers,
-               coalesce(sum(k.cents), 0)::bigint as omzet_cents
+               coalesce(max(s.winkelwagen), 0)::int as winkelwagen,
+               coalesce(max(s.checkout), 0)::int as checkout,
+               coalesce(max(s.kopers), 0)::int as kopers,
+               coalesce(max(s.omzet_cents), 0)::bigint as omzet_cents
         from exposed x
-        left join koop k on k.session_id = x.session_id
+        left join stappen s on s.variant = x.variant
         group by x.variant
         order by x.variant
       `)
     ).rows;
 
+    const doelVeld = doel === "purchase" ? "kopers" : doel === "add_to_cart" ? "winkelwagen" : "checkout";
+
     const varianten = rows.map((r) => {
       const bezoekers = Number(r.bezoekers) || 0;
+      const winkelwagen = Number(r.winkelwagen) || 0;
+      const checkout = Number(r.checkout) || 0;
       const kopers = Number(r.kopers) || 0;
+      const omzetCents = Number(r.omzet_cents) || 0;
+      const doelN = doelVeld === "kopers" ? kopers : doelVeld === "winkelwagen" ? winkelwagen : checkout;
       return {
         variant: r.variant,
         bezoekers,
+        winkelwagen,
+        checkout,
         kopers,
-        conversiePct: bezoekers ? Math.round((kopers / bezoekers) * 10000) / 100 : 0,
-        omzetCents: Number(r.omzet_cents) || 0,
+        omzetCents,
+        omzetPerBezoekerCents: bezoekers ? Math.round(omzetCents / bezoekers) : 0,
+        doelN,
+        conversiePct: bezoekers ? Math.round((doelN / bezoekers) * 10000) / 100 : 0,
       };
     });
 
-    // Vergelijking met de controle (eerste variant op alfabet — per afspraak "A").
+    // SRM: klopt de gemeten verdeling met de ingestelde gewichten? Zo niet,
+    // dan is er iets mis met de toewijzing en is élke conclusie verdacht.
+    let srm: { chi2: number; waarschuwing: boolean } | null = null;
+    if (exp && varianten.length >= 2) {
+      const totaalBezoekers = varianten.reduce((s, v) => s + v.bezoekers, 0);
+      const totaalGewicht = exp.varianten.reduce((s, v) => s + v.gewicht, 0) || 1;
+      if (totaalBezoekers >= 200) {
+        let chi2 = 0;
+        let geldig = true;
+        for (const v of varianten) {
+          const gewicht = exp.varianten.find((x) => x.key === v.variant)?.gewicht;
+          if (gewicht === undefined) { geldig = false; break; }
+          const verwacht = (gewicht / totaalGewicht) * totaalBezoekers;
+          if (verwacht < 5) { geldig = false; break; } // chi-kwadraat onbetrouwbaar
+          chi2 += ((v.bezoekers - verwacht) ** 2) / verwacht;
+        }
+        if (geldig) {
+          const kritiek = CHI2_KRITIEK[Math.min(varianten.length - 2, CHI2_KRITIEK.length - 1)];
+          srm = { chi2: Math.round(chi2 * 100) / 100, waarschuwing: chi2 > kritiek };
+        }
+      }
+    }
+
+    // Tweezijdige z-toets op het doel, tegen de eerste variant (de controle).
     const controle = varianten[0];
     const vergelijking = varianten.slice(1).map((v) => {
       const n1 = controle?.bezoekers || 0;
       const n2 = v.bezoekers;
-      const x1 = controle?.kopers || 0;
-      const x2 = v.kopers;
+      const x1 = controle?.doelN || 0;
+      const x2 = v.doelN;
       const genoeg = n1 >= 100 && n2 >= 100;
       let z = 0;
       let pWaarde = 1;
@@ -118,7 +186,18 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json({ ok: true, id, varianten, vergelijking, controle: controle?.variant ?? null });
+    return NextResponse.json({
+      ok: true,
+      id,
+      doel,
+      doelLabel: DOEL_LABEL[doel],
+      gestartOp: exp?.gestartOp ?? null,
+      gestoptOp: exp?.gestoptOp ?? null,
+      varianten,
+      vergelijking,
+      controle: controle?.variant ?? null,
+      srm,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

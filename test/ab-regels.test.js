@@ -107,3 +107,29 @@ test("sanering: één variant is geen experiment; alle gewichten 0 krijgt een va
   assert.equal(experimenten[0].id, "nul");
   assert.equal(experimenten[0].varianten[0].gewicht, 100);
 });
+
+test("doel: geldige waarde blijft, onzin wordt purchase", () => {
+  const { experimenten } = schoonExperimentsDoc({
+    experimenten: [
+      { id: "een", doel: "add_to_cart", varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }] },
+      { id: "twee", doel: "verkoop!!", varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }] },
+    ],
+  });
+  assert.equal(experimenten[0].doel, "add_to_cart");
+  assert.equal(experimenten[1].doel, "purchase");
+});
+
+test("meetvenster: alleen echte datums overleven de sanering", () => {
+  const { experimenten } = schoonExperimentsDoc({
+    experimenten: [
+      {
+        id: "venster",
+        gestartOp: "2026-08-12T10:00:00.000Z",
+        gestoptOp: "geen datum",
+        varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }],
+      },
+    ],
+  });
+  assert.equal(experimenten[0].gestartOp, "2026-08-12T10:00:00.000Z");
+  assert.equal(experimenten[0].gestoptOp, undefined);
+});
