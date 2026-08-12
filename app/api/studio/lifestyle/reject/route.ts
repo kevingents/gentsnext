@@ -5,17 +5,19 @@ import { addLearning } from "@/lib/visual-learnings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 30; // de notitie wordt omgezet naar een prompt-instructie
 
 /**
- * POST /api/studio/lifestyle/reject { handle, slot:1|2|3, category, reason, url? }
+ * POST /api/studio/lifestyle/reject { handle, slot:1|2|3, topic?, category, reason, url? }
  * Keurt een sfeerbeeld af: legt de reden vast in de learnings-store (de AI leert
- * ervan) én wist het slot (db-veld leeg + blob weg). Auth: admin OF STUDIO_API_TOKEN.
+ * ervan) én wist het slot (db-veld leeg + blob weg). topic is "beeld", "model" of
+ * "kleding". Auth: admin OF STUDIO_API_TOKEN.
  */
 export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { handle?: unknown; slot?: unknown; category?: unknown; reason?: unknown; url?: unknown };
+  let body: { handle?: unknown; slot?: unknown; topic?: unknown; category?: unknown; reason?: unknown; url?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -27,9 +29,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Handle of slot ontbreekt." }, { status: 400 });
   }
   try {
+    const topic = body?.topic === "kleding" || body?.topic === "model" || body?.topic === "beeld" ? body.topic : undefined;
     await addLearning({
       handle,
       slot,
+      topic,
       url: body?.url ? String(body.url) : undefined,
       category: String(body?.category || "kwaliteit"),
       reason: String(body?.reason || "").trim(),
