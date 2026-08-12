@@ -220,9 +220,23 @@ export function schoonHomeLayout(raw: unknown): HomeLayout {
   return { secties };
 }
 
+/**
+ * Documentsleutels: de live indeling heet "homepage"; een A/B-variant heeft een
+ * eigen document ("homepage:exp:<experiment>:<variant>", zie lib/experiments).
+ * Alleen dat patroon is toegestaan — de sleutel komt via de portal binnen en
+ * mag nooit een willekeurig ander content-document kunnen aanwijzen.
+ */
+export function isHomepageDocKey(key: string): boolean {
+  return key === "homepage" || /^homepage:exp:[a-z0-9-]{1,40}:[a-z0-9-]{1,12}$/.test(key);
+}
+
 /** De indeling zoals de site hem rendert (store → gesaneerd, anders default). */
-export async function getHomeLayout(): Promise<HomeLayout> {
-  const doc = await getContentDoc<HomeLayout>("homepage");
-  if (!doc) return DEFAULT_HOME;
+export async function getHomeLayout(docKey = "homepage"): Promise<HomeLayout> {
+  const key = isHomepageDocKey(docKey) ? docKey : "homepage";
+  const doc = await getContentDoc<HomeLayout>(key);
+  // Een variant-document dat (nog) niet bestaat valt terug op de LIVE indeling,
+  // niet op de code-default: een experiment-variant zonder eigen indeling hoort
+  // eruit te zien als de site van dat moment.
+  if (!doc) return key === "homepage" ? DEFAULT_HOME : getHomeLayout("homepage");
   return schoonHomeLayout(doc);
 }

@@ -13,6 +13,8 @@ import { getTrendingHandles } from "@/lib/analytics";
 import { getAllLooks } from "@/lib/looks";
 import { getOccasions } from "@/lib/occasions-server";
 import { getHomeLayout, type HomeSection } from "@/lib/homepage";
+import { resolveAb, homepageVariantKey } from "@/lib/experiments";
+import { TrackAb } from "@/components/analytics/track-ab";
 import { CATEGORIES } from "@/lib/categories";
 import { getCategoryLabels } from "@/lib/nav-i18n";
 import { localeAlternates } from "@/lib/seo";
@@ -58,7 +60,20 @@ const STANDAARD_TEKST: Record<string, { eyebrow?: string; titel?: string; tekst?
 export default async function Home() {
   const locale = await getLocale();
   const t = await getT(locale);
-  const { secties } = await getHomeLayout();
+
+  // A/B: bepaal éérst de varianten van deze bezoeker — die kunnen de indeling
+  // en losse hero-/USP-velden vervangen. Exposure loggen we hier op de
+  // homepage voor de experimenten die de homepage raken; aankondigingsbalk-
+  // experimenten loggen in de balk zelf (die staat op elke pagina).
+  const ab = await resolveAb();
+  const eigenIndeling = [...ab.assignments].reverse().find((a) => a.overrides?.eigenIndeling);
+  const homepageAb = ab.assignments.filter(
+    (a) => !a.overrides || a.overrides.eigenIndeling || a.overrides.hero || a.overrides.usps,
+  );
+
+  const { secties } = await getHomeLayout(
+    eigenIndeling ? homepageVariantKey(eigenIndeling.id, eigenIndeling.variant) : "homepage",
+  );
   const zichtbaar = secties.filter((s) => s.aan);
   const heeft = (type: HomeSection["type"]) => zichtbaar.some((s) => s.type === type);
 
@@ -88,13 +103,41 @@ export default async function Home() {
   // trending-await filteren we overlap weg, anders staat hetzelfde nieuwe pak
   // in "Populair nu" én in de strip eronder.
   const stripSecties = zichtbaar.filter((s) => s.type === "producten" && s.hoofdgroep);
-  const [settings, occasions, looks, catLabels, ...stripsRuw] = await Promise.all([
+  const [settingsBasis, occasions, looks, catLabels, ...stripsRuw] = await Promise.all([
     getLocalizedSiteSettings(locale),
     heeft("gelegenheden") ? getOccasions().catch(() => []) : Promise.resolve([]),
     heeft("look") ? getAllLooks().catch(() => []) : Promise.resolve([]),
     heeft("categorieen") ? getCategoryLabels(locale) : Promise.resolve(new Map<string, string>()),
     ...stripSecties.map((s) => getHighlights(s.hoofdgroep!, 8).catch(() => [] as ProductCardData[])),
   ]);
+
+  // Variant-overrides over de (vertaalde) instellingen heen. Een override-tekst
+  // staat er in élke taal — zelfde regel als eigen teksten in de indeling.
+  const o = ab.overrides;
+  const settings = {
+    ...settingsBasis,
+    usps: o.usps?.length ? o.usps : settingsBasis.usps,
+    hero: {
+      ...settingsBasis.hero,
+      eyebrow: o.hero?.eyebrow || settingsBasis.hero.eyebrow,
+      title: o.hero?.title || settingsBasis.hero.title,
+      subtitle: o.hero?.subtitle || settingsBasis.hero.subtitle,
+      videoUrl: o.hero?.videoUrl || settingsBasis.hero.videoUrl,
+      videoUrlMobile: o.hero?.videoUrlMobile || settingsBasis.hero.videoUrlMobile,
+      posterUrl: o.hero?.posterUrl || settingsBasis.hero.posterUrl,
+      primary: {
+        label: o.hero?.primaryLabel || settingsBasis.hero.primary.label,
+        href: o.hero?.primaryHref || settingsBasis.hero.primary.href,
+      },
+      secondary:
+        o.hero?.secondaryLabel || o.hero?.secondaryHref
+          ? {
+              label: o.hero?.secondaryLabel || settingsBasis.hero.secondary?.label || "",
+              href: o.hero?.secondaryHref || settingsBasis.hero.secondary?.href || "",
+            }
+          : settingsBasis.hero.secondary,
+    },
+  };
 
   const trending = await trendingPromise;
   const trendingHandles = new Set(trending.map((p) => p.handle));
@@ -235,6 +278,7 @@ export default async function Home() {
   return (
     <>
       <JsonLd data={orgJsonLd} />
+      {homepageAb.length > 0 && <TrackAb assignments={homepageAb.map(({ id, variant }) => ({ id, variant }))} />}
       {zichtbaar.map((sec) => (
         <div key={sec.id}>{blok(sec)}</div>
       ))}
