@@ -129,7 +129,14 @@ function famOf(...parts: (string | null | undefined)[]): Family {
 
 function formalityOf(hg: string, title: string, handle: string): Formality {
   const t = `${title} ${handle}`.toLowerCase();
-  if (/smoking|tuxedo|vadermoord|pliss|wingtip|wing.?collar|galadui|rokkostuum/.test(t)) return "black-tie";
+  // "rokkostuum" stond er wél in, maar de artikelen heten rokjas, rokvest,
+  // rokstrik en broek-rok-smok — die vielen dus door naar smart-casual en
+  // kregen cognac bruine schoenen bij een rokkostuum. Idem de lakschoen: de
+  // kleurtabel wist allang dat lak zwart lakleer is, de formaliteit niet.
+  if (/smoking|tuxedo|vadermoord|pliss|wingtip|wing.?collar|galadui|rokkostuum|\brok|jacquet|lakschoen|lakleer|\blak\b|patent/.test(t)) return "black-tie";
+  // Een strik is in deze catalogus per definitie gala — losse dassen zitten in
+  // "Stropdassen". Op de hoofdgroep toetsen is preciezer dan op de titel.
+  if (hg === "Strikken") return "black-tie";
   if (/jeans|denim|t-?shirt|sweat|hoodie|sneaker|cargo|short|bermuda/.test(t)) return "casual";
   if (hg === "Pakken" || hg === "Colberts") return "business";
   if (hg === "Overhemden") return /casual|flanel|oxford.*casual|linnen/.test(t) ? "smart-casual" : "business";
@@ -249,21 +256,23 @@ export function modelStylePrompt(
   colorLabel: string | null | undefined,
   title: string,
   handle: string,
-): { shirt: string; shoes: string } {
+): { shirt: string; shoes: string; neckwear: string; trousers: string; blackTie: boolean } {
   const formality = formalityOf(hg, title, handle);
   const fam = famOf(colorLabel, title, handle);
   const topShoe = colorPlan("shoes", formality, fam).pref[0];
-  const shoes =
-    formality === "black-tie"
-      ? "black patent leather formal shoes"
-      : topShoe === "brown" || topShoe === "tan"
-        ? "cognac brown leather shoes"
-        : "black leather shoes";
-  const shirt =
-    formality === "black-tie"
-      ? "a crisp white formal dress shirt"
-      : "a crisp white collared dress shirt";
-  return { shirt, shoes };
+  const blackTie = formality === "black-tie";
+  const shoes = blackTie
+    ? "black patent leather formal shoes"
+    : topShoe === "brown" || topShoe === "tan"
+      ? "cognac brown leather shoes"
+      : "black leather shoes";
+  const shirt = blackTie ? "a crisp white formal dress shirt" : "a crisp white collared dress shirt";
+  // Bij black-tie hoort een strik. Die stond nergens in de prompt, dus vroeg het
+  // team er per product handmatig om — bij een smokingoverhemd zelfs meerdere
+  // keren, want er was geen enkele plek waar neckwear genoemd werd.
+  const neckwear = blackTie ? "a black bow tie" : "";
+  const trousers = blackTie ? "black tuxedo trousers" : "matching trousers";
+  return { shirt, shoes, neckwear, trousers, blackTie };
 }
 
 /**
