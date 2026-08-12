@@ -38,6 +38,10 @@ const ALLOWED = new Set([
   // erop geklikt wordt (alt_click, via /api/r). Samen: haalt een annulering nog
   // iets op, of geven we alleen geld terug?
   "alt_offered", "alt_click",
+  // A/B: één exposure per sessie per experiment, handle "<experiment>:<variant>".
+  // Conversie wordt NIET apart gelogd — dat zijn de bestaande purchase-events
+  // van dezelfde sessie, zodat er nooit twee tellingen kunnen verschillen.
+  "ab_exposure",
 ]);
 
 export async function recordEvents(list: IncomingEvent[]): Promise<number> {
