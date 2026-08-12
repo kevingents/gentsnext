@@ -34,7 +34,17 @@ export async function delExactState(key: string): Promise<void> {
   await db.delete(exactState).where(eq(exactState.key, key));
 }
 
-const LOCK_KEY = "refresh-lock";
+const DEFAULT_LOCK_KEY = "refresh-lock";
+/* Eén slot per Exact-VERBINDING: GENTS (NL) en Antwerpen (BE) hebben elk hun
+   eigen eenmalige refresh-token, dus ook een eigen slot — anders blokkeert de
+   NL-verversing de BE-verversing en andersom. Allowlist, geen vrije tekst. */
+const LOCK_KEYS = /^refresh-lock(:[a-z][a-z0-9-]{0,30})?$/;
+
+function lockKeyOf(raw?: string): string {
+  const k = String(raw || DEFAULT_LOCK_KEY);
+  if (!LOCK_KEYS.test(k)) throw new Error(`Ongeldig slot "${k}".`);
+  return k;
+}
 
 /**
  * Probeer het refresh-slot te claimen. Eén atomaire statement: de insert wint
@@ -42,13 +52,14 @@ const LOCK_KEY = "refresh-lock";
  * is. Geeft terug of DEZE aanroep de claim won — de verliezer gaat pollen op
  * verse tokens in plaats van zelf te verversen.
  */
-export async function claimExactRefresh(owner: string, leaseMs: number): Promise<boolean> {
+export async function claimExactRefresh(owner: string, leaseMs: number, lockKey?: string): Promise<boolean> {
   const db = getDb();
+  const key = lockKeyOf(lockKey);
   const now = Date.now();
   const value = { owner, until: now + Math.max(1000, leaseMs) };
   const rows = await db
     .insert(exactState)
-    .values({ key: LOCK_KEY, value, updatedAt: new Date() })
+    .values({ key, value, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: exactState.key,
       set: { value, updatedAt: new Date() },
@@ -59,10 +70,11 @@ export async function claimExactRefresh(owner: string, leaseMs: number): Promise
 }
 
 /** Slot vrijgeven — alleen door de eigenaar (een verlopen lease valt vanzelf vrij). */
-export async function releaseExactRefresh(owner: string): Promise<void> {
+export async function releaseExactRefresh(owner: string, lockKey?: string): Promise<void> {
   const db = getDb();
+  const key = lockKeyOf(lockKey);
   await db
     .update(exactState)
     .set({ value: { owner: "", until: 0 }, updatedAt: new Date() })
-    .where(sql`${exactState.key} = ${LOCK_KEY} and ${exactState.value}->>'owner' = ${owner}`);
+    .where(sql`${exactState.key} = ${key} and ${exactState.value}->>'owner' = ${owner}`);
 }
