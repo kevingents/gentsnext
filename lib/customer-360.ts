@@ -58,12 +58,19 @@ const UUID_PATROON = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
  * want een half genormaliseerd nummer matcht bij Meta en Google nergens en
  * verlaagt alleen je matchpercentage zonder dat je ziet waarom.
  */
+/* Het klantveld eerst, anders het nummer van de laatste bestelling. Op de
+   klantkaart staat maar bij 1.984 van de 46.253 klanten een telefoonnummer; via
+   de orders komen er 12.771 bij. Een nummer is een tweede matchsleutel bij Meta
+   en Google Ads naast e-mail, en het is wat een winkel nodig heeft om te bellen
+   over een afhaalorder. */
+const TELEFOON_BRON = sql`coalesce(nullif(c.phone, ''), a.order_phone, '')`;
+
 const TELEFOON_E164 = sql`
   case
-    when c.phone ~ '^\\+[0-9]{8,15}$' then regexp_replace(c.phone, '[^0-9+]', '', 'g')
-    when regexp_replace(c.phone, '\\D', '', 'g') ~ '^0031[0-9]{9,}$' then '+' || substr(regexp_replace(c.phone, '\\D', '', 'g'), 3)
-    when regexp_replace(c.phone, '\\D', '', 'g') ~ '^31[0-9]{9,}$'   then '+' || regexp_replace(c.phone, '\\D', '', 'g')
-    when regexp_replace(c.phone, '\\D', '', 'g') ~ '^0[0-9]{8,}$'    then '+31' || substr(regexp_replace(c.phone, '\\D', '', 'g'), 2)
+    when ${TELEFOON_BRON} ~ '^\\+[0-9]{8,15}$' then regexp_replace(${TELEFOON_BRON}, '[^0-9+]', '', 'g')
+    when regexp_replace(${TELEFOON_BRON}, '\\D', '', 'g') ~ '^0031[0-9]{9,}$' then '+' || substr(regexp_replace(${TELEFOON_BRON}, '\\D', '', 'g'), 3)
+    when regexp_replace(${TELEFOON_BRON}, '\\D', '', 'g') ~ '^31[0-9]{9,}$'   then '+' || regexp_replace(${TELEFOON_BRON}, '\\D', '', 'g')
+    when regexp_replace(${TELEFOON_BRON}, '\\D', '', 'g') ~ '^0[0-9]{8,}$'    then '+31' || substr(regexp_replace(${TELEFOON_BRON}, '\\D', '', 'g'), 2)
     else ''
   end`;
 
@@ -277,9 +284,40 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       from newsletter_subscribers where trim(email) <> '' group by 1
     ),
     wallet as (select distinct serial_number sn from wallet_apple_registrations),
-    adres as (
+    /* Adres én telefoon: eerst het opgeslagen adresboek, anders het BEZORGADRES
+       van de laatste bestelling.
+     *
+     * Waarom die terugval er moet zijn: customer_addresses bevat 22 rijen op
+     * 46.253 klanten — bij de Shopify-import zijn adressen nooit als adresboek
+     * overgenomen, ze zitten alleen op de orders. Zonder deze CTE zou het
+     * profiel dus voor 99,95% van de klanten geen postcode kennen. Dat is niet
+     * cosmetisch: postcode en land zijn matchsleutels bij Meta en Google Ads
+     * (ze verhogen het matchpercentage flink) en zonder plaats is elke
+     * geografische doelgroep of winkelanalyse onmogelijk.
+     *
+     * Via de orders komen 26.659 klanten aan een adres en 12.771 aan een
+     * telefoonnummer. Het adresboek wint waar het gevuld is: dat is wat de klant
+     * zélf heeft opgegeven en onderhoudt.
+     */
+    adres_boek as (
       select distinct on (customer_id) customer_id cid, postal_code, city, country
       from customer_addresses order by customer_id, is_default desc, created_at desc
+    ),
+    adres_order as (
+      select distinct on (customer_id) customer_id cid, postal_code, city, country, phone
+      from orders
+      where customer_id is not null and (postal_code <> '' or phone <> '')
+      order by customer_id, created_at desc
+    ),
+    adres as (
+      select
+        coalesce(b.cid, o.cid) cid,
+        coalesce(nullif(b.postal_code, ''), o.postal_code, '') postal_code,
+        coalesce(nullif(b.city, ''), o.city, '') city,
+        coalesce(nullif(b.country, ''), o.country, 'NL') country,
+        coalesce(o.phone, '') order_phone
+      from adres_boek b
+      full outer join adres_order o on o.cid = b.cid
     ),
     -- Attributie van de devices van deze klant: de eerste aanraking die we van
     -- hem kennen. Zo weet je bij een VIP-klant nog steeds welke campagne hem
