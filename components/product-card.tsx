@@ -8,9 +8,7 @@ import { useT } from "@/components/i18n/locale-provider";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { ProductCardBadge } from "@/components/product-card-badge";
 import { track } from "@/lib/track-client";
-
-// Brede/kleine accessoires passen niet in de 3:4-tegel met object-cover → heel tonen.
-const FIT_CONTAIN = new Set(["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"]);
+import { packshotContain } from "@/lib/packshot-weergave";
 
 export function ProductCard({
   product,
@@ -32,7 +30,7 @@ export function ProductCard({
   sort?: string;
 }) {
   const t = useT();
-  const contain = FIT_CONTAIN.has(product.category || "");
+  const contain = packshotContain(product.category || "");
   return (
     <Link
       href={`/products/${product.handle}`}
@@ -52,7 +50,9 @@ export function ProductCard({
         <ProductCardBadge label={t("plp.badge.new")} tone="new" />
       ) : null}
       <WishlistButton handle={product.handle} />
-      <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
+      {/* Accessoire-packshots staan op puur wit; met bg-surface eronder werden de
+          contain-randen een zichtbare balk. Zie lib/packshot-weergave. */}
+      <div className={`relative aspect-[3/4] overflow-hidden rounded-card ${contain ? "bg-white" : "bg-surface"}`}>
         {product.imageUrl ? (
           <Image
             src={product.imageUrl}
@@ -61,7 +61,7 @@ export function ProductCard({
             // Boven-de-vouw kaarten (eerste rij) niet lazy-loaden → sneller LCP op de PLP.
             priority={priority}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain p-4" : "object-cover"} ${product.hoverImageUrl ? "group-hover:opacity-0" : ""}`}
+            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain" : "object-cover"} ${product.hoverImageUrl ? "group-hover:opacity-0" : ""}`}
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">

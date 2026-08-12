@@ -15,6 +15,7 @@ import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
 import { getCategoryLabels } from "@/lib/nav-i18n";
+import { packshotContain } from "@/lib/packshot-weergave";
 import { getMyStores } from "@/lib/store-preference";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getT } from "@/lib/t-server";
@@ -181,8 +182,9 @@ export default async function ProductPage({ params }: Props) {
 
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
   // Brede/kleine accessoires (riem, das, strik, manchetknoop, pochet) passen niet
-  // in de 4:5-tegel met object-cover → toon ze heel met object-contain.
-  const fitContain = ["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"].includes(hoofdgroep);
+  // in de 4:5-tegel met object-cover → toon ze heel met object-contain, op een
+  // witte tegel (die packshots staan op puur wit — zie lib/packshot-weergave).
+  const fitContain = packshotContain(hoofdgroep);
   const rating = parseRating(attrs);
   // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
   const cat = categoryByHoofdgroep(hoofdgroep);
@@ -520,7 +522,7 @@ export default async function ProductPage({ params }: Props) {
               ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
               ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
               ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
-              ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain })),
+              ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain, wit: fitContain })),
             ]}
             title={product.title}
             sizeMedia={sizeMedia}
