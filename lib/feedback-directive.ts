@@ -75,6 +75,10 @@ async function vraagOmzetting(reason: string, category: string, topic: string, s
     `phrase it POSITIVELY as what the new photo MUST show — never use "no", "not", "avoid", "without" or "less", because image models ignore negations and render exactly what you name ` +
     `(example: "het jasje is te lang" becomes "jacket length ends just below the seat, classic menswear proportions"); ` +
     `note that the feedback may already be phrased as a wish ("het is beter als de kraag een beetje open staat") — then simply restate it as the instruction; ` +
+    `MOST NOTES CONTAIN BOTH A COMPLAINT AND AN INSTRUCTION ("de broek hoort niet bij het jasje, doe er een normale broek onder", "… dus zorg ervoor dat het model een smokingpantalon draagt") — ` +
+    `the instruction is the part that matters, build your answer on that and ignore the complaint; ` +
+    `NEVER turn a complaint into its opposite: "de broek hoort niet bij het jasje" does NOT mean the trousers should match the jacket, it means the trousers currently shown are wrong — ` +
+    `if the note gives no instruction, describe the correct end state for a well-dressed man instead of inverting the complaint; ` +
     `stay concrete and visual; max 20 words; no quotes, no explanation, no trailing period. Return ONLY the instruction.` +
     (strenger
       ? ` Your previous answer contained a negation. State ONLY the desired end state. ` +

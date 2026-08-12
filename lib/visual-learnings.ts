@@ -252,10 +252,17 @@ export function learningsPromptBlock(store: LearningsStore, opts: { handle?: str
   // notitie, of anders de standaardregel van de categorie. De rúwe notitie is een
   // klacht en mag nooit als opdracht meegaan; kon hij niet omgezet worden, dan
   // gaat hij apart mee, expliciet gelabeld.
-  const mineCats = uniq(mine.map((l) => l.category));
+  // Alleen de nieuwste beoordeling per categorie telt — zie de toelichting in
+  // lib/model-learnings.ts. Anders staan een oude en een nieuwe wens tegelijk in
+  // dezelfde prompt en wint er geen van beide.
+  const perCategorie = new Map<string, (typeof mine)[number]>();
+  for (const l of mine) if (!perCategorie.has(l.category)) perCategorie.set(l.category, l);
+  const actueel = [...perCategorie.values()];
+
+  const mineCats = uniq(actueel.map((l) => l.category));
   const focusRaw: string[] = [];
   const complaintsRaw: string[] = [];
-  for (const l of mine) {
+  for (const l of actueel) {
     const directive = (l.directive || "").trim();
     if (meaningful(directive)) {
       focusRaw.push(directive);
