@@ -9,6 +9,7 @@ import { walletConfigured } from "@/lib/apple-wallet";
 import { bonusTasks } from "@/lib/loyalty-bonus";
 import type { ProfilePreferences } from "@/lib/profiel-voorkeuren";
 import { getStores } from "@/lib/stores";
+import { getSettings } from "@/lib/settings";
 import { ProfileClient } from "@/components/account/profile-client";
 
 /** Staat de spaarpas op minstens één toestel? serialNumber = het klant-id. */
@@ -62,10 +63,20 @@ export default async function AccountPage() {
     isStaff: Boolean(customer.isAdmin),
   };
 
+  /* De inwisselkoers staat in de tool, niet in de code: zonder deze prop
+     rekende het scherm met een eigen 500/EUR 25 en liep het uit de pas zodra
+     iemand de koers aanpaste. */
+  const { loyaltyConfig } = await getSettings();
+
   return (
     <ProfileClient
       customer={safeCustomer}
       data={safe}
+      redeem={{
+        minPoints: loyaltyConfig.redeemMinPoints,
+        stepPoints: loyaltyConfig.redeemStepPoints || loyaltyConfig.redeemMinPoints,
+        centsPerPoint: loyaltyConfig.redeemCentsPerPoint,
+      }}
       walletEnabled={walletConfigured()}
       bonuses={bonussen}
       stores={getStores().map((s) => ({ pageHandle: s.pageHandle, title: s.title, city: s.city }))}

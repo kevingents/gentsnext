@@ -92,19 +92,24 @@ function nlDate(iso: string): string {
 const STATUS_NL = ORDER_STATUS_NL_KLANT;
 const RET_STATUS_NL = RETURN_STATUS_NL;
 
-const NEXT_TIER = 500; // punten voor de volgende beloning
+/** Inwisselkoers zoals in de tool ingesteld; deze waarden gelden alleen als de
+ *  server ze (nog) niet meestuurt. */
+export type RedeemConfig = { minPoints: number; stepPoints: number; centsPerPoint: number };
+const REDEEM_FALLBACK: RedeemConfig = { minPoints: 500, stepPoints: 500, centsPerPoint: 5 };
 
 export function ProfileClient({
   customer,
   data,
   walletEnabled = false,
   bonuses = [],
+  redeem = REDEEM_FALLBACK,
   stores = [],
 }: {
   customer: Customer;
   data: Data;
   walletEnabled?: boolean;
   bonuses?: BonusTask[];
+  redeem?: RedeemConfig;
   stores?: StoreOption[];
 }) {
   const t = useT();
@@ -157,10 +162,10 @@ export function ProfileClient({
       </nav>
 
       <div className="mt-8">
-        {tab === "overzicht" && <Overzicht customer={customer} data={data} bonuses={bonuses} onTab={setTab} />}
+        {tab === "overzicht" && <Overzicht customer={customer} data={data} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "bestellingen" && <BestellingenTab data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
-        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} bonuses={bonuses} onTab={setTab} />}
+        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
         {tab === "gegevens" && <Gegevens customer={customer} stores={stores} />}
@@ -291,11 +296,11 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
 }
 
 /* ── Overzicht ────────────────────────────────────────────────────────────── */
-function Overzicht({ customer, data, bonuses, onTab }: { customer: Customer; data: Data; bonuses: BonusTask[]; onTab: (t: TabKey) => void }) {
+function Overzicht({ customer, data, bonuses, redeem, onTab }: { customer: Customer; data: Data; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const totalOrders = data.onlineOrders.length + data.storeBuys.length;
-  const toNext = Math.max(0, NEXT_TIER - data.pointsBalance);
-  const pct = Math.min(100, Math.round((data.pointsBalance / NEXT_TIER) * 100));
+  const toNext = Math.max(0, redeem.minPoints - data.pointsBalance);
+  const pct = Math.min(100, Math.round((data.pointsBalance / Math.max(1, redeem.minPoints)) * 100));
   return (
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -343,7 +348,7 @@ function Overzicht({ customer, data, bonuses, onTab }: { customer: Customer; dat
       <div className="border border-line p-5">
         <div className="flex items-center justify-between">
           <p className="font-sans text-sm">{t("account.overview.progressTitle")}</p>
-          <p className="font-sans text-sm text-muted">{data.pointsBalance} / {NEXT_TIER}</p>
+          <p className="font-sans text-sm text-muted">{data.pointsBalance} / {redeem.minPoints}</p>
         </div>
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
           <div className="h-full bg-ink transition-all" style={{ width: `${pct}%` }} />
@@ -477,11 +482,14 @@ function Retouren({ data }: { data: Data }) {
 }
 
 /* ── Spaarpunten ──────────────────────────────────────────────────────────── */
-/** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). 500 punten = € 25. */
-function RedeemPoints({ available }: { available: number }) {
+/** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). Koers uit de tool. */
+function RedeemPoints({ available, koers }: { available: number; koers: RedeemConfig }) {
   const t = useT();
-  const STEP = 500;
-  const STEP_CENTS = 2500; // 500 punten = € 25 (server is bron van waarheid)
+  /* Uit de tool, niet uit de code: de koers is een knop in Instellingen en de
+     server rekent er ook mee. Twee plekken met een eigen 500 liepen uit elkaar
+     zodra iemand hem verzette. */
+  const STEP = Math.max(1, koers.stepPoints || koers.minPoints);
+  const STEP_CENTS = STEP * koers.centsPerPoint;
   const maxSteps = Math.floor(available / STEP);
   const [steps, setSteps] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -562,9 +570,19 @@ function RedeemPoints({ available }: { available: number }) {
   );
 }
 
-function Punten({ data, walletEnabled, bonuses, onTab }: { data: Data; walletEnabled: boolean; bonuses: BonusTask[]; onTab: (t: TabKey) => void }) {
+function Punten({ data, walletEnabled, bonuses, redeem, onTab }: { data: Data; walletEnabled: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const walletBonus = bonuses.find((b) => b.kind === "wallet");
+  /* Weg naar de eerste tegoedbon. Alleen zolang je er nog niet bent: kun je al
+     inwisselen, dan staat de inwisselknop eronder en is "nog zoveel te gaan"
+     onzin. Punten in behandeling tellen als een lichter stuk van de balk mee —
+     ze zijn verdiend, alleen nog niet vrij, en zonder dat stuk lijkt de klant
+     verder weg dan hij is. */
+  const drempel = Math.max(1, redeem.minPoints);
+  const nogNodig = Math.max(0, drempel - data.pointsAvailable);
+  const pctBeschikbaar = Math.min(100, Math.round((data.pointsAvailable / drempel) * 100));
+  const pctMetWachtend = Math.min(100, Math.round(((data.pointsAvailable + data.pointsPending) / drempel) * 100));
+  const wachtendDekt = data.pointsPending >= nogNodig;
   return (
     <div className="space-y-6">
       <div className="border border-line p-6">
@@ -573,7 +591,37 @@ function Punten({ data, walletEnabled, bonuses, onTab }: { data: Data; walletEna
         {data.pointsPending > 0 && (
           <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
         )}
-        <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.points.explainer")}</p>
+        {nogNodig > 0 && (
+          <div className="mt-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <p className="font-sans text-sm">
+                {t("account.points.toFirstReward", {
+                  n: nogNodig,
+                  amount: formatEuro(drempel * redeem.centsPerPoint),
+                })}
+              </p>
+              <p className="font-sans text-sm text-muted">{data.pointsAvailable} / {drempel}</p>
+            </div>
+            <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+              {/* Eerst het wachtende deel, daaroverheen het besteedbare — zo
+                  lees je in één balk allebei de standen. */}
+              <div className="absolute inset-y-0 left-0 bg-ink/25 transition-all" style={{ width: `${pctMetWachtend}%` }} />
+              <div className="absolute inset-y-0 left-0 bg-ink transition-all" style={{ width: `${pctBeschikbaar}%` }} />
+            </div>
+            {/* Alleen iets zeggen als er punten in behandeling staan. Een regel
+                als "nog X euro besteden" zou hier een omrekening claimen die niet
+                vastligt: de punten-per-euro is een aparte knop, en die verschilt
+                voor web en kassa. */}
+            {data.pointsPending > 0 && (
+              <p className="mt-1.5 font-sans text-xs text-muted">
+                {wachtendDekt
+                  ? t("account.points.pendingCovers")
+                  : t("account.points.pendingCounts", { n: data.pointsPending })}
+              </p>
+            )}
+          </div>
+        )}
+        <p className="mt-3 font-sans text-sm text-ink-soft">{t("account.points.explainer")}</p>
         {walletEnabled && (
           <div className="mt-5">
             <AppleWalletButton />
@@ -587,7 +635,7 @@ function Punten({ data, walletEnabled, bonuses, onTab }: { data: Data; walletEna
         )}
       </div>
       <PuntenActies bonuses={bonuses} onTab={onTab} />
-      <RedeemPoints available={data.pointsAvailable} />
+      <RedeemPoints available={data.pointsAvailable} koers={redeem} />
       {data.loyalty.length ? (
         <ul className="divide-y divide-line border-y border-line">
           {data.loyalty.map((e) => (
