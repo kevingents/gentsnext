@@ -1,11 +1,11 @@
 import { stockForSkus } from "@/lib/stock";
+import { safetyAllocationFor, safetyKey } from "@/lib/safety-stock";
 import { getStores, DAYS } from "@/lib/stores";
 import {
   isFulfillable,
   isWarehouse,
   branchPriority,
   branchCountry,
-  safetyStockFor,
   isHoliday,
   isDispatchDay,
   effectiveCutoffHour,
@@ -117,7 +117,7 @@ function dispatchInfo(branchId: string, settings: Settings) {
 
 /* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
 async function buildBranches(skus: string[], settings: Settings): Promise<Branch[]> {
-  const stock = await stockForSkus(skus);
+  const [stock, safety] = await Promise.all([stockForSkus(skus), safetyAllocationFor(skus)]);
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
 
@@ -135,7 +135,9 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
       if (gepauzeerd.has(String(b.branchId))) continue;
       // Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
       if (settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0) continue;
-      const net = b.qty - safetyStockFor(b.branchId, settings);
+      // Zelfde vastgelegde stuks als de PDP ziet (budget per artikel, niet per
+      // maat) — anders belooft de site voorraad die de allocatie niet mag pakken.
+      const net = b.qty - (safety.get(safetyKey(b.branchId, sku)) || 0);
       if (net <= 0) continue;
       let rec = byBranch.get(b.branchId);
       if (!rec) {
