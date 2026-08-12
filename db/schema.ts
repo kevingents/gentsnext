@@ -1467,8 +1467,23 @@ export const studentActies = pgTable(
     winkels: jsonb("winkels").notNull().default([]),
     /** Lege lijst = ALLE producten; anders deze sku's/barcodes. */
     producten: jsonb("producten").notNull().default([]),
-    /** Kortingspercentage (0-100) op de deelnemende regels. */
+    /**
+     * Soort korting: 'percent' | 'bedrag' | 'nplusm' | 'cadeau'.
+     * Default 'percent' — zo blijft elke bestaande actie doen wat ze deed.
+     */
+    kortingSoort: text("korting_soort").notNull().default("percent"),
+    /** Kortingspercentage (0-100) op de deelnemende regels. Alleen bij 'percent'. */
     kortingPct: integer("korting_pct").notNull().default(0),
+    /** Vast bedrag in centen, één keer per bon. Alleen bij 'bedrag'. */
+    kortingCent: integer("korting_cent").notNull().default(0),
+    /** Koop N (uit `producten`) — bij 'nplusm' en als drempel bij 'cadeau'. */
+    koopAantal: integer("koop_aantal").notNull().default(0),
+    /** Krijg M gratis: het goedkoopste artikel uit de groep, of M cadeaus. */
+    gratisAantal: integer("gratis_aantal").notNull().default(0),
+    /** Herhaalt de actie binnen één bon? 2+1 op 6 artikelen = 2 gratis als dit aan staat. */
+    herhalen: boolean("herhalen").notNull().default(true),
+    /** Cadeau-artikelen (lijst B) bij soort 'cadeau'; leeg bij de andere soorten. */
+    cadeauProducten: jsonb("cadeau_producten").notNull().default([]),
     /** Geldigheid; leeg = geen begrenzing aan die kant. */
     vanaf: date("vanaf"),
     tot: date("tot"),
