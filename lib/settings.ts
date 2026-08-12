@@ -188,6 +188,12 @@ export type Settings = {
      * uit de klant-UI (bestaande toekenningen blijven staan).
      */
     bonusPoints: {
+      /**
+       * Welkomstbonus: het aanmaken van een profiel, online én aan de kassa.
+       * Geen taak maar een gebeurtenis — je kunt maar één keer een account
+       * aanmaken, dus dit staat nooit als "nog te doen" in de klant-UI.
+       */
+      accountCreated: number;
       /** Maatprofiel bewaard — via /maatadvies of het tabblad Mijn maten. */
       sizeAdvice: number;
       /** Spaarpas écht toegevoegd aan Apple Wallet (device-registratie). */
@@ -367,6 +373,7 @@ export const DEFAULT_SETTINGS: Settings = {
     redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
     backfillLookbackDays: num(process.env.GENTS_LOYALTY_BACKFILL_LOOKBACK_DAYS, 30),
     bonusPoints: {
+      accountCreated: num(process.env.GENTS_LOYALTY_BONUS_ACCOUNT, 50),
       sizeAdvice: num(process.env.GENTS_LOYALTY_BONUS_SIZE_ADVICE, 50),
       walletPass: num(process.env.GENTS_LOYALTY_BONUS_WALLET, 50),
       favoriteStore: num(process.env.GENTS_LOYALTY_BONUS_STORE, 50),

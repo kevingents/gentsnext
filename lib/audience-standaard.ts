@@ -41,6 +41,30 @@ export const STANDAARD_DOELGROEPEN: (AudienceInvoer & { doel: "bereiken" | "uits
     definitie: en({ veld: "segment", operator: "is_een_van", waarde: ["risico"] }),
   },
   {
+    slug: "kopers-zonder-maatprofiel",
+    naam: "Kocht al, maar gaf z'n maat nooit door",
+    doel: "bereiken",
+    omschrijving:
+      "Heeft besteld zonder ooit z'n maten op te geven. Precies de groep waar de verkeerde-maat-retouren vandaan komen: wij weten niet wat past, en hij ziet nergens 'in jouw maat'. Actie: één mail met het maatadvies en de punten die daaraan hangen. Dit is de goedkoopste retour-ingreep die er is — een retour kost meer dan de bonus.",
+    definitie: en(
+      { veld: "maatprofiel", operator: "nee" },
+      { veld: "orders_totaal", operator: "minstens", waarde: 1 },
+      { veld: "marketing_opt_in", operator: "ja" }
+    ),
+  },
+  {
+    slug: "hoge-retourquote-zonder-maatprofiel",
+    naam: "Veel retouren én geen maatprofiel",
+    doel: "bereiken",
+    omschrijving:
+      "Stuurt bovengemiddeld veel terug én gaf nooit een maat door. Bij deze klanten is de retour waarschijnlijk een pasvormprobleem en geen spijt — dus oplosbaar. Actie: persoonlijk maatadvies of een afspraak in z'n eigen winkel, geen korting.",
+    definitie: en(
+      { veld: "retourquote", operator: "minstens", waarde: 25 },
+      { veld: "maatprofiel", operator: "nee" },
+      { veld: "orders_totaal", operator: "minstens", waarde: 2 }
+    ),
+  },
+  {
     slug: "winkelwagen-verlaten-7d",
     naam: "Winkelwagen laten staan (7 dagen)",
     doel: "bereiken",

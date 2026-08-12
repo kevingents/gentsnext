@@ -31,6 +31,9 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         customer: { customerId: c.id, email: c.email, name, firstName: c.firstName || "", lastName: c.lastName || "", phone: c.phone || "" },
+        /* 0 als de klant al bestond. De kassa kan hiermee "welkom, +50 punten"
+           tonen of op de bon zetten — zonder dat de kassa de regel hoeft te kennen. */
+        welkomstpunten: c.welkomstpunten ?? 0,
       });
     }
     if (action === "update") {

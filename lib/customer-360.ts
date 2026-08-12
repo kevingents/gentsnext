@@ -78,6 +78,42 @@ const TELEFOON_E164 = sql`
 const hash = (kolom: ReturnType<typeof sql>) =>
   sql`case when trim(coalesce(${kolom}, '')) = '' then '' else encode(sha256(convert_to(lower(trim(${kolom})), 'UTF8')), 'hex') end`;
 
+/* ── Zelf opgegeven maten en profiel-compleetheid ──────────────────────────────
+ *
+ * Deze twee regels staan óók in lib/profiel-voorkeuren (sizeProfileComplete en
+ * profileChecklist) — dat is waar de klant-UI en de bonus mee rekenen. Hier
+ * moeten ze een tweede keer, in SQL: de profielherbouw doet 46k klanten in één
+ * statement, en dat gaat niet als je per klant TypeScript wilt draaien.
+ *
+ * Wijzig je de regel daar, wijzig hem hier mee. Loopt het uit elkaar, dan zegt
+ * de doelgroep iets anders dan de klant op z'n eigen accountpagina ziet.
+ */
+
+/** Minstens twee van de vier hoofdmaten zelf ingevuld. */
+const MAATPROFIEL = sql`(
+  (case when coalesce(trim(c.size_profile->>'colbert'),  '') <> '' then 1 else 0 end)
++ (case when coalesce(trim(c.size_profile->>'broek'),    '') <> '' then 1 else 0 end)
++ (case when coalesce(trim(c.size_profile->>'overhemd'), '') <> '' then 1 else 0 end)
++ (case when coalesce(trim(c.size_profile->>'schoen'),   '') <> '' then 1 else 0 end)
+) >= 2`;
+
+/** Lengte van een voorkeurslijst, ook als er ooit iets anders dan een array in belandt. */
+const lijstLengte = (sleutel: string) => sql`
+  case when jsonb_typeof(c.preferences->${sleutel}) = 'array'
+       then jsonb_array_length(c.preferences->${sleutel}) else 0 end`;
+
+/** De volledige checklist: naam, telefoon, leeftijd, kleuren, winkel, gelegenheden.
+ *  De nieuwsbrief-opt-in zit hier bewust NIET in — zie profileChecklist. */
+const PROFIEL_COMPLEET = sql`(
+      coalesce(trim(c.first_name), '') <> ''
+  and coalesce(trim(c.last_name), '')  <> ''
+  and coalesce(trim(c.phone), '')      <> ''
+  and (coalesce(trim(c.preferences->>'birthDate'), '') <> '' or coalesce(trim(c.preferences->>'ageRange'), '') <> '')
+  and ${lijstLengte("favoriteColors")} > 0
+  and coalesce(trim(c.preferences->>'favoriteStore'), '') <> ''
+  and ${lijstLengte("occasions")} > 0
+)`;
+
 export type HerbouwResultaat = { profielen: number; rfm: number; ms: number };
 
 /**
@@ -156,7 +192,12 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
     punten as (
       select customer_id cid,
              coalesce(sum(points), 0)::int totaal,
-             coalesce(sum(points) filter (where vests_at is null or vests_at <= now()), 0)::int beschikbaar
+             coalesce(sum(points) filter (where vests_at is null or vests_at <= now()), 0)::int beschikbaar,
+             -- Wat kwam er uit de eenmalige actie-bonussen? Zegt of iemand op een
+             -- prikkel reageert. Sleutels gelijk aan REF_TYPE in lib/loyalty-bonus.
+             coalesce(sum(points) filter (
+               where ref_type in ('bonus_account','bonus_maatadvies','bonus_wallet','bonus_winkel','profile_completion')
+             ), 0)::int bonus
       from loyalty_events group by 1
     ),
     vouchers_agg as (
@@ -343,6 +384,7 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       eerste_aankoop, laatste_aankoop, dagen_sinds_aankoop, klantwaarde_cents,
       retouren, retour_cents, retourquote,
       punten, punten_beschikbaar, tegoed_cents, actieve_vouchers, wallet_pas,
+      bonus_punten, maatprofiel, profiel_compleet,
       sessies_30d, productviews_30d, zoekopdrachten_30d, laatst_gezien, kar_verlaten_op, laatst_bekeken,
       tickets, afspraken, reviews,
       top_categorieen, top_merken, top_kleuren, maten, favoriete_winkel, kanaal,
@@ -384,6 +426,7 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
 
       coalesce(pt.totaal, 0), coalesce(pt.beschikbaar, 0), coalesce(tg.cents, 0),
       coalesce(v.n, 0), (wl.sn is not null),
+      coalesce(pt.bonus, 0), ${MAATPROFIEL}, ${PROFIEL_COMPLEET},
 
       coalesce(g.sessies, 0), coalesce(g.views, 0), coalesce(g.zoek, 0), g.laatst,
       case when g.laatste_kar > coalesce(g.laatste_koop, 'epoch'::timestamptz) then g.laatste_kar end,
@@ -442,7 +485,8 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       retouren = excluded.retouren, retour_cents = excluded.retour_cents, retourquote = excluded.retourquote,
       punten = excluded.punten, punten_beschikbaar = excluded.punten_beschikbaar,
       tegoed_cents = excluded.tegoed_cents, actieve_vouchers = excluded.actieve_vouchers,
-      wallet_pas = excluded.wallet_pas,
+      wallet_pas = excluded.wallet_pas, bonus_punten = excluded.bonus_punten,
+      maatprofiel = excluded.maatprofiel, profiel_compleet = excluded.profiel_compleet,
       sessies_30d = excluded.sessies_30d, productviews_30d = excluded.productviews_30d,
       zoekopdrachten_30d = excluded.zoekopdrachten_30d, laatst_gezien = excluded.laatst_gezien,
       kar_verlaten_op = excluded.kar_verlaten_op, laatst_bekeken = excluded.laatst_bekeken,

@@ -57,6 +57,10 @@ export async function findOrCreateCustomer(email: string) {
  * Maak/vind een gents.nl-klant met naam + telefoon, voor de kassa/scanner.
  * GEEN SRS-push — dit is puur de gents.nl-klantkaart (omnichannel-profiel). Bestaat
  * de klant al (op e-mail), dan vullen we alleen lege velden aan (niet overschrijven).
+ *
+ * Een NIEUWE klant krijgt hier de welkomstpunten: een profiel aanmaken telt aan de
+ * kassa net zo goed als online. Een bestaande klant niet — die heeft z'n profiel al.
+ * Meldt de bonus terug zodat de kassa 'm op de bon of op het scherm kan zetten.
  */
 export async function createPosCustomer(input: { email: string; firstName?: string; lastName?: string; phone?: string }) {
   const db = getDb();
@@ -76,10 +80,19 @@ export async function createPosCustomer(input: { email: string; firstName?: stri
       patch.updatedAt = new Date();
       await db.update(customers).set(patch).where(eq(customers.id, existing.id));
     }
-    return { ...existing, ...patch };
+    return { ...existing, ...patch, welkomstpunten: 0 };
   }
   const [created] = await db.insert(customers).values({ email, firstName, lastName, phone }).returning();
-  return created;
+  let welkomstpunten = 0;
+  try {
+    const { awardAccountBonus } = await import("@/lib/loyalty-bonus");
+    const r = await awardAccountBonus(created.id);
+    welkomstpunten = r.awarded ? r.points : 0;
+  } catch (e) {
+    // Nooit fataal: de klant is aangemaakt, dat is waar de kassier op wacht.
+    console.error("[account] welkomstpunten kassa mislukt:", e);
+  }
+  return { ...created, welkomstpunten };
 }
 
 /** Klantgegevens bijwerken vanaf de kassa (Kevin 5 aug: "klantgegevens kunnen
@@ -227,6 +240,17 @@ export async function consumeMagicToken(rawToken: string): Promise<boolean> {
     await db.update(customers).set({ emailVerifiedAt: sql`now()`, lastLoginAt: sql`now()` }).where(eq(customers.id, cust.id));
     await claimGuestData(cust.id, cust.email);
     if (firstTime) {
+      /* Welkomstpunten pas hier, bij de EERSTE bevestigde login — niet zodra er
+         een klantrij bestaat. findOrCreateCustomer maakt die rij al zodra iemand
+         een adres intikt op het inlogformulier; punten daaraan hangen betekent
+         dat honderd verzonnen adressen honderd bonussen opleveren zonder dat er
+         ooit een mailbox opengaat. Wie hier komt heeft de link écht geopend. */
+      try {
+        const { awardAccountBonus } = await import("@/lib/loyalty-bonus");
+        await awardAccountBonus(cust.id);
+      } catch (e) {
+        console.error("[account] welkomstpunten-fout:", e);
+      }
       try {
         await sendWelcomeEmail(cust.email, cust.firstName);
       } catch (e) {
