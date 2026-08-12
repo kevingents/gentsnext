@@ -7,8 +7,9 @@ import { useT } from "@/components/i18n/locale-provider";
 import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import { StarIcon, type MyStore } from "@/components/stores/my-store-toggle";
 import { MAX_MY_STORES } from "@/lib/stores";
+import { track } from "@/lib/track-client";
 
-type ApiStore = { name: string; city: string };
+type ApiStore = { name: string; city: string; distanceKm?: number | null };
 
 /**
  * "Kies je winkels" — een echte kiezer, geen ster om te raden.
@@ -21,18 +22,23 @@ type ApiStore = { name: string; city: string };
  * Meerdere winkels mogen (thuis, werk, familie) — daarom blijft de lade ópen
  * na een keuze: je bent meestal nog niet klaar. Sluiten doe je zelf.
  *
- * De winkellijst komt uit /api/stores (naam + stad) en wordt pas bij openen
- * opgehaald: dat scheelt de winkeldata in de bundel van elke productpagina.
- * /api/mijn-winkel accepteert de winkelnaam, dus meer hebben we hier niet nodig.
+ * De winkellijst komt uit /api/stores (naam + stad + afstand) en wordt pas bij
+ * openen opgehaald: dat scheelt de winkeldata in de bundel van elke
+ * productpagina. Die route sorteert op afstand tot de bezoeker (geschat uit het
+ * IP door Vercel — geen toestemmingsvraag, niets opgeslagen), zodat de winkel om
+ * de hoek bovenaan staat in plaats van Almere op alfabet.
  */
 export function StoreChooser({
   myStores = [],
   variant = "row",
+  bron = "onbekend",
 }: {
   /** Winkelnamen ("GENTS Utrecht") van de gekozen winkels. */
   myStores?: string[];
   /** "row" = uitnodigende regel op de PDP, "link" = kaal tekstknopje. */
   variant?: "row" | "link";
+  /** Waar stond de kiezer? (pdp/plp/winkels) — voor de meting. */
+  bron?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -84,6 +90,7 @@ export function StoreChooser({
       });
       const d = (await r.json().catch(() => null)) as { stores?: MyStore[] } | null;
       if (d?.stores) setGekozen(d.stores.map((s) => s.title));
+      track("mijn_winkel", { props: { winkel: name, aan: !gekozen.includes(name), aantal: d?.stores?.length ?? 0, bron } });
     } catch {
       /* voorkeur is comfort, geen blocker */
     } finally {
@@ -175,6 +182,9 @@ export function StoreChooser({
                             <span className="flex items-center gap-2">
                               <StarIcon filled={mine} className="h-4 w-4 shrink-0 text-ink" />
                               <span className={mine ? "font-medium text-ink" : "text-ink"}>{s.city}</span>
+                              {typeof s.distanceKm === "number" ? (
+                                <span className="text-xs text-muted">{t("myStore.km", { km: s.distanceKm })}</span>
+                              ) : null}
                             </span>
                             <span className="shrink-0 text-xs text-muted">{mine ? t("myStore.unset") : t("myStore.set")}</span>
                           </button>

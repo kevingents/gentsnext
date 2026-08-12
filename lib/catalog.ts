@@ -1187,6 +1187,32 @@ async function getStoreStockCountUncached(collectionId: string, category: string
   return Number(res.rows[0]?.n ?? 0);
 }
 const _storeStockCountCached = unstable_cache(getStoreStockCountUncached, ["plp-store-stock-count-v1"], { revalidate: 180 });
+
+/**
+ * Welke van deze producten liggen er in één van die filialen? Voor het label op
+ * de producttegel ("In Utrecht") — zonder dat moet je elk artikel openen om te
+ * zien of het in jouw winkel hangt.
+ *
+ * Eén query voor de hele pagina (24 tegels), op dezelfde bron en dezelfde regels
+ * als het filter. Niet gecached: hij hangt aan de getoonde producten én aan de
+ * winkels van déze bezoeker, dus een cache zou vrijwel nooit raak zijn.
+ */
+export async function handlesInStores(handles: string[], branchIds: string[]): Promise<Set<string>> {
+  const clean = [...new Set(handles.filter(Boolean))];
+  if (!clean.length || !branchIds.length) return new Set();
+  const db = getDb();
+  const res = await db.execute<{ handle: string }>(sql`
+    select distinct p.handle
+    from ${products} p
+    join ${productVariants} v on v.product_id = p.id
+    join ${srsStock} s on s.sku = v.sku
+    where p.handle in (${sqlInList(clean)})
+      and s.gen = (select active_gen from ${srsStockMeta} where id = 'latest')
+      and s.branch_id in (${sqlInList(branchIds)})
+      and s.qty > 0
+  `);
+  return new Set(res.rows.map((r) => String(r.handle)));
+}
 export function getStoreStockCount(f: ProductFilters, branchId: string): Promise<number> {
   return _storeStockCountCached(f.collectionId || "", f.category || "", branchId);
 }

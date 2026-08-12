@@ -75,6 +75,7 @@ export const EVENT_CATALOG: EventDef[] = [
   { naam: "maatadvies_start",                        groep: "catalogus", uitleg: "Maatadvies/size-finder gestart." },
   { naam: "maatadvies_klaar",                        groep: "catalogus", uitleg: "Maatadvies afgerond, mét de geadviseerde maat." },
   { naam: "winkelvoorraad_bekeken",                  groep: "catalogus", uitleg: "Voorraad per winkel opgevraagd (click&collect)." },
+  { naam: "mijn_winkel",                             groep: "catalogus", uitleg: "Vaste winkel aan- of uitgezet — props: winkel, aan, aantal, bron (pdp/plp/winkels/profiel)." },
   { naam: "levertijd_bekeken",                       groep: "catalogus", uitleg: "Levertijd-uitleg geopend." },
   { naam: "look_bekeken",    ga4: "view_item_list",  ecommerce: true,    groep: "catalogus", uitleg: "Look/outfit-pagina bekeken." },
   { naam: "mixmatch_bekeken",                        groep: "catalogus", uitleg: "Combinatie-suggestie (pak + overhemd) getoond." },

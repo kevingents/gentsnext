@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/components/i18n/locale-provider";
+import { track } from "@/lib/track-client";
 
 /**
  * "Maak dit mijn winkel" — één knop, overal dezelfde.
@@ -30,6 +31,7 @@ export function MyStoreToggle({
   onChange,
   variant = "button",
   className = "",
+  bron = "onbekend",
 }: {
   /** pageHandle óf winkelnaam — /api/mijn-winkel accepteert allebei. */
   value: string;
@@ -38,6 +40,8 @@ export function MyStoreToggle({
   onChange?: (stores: MyStore[]) => void;
   /** "button" = omrande knop, "inline" = tekstknop in een rij. */
   variant?: "button" | "inline";
+  /** Waar stond de knop? Zo zien we wélke plek de winkelkeuze oplevert. */
+  bron?: string;
   className?: string;
 }) {
   const t = useT();
@@ -58,6 +62,9 @@ export function MyStoreToggle({
       });
       const d = (await r.json().catch(() => null)) as { stores?: MyStore[] } | null;
       if (d?.stores) onChange?.(d.stores);
+      // Meten wélke plek winkels oplevert — anders weet je alleen dát er
+      // gekozen wordt, niet waar de knop werkt.
+      track("mijn_winkel", { props: { winkel: value, aan: !active, aantal: d?.stores?.length ?? 0, bron } });
       // Alles wat "mijn winkels" toont (kop, PDP-regel, PLP-filter) leest de
       // cookie op de server — pas na een refresh klopt het overal.
       startTransition(() => router.refresh());

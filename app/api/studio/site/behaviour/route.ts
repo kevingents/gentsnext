@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
 import { getDashboard } from "@/lib/analytics";
 import { getNavInsights } from "@/lib/nav-insights";
+import { getMijnWinkelInsights } from "@/lib/mijn-winkel-insights";
 import { getProductsByHandles } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export const runtime = "nodejs";
  * meest bekeken producten, zoekopdrachten (mét de nul-resultaten), en de
  * navigatie-inzichten (welke menu-items, filters en sorteringen gebruikt
  * worden, en welke maten klanten aanklikken terwijl ze uitverkocht zijn).
+ *
+ * `winkel` = de meting bij "Mijn winkel(s)": adoptie, waar klanten hun winkel
+ * kiezen, en of sessies die op winkelvoorraad filteren vaker kopen.
  *
  * De handles uit de gebeurtenissen worden hier al omgezet naar producttitels —
  * de portal heeft geen toegang tot de catalogus en zou anders een lijst met
@@ -31,7 +35,7 @@ export async function GET(req: Request) {
   const days = rawParam && Number.isFinite(parsed) ? Math.min(365, Math.max(1, Math.round(parsed))) : 30;
 
   try {
-    const [dashboard, nav] = await Promise.all([getDashboard(days), getNavInsights(days)]);
+    const [dashboard, nav, winkel] = await Promise.all([getDashboard(days), getNavInsights(days), getMijnWinkelInsights(days)]);
 
     // Titels erbij zodat de portal geen slugs hoeft te tonen. Een product dat
     // intussen verwijderd is heeft geen titel meer — dan valt hij terug op de
@@ -44,7 +48,7 @@ export async function GET(req: Request) {
     }));
 
     // getDashboard geeft de gehanteerde `days` zelf terug — niet nog eens zetten.
-    return NextResponse.json({ ok: true, ...dashboard, topProducts, nav });
+    return NextResponse.json({ ok: true, ...dashboard, topProducts, nav, winkel });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

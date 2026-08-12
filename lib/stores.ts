@@ -9,7 +9,50 @@ export type Store = {
   mapsUrl: string;
   hours: Record<string, string>; // dag → "10:00-18:00" (leeg = gesloten)
   today: string;
+  /**
+   * Coördinaten van het STADSCENTRUM, niet van de deur — nauwkeurig genoeg om
+   * winkels op afstand te sorteren ("welke is het dichtst bij?"), maar bewust
+   * niet bedoeld voor navigatie: daarvoor staat er een echte maps-link op de
+   * winkelpagina.
+   */
+  lat?: number;
+  lng?: number;
 };
+
+/**
+ * Hemelsbrede afstand in km (Haversine). Voor "welke winkel is het dichtst bij"
+ * is dat genoeg: de volgorde van 19 winkels over Nederland verandert niet van
+ * een paar honderd meter reisafstand-verschil.
+ */
+export function afstandKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Winkels gesorteerd op afstand tot een punt. Zonder punt (of zonder coördinaten
+ * op de winkel) blijft de bestaande volgorde staan — nooit een willekeurige.
+ */
+export function storesByDistance<T extends { lat?: number; lng?: number }>(
+  list: T[],
+  vanaf: { lat: number; lng: number } | null,
+): (T & { distanceKm?: number })[] {
+  if (!vanaf) return list.map((s) => ({ ...s }));
+  return list
+    .map((s) => ({
+      ...s,
+      distanceKm:
+        typeof s.lat === "number" && typeof s.lng === "number"
+          ? Math.round(afstandKm(vanaf, { lat: s.lat, lng: s.lng }))
+          : undefined,
+    }))
+    .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+}
 
 export const DAYS = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"];
 
