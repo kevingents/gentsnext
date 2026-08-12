@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
+import { TrackLijst } from "@/components/analytics/track-lijst";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
@@ -148,6 +149,9 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
+              {/* De noemer onder de doorklikken: zonder view_item_list weet je
+                  alleen wát er geklikt werd, niet wat er getóónd werd. */}
+              <TrackLijst producten={items} listId={`categorie:${cat.slug}`} listName={catLabel} />
               {items.map((product, i) => (
                 <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * PER_PAGE + i + 1} listId={`categorie:${cat.slug}`} sort={sel.sort} />
               ))}

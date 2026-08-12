@@ -481,7 +481,13 @@ export default async function ProductPage({ params }: Props) {
       <JsonLd data={productJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
       <JsonLd data={faqJsonLd} />
-      <TrackRecent handle={product.handle} />
+      <TrackRecent
+        handle={product.handle}
+        title={product.title}
+        vendor={product.vendor}
+        category={hoofdgroep}
+        priceCents={minPrice}
+      />
 
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">
