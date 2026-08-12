@@ -1556,3 +1556,17 @@ export const studentLeden = pgTable(
     index("student_leden_vereniging_idx").on(t.vereniging),
   ],
 );
+
+/* ── Exact Online-koppelingsstatus (verhuisd uit Vercel Blob, aug 2026) ────────
+   Kleine key/value-tabel: de versleutelde OAuth-tokens (storegents versleutelt
+   vóór het schrijven — de database ziet nooit een leesbare token), de
+   boekhoud-mapping en de geboekt-markers. Waarom Postgres i.p.v. blob: blob is
+   uiteindelijk-consistent en kent geen sloten, en Exacts refresh-token is
+   eenmalig — twee servers die tegelijk verversen kostte op 11-8-2026 de hele
+   koppeling ("Old refresh token used"). Hier is lezen altijd vers en is de
+   refresh-claim één atomaire statement. */
+export const exactState = pgTable("exact_state", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
