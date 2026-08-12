@@ -1,0 +1,50 @@
+# Typecheck + tests op elke PR en op main.
+#
+# Waarom dit bestaat: de testmap bevat waakhonden die niemand handmatig draait —
+# de belangrijkste eist dat élke tabel met persoonsgegevens in
+# lib/sandbox-anonimiseren.ts voorkomt, want de sandbox wordt 's nachts vanaf
+# productie gekopieerd. Op 12 aug 2026 stond die test rood met vijf vergeten
+# tabellen (waaronder 48.336 klantprofielen), gewoon omdat een rode test op main
+# pas opvalt als iemand toevallig `npm test` tikt.
+#
+# Bewust GEEN `next build` hier: Vercel bouwt elke PR al (de check heet
+# "Vercel – gentsnext") en heeft daar de env-vars voor. Dit draait het stuk dat
+# Vercel niet doet.
+name: Controle
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  controle:
+    name: Typecheck en tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm ci i.p.v. npm install: die faalt hard op een scheve lockfile in
+      # plaats van hem stilletjes bij te werken.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # De telling vóór de tests is geen franje. `node --test` met een glob die
+      # niets oplevert eindigt met exit 0 — een lege testmap zou hier dus stil
+      # groen worden en precies de dekking wegnemen waarvoor deze job bestaat.
+      - name: Tests
+        run: |
+          aantal=$(ls test/*.test.js 2>/dev/null | wc -l)
+          if [ "$aantal" -eq 0 ]; then
+            echo "::error::Geen testbestanden gevonden in test/ — node --test zou hier stil groen worden."
+            exit 1
+          fi
+          echo "$aantal testbestand(en) gevonden"
+          npm test
