@@ -484,8 +484,8 @@ export type ProductFilters = {
   fits?: string[];
   priceMinCents?: number;
   priceMaxCents?: number;
-  /** Filiaalnummer: alleen artikelen die in dát filiaal op voorraad liggen. */
-  storeBranchId?: string;
+  /** Filiaalnummers: alleen artikelen die in ten mínste één ervan liggen. */
+  storeBranchIds?: string[];
 };
 
 export type Facets = {
@@ -740,12 +740,12 @@ function sizeCondition(values: string[]): SQL {
  * winkel" is dat de juiste maat: het is een reisbeslissing, geen verkoop. De
  * harde belofte per maat blijft op de PDP staan (availableForSkus).
  */
-function storeStockExists(branchId: string): SQL {
+function storeStockExists(branchIds: string[]): SQL {
   return sql`exists (
     select 1 from ${srsStock} s
     where s.sku = v.sku
       and s.gen = (select active_gen from ${srsStockMeta} where id = 'latest')
-      and s.branch_id = ${branchId}
+      and s.branch_id in (${sqlInList(branchIds)})
       and s.qty > 0
   )`;
 }
@@ -762,11 +762,11 @@ function variantExists(f: ProductFilters): SQL | null {
     parts.push(inList(sql`v.color_family`, f.colorFamilies));
     active = true;
   }
-  if (f.storeBranchId) {
+  if (f.storeBranchIds?.length) {
     // Bewust in DEZELFDE exists als maat/kleur/prijs: "maat 52 in Utrecht" moet
     // één variant zijn die allebei waarmaakt, niet "heeft 52" én "heeft íéts in
-    // Utrecht".
-    parts.push(storeStockExists(f.storeBranchId));
+    // Utrecht". Meerdere winkels = in ten minste één ervan (in (...)).
+    parts.push(storeStockExists(f.storeBranchIds));
     active = true;
   }
   if (f.sizes?.length) {
@@ -786,7 +786,7 @@ function variantExists(f: ProductFilters): SQL | null {
   // Filtert de klant op een winkel, dan IS de winkelvoorraad die eis: het hangt
   // daar en je kunt het passen — of het online nog leverbaar is, doet dan niet
   // ter zake (stock_qty is de online-pool).
-  if (!f.storeBranchId) parts.push(sql`v.stock_qty > 0`);
+  if (!f.storeBranchIds?.length) parts.push(sql`v.stock_qty > 0`);
   return sql`exists (select 1 from ${productVariants} v where ${sql.join(parts, sql` and `)})`;
 }
 
@@ -1178,7 +1178,7 @@ export function getFacets(f: ProductFilters): Promise<Facets> {
  */
 async function getStoreStockCountUncached(collectionId: string, category: string, branchId: string): Promise<number> {
   if (!branchId) return 0;
-  const f: ProductFilters = { collectionId: collectionId || undefined, category: category || undefined, storeBranchId: branchId };
+  const f: ProductFilters = { collectionId: collectionId || undefined, category: category || undefined, storeBranchIds: [branchId] };
   const ve = variantExists(f);
   if (!ve) return 0;
   const db = getDb();

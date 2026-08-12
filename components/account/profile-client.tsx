@@ -9,6 +9,7 @@ import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
 import { PORTAL_URL } from "@/lib/portal";
 import { COLOR_FAMILIES } from "@/lib/colors";
+import { MAX_MY_STORES } from "@/lib/stores";
 import {
   AGE_RANGES,
   SHOP_OCCASIONS,
@@ -829,6 +830,11 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
     ageRange: customer.preferences?.ageRange ?? "",
     favoriteColors: customer.preferences?.favoriteColors ?? [],
     favoriteStore: customer.preferences?.favoriteStore ?? "",
+    // Oude profielen hebben alleen het enkelvoudige veld — dat is winkel één.
+    favoriteStores:
+      customer.preferences?.favoriteStores?.length
+        ? customer.preferences.favoriteStores
+        : [customer.preferences?.favoriteStore ?? ""].filter(Boolean),
     occasions: customer.preferences?.occasions ?? [],
     styleNote: customer.preferences?.styleNote ?? "",
   });
@@ -845,6 +851,16 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
     setPrefs((p) => {
       const huidig = p[veld] ?? [];
       return { ...p, [veld]: huidig.includes(key) ? huidig.filter((k) => k !== key) : [...huidig, key] };
+    });
+
+  /** Winkel erbij of eraf; favoriteStore blijft de eerste uit de lijst. */
+  const toggleStore = (handle: string) =>
+    setPrefs((p) => {
+      const huidig = p.favoriteStores ?? [];
+      const next = huidig.includes(handle)
+        ? huidig.filter((h) => h !== handle)
+        : [...huidig, handle].slice(0, MAX_MY_STORES);
+      return { ...p, favoriteStores: next, favoriteStore: next[0] ?? "" };
     });
 
   async function save(e: React.FormEvent) {
@@ -998,20 +1014,36 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
           </div>
         </fieldset>
 
-        <label className="mt-5 block">
-          <span className="font-sans text-sm">{t("account.prefs.store")}</span>
-          <select
-            value={prefs.favoriteStore || ""}
-            onChange={(e) => setPrefs((p) => ({ ...p, favoriteStore: e.target.value }))}
-            className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
-          >
-            <option value="">{t("account.prefs.choose")}</option>
-            {stores.map((s) => (
-              <option key={s.pageHandle} value={s.pageHandle}>{s.title}</option>
-            ))}
-          </select>
-          <span className="mt-1 block font-sans text-xs text-muted">{t("account.prefs.storeHint")}</span>
-        </label>
+        {/* Winkels: meerdere mogen. Chips i.p.v. een keuzelijst — dezelfde
+            bediening als kleuren en gelegenheden hierboven, en je ziet in één
+            oogopslag wélke winkels het zijn. De eerste die je aanzet blijft
+            winkel nummer één (daar hangt de profielchecklist aan). */}
+        <fieldset className="mt-5">
+          <legend className="font-sans text-sm">{t("account.prefs.store")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {stores.map((s) => {
+              const gekozen = (prefs.favoriteStores ?? []).includes(s.pageHandle);
+              const vol = (prefs.favoriteStores ?? []).length >= MAX_MY_STORES;
+              return (
+                <button
+                  key={s.pageHandle}
+                  type="button"
+                  onClick={() => toggleStore(s.pageHandle)}
+                  aria-pressed={gekozen}
+                  disabled={!gekozen && vol}
+                  className={`border px-3 py-1.5 font-sans text-sm transition-colors ${
+                    gekozen ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink disabled:opacity-40 disabled:hover:border-line"
+                  }`}
+                >
+                  {s.city}
+                </button>
+              );
+            })}
+          </div>
+          <span className="mt-2 block font-sans text-xs text-muted">
+            {t("account.prefs.storeHint")} {t("myStore.max", { count: MAX_MY_STORES })}
+          </span>
+        </fieldset>
 
         <label className="mt-5 block">
           <span className="font-sans text-sm">{t("account.prefs.note")}</span>

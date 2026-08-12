@@ -20,7 +20,7 @@ import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
 import { getActieveRegels } from "@/lib/merchandising-regels";
-import { plpStoreProps, storeFilterBranchId } from "@/lib/plp-store";
+import { plpStoreProps, storeFilterBranchIds } from "@/lib/plp-store";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   const filters = selectionToFilters(sel, {
     category: cat.hoofdgroep,
-    storeBranchId: storeFilterBranchId(sel.store),
+    storeBranchIds: storeFilterBranchIds(sel.stores),
   });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
   const [sessionCustomer, facets] = await Promise.all([
@@ -65,7 +65,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     getFacets({ category: cat.hoofdgroep }).then((fc) => localizeFacets(locale, fc)),
   ]);
   // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
-  const storeProps = await plpStoreProps(sel.store, (sessionCustomer?.preferences as { favoriteStore?: unknown } | null)?.favoriteStore, {
+  const storeProps = await plpStoreProps(sel.stores, sessionCustomer?.preferences, {
     category: cat.hoofdgroep,
   });
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.

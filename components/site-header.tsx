@@ -11,7 +11,7 @@ import { TrackLink } from "@/components/analytics/track-link";
 import { getLocale } from "@/lib/locale-server";
 import { getLocalizedMenu } from "@/lib/nav-i18n";
 import { getT } from "@/lib/t-server";
-import { getMyStoreFromCookie } from "@/lib/store-preference";
+import { getMyStoresFromCookie } from "@/lib/store-preference";
 import type { MenuItem } from "@/lib/main-menu";
 
 export async function SiteHeader() {
@@ -19,16 +19,18 @@ export async function SiteHeader() {
   // Vertaald menu (ns "nav" via de vertaal-cron) — het menu is portal-data en
   // lekte anders Nederlands op /en /de.
   const menu = await getLocalizedMenu(locale);
-  // Bewust de cookie-variant: de kop rendert op élke pagina, en getMyStore()
+  // Bewust de cookie-variant: de kop rendert op élke pagina, en getMyStores()
   // valt terug op het profiel — dat zou een DB-vraag per paginaweergave zijn.
-  const myStore = await getMyStoreFromCookie();
+  const mijn = await getMyStoresFromCookie();
+  // Meer winkels? Dan de eerste + "+2": de kop is geen plek voor een lijstje.
+  const myStoreCity = mijn.length ? (mijn.length === 1 ? mijn[0].city : `${mijn[0].city} +${mijn.length - 1}`) : null;
   return (
     <>
       {/* Checkout = afleidingsvrij: geen campagne-balk met exit-link. */}
       <HideOnCheckout>
         <AnnouncementBar />
       </HideOnCheckout>
-      <SiteHeaderInner locale={locale} menu={menu} myStoreCity={myStore?.city ?? null} />
+      <SiteHeaderInner locale={locale} menu={menu} myStoreCity={myStoreCity} />
     </>
   );
 }

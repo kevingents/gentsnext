@@ -13,6 +13,9 @@ import { useT } from "@/components/i18n/locale-provider";
  * uit-stand wát je krijgt, niet alleen wát het is.
  */
 
+/** Zoals /api/mijn-winkel 'm teruggeeft — genoeg voor elke plek die 'm toont. */
+export type MyStore = { pageHandle: string; title: string; city: string };
+
 export function StarIcon({ filled, className = "h-4 w-4" }: { filled: boolean; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" aria-hidden>
@@ -32,7 +35,7 @@ export function MyStoreToggle({
   value: string;
   active: boolean;
   /** Lokale echo voor de aanroeper: de serverprop komt pas na de refresh mee. */
-  onChange?: (next: string | null) => void;
+  onChange?: (stores: MyStore[]) => void;
   /** "button" = omrande knop, "inline" = tekstknop in een rij. */
   variant?: "button" | "inline";
   className?: string;
@@ -44,17 +47,18 @@ export function MyStoreToggle({
 
   async function toggle() {
     if (busy) return;
-    // Nogmaals klikken wist de voorkeur — dezelfde knop, geen apart kruisje.
-    const next = active ? "" : value;
     setBusy(true);
-    onChange?.(next || null);
     try {
-      await fetch("/api/mijn-winkel", {
+      // Erbij of eraf; de server houdt de lijst bij (max MAX_MY_STORES) en
+      // stuurt 'm terug, zodat de knop nooit een eigen waarheid verzint.
+      const r = await fetch("/api/mijn-winkel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store: next }),
+        body: JSON.stringify({ toggle: value }),
       });
-      // Alles wat "mijn winkel" toont (kop, PDP-regel, PLP-filter) leest de
+      const d = (await r.json().catch(() => null)) as { stores?: MyStore[] } | null;
+      if (d?.stores) onChange?.(d.stores);
+      // Alles wat "mijn winkels" toont (kop, PDP-regel, PLP-filter) leest de
       // cookie op de server — pas na een refresh klopt het overal.
       startTransition(() => router.refresh());
     } catch {

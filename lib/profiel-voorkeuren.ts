@@ -13,6 +13,7 @@
  * bonus-engine (server) rekenen zo met exact dezelfde regels.
  */
 import { COLOR_FAMILIES } from "@/lib/colors";
+import { MAX_MY_STORES } from "@/lib/stores";
 
 export type ProfilePreferences = {
   /** yyyy-mm-dd. Voor de verjaardagsattentie én om de leeftijdsgroep af te leiden. */
@@ -21,8 +22,15 @@ export type ProfilePreferences = {
   ageRange?: string;
   /** Kleurfamilies uit lib/colors — dezelfde sleutels als het PLP-kleurfilter. */
   favoriteColors?: string[];
-  /** pageHandle van de vaste winkel (deelt de sleutel met "Mijn winkel"). */
+  /**
+   * pageHandle van de EERSTE vaste winkel (deelt de sleutel met "Mijn winkel").
+   * Blijft bewust bestaan naast favoriteStores: de profielchecklist en de
+   * eenmalige winkel-bonus hangen eraan, en oude profielen hebben alleen dit veld.
+   * Wordt altijd gelijkgehouden aan favoriteStores[0].
+   */
   favoriteStore?: string;
+  /** Alle vaste winkels (pageHandles) — een klant komt vaak in meer dan één. */
+  favoriteStores?: string[];
   /** Waarvoor koopt deze klant? Slugs sluiten aan op /gelegenheden. */
   occasions?: string[];
   /** Vrij veld: "draag nooit bruin", "altijd extra lange mouw". */
@@ -102,8 +110,18 @@ export function cleanPreferences(raw: unknown, knownStores?: Set<string>): Profi
       .slice(0, 6);
   }
 
-  const store = String(b.favoriteStore ?? "").trim();
-  if (store && (!knownStores || knownStores.has(store))) out.favoriteStore = store;
+  /* Winkels: de lijst is leidend, het enkelvoudige veld blijft de eerste winkel
+     (profielchecklist + winkel-bonus hangen eraan). Een oud formulier dat alleen
+     favoriteStore stuurt blijft daardoor gewoon werken. */
+  const storeList = Array.isArray(b.favoriteStores) ? b.favoriteStores : [];
+  const enkel = String(b.favoriteStore ?? "").trim();
+  const schoneWinkels = [...new Set([...storeList.map((s) => String(s).trim()), enkel])]
+    .filter((s) => s && (!knownStores || knownStores.has(s)))
+    .slice(0, MAX_MY_STORES);
+  if (schoneWinkels.length) {
+    out.favoriteStores = schoneWinkels;
+    out.favoriteStore = schoneWinkels[0];
+  }
 
   if (Array.isArray(b.occasions)) {
     out.occasions = [...new Set(b.occasions.map((o) => String(o).trim()))]

@@ -548,13 +548,20 @@ export async function updateSizeProfile(customerId: string, sizeProfile: SizePro
   await db.update(customers).set({ sizeProfile, updatedAt: sql`now()` }).where(eq(customers.id, customerId));
 }
 
-/** Losse voorkeur bijwerken (bv. favoriteStore) — merge, nooit de rest wissen. */
-export async function updatePreference(customerId: string, key: string, value: string) {
+/**
+ * Losse voorkeur bijwerken (bv. favoriteStore) — merge, nooit de rest wissen.
+ * Een lijst (favoriteStores) gaat als jsonb-array de kolom in, niet als tekst:
+ * anders leest elke lezer er een string uit waar hij een array verwacht.
+ */
+export async function updatePreference(customerId: string, key: string, value: string | string[]) {
   const db = getDb();
+  const waarde = Array.isArray(value)
+    ? sql`${JSON.stringify(value)}::jsonb`
+    : sql`to_jsonb(${value}::text)`;
   await db
     .update(customers)
     .set({
-      preferences: sql`coalesce(${customers.preferences}, '{}'::jsonb) || jsonb_build_object(${key}::text, ${value}::text)`,
+      preferences: sql`coalesce(${customers.preferences}, '{}'::jsonb) || jsonb_build_object(${key}::text, ${waarde})`,
       updatedAt: sql`now()`,
     })
     .where(eq(customers.id, customerId));

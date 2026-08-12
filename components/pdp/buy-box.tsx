@@ -66,8 +66,8 @@ type Props = {
   hoofdgroep: string;
   sizeChartHandle: string | null;
   productHandle: string;
-  /** "Mijn winkel" (winkelnaam) — server-side uit cookie/profiel. */
-  myStore?: string | null;
+  /** "Mijn winkels" (winkelnamen) — server-side uit cookie/profiel. */
+  myStores?: string[];
   image: string;
   colors: BuyColor[];
   minPriceCents: number;
@@ -93,7 +93,7 @@ export function BuyBox({
   hoofdgroep,
   sizeChartHandle,
   productHandle,
-  myStore,
+  myStores = [],
   image,
   colors,
   minPriceCents,
@@ -353,39 +353,52 @@ export function BuyBox({
         ) : null}
         {/* Mijn winkel: direct antwoord op "ligt dit in mijn winkel?" — de
             winkelvoorraad per maat hebben we hier al, dus dit kost niets extra. */}
-        {myStore && selectedSize ? (() => {
-          const hit = (selectedSize.branches ?? []).find((b) => b.store === myStore);
-          const others = (selectedSize.branches ?? []).filter((b) => b.qty > 0 && b.store !== myStore).length;
-          return hit && hit.qty > 0 ? (
-            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-xs text-success">
-              <StoreIcon className="h-3.5 w-3.5 shrink-0" />
-              <span>
-                {/* "Vandaag ophalen" alleen als de winkel nu open is — anders
-                    beloofde de regel iets wat vandaag niet kan. */}
-                <span className="font-medium">
-                  {hit.openNow ? t("myStore.inStock", { store: myStore }) : t("myStore.inStockClosed", { store: myStore })}
-                </span>
-                {hit.openLabel ? <span className="text-muted"> · {hit.openLabel}</span> : null}
-              </span>
-              {/* Zichtbaar kunnen wisselen: zonder deze knop is "mijn winkel"
-                  een instelling die je alleen terugvindt waar je 'm ooit zette. */}
-              <StoreChooser myStore={myStore} variant="link" />
-            </p>
-          ) : (
-            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-xs text-muted">
-              <StoreIcon className="h-3.5 w-3.5 shrink-0" />
-              <span>
-                {t("myStore.notInStock", { store: myStore })}
-                {others > 0 ? <span> · {t("myStore.elsewhere", { count: others })}</span> : null}
-              </span>
-              <StoreChooser myStore={myStore} variant="link" />
-            </p>
+        {myStores.length > 0 && selectedSize ? (() => {
+          const branches = selectedSize.branches ?? [];
+          // Eigen winkels mét de maat eerst: het antwoord dat je zoekt ("waar
+          // kan ik 'm passen?") staat dan bovenaan, niet ergens in een rijtje.
+          const mijn = myStores
+            .map((naam) => ({ naam, hit: branches.find((b) => b.store === naam) }))
+            .sort((a, b) => Number((b.hit?.qty ?? 0) > 0) - Number((a.hit?.qty ?? 0) > 0));
+          const elders = branches.filter((b) => b.qty > 0 && !myStores.includes(b.store)).length;
+          const geen = mijn.every((m) => !m.hit || m.hit.qty <= 0);
+          return (
+            <div className="mt-3 space-y-1">
+              {mijn.map(({ naam, hit }) =>
+                hit && hit.qty > 0 ? (
+                  <p key={naam} className="flex flex-wrap items-center gap-x-2 font-sans text-xs text-success">
+                    <StoreIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      {/* "Vandaag ophalen" alleen als de winkel nu open is — anders
+                          beloofde de regel iets wat vandaag niet kan. */}
+                      <span className="font-medium">
+                        {hit.openNow ? t("myStore.inStock", { store: naam }) : t("myStore.inStockClosed", { store: naam })}
+                      </span>
+                      {hit.openLabel ? <span className="text-muted"> · {hit.openLabel}</span> : null}
+                    </span>
+                  </p>
+                ) : (
+                  <p key={naam} className="flex flex-wrap items-center gap-x-2 font-sans text-xs text-muted">
+                    <StoreIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{t("myStore.notInStock", { store: naam })}</span>
+                  </p>
+                )
+              )}
+              {/* Ligt 'ie in géén van je winkels? Zeg dan meteen of het elders wél
+                  kan — anders is de regel een doodlopende mededeling. */}
+              <p className="flex flex-wrap items-center gap-x-2 font-sans text-xs text-muted">
+                {geen && elders > 0 ? <span>{t("myStore.elsewhereFull", { count: elders })}</span> : null}
+                {/* Zichtbaar kunnen wisselen: zonder deze knop is "mijn winkel"
+                    een instelling die je alleen terugvindt waar je 'm ooit zette. */}
+                <StoreChooser myStores={myStores} variant="link" />
+              </p>
+            </div>
           );
         })() : null}
         {/* Nog géén winkel gekozen? Dan stond er tot nu toe niets — de hele
             functie bestond alleen voor wie 'm al gevonden had. Deze regel vraagt
             het gewoon, op de plek waar de vraag speelt (onder je maat). */}
-        {!myStore && storeCount > 0 ? <StoreChooser myStore={null} /> : null}
+        {myStores.length === 0 && storeCount > 0 ? <StoreChooser /> : null}
         {hasStock && selectedSize ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
@@ -493,7 +506,7 @@ export function BuyBox({
           // is onzin voor een accessoire; de generieke regel volstaat dan.
           size={oneSize ? undefined : selectedSize.size}
           branches={selectedSize.branches}
-          myStore={myStore}
+          myStores={myStores}
           reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
         />
       ) : null}
