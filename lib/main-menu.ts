@@ -38,9 +38,11 @@ export const MAIN_MENU: MenuItem[] = [
         ],
       },
       {
-        title: "Broeken & jassen",
+        // "Broeken" heet in de winkel een pantalon — de categoriepagina
+        // (/categorie/pantalons) gebruikte die naam al, het menu nog niet.
+        title: "Pantalons & jassen",
         links: [
-          { label: "Broeken", href: "/collections/broeken" },
+          { label: "Pantalons", href: "/collections/broeken" },
           { label: "Jassen", href: "/collections/jassen" },
         ],
       },
@@ -99,12 +101,18 @@ export const MAIN_MENU: MenuItem[] = [
         ],
       },
       {
+        // Alle vier wezen naar dezelfde ongefilterde schoenenpagina: wie op
+        // "Loafers" klikte kreeg ook veterschoenen. De subgroep in de catalogus
+        // (Veterschoen/Lakschoenen/Loafers/Gespschoen/Sneakers) IS het filter —
+        // ?type= is exact de waarde waar de PLP op selecteert.
         title: "Schoenen",
         links: [
-          { label: "Veterschoenen", href: "/collections/schoenen" },
-          { label: "Lakschoenen", href: "/collections/schoenen" },
-          { label: "Loafers", href: "/collections/schoenen" },
-          { label: "Gespschoenen", href: "/collections/schoenen" },
+          { label: "Veterschoenen", href: "/collections/schoenen?type=Veterschoen" },
+          { label: "Lakschoenen", href: "/collections/schoenen?type=Lakschoenen" },
+          { label: "Loafers", href: "/collections/schoenen?type=Loafers" },
+          { label: "Gespschoenen", href: "/collections/schoenen?type=Gespschoen" },
+          { label: "Sneakers", href: "/collections/schoenen?type=Sneakers" },
+          { label: "Alle schoenen", href: "/collections/schoenen" },
         ],
       },
       {

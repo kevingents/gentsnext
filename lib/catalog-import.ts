@@ -326,6 +326,9 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
   for (const item of items) {
     const productId = productIdByShopifyId.get(item.shopifyProductId);
     if (!productId) continue;
+    // De hoofdgroep beslist welke matenreeks geldt: "44" is een pakmaat XS én
+    // een overhemd-boordmaat XL. Zonder deze meegift won altijd de pakkenreeks.
+    const hoofdgroep = String(item.attributes?.hoofdgroep_omschrijving ?? "");
     for (const v of item.variants) {
       variantRows.push({
         productId,
@@ -333,7 +336,7 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
         barcode: v.barcode,
         position: v.position,
         size: v.size,
-        sizeLabel: v.size ? sizeRowLabel(v.size) : "",
+        sizeLabel: v.size ? sizeRowLabel(v.size, hoofdgroep) : "",
         color: v.color,
         colorFamily: v.color ? colorFamily(v.color) : "",
         priceCents: v.priceCents,

@@ -115,25 +115,25 @@ export function BuyBox({
 
   // Deel de gekozen maat-bucket met de galerij (foto aanpassen bij grote maten).
   useEffect(() => {
-    setSizeLabel(size ? sizeRowLabel(size) : null);
-  }, [size, setSizeLabel]);
+    setSizeLabel(size ? sizeRowLabel(size, hoofdgroep) : null);
+  }, [size, hoofdgroep, setSizeLabel]);
 
   // Shop in jouw maat: selecteer de opgeslagen maat van de klant automatisch
   // voor (alleen leverbare maten), exact eerst, anders dezelfde lettermaat-bucket.
-  const myBucket = mySize ? sizeRowLabel(mySize) : null;
+  const myBucket = mySize ? sizeRowLabel(mySize, hoofdgroep) : null;
   const autoPicked = useRef(false);
   useEffect(() => {
     if (autoPicked.current || size || !mySize || !active) return;
     const available = active.sizes.filter((s) => !s.known || s.qty > 0);
     const pick =
       available.find((s) => s.size === mySize) ??
-      available.find((s) => sizeRowLabel(s.size) === myBucket);
+      available.find((s) => sizeRowLabel(s.size, hoofdgroep) === myBucket);
     if (pick) {
       setSize(pick.size);
       autoPicked.current = true;
     }
   }, [active, mySize, myBucket, size]);
-  const isMySize = Boolean(size && myBucket && sizeRowLabel(size) === myBucket);
+  const isMySize = Boolean(size && myBucket && sizeRowLabel(size, hoofdgroep) === myBucket);
 
   // Precies één maat → meteen voorselecteren (scheelt een klik). Is die ene maat
   // uitverkocht, dan wordt 'ie óók geselecteerd: de klant ziet de maat en krijgt
@@ -191,7 +191,7 @@ export function BuyBox({
     Boolean(
       mySize &&
         active &&
-        active.sizes.some((s) => (!s.known || s.qty > 0) && (s.size === mySize || sizeRowLabel(s.size) === myBucket)),
+        active.sizes.some((s) => (!s.known || s.qty > 0) && (s.size === mySize || sizeRowLabel(s.size, hoofdgroep) === myBucket)),
     );
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? `${t("product.from")} ` : "") + formatEuro(priceCents);

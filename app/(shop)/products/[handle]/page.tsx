@@ -200,7 +200,7 @@ export default async function ProductPage({ params }: Props) {
   // Aanbevelingen ruim ophalen (8): na het resolven van de look filteren we de
   // look-items eruit zodat "Maak de look compleet" geen dubbelingen toont.
   const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStore] = await Promise.all([
-    getRecommendations(hoofdgroep, product.id, 8),
+    getRecommendations(hoofdgroep, product.id, 8, { subgroep: String(attrs.subgroep || ""), attrs }),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
     getReviewSummary(product.handle),

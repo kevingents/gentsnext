@@ -58,6 +58,25 @@ function tokenize(title: string): string[] {
  */
 export const MAX_GROUP_SIZE = 24;
 
+/**
+ * Hoofdgroepen waar de KLEUR HET ARTIKEL IS. Bij een pak of colbert is "navy"
+ * een variant van hetzelfde model — één kaart met een kleurenbalk is dan precies
+ * goed. Bij een pochet, das of strik koopt de klant juist de kleur: die 19
+ * "Pochet PE"-kleuren samenvouwen tot één kaart liet van 19 pochets er 1 zien,
+ * en van 43 trouwaccessoires nog 7 (strikken 15→1, pochets 12→1, dassen 12→1).
+ *
+ * Voor deze groepen blijft de groep wél bestaan (de kleurenbalk op de PDP werkt
+ * dus gewoon), maar is ELK lid primair — iedere kleur krijgt z'n eigen kaart.
+ */
+const COLOR_IS_ARTICLE = new Set([
+  "pochet", "pochets", "stropdassen", "stropdas", "strikken", "strik",
+  "bretels", "sokken", "dasspelden", "sjaal", "sjaals", "cumberband",
+]);
+
+export function colorIsArticle(hoofdgroep: string): boolean {
+  return COLOR_IS_ARTICLE.has(deburr(String(hoofdgroep || "")).trim().toLowerCase());
+}
+
 export type DerivedVariant = {
   /** Genormaliseerde basisnaam (zonder kleur-suffix). Leeg = niet groepeerbaar. */
   baseKey: string;
