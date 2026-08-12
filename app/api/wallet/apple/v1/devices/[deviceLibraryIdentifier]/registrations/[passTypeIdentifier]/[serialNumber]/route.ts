@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { walletAppleRegistrations } from "@/db/schema";
@@ -60,6 +61,19 @@ export async function POST(req: Request, { params }: Params) {
         target: [walletAppleRegistrations.deviceLibraryIdentifier, walletAppleRegistrations.serialNumber],
         set: { pushToken },
       });
+    /* Dít is het bewijs dat de pas er écht in staat: Apple registreert het toestel
+       pas ná "Toevoegen". Het downloaden van de .pkpass zegt niets — dat kan ook
+       eindigen in "Annuleren". serialNumber = het klant-id, en de bonus is
+       idempotent, dus opnieuw installeren levert geen tweede keer punten op.
+       Ná de response (after): het bijschrijven stuurt zelf een pas-update via
+       APNs, en daarop wachten zou Apple's registratie-verzoek onnodig laten
+       hangen. Best-effort — een mislukte bonus mag de registratie niet slopen. */
+    if (!existing.length) {
+      after(async () => {
+        const { awardBonus } = await import("@/lib/loyalty-bonus");
+        await awardBonus(serialNumber, "wallet");
+      });
+    }
     return new Response(null, { status: existing.length ? 200 : 201 });
   } catch (e) {
     console.error("[wallet/v1/register]", (e as Error).message);

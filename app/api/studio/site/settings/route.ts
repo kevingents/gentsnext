@@ -21,7 +21,7 @@ export const runtime = "nodejs";
  */
 
 /** Alleen deze operationele velden mag de portal zetten (rest blijft ongemoeid). */
-function sanitizeOperational(input: unknown): Partial<Settings> {
+function sanitizeOperational(input: unknown, huidig: Settings): Partial<Settings> {
   const b = (input || {}) as Record<string, unknown>;
   const out: Partial<Settings> = {};
   const intFields: (keyof Settings)[] = [
@@ -118,6 +118,27 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
       validityMonths: Math.max(1, Math.round(Number(g.validityMonths) || 24)),
     };
   }
+  /* Spaarpunten-bonussen (maatprofiel, Wallet-pas, compleet profiel). Alleen de
+     bonusbedragen zijn hier te zetten; vesting en inwisselkoers blijven buiten
+     de portal — dat raakt bestaande, al uitgegeven punten.
+     Bewust op de HUIDIGE loyaltyConfig gestapeld: updateSettings merget ondiep,
+     dus een los bonus-object zou de rest van de spaarpunt-instellingen wissen.
+     0 = die bonus staat uit. Plafond 5.000 punten: een tikfout mag geen
+     tegoedbon van honderden euro's per klant uitdelen. */
+  if (b.loyaltyBonusPoints && typeof b.loyaltyBonusPoints === "object") {
+    const lb = b.loyaltyBonusPoints as Record<string, unknown>;
+    const bedrag = (v: unknown, val: number) =>
+      Number.isFinite(Number(v)) ? Math.max(0, Math.min(5000, Math.round(Number(v)))) : val;
+    const nu = huidig.loyaltyConfig.bonusPoints;
+    out.loyaltyConfig = {
+      ...huidig.loyaltyConfig,
+      bonusPoints: {
+        sizeAdvice: bedrag(lb.sizeAdvice, nu.sizeAdvice),
+        walletPass: bedrag(lb.walletPass, nu.walletPass),
+        profileComplete: bedrag(lb.profileComplete, nu.profileComplete),
+      },
+    };
+  }
   return out;
 }
 
@@ -186,7 +207,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
   }
   try {
-    const opPatch = sanitizeOperational(body.operational);
+    const opPatch = sanitizeOperational(body.operational, await getSettings());
     const contentPatch = sanitizeContent(body.content);
     if (Object.keys(opPatch).length) await updateSettings(opPatch);
     if (Object.keys(contentPatch).length) await updateSiteSettings(contentPatch);

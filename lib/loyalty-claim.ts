@@ -198,6 +198,18 @@ async function creditOnce(customerId: string, points: number, reason: string, re
   return { ok: true, points: inserted.length ? points : 0, alreadyClaimed: !inserted.length, balance: await ledgerBalance(customerId) };
 }
 
+/**
+ * Eenmalige ACTIE-bonus (maatprofiel, Wallet-pas, compleet profiel): geen
+ * aankoop, dus geen vesting — direct besteedbaar. refId = het klant-id, zodat de
+ * unieke index (ref_type, ref_id) hem hoogstens één keer per klant doorlaat,
+ * ook bij twee gelijktijdige verzoeken.
+ */
+export async function creditBonusOnce(customerId: string, points: number, reason: string, refType: string): Promise<ClaimResult> {
+  const cid = String(customerId || "").trim();
+  if (!cid) return { ok: false, error: "Geen account." };
+  return creditOnce(cid, points, reason, refType, cid, null);
+}
+
 /** Verzilver de spaarpunten van een ANONIEME kassabon naar een account. */
 export async function claimReceiptPoints(input: { saleId: string; token: string; customerId: string; email?: string }): Promise<ClaimResult> {
   const saleId = String(input.saleId || "").trim();
