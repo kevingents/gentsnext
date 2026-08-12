@@ -5,28 +5,32 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/i18n/locale-provider";
 import { useModalA11y } from "@/components/hooks/use-modal-a11y";
-import { StarIcon } from "@/components/stores/my-store-toggle";
+import { StarIcon, type MyStore } from "@/components/stores/my-store-toggle";
+import { MAX_MY_STORES } from "@/lib/stores";
 
 type ApiStore = { name: string; city: string };
 
 /**
- * "Kies je winkel" — een echte kiezer, geen ster om te raden.
+ * "Kies je winkels" — een echte kiezer, geen ster om te raden.
  *
  * De keuze zat verstopt als icoon in de afhaal-lade: je moest 'm openen, de
  * ster zien staan én snappen dat een ster hier "vaste winkel" betekent. Deze
  * knop zegt in tekst wat 'ie doet, opent een lijst met álle winkels, en toont
- * daarna gewoon welke winkel het geworden is.
+ * daarna welke winkels het geworden zijn.
+ *
+ * Meerdere winkels mogen (thuis, werk, familie) — daarom blijft de lade ópen
+ * na een keuze: je bent meestal nog niet klaar. Sluiten doe je zelf.
  *
  * De winkellijst komt uit /api/stores (naam + stad) en wordt pas bij openen
  * opgehaald: dat scheelt de winkeldata in de bundel van elke productpagina.
  * /api/mijn-winkel accepteert de winkelnaam, dus meer hebben we hier niet nodig.
  */
 export function StoreChooser({
-  myStore,
+  myStores = [],
   variant = "row",
 }: {
-  /** Winkelnaam ("GENTS Utrecht") van de gekozen winkel, of null. */
-  myStore?: string | null;
+  /** Winkelnamen ("GENTS Utrecht") van de gekozen winkels. */
+  myStores?: string[];
   /** "row" = uitnodigende regel op de PDP, "link" = kaal tekstknopje. */
   variant?: "row" | "link";
 }) {
@@ -34,11 +38,15 @@ export function StoreChooser({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [stores, setStores] = useState<ApiStore[] | null>(null);
+  const [gekozen, setGekozen] = useState<string[]>(myStores);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState("");
   const [, startTransition] = useTransition();
   const panelRef = useRef<HTMLDivElement>(null);
-  useModalA11y(panelRef, { onClose: () => setOpen(false), active: open, inertMain: true });
+  useModalA11y(panelRef, { onClose: sluit, active: open, inertMain: true });
+
+  // Serverwaarheid wint zodra de pagina opnieuw rendert.
+  useEffect(() => setGekozen(myStores), [myStores.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || stores) return;
@@ -56,20 +64,26 @@ export function StoreChooser({
     };
   }, [open, stores]);
 
-  async function pick(name: string) {
+  function sluit() {
+    setOpen(false);
+    // Pas bij sluiten verversen: tijdens het kiezen zou elke klik de pagina
+    // eronder opnieuw laten renderen.
+    startTransition(() => router.refresh());
+  }
+
+  async function toggle(name: string) {
     if (busy) return;
-    // Nogmaals dezelfde winkel = wissen; dat is de enige manier om terug naar
-    // "geen winkel" te komen zonder een apart kruisje in de lijst.
-    const next = name === myStore ? "" : name;
     setBusy(name);
+    // Meteen zichtbaar; de server stuurt de echte lijst terug (incl. de grens).
+    setGekozen((huidig) => (huidig.includes(name) ? huidig.filter((n) => n !== name) : [...huidig, name]));
     try {
-      await fetch("/api/mijn-winkel", {
+      const r = await fetch("/api/mijn-winkel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store: next }),
+        body: JSON.stringify({ toggle: name }),
       });
-      setOpen(false);
-      startTransition(() => router.refresh());
+      const d = (await r.json().catch(() => null)) as { stores?: MyStore[] } | null;
+      if (d?.stores) setGekozen(d.stores.map((s) => s.title));
     } catch {
       /* voorkeur is comfort, geen blocker */
     } finally {
@@ -79,6 +93,12 @@ export function StoreChooser({
 
   const needle = q.trim().toLowerCase();
   const list = (stores ?? []).filter((s) => !needle || `${s.city} ${s.name}`.toLowerCase().includes(needle));
+  const vol = gekozen.length >= MAX_MY_STORES;
+  const label = gekozen.length
+    ? gekozen.length === 1
+      ? gekozen[0]
+      : t("myStore.countLabel", { first: gekozen[0], count: gekozen.length - 1 })
+    : "";
 
   const trigger =
     variant === "link" ? (
@@ -87,7 +107,7 @@ export function StoreChooser({
         onClick={() => setOpen(true)}
         className="inline-flex min-h-11 items-center font-sans text-xs text-ink underline underline-offset-4 lg:min-h-0"
       >
-        {myStore ? t("myStore.change") : t("myStore.choose")}
+        {gekozen.length ? t("myStore.change") : t("myStore.choose")}
       </button>
     ) : (
       <button
@@ -96,14 +116,14 @@ export function StoreChooser({
         className="mt-3 flex w-full items-center justify-between gap-3 border border-line px-3 py-2.5 text-left transition-colors hover:border-ink"
       >
         <span className="flex items-center gap-2.5">
-          <StarIcon filled={Boolean(myStore)} className="h-4 w-4 shrink-0 text-ink" />
+          <StarIcon filled={gekozen.length > 0} className="h-4 w-4 shrink-0 text-ink" />
           <span className="font-sans text-sm">
-            <span className="block font-medium text-ink">{myStore ? `${t("myStore.badge")}: ${myStore}` : t("myStore.choose")}</span>
-            <span className="block text-xs text-muted">{myStore ? t("myStore.explainShort") : t("myStore.explain")}</span>
+            <span className="block font-medium text-ink">{gekozen.length ? `${t("myStore.badge")}: ${label}` : t("myStore.choose")}</span>
+            <span className="block text-xs text-muted">{gekozen.length ? t("myStore.explainShort") : t("myStore.explain")}</span>
           </span>
         </span>
         <span className="shrink-0 font-sans text-xs text-ink underline underline-offset-4">
-          {myStore ? t("myStore.change") : t("myStore.chooseCta")}
+          {gekozen.length ? t("myStore.change") : t("myStore.chooseCta")}
         </span>
       </button>
     );
@@ -114,15 +134,17 @@ export function StoreChooser({
       {open && typeof document !== "undefined"
         ? createPortal(
             <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={t("myStore.choose")}>
-              <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
+              <div className="absolute inset-0 bg-ink/40" onClick={sluit} />
               <div ref={panelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-canvas shadow-drawer focus:outline-none">
                 <div className="flex items-center justify-between border-b border-line px-5 py-4">
                   <p className="font-display text-lg">{t("myStore.choose")}</p>
-                  <button type="button" onClick={() => setOpen(false)} className="font-sans text-sm underline">
+                  <button type="button" onClick={sluit} className="font-sans text-sm underline">
                     {t("common.close")}
                   </button>
                 </div>
-                <p className="border-b border-line bg-surface px-5 py-3 font-sans text-xs text-ink-soft">{t("myStore.explain")}</p>
+                <p className="border-b border-line bg-surface px-5 py-3 font-sans text-xs text-ink-soft">
+                  {t("myStore.explain")} {t("myStore.max", { count: MAX_MY_STORES })}
+                </p>
                 <div className="border-b border-line px-5 py-3">
                   <input
                     value={q}
@@ -137,14 +159,18 @@ export function StoreChooser({
                 ) : (
                   <ul className="flex-1 divide-y divide-line overflow-y-auto">
                     {list.map((s) => {
-                      const mine = s.name === myStore;
+                      const mine = gekozen.includes(s.name);
+                      // Vol? Dan kun je alleen nog wegnemen, niet toevoegen —
+                      // zichtbaar uitgezet in plaats van een klik die niets doet.
+                      const uit = !mine && vol;
                       return (
                         <li key={s.name}>
                           <button
                             type="button"
-                            onClick={() => pick(s.name)}
+                            onClick={() => toggle(s.name)}
                             aria-pressed={mine}
-                            className={`flex min-h-11 w-full items-center justify-between gap-3 px-5 py-3 text-left font-sans text-sm hover:bg-surface ${busy === s.name ? "opacity-60" : ""}`}
+                            disabled={uit}
+                            className={`flex min-h-11 w-full items-center justify-between gap-3 px-5 py-3 text-left font-sans text-sm hover:bg-surface disabled:opacity-40 disabled:hover:bg-transparent ${busy === s.name ? "opacity-60" : ""}`}
                           >
                             <span className="flex items-center gap-2">
                               <StarIcon filled={mine} className="h-4 w-4 shrink-0 text-ink" />
@@ -157,6 +183,11 @@ export function StoreChooser({
                     })}
                   </ul>
                 )}
+                <div className="border-t border-line p-4">
+                  <button type="button" onClick={sluit} className="btn-primary w-full">
+                    {t("myStore.done")}
+                  </button>
+                </div>
               </div>
             </div>,
             document.body,

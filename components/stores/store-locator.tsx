@@ -17,12 +17,12 @@ export type LocatorStore = {
   todayRange: string | null;
 };
 
-export function StoreLocator({ stores, myStore }: { stores: LocatorStore[]; myStore?: string | null }) {
+export function StoreLocator({ stores, myStores = [] }: { stores: LocatorStore[]; myStores?: string[] }) {
   const t = useT();
   const [q, setQ] = useState("");
   const [openOnly, setOpenOnly] = useState(false);
   // Lokale echo: de serverprop (cookie) komt pas na de router-refresh mee.
-  const [favorite, setFavorite] = useState<string | null>(myStore ?? null);
+  const [favorites, setFavorites] = useState<string[]>(myStores);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -32,26 +32,31 @@ export function StoreLocator({ stores, myStore }: { stores: LocatorStore[]; mySt
           (!needle || `${s.city} ${s.title} ${s.address}`.toLowerCase().includes(needle)) &&
           (!openOnly || s.open)
       )
-      // Eigen winkel bovenaan — dat is de winkel waar je naartoe gaat.
-      .sort((a, b) => Number(b.pageHandle === favorite) - Number(a.pageHandle === favorite));
-  }, [stores, q, openOnly, favorite]);
+      // Eigen winkels bovenaan — dat zijn de winkels waar je naartoe gaat.
+      .sort((a, b) => Number(favorites.includes(b.pageHandle)) - Number(favorites.includes(a.pageHandle)));
+  }, [stores, q, openOnly, favorites]);
 
-  const mine = stores.find((s) => s.pageHandle === favorite) ?? null;
+  const mine = stores.filter((s) => favorites.includes(s.pageHandle));
 
   return (
     <div>
       {/* Uitleg vóór de knop: "mijn winkel" is geen bladwijzer maar een filter op
           voorraad — zonder die zin blijft de ster een raadsel. */}
       <div className="mb-8 border border-line bg-surface px-4 py-3 font-sans text-sm">
-        {mine ? (
+        {mine.length ? (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-ink-soft">{t("myStore.locator.current")}</span>
-            <Link href={`/pages/${mine.pageHandle}`} className="font-medium text-ink underline underline-offset-4">
-              {mine.title}
-            </Link>
+            <span className="text-ink-soft">{mine.length === 1 ? t("myStore.locator.current") : t("myStore.locator.currentPlural")}</span>
+            {mine.map((s, i) => (
+              <span key={s.pageHandle}>
+                {i > 0 ? <span className="text-muted">· </span> : null}
+                <Link href={`/pages/${s.pageHandle}`} className="font-medium text-ink underline underline-offset-4">
+                  {s.city}
+                </Link>
+              </span>
+            ))}
             {/* Wisselen is hier de zinnige actie (wissen kan via de kaart zelf). */}
             <span className="ml-auto">
-              <StoreChooser myStore={mine.title} variant="link" />
+              <StoreChooser myStores={mine.map((s) => s.title)} variant="link" />
             </span>
           </p>
         ) : (
@@ -79,7 +84,7 @@ export function StoreLocator({ stores, myStore }: { stores: LocatorStore[]; mySt
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((s) => {
-          const isMine = s.pageHandle === favorite;
+          const isMine = favorites.includes(s.pageHandle);
           return (
             <li key={s.pageHandle}>
               {/* Kaart is bewust géén Link meer: er staat nu een knop in, en een
@@ -100,7 +105,12 @@ export function StoreLocator({ stores, myStore }: { stores: LocatorStore[]; mySt
                   <p className="mt-2 font-sans text-xs text-muted">{t("stores.today")}: {s.todayRange}</p>
                 ) : null}
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
-                  <MyStoreToggle value={s.pageHandle} active={isMine} onChange={setFavorite} variant="inline" />
+                  <MyStoreToggle
+                    value={s.pageHandle}
+                    active={isMine}
+                    onChange={(list) => setFavorites(list.map((x) => x.pageHandle))}
+                    variant="inline"
+                  />
                   <Link href={`/pages/${s.pageHandle}`} className="font-sans text-sm text-ink underline underline-offset-4">
                     {t("stores.locator.viewStore")} →
                   </Link>

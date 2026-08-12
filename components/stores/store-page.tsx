@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Dot } from "@/components/icons";
 import { DAYS, openStatus, mapsEmbedUrl, mapsLinkUrl, type Store } from "@/lib/stores";
 import { getLocale } from "@/lib/locale-server";
-import { getMyStore } from "@/lib/store-preference";
+import { getMyStores } from "@/lib/store-preference";
 import { MyStoreToggle } from "@/components/stores/my-store-toggle";
 import { t } from "@/lib/messages";
 
@@ -10,7 +10,7 @@ export async function StorePage({ store }: { store: Store }) {
   const { open, today, todayRange } = openStatus(store);
   const todayName = today;
   const locale = await getLocale();
-  const isMine = (await getMyStore())?.pageHandle === store.pageHandle;
+  const isMine = (await getMyStores()).some((s) => s.pageHandle === store.pageHandle);
 
   return (
     <div className="mx-auto max-w-page px-gutter py-12">

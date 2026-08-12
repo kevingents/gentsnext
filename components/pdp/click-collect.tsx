@@ -17,7 +17,7 @@ type Branch = { store: string; qty: number; openNow?: boolean; openLabel?: strin
 export function ClickAndCollect({
   branches,
   reserve,
-  myStore,
+  myStores = [],
   size,
 }: {
   branches: Branch[];
@@ -25,14 +25,14 @@ export function ClickAndCollect({
   /** De gekozen maat — dan meldt de regel dat het om DIE maat gaat, want dit
    *  blok verving het losse voorraadkader boven de maatkiezer. */
   size?: string;
-  /** Winkelnaam van "mijn winkel" (server-side uit cookie/profiel). */
-  myStore?: string | null;
+  /** Winkelnamen van "mijn winkels" (server-side uit cookie/profiel). */
+  myStores?: string[];
 }) {
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   // Lokale echo van de keuze: de server-prop komt pas na een refresh mee.
-  const [favorite, setFavorite] = useState<string | null>(myStore ?? null);
+  const [favorites, setFavorites] = useState<string[]>(myStores);
   // Reserveer-om-te-passen-flow binnen de modal.
   const [selStore, setSelStore] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
@@ -45,7 +45,7 @@ export function ClickAndCollect({
   // Open + op voorraad eerst.
   const sorted = [...branches].sort(
     (a, b) =>
-      Number(b.store === favorite) - Number(a.store === favorite) ||
+      Number(favorites.includes(b.store)) - Number(favorites.includes(a.store)) ||
       Number(b.openNow) - Number(a.openNow) ||
       b.qty - a.qty
   );
@@ -124,7 +124,9 @@ export function ClickAndCollect({
             {/* Wat "mijn winkel" oplevert, vóór je de knoppen in de lijst ziet. */}
             {!done ? (
               <p className="border-b border-line px-5 py-2.5 font-sans text-xs text-muted">
-                {favorite ? `${t("myStore.locator.current")} ${favorite}` : t("myStore.explain")}
+                {favorites.length
+                  ? `${favorites.length === 1 ? t("myStore.locator.current") : t("myStore.locator.currentPlural")} ${favorites.join(" · ")}`
+                  : t("myStore.explain")}
               </p>
             ) : null}
             {done ? (
@@ -156,7 +158,7 @@ export function ClickAndCollect({
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-ink">{b.store}</span>
-                            {b.store === favorite ? (
+                            {favorites.includes(b.store) ? (
                               <span className="shrink-0 border border-line px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-ink-soft">
                                 {t("myStore.badge")}
                               </span>
@@ -192,8 +194,8 @@ export function ClickAndCollect({
                           wát je instelt. */}
                       <MyStoreToggle
                         value={b.store}
-                        active={b.store === favorite}
-                        onChange={setFavorite}
+                        active={favorites.includes(b.store)}
+                        onChange={(list) => setFavorites(list.map((x) => x.title))}
                         variant="inline"
                         className="mt-1.5"
                       />

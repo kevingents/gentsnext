@@ -13,6 +13,15 @@ export type Store = {
 
 export const DAYS = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"];
 
+/**
+ * Hoeveel winkels een klant als "mijn winkel" mag vastleggen. Een klant komt
+ * vaak in twee of drie winkels (thuis, werk, familie), maar bij tien betekent
+ * "mijn winkel" niets meer: de productpagina wordt een lijstje en het filter
+ * filtert bijna niets meer weg. Staat hier omdat zowel de server (cookie,
+ * profiel) als het profielformulier in de browser deze grens nodig heeft.
+ */
+export const MAX_MY_STORES = 5;
+
 export function getStores(): Store[] {
   return storesData as Store[];
 }

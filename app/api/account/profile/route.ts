@@ -74,10 +74,13 @@ export async function POST(req: Request) {
     const patch: Required<Pick<ProfilePreferences, "birthDate" | "ageRange" | "favoriteStore" | "styleNote">> & {
       favoriteColors: string[];
       occasions: string[];
+      favoriteStores: string[];
     } = {
       birthDate: schoon.birthDate ?? "",
       ageRange: schoon.ageRange ?? "",
+      // favoriteStore = de eerste winkel; cleanPreferences houdt ze gelijk.
       favoriteStore: schoon.favoriteStore ?? "",
+      favoriteStores: schoon.favoriteStores ?? [],
       styleNote: schoon.styleNote ?? "",
       favoriteColors: schoon.favoriteColors ?? [],
       occasions: schoon.occasions ?? [],
@@ -93,8 +96,8 @@ export async function POST(req: Request) {
     /* "Mijn winkel" leest primair een cookie (server kent de keuze dan al bij de
        eerste render). Die hier meteen meezetten, anders kiest de klant hier een
        vaste winkel en blijft de rest van de site z'n oude keuze tonen. */
-    if (patch.favoriteStore) {
-      res.cookies.set(STORE_COOKIE, patch.favoriteStore, { path: "/", maxAge: STORE_COOKIE_MAX_AGE, sameSite: "lax" });
+    if (patch.favoriteStores.length) {
+      res.cookies.set(STORE_COOKIE, patch.favoriteStores.join(","), { path: "/", maxAge: STORE_COOKIE_MAX_AGE, sameSite: "lax" });
     } else {
       res.cookies.set(STORE_COOKIE, "", { path: "/", maxAge: 0 });
     }

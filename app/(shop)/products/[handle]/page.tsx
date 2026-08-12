@@ -15,7 +15,7 @@ import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
 import { getCategoryLabels } from "@/lib/nav-i18n";
-import { getMyStore } from "@/lib/store-preference";
+import { getMyStores } from "@/lib/store-preference";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getT } from "@/lib/t-server";
 import { buildModelLook, buildSuitLook, resolveLook, getLookBuyData } from "@/lib/looks";
@@ -199,7 +199,7 @@ export default async function ProductPage({ params }: Props) {
   // van de productdata → mee in de parallelle batch i.p.v. twee losse round-trips.
   // Aanbevelingen ruim ophalen (8): na het resolven van de look filteren we de
   // look-items eruit zodat "Maak de look compleet" geen dubbelingen toont.
-  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStore] = await Promise.all([
+  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStores] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 8, { subgroep: String(attrs.subgroep || ""), attrs }),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
@@ -212,7 +212,7 @@ export default async function ProductPage({ params }: Props) {
     getBlogPostsForProduct(product.handle),
     getSessionCustomer(),
     getSettings(),
-    getMyStore(),
+    getMyStores(),
   ]);
   // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
   const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
@@ -542,7 +542,7 @@ export default async function ProductPage({ params }: Props) {
             hoofdgroep={hoofdgroep}
             sizeChartHandle={sizeChartFor(hoofdgroep)}
             productHandle={product.handle}
-              myStore={myStore?.title ?? null}
+              myStores={myStores.map((s) => s.title)}
             image={images[0]?.url || ""}
             colors={colors}
             minPriceCents={minPrice}
