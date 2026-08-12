@@ -43,6 +43,10 @@ export type LoyaltyPassInput = {
   name: string;
   email: string;
   points: number;
+  /** Nog niet besteedbaar (recente aankoop). 0/undefined = niets in behandeling. */
+  pending?: number;
+  /** Wanneer die punten besteedbaar worden. */
+  pendingVestsAt?: Date | string | null;
   memberSince?: Date | string | null;
   /**
    * Openstaande tegoedbonnen. Staan op de pas zodat de klant in de winkel niets
@@ -68,6 +72,12 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   if (!walletConfigured()) throw new Error("Apple Wallet is niet geconfigureerd.");
   const { icon, logo } = passImages();
   const points = Math.max(0, Math.round(Number(input.points) || 0));
+  const pending = Math.max(0, Math.round(Number(input.pending) || 0));
+  const vestDatum = input.pendingVestsAt ? new Date(input.pendingVestsAt) : null;
+  // Datum in de NL-tijdzone, niet die van de server (die staat op UTC).
+  const vestLabel = vestDatum && !isNaN(vestDatum.getTime())
+    ? vestDatum.toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })
+    : null;
   const memberCode = "GENTS " + input.customerId.replace(/-/g, "").slice(0, 8).toUpperCase();
   const sinceYear = input.memberSince ? new Date(input.memberSince).getFullYear() : null;
 
@@ -105,17 +115,35 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   const tegoedCents = tegoeden.reduce((s, v) => s + (Number(v.valueCents) || 0), 0);
 
   pass.type = "storeCard";
-  pass.primaryFields.push({ key: "balance", label: "Spaarpunten", value: String(points) });
+  pass.primaryFields.push({
+    key: "balance",
+    label: "Spaarpunten",
+    value: String(points),
+    // iOS toont dit als melding zodra het saldo op de pas verandert.
+    changeMessage: "Je hebt nu %@ spaarpunten",
+  });
   pass.secondaryFields.push({ key: "member", label: "Lid", value: input.name });
-  /* Tegoed vóór "lid sinds": wat je kunt uitgeven is belangrijker dan sinds
-     wanneer je klant bent, en er is maar plek voor een handvol velden. */
+  /* Volgorde op waarde: tegoed (uitgeefbaar) → punten in behandeling (verklaart
+     waarom het saldo nog laag is) → lid sinds (decoratief). Er is maar plek voor
+     een handvol velden, dus "lid sinds" valt als eerste af. */
   if (tegoeden.length) {
     pass.auxiliaryFields.push({
       key: "credit",
       label: tegoeden.length === 1 ? "Tegoed" : `Tegoed (${tegoeden.length})`,
       value: tegoedCents > 0 ? euroKort(tegoedCents) : tegoeden[0].label,
     });
-  } else if (sinceYear) {
+  }
+  /* Zonder dit veld leest de pas als "0 punten" terwijl de klant net gekocht
+     heeft: punten vesten pas na de retourtermijn (21 dagen). */
+  if (pending > 0) {
+    pass.auxiliaryFields.push({
+      key: "pending",
+      label: "In behandeling",
+      value: String(pending),
+      changeMessage: "Er staan %@ punten in behandeling",
+    });
+  }
+  if (!tegoeden.length && pending <= 0 && sinceYear) {
     pass.auxiliaryFields.push({ key: "since", label: "Lid sinds", value: String(sinceYear) });
   }
   pass.backFields.push(
@@ -123,9 +151,16 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       key: "how",
       label: "Zo werkt het",
       value:
-        "Je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen.",
+        "Je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen. Punten van een nieuwe aankoop worden besteedbaar na de retourtermijn.",
     },
-    { key: "value", label: "Je saldo", value: `${points} punten` },
+    {
+      key: "value",
+      label: "Je saldo",
+      value:
+        pending > 0
+          ? `${points} punten besteedbaar. ${pending} punten zijn nog in behandeling${vestLabel ? ` — besteedbaar vanaf ${vestLabel}` : ""}.`
+          : `${points} punten besteedbaar.`,
+    },
   );
   if (tegoeden.length) {
     pass.backFields.push({
