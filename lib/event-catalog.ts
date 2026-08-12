@@ -144,6 +144,42 @@ export const EVENT_CATALOG: EventDef[] = [
 ];
 /* eslint-enable prettier/prettier */
 
+/**
+ * Gedeclareerd maar (nog) NERGENS gevuurd.
+ *
+ * Deze lijst staat er expres. De vorige allowlist ging juist mis omdat niemand
+ * kon zien welke events echt bestonden: de rapportage verwees naar
+ * footer- en tegel-klikken die nooit gemeten werden, en die blokken stonden
+ * jarenlang leeg zonder dat iemand doorhad dat de MEETKANT ontbrak — het leek
+ * gewoon of er niet op geklikt werd.
+ *
+ * Een event hierin is dus geen bug maar een openstaande aansluiting. Zolang hij
+ * hier staat mag geen enkel dashboard of doelgroepregel doen alsof er data is.
+ * Sluit je 'm aan, haal 'm dan hier weg — dat is de hele ceremonie.
+ */
+export const NOG_NIET_AANGESLOTEN: ReadonlySet<string> = new Set([
+  // Pagina
+  "uitgaande_klik", "bestand_download", "pagina_fout", "delen",
+  "banner_getoond", "banner_klik",
+  // Catalogus — de PDP-interacties. Waardevol (maat-frictie, twijfel over de
+  // pasvorm), maar elk een aparte plek in de PDP-componenten.
+  "meer_laden", "maat_gekozen", "kleur_gewisseld", "media_bekeken",
+  "maattabel_open", "maatadvies_start", "maatadvies_klaar",
+  "winkelvoorraad_bekeken", "levertijd_bekeken",
+  // Checkout
+  "afhalen_gekozen",
+  // refund hoort server-side aan de retour-afhandeling te hangen, zodat de
+  // omzet bij Google en Meta gecorrigeerd wordt na een retour.
+  "refund",
+  // Account
+  "login", "sign_up", "magic_link", "profiel_afgerond", "maatprofiel_opgeslagen",
+  // Service
+  "afspraak_start", "retour_gestart", "retour_aangemeld", "ticket_gesteld",
+  "whatsapp_optin", "hulp_geopend",
+  // Loyalty
+  "punten_ingewisseld", "giftcard_gekocht", "wallet_toegevoegd", "bon_geclaimd",
+]);
+
 const BY_NAAM = new Map(EVENT_CATALOG.map((e) => [e.naam, e]));
 
 /** Wat de server accepteert. Alles daarbuiten wordt geweigerd, niet stil geslikt. */
