@@ -9,6 +9,7 @@ import { useT } from "@/components/i18n/locale-provider";
 import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
+import { huidigeAttributie } from "@/lib/attributie-client";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
 import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
 
@@ -120,6 +121,21 @@ function CheckoutForm() {
   const [unavailableSkus, setUnavailableSkus] = useState<string[]>([]);
   // Stappen-checkout: gegevens → betalen (één sectie per scherm, past op elke resolutie).
   const [step, setStep] = useState<"gegevens" | "betalen">("gegevens");
+
+  // begin_checkout hoort bij het ÓPENEN van de checkout, niet bij het indrukken
+  // van de betaalknop. Stond het op die knop, dan telde alleen wie helemaal
+  // doorklikte als "gestart" — en was de afhaak binnen de checkout per definitie
+  // onzichtbaar, want de noemer ontbrak. Eén keer per bezoek aan deze pagina.
+  const checkoutGemeld = useRef(false);
+  useEffect(() => {
+    if (checkoutGemeld.current || !cart.hydrated || !cart.lines.length) return;
+    checkoutGemeld.current = true;
+    track("checkout_start", {
+      valueCents: cart.subtotalCents,
+      props: { items: cart.lines.length, stuks: cart.count },
+    });
+    track("checkout_stap", { props: { stap: "gegevens" } });
+  }, [cart.hydrated, cart.lines.length, cart.subtotalCents, cart.count]);
 
   // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm).
   type PayMethod = { id: string; description: string; image: string };
@@ -356,11 +372,18 @@ function CheckoutForm() {
       const d = await r.json();
       if (d.type === "giftcard") {
         setGiftcard({ code: d.code, balanceCents: d.balanceCents });
+        track("giftcard_ingewisseld", { valueCents: d.balanceCents, props: { code: d.code } });
         setCodeInput("");
       } else if (d.type === "voucher") {
         setVoucher({ code: d.code, discountCents: d.discountCents, label: d.label });
+        track("voucher_toegepast", { valueCents: d.discountCents, props: { coupon: d.code, label: d.label } });
         setCodeInput("");
       } else {
+        // Een geweigerde code is een omzetlek dat je alleen ziet als je 'm meet:
+        // de klant heeft een verwachting die de checkout niet waarmaakt, en
+        // haakt precies daar af. De REDEN gaat mee, want "verlopen" vraagt om
+        // een ander antwoord dan "bestaat niet".
+        track("voucher_geweigerd", { props: { coupon: code.slice(0, 40), reden: String(d.error || "onbekend").slice(0, 80) } });
         setCodeErr(d.error || t("checkout.error_code_unknown"));
       }
     } catch {
@@ -424,6 +447,19 @@ function CheckoutForm() {
     }
     if (business && !(form.companyName || "").trim()) { setError(t("checkout.error_company_name")); return; }
     setError("");
+    // GA4's add_shipping_info: de klant heeft zijn bezorgkeuze vastgelegd. Dit
+    // is de stap die tot nu toe volledig ontbrak, waardoor de checkout één
+    // zwarte doos was tussen "gestart" en "betaald" — je kon niet zien of mensen
+    // op het adres, op de verzendkosten of op de betaalpagina afhaakten.
+    track("verzendkeuze", {
+      valueCents: payableCents,
+      props: {
+        methode: pickupMode ? "pickup" : delivery,
+        ...(pickupMode ? { winkel: pickupStore } : {}),
+        shippingCents,
+      },
+    });
+    track("checkout_stap", { props: { stap: "betalen" } });
     setStep("betalen");
   }
 
@@ -453,7 +489,14 @@ function CheckoutForm() {
       return;
     }
     setBusy(true);
-    track("checkout_start", { valueCents: payableCents, props: { items: cart.lines.length } });
+    // GA4's add_payment_info. `checkout_start` hoort niet hier maar bij het
+    // ÓPENEN van de checkout (zie de useEffect hieronder): stond hij op dit
+    // punt, dan telde alleen wie helemaal doorklikte als "gestart" en was de
+    // afhaak in de checkout per definitie onzichtbaar.
+    track("betaalkeuze", {
+      valueCents: payableCents,
+      props: { items: cart.lines.length, methode: pickupMode ? "pickup" : delivery, coupon: voucher?.code || "" },
+    });
     // Niet-voorgevinkte nieuwsbrief-opt-in (AVG): alleen bij expliciete keuze.
     if (newsletter && form.email) {
       fetch("/api/newsletter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email }) }).catch(() => {});
@@ -472,6 +515,10 @@ function CheckoutForm() {
           // Server vergelijkt: wijkt het echte totaal af (prijs/actie gewijzigd
           // sinds toevoegen) → 409 i.p.v. stil een ander bedrag innen.
           expectedTotalCents: payableCents,
+          // De campagne die deze klant bracht, vastgevroren op de order. Zonder
+          // dit komt élke conversie bij Google en Meta binnen als "direct" en
+          // lijkt betaalde reclame gratis.
+          attributie: huidigeAttributie() ?? undefined,
           items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty, groupId: l.groupId, roleLabel: l.roleLabel })),
         }),
       });
@@ -482,12 +529,24 @@ function CheckoutForm() {
           // verwijder-artikelen-flow: de artikelen zijn elders wél leverbaar.
           // Terug naar stap 1 met een ververste lijst, zodat de klant zélf
           // opnieuw een (complete) winkel kiest — nooit stil herkiezen.
+          track("checkout_fout", { valueCents: payableCents, props: { soort: "afhaalvoorraad", winkel: pickupStore } });
           setError(t("checkout.pickup_unavailable"));
           setPickupStore("");
           setPickupAvailRefresh((n) => n + 1);
           setStep("gegevens");
           return;
         }
+        // Een afgebroken checkout is de duurste afhaak die er is: de klant wilde
+        // betalen en kon het niet. Zonder dit event zie je alleen dat de order
+        // ontbreekt, niet wáárom — en dat is precies het verschil tussen een
+        // prijswijziging, een voorraadweigering en een echte storing.
+        track("checkout_fout", {
+          valueCents: payableCents,
+          props: {
+            soort: data.priceChanged ? "prijs_gewijzigd" : Array.isArray(data.unavailableSkus) && data.unavailableSkus.length ? "voorraad" : "overig",
+            melding: String(data.error || "").slice(0, 120),
+          },
+        });
         setError(data.error || t("common.error"));
         // Prijs gewijzigd → knop toont voortaan het server-totaal; nogmaals
         // betalen gaat dan wél door (expectedTotalCents matcht weer).

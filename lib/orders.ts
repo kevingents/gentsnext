@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { after } from "next/server";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
@@ -10,6 +11,8 @@ import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
 import { recordEvents } from "@/lib/analytics";
+import { ververProfiel } from "@/lib/customer-360";
+import { koppelDevice } from "@/lib/identity";
 import { shippingCentsFor, DEFAULT_COUNTRY, isKnownCountry } from "@/lib/shipping-zones";
 import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
@@ -277,7 +280,18 @@ export async function createOrder(
      onderling verkeer. De bezorg-tak deelt de online-pool met de webshop —
      zou de kassa daar zonder marge claimen, dan kan een echte webklant een
      "niet meer op voorraad" krijgen terwijl de PDP nog voorraad toont. */
-  opts: { channel?: StockChannel; voorverkoop?: boolean } = {}
+  /* `sessionId` + `attributie`: het device waarop besteld is en de campagne die
+     de klant bracht. Vastgevroren op DIT moment — een verwijzing naar de
+     bezoeker-attributie zou meebewegen met zijn volgende bezoek, terwijl een
+     order toegerekend moet blijven aan de klik die hem opleverde. Dit is ook
+     wat een server-side conversie naar Google/Meta straks nodig heeft; zonder
+     klik-id komt die aan als "direct" en lijkt betaalde reclame gratis. */
+  opts: {
+    channel?: StockChannel;
+    voorverkoop?: boolean;
+    sessionId?: string;
+    attributie?: Record<string, unknown>;
+  } = {}
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -378,6 +392,8 @@ export async function createOrder(
       accessToken,
       status: "open",
       customerId: customerId ?? null,
+      sessionId: String(opts.sessionId || "").slice(0, 64),
+      attributie: (opts.attributie ?? {}) as Record<string, unknown>,
       email: contact.email.trim().toLowerCase(),
       firstName: contact.firstName.trim(),
       lastName: contact.lastName.trim(),
@@ -656,6 +672,7 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     .returning({
       id: orders.id, voucherCode: orders.voucherCode, orderNumber: orders.orderNumber, totalCents: orders.totalCents,
       customerId: orders.customerId, paidAt: orders.paidAt, createdAt: orders.createdAt,
+      sessionId: orders.sessionId,
     });
   // Omzet-event op het choke-point van élke betaling. Het bestaande
   // purchase-event stond client-side op de bedanktpagina en miste daardoor
@@ -668,7 +685,11 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     for (const o of updated) {
       recordEvents([
         {
-          sessionId: "server",
+          // Het device van de bestelling in plaats van "server": daarmee valt
+          // deze aankoop op zijn plek in de sessie waarin hij werd gedaan, en
+          // klopt de funnel per device weer. Bij een order zonder device (kassa,
+          // handmatig) blijft het "server".
+          sessionId: o.sessionId || "server",
           type: "purchase",
           path: "/api/webhooks",
           // handle blijft leeg: dat veld is voor PRODUCT-handles (de ranking
@@ -676,8 +697,20 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
           handle: "",
           valueCents: o.totalCents,
           props: { source: "webhook", orderNumber: o.orderNumber },
+          customerId: o.customerId ?? null,
+          bron: "server",
         },
       ]).catch(() => {});
+
+      // Een betaalde bestelling verandert het klantbeeld ingrijpend (segment,
+      // recentheid, bestedingen) en dus ook in welke doelgroepen deze klant
+      // valt. Meteen verversen; wachten tot de nachtjob zou betekenen dat een
+      // klant nog een dag lang in "winkelwagen laten staan" zit nádat hij kocht.
+      if (o.customerId) {
+        const klant = o.customerId;
+        after(() => ververProfiel(klant));
+        if (o.sessionId) after(() => koppelDevice(klant, o.sessionId, "bestelling").then(() => {}));
+      }
     }
   }
   /* Spaarpunten op hetzelfde choke-point als het omzet-event: élke betaling komt

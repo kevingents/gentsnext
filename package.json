@@ -26,7 +26,9 @@
     "generate:model-photos": "tsx scripts/generate-model-photos.ts",
     "check:verzenddagen": "tsx scripts/check-verzenddagen.ts",
     "verify:possales": "tsx scripts/verify-pos-sales.ts",
-    "backfill:punten": "tsx scripts/backfill-loyalty.ts"
+    "backfill:punten": "tsx scripts/backfill-loyalty.ts",
+    "db:migratie": "tsx scripts/migratie-uitvoeren.ts",
+    "profielen:herbouw": "tsx scripts/herbouw-profielen.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

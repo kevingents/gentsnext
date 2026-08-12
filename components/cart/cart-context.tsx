@@ -82,7 +82,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const add = useCallback((line: Omit<CartLine, "id">, opts?: { quiet?: boolean }) => {
     const id = lineId(line);
-    track("add_to_cart", { handle: line.productHandle, valueCents: line.priceCents * line.qty });
+    // Dit is het ENIGE punt waar add_to_cart afgaat. De look-componenten
+    // vuurden het er vroeger nog een keer overheen ná deze aanroep, waardoor
+    // elke toevoeging vanuit een look dubbel telde — één keer mét bedrag en één
+    // keer zonder. Wie een extra kenmerk wil meegeven (bv. uit welke look),
+    // geeft dat mee via `line`, niet via een tweede event.
+    track("add_to_cart", {
+      handle: line.productHandle,
+      valueCents: line.priceCents * line.qty,
+      props: {
+        title: line.title, size: line.size, color: line.color, qty: line.qty,
+        ...(line.groupId ? { groupId: line.groupId } : {}),
+      },
+    });
     setLines((prev) => {
       const existing = prev.find((l) => l.id === id);
       if (existing) return prev.map((l) => (l.id === id ? { ...l, qty: l.qty + line.qty } : l));
@@ -94,6 +106,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addMany = useCallback((newLines: Omit<CartLine, "id">[]) => {
+    // Een complete look in één keer: één event per regel, zodat de meting
+    // hetzelfde telt als bij losse toevoegingen. `fromLook` maakt achteraf
+    // zichtbaar wat de looks daadwerkelijk opleveren.
+    for (const line of newLines) {
+      track("add_to_cart", {
+        handle: line.productHandle,
+        valueCents: line.priceCents * line.qty,
+        props: { title: line.title, size: line.size, color: line.color, qty: line.qty, fromLook: true },
+      });
+    }
     setLines((prev) => {
       const next = [...prev];
       for (const line of newLines) {
@@ -113,20 +135,78 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const dismissAdded = useCallback(() => setAdded(null), []);
   const dismissToast = useCallback(() => setToast(null), []);
 
-  const remove = useCallback((id: string) => setLines((prev) => prev.filter((l) => l.id !== id)), []);
+  // Wegnemen is net zo veelzeggend als toevoegen: een product dat structureel de
+  // wagen weer uit gaat heeft een prijs-, maat- of leverprobleem. Dat konden we
+  // tot nu toe niet zien, want er werd alleen geteld wat eríngaat.
+  const remove = useCallback(
+    (id: string) =>
+      setLines((prev) => {
+        const weg = prev.find((l) => l.id === id);
+        if (weg) {
+          track("remove_from_cart", {
+            handle: weg.productHandle,
+            valueCents: weg.priceCents * weg.qty,
+            props: { title: weg.title, size: weg.size, color: weg.color, qty: weg.qty },
+          });
+        }
+        return prev.filter((l) => l.id !== id);
+      }),
+    []
+  );
   const removeGroup = useCallback(
-    (groupId: string) => setLines((prev) => prev.filter((l) => l.groupId !== groupId)),
+    (groupId: string) =>
+      setLines((prev) => {
+        for (const l of prev.filter((x) => x.groupId === groupId)) {
+          track("remove_from_cart", {
+            handle: l.productHandle,
+            valueCents: l.priceCents * l.qty,
+            props: { title: l.title, size: l.size, qty: l.qty, groupId },
+          });
+        }
+        return prev.filter((l) => l.groupId !== groupId);
+      }),
     []
   );
   const setQty = useCallback(
     (id: string, qty: number) =>
-      setLines((prev) =>
-        qty <= 0 ? prev.filter((l) => l.id !== id) : prev.map((l) => (l.id === id ? { ...l, qty } : l))
-      ),
+      setLines((prev) => {
+        const huidig = prev.find((l) => l.id === id);
+        if (huidig && qty !== huidig.qty) {
+          // Naar 0 is een verwijdering, geen wijziging — anders mist GA4 het
+          // remove_from_cart-signaal bij de meest gebruikte manier om iets uit
+          // de wagen te halen.
+          if (qty <= 0) {
+            track("remove_from_cart", {
+              handle: huidig.productHandle,
+              valueCents: huidig.priceCents * huidig.qty,
+              props: { title: huidig.title, size: huidig.size, qty: huidig.qty },
+            });
+          } else {
+            track("aantal_gewijzigd", {
+              handle: huidig.productHandle,
+              valueCents: huidig.priceCents * qty,
+              props: { van: huidig.qty, naar: qty, title: huidig.title },
+            });
+          }
+        }
+        return qty <= 0 ? prev.filter((l) => l.id !== id) : prev.map((l) => (l.id === id ? { ...l, qty } : l));
+      }),
     []
   );
   const clear = useCallback(() => setLines([]), []);
-  const open = useCallback(() => setIsOpen(true), []);
+  const open = useCallback(() => {
+    // cart_view stond wél in de toegestane lijst maar werd nergens gevuurd —
+    // de stap tussen "in de wagen" en "checkout gestart" ontbrak dus volledig in
+    // de funnel, terwijl daar juist de grootste afhaak zit.
+    setLines((prev) => {
+      track("cart_view", {
+        valueCents: prev.reduce((n, l) => n + l.priceCents * l.qty, 0),
+        props: { regels: prev.length, stuks: prev.reduce((n, l) => n + l.qty, 0) },
+      });
+      return prev;
+    });
+    setIsOpen(true);
+  }, []);
   const close = useCallback(() => setIsOpen(false), []);
 
   const count = useMemo(() => lines.reduce((n, l) => n + l.qty, 0), [lines]);
