@@ -82,7 +82,10 @@ export const GARMENT_REJECT_CATEGORIES = {
   details: { label: "Details kloppen niet (knopen, kraag, zakken)", rule: "reproduce every construction detail of the reference garment exactly: button stance, lapel and collar shape, pockets, vents and stitching — invent nothing" },
   kreukels: { label: "Kreukels / slordig gedragen", rule: "the garment is worn crisply and neatly: correctly buttoned, collar straight, fabric smooth and free of creases" },
   styling: { label: "Styling eromheen klopt niet", rule: "the surrounding menswear stays classic, neutral and subordinate to the featured item" },
-  combinatie: { label: "Verkeerd gecombineerd", rule: "combine the item by GENTS menswear etiquette: a crisp white collared shirt, neat matching trousers and leather shoes in the prescribed colour" },
+  // "neat trousers", niet "neat MATCHING trousers": dit is een huisregel die in
+  // veel prompts belandt, en dat ene woord sprak correcties over de broekkleur
+  // tegen — precies de tegenspraak die we elders juist weghalen.
+  combinatie: { label: "Verkeerd gecombineerd", rule: "combine the item by GENTS menswear etiquette: a crisp white collared shirt, neat trousers and leather shoes in the prescribed colour" },
   anderitem: { label: "Toont niet hetzelfde product", rule: "the featured garment must be THE EXACT item from the reference photo — same model, colour, pattern and details, never a lookalike" },
 } as const;
 
@@ -314,10 +317,20 @@ export function modelPromptBlocks(store: ModelLearningsStore, opts: { handle?: s
     // opdracht de prompt in — dan genereert het model precies dat. Kon hij niet
     // omgezet worden (geen API-key, time-out), dan gaat hij apart mee, expliciet
     // gelabeld als klacht die gecorrigeerd moet worden.
-    const mineCats = uniq(mine.map((l) => l.category));
+    // Alleen de NIEUWSTE beoordeling per categorie telt. Keur je hetzelfde
+    // product nog eens af in dezelfde categorie, dan vervang je wat je eerder
+    // zei — je herhaalt jezelf niet, je corrigeert jezelf. Zonder deze regel
+    // stapelden tegenstellingen zich op: bij één colbert stond zowel "trousers
+    // in a contrasting color" als "trousers match the jacket" in dezelfde
+    // prompt, en dan wint er geen van beide. `mine` staat nieuwste eerst.
+    const perCategorie = new Map<string, (typeof mine)[number]>();
+    for (const l of mine) if (!perCategorie.has(l.category)) perCategorie.set(l.category, l);
+    const actueel = [...perCategorie.values()];
+
+    const mineCats = uniq(actueel.map((l) => l.category));
     const focusRaw: string[] = [];
     const complaintsRaw: string[] = [];
-    for (const l of mine) {
+    for (const l of actueel) {
       const directive = (l.directive || "").trim();
       if (meaningful(directive)) {
         focusRaw.push(directive);

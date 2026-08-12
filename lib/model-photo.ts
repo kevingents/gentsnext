@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -16,6 +16,14 @@ import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
 const API = "https://api.fashn.ai/v1";
 const STUDIO = "Clean seamless studio background in a soft neutral light grey, soft even lighting, sharp high-end menswear e-commerce catalog quality. The shown product must stay accurate to the reference photo.";
 const POSE = "Relaxed full-length pose, one hand casually in his trouser pocket, weight on one leg, warm genuine smile, looking softly into the camera.";
+/**
+ * Schoenen en riemen zijn kleine artikelen: het bulk-script (scripts/generate-
+ * model-photos.ts, POSES_LOWER) fotografeert die vanaf het middel. Deze
+ * hergenerator deed dat niet en zette er een héle man neer — dus beoordeelde je
+ * bij een lakschoen ineens een compleet pak, en dan is er altijd wel iets mis.
+ */
+const POSE_ONDER = "Framed from the waist down, focus on the lower body and footwear, relaxed stance with weight on one leg and one foot slightly forward.";
+const ONDERLIJF = new Set(["Schoenen", "Riemen"]);
 
 function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
   switch (hg) {
@@ -28,7 +36,14 @@ function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
     case "Polo-shirts": return "Male model wearing THIS polo shirt, styled with neat trousers.";
     case "T-Shirts": return "Male model wearing THIS t-shirt, styled casually with neat trousers.";
     case "Jassen": return "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.";
-    default: return "Male model wearing THIS item, neatly styled with matching menswear.";
+    // Zonder eigen zin viel een schoen terug op "THIS item, neatly styled with
+    // matching menswear" — vaag, en "matching" is precies het woord dat de
+    // generator een compleet bij elkaar passend pak liet verzinnen.
+    case "Schoenen": return "Male model wearing THESE shoes with well-fitted trousers.";
+    case "Riemen": return `Male model wearing THIS belt with well-fitted trousers, a tucked ${s.shirt} and ${s.shoes}.`;
+    case "Stropdassen": return `Male model wearing THIS tie with ${s.shirt} and a classic jacket.`;
+    case "Strikken": return `Male model wearing THIS bow tie with ${s.shirt} and a black tuxedo jacket.`;
+    default: return "Male model wearing THIS item, neatly styled with classic menswear.";
   }
 }
 
@@ -83,7 +98,8 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   const kledingZin = learn.fixTopics.garment
     ? garmentFor(p.hg, style).replace(/with matching trousers/gi, "with trousers")
     : garmentFor(p.hg, style);
-  const prompt = `${learn.lead}${kledingZin}${learn.garment} ${POSE} ${STUDIO}${learn.model}${learn.fix}`;
+  const pose = ONDERLIJF.has(p.hg) ? POSE_ONDER : POSE;
+  const prompt = `${learn.lead}${kledingZin}${learn.garment} ${pose} ${STUDIO}${learn.model}${learn.fix}`;
 
   // face_reference houdt dezelfde man vast — prettig als je niets aan te merken
   // hebt en gewoon een andere take wilt. Maar het referentiebeeld is de foto die
@@ -94,9 +110,26 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
   try {
     const buf = Buffer.from(await (await fetch(out)).arrayBuffer());
-    const b = await put(`ai-models/${handle}-model.jpg`, buf, { access: "public", token, contentType: "image/jpeg", allowOverwrite: true });
-    const url = `${b.url}?v=${Date.now()}`;
+    // ELKE generatie een eigen pad. Voorheen ging alles naar hetzelfde
+    // ai-models/<handle>-model.jpg met allowOverwrite; blob-objecten worden op
+    // pad gecachet (standaard een maand, en de ?v= erachter telt niet mee voor
+    // dat cachesleutel), dus kreeg je een tijd lang je oude foto terug — vandaar
+    // "vier keer drukken voor een nieuwe afbeelding". Een nieuw pad kán niet
+    // gecachet zijn. De vorige versie ruimen we daarna op.
+    const vorige = p.huidig || "";
+    const b = await put(`ai-models/${handle}-model-${Date.now()}.jpg`, buf, {
+      access: "public",
+      token,
+      contentType: "image/jpeg",
+      cacheControlMaxAge: 0,
+    });
+    const url = b.url;
     await db.update(products).set({ modelImageUrl: url, modelImageAlt: `${p.title} — op model` }).where(eq(products.id, p.id));
+    // Pas opruimen ná de db-update: gaat het verwijderen mis, dan staat de site
+    // in elk geval al op de nieuwe foto.
+    if (vorige && vorige !== url.split("?")[0]) {
+      try { await del(vorige, { token }); } catch { /* blob al weg */ }
+    }
     return { ok: true, url };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
