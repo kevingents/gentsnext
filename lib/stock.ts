@@ -1,14 +1,14 @@
-import { list } from "@vercel/blob";
 import { readActiveBaseline } from "@/lib/srs-stock-core";
 
 /**
  * Voorraad uit de SRS-data-export (voorkeur van de business boven Shopify-stock).
  *
- * Bron (voorkeur): Neon-tabel `srs_stock` (bron van waarheid, gepusht door de
- * storegents SRS-import 3×/dag; zie lib/srs-stock-core). Val terug op de blob
- * `srs-voorraad/srs-rows-latest.json` zolang Neon nog niet gevuld is (transitie) —
- * zo blijft de PDP werken ongeacht welke bron actief is.
- * Rij-formaat blob: { filiaalNummer, store, sku, voorraad, ideaal, tekort }.
+ * Bron: Neon-tabel `srs_stock` (bron van waarheid; de storegents SRS-import pusht
+ * de volledige baseline structureel via /api/core/stock/baseline — uurlijkse cron,
+ * en de import-marker schuift daar pas op als de push gecommit is, dus een gemiste
+ * push wordt vanzelf opnieuw geprobeerd; zie lib/srs-stock-core). De oude
+ * transitie-fallback op de cross-repo blob `srs-voorraad/srs-rows-latest.json`
+ * is verwijderd.
  *
  * We bouwen één keer per proces (5 min TTL) een SKU-index:
  *   sku → { total, online, byBranch: [{ branchId, store, qty }] }
@@ -23,13 +23,12 @@ export type SkuStock = { total: number; online: number; byBranch: BranchStock[] 
 
 type StockIndex = Map<string, SkuStock>;
 
-const BLOB_PATH = "srs-voorraad/srs-rows-latest.json";
 const TTL_MS = 5 * 60 * 1000;
 
 let _index: StockIndex | null = null;
 let _at = 0;
 let _inflight: Promise<StockIndex> | null = null;
-let _syncedAt: Date | null = null; // tijdstip van de laatste SRS-voorraadsync (blob)
+let _syncedAt: Date | null = null; // tijdstip van de laatste SRS-voorraadsync (Neon-baseline)
 
 export function onlineBranchSet(): Set<string> | null {
   const raw = (process.env.GENTS_WEBSHOP_STOCK_BRANCHES || "").trim();
@@ -42,7 +41,7 @@ export function onlineBranchSet(): Set<string> | null {
   );
 }
 
-/** Voeg één voorraad-rij toe aan de index (gedeeld door de Neon- en blob-bron). */
+/** Voeg één voorraad-rij toe aan de index. */
 function addRow(
   index: StockIndex,
   online: Set<string> | null,
@@ -80,48 +79,12 @@ async function loadIndexFromNeon(): Promise<StockIndex | null> {
     _syncedAt = syncedAt;
     return index;
   } catch {
-    return null; // Neon onbereikbaar → val terug op de blob (PDP blijft werken)
+    return null; // Neon onbereikbaar → lege index (PDP toont dan neutraal)
   }
-}
-
-/** Transitie-fallback: de cross-repo storegents-blob (oude bron). */
-async function loadIndexFromBlob(): Promise<StockIndex> {
-  const token =
-    process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
-  const index: StockIndex = new Map();
-  if (!token) return index; // geen token → lege index (PDP toont dan neutraal)
-
-  const result = await list({ prefix: BLOB_PATH, limit: 1, token });
-  const blob = result.blobs.find((b) => b.pathname === BLOB_PATH);
-  if (!blob) return index;
-  _syncedAt = blob.uploadedAt ? new Date(blob.uploadedAt) : null;
-
-  const res = await fetch(`${blob.url}?_=${Date.now()}`, { cache: "no-store" });
-  if (!res.ok) return index;
-  const data = (await res.json()) as { rows?: any[] };
-  const rows = Array.isArray(data?.rows) ? data.rows : [];
-  const online = onlineBranchSet();
-
-  for (const r of rows) {
-    const branchId = String(r?.filiaalNummer || "").trim();
-    addRow(
-      index,
-      online,
-      String(r?.sku || "").trim(),
-      Number(r?.voorraad) || 0,
-      branchId,
-      String(r?.store || `Filiaal ${branchId}`),
-      Number(r?.tekort) || 0,
-      Number(r?.ideaal) || 0
-    );
-  }
-  return index;
 }
 
 async function loadIndex(): Promise<StockIndex> {
-  const neon = await loadIndexFromNeon();
-  if (neon) return neon;
-  return loadIndexFromBlob();
+  return (await loadIndexFromNeon()) ?? new Map();
 }
 
 async function getIndex(): Promise<StockIndex> {
@@ -165,7 +128,7 @@ export async function stockAvailable(): Promise<boolean> {
   return idx.size > 0;
 }
 
-/** Tijdstip van de laatste SRS-voorraadsync (blob-upload). Voor reservering-release. */
+/** Tijdstip van de laatste SRS-voorraadsync (Neon-baseline). Voor reservering-release. */
 export async function stockSyncedAt(): Promise<Date | null> {
   await getIndex();
   return _syncedAt;
