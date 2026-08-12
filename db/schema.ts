@@ -512,6 +512,11 @@ export const orders = pgTable(
     /** Mollie */
     molliePaymentId: text("mollie_payment_id"),
     paymentStatus: text("payment_status"),
+    /** Wélke methode de klant koos (ideal, creditcard, klarna, bancontact, …).
+     *  Stond nergens vast: `paymentStatus` is alleen 'paid'. Het is een sterk
+     *  profielkenmerk én het stuurt de volgorde van de betaalkeuze in de
+     *  checkout. Leeg voor de historische import — eerlijker dan een gok. */
+    betaalmethode: text("betaalmethode").notNull().default(""),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     /** SRS-weborder-push-status (na betaling) — voor de latere koppeling. */
     srsPushedAt: timestamp("srs_pushed_at", { withTimezone: true }),
@@ -1885,11 +1890,53 @@ export const customerProfiles = pgTable(
     /** nieuw | trouw | vip | slapend | risico | eenmalig | verloren | geen. */
     segment: text("segment").notNull().default("geen"),
 
+    /** Grote maten — Kevin wil deze groep expliciet kunnen benaderen. Afgeleid
+     *  langs TWEE wegen: lidmaatschap van de collectie 'Grote maten' én de
+     *  gekochte maten zelf. Eén weg is niet genoeg: de collectie dekt niet alle
+     *  artikelen, en een maat zegt per categorie iets anders. */
+    groteMaten: boolean("grote_maten").notNull().default(false),
+    maatprofielCompleet: boolean("maatprofiel_compleet").notNull().default(false),
+
+    /** Prijsgevoeligheid als PERCENTAGE van de orders met korting. Wie alleen in
+     *  de sale koopt is een andere campagne dan wie vol tarief betaalt — en die
+     *  tweede groep wil je nóóit een kortingsmail sturen. */
+    kortingsaandeel: integer("kortingsaandeel").notNull().default(0),
+    ordersMetKorting: integer("orders_met_korting").notNull().default(0),
+
+    zakelijk: boolean("zakelijk").notNull().default(false),
+    cadeaukoper: boolean("cadeaukoper").notNull().default(false),
+    taal: text("taal").notNull().default("nl"),
+    betaalmethode: text("betaalmethode").notNull().default(""),
+    bezorgvoorkeur: text("bezorgvoorkeur").notNull().default(""),
+    /** In welke maanden koopt deze klant. Voedt seizoenscampagnes: wie elk jaar
+     *  in mei een pak koopt (trouwseizoen) benader je in april, niet in
+     *  november. */
+    aankoopmaanden: jsonb("aankoopmaanden").notNull().default([]),
+
+    mailVerstuurd: integer("mail_verstuurd").notNull().default(0),
+    mailGeopend: integer("mail_geopend").notNull().default(0),
+    mailGeklikt: integer("mail_geklikt").notNull().default(0),
+    mailOpenratio: integer("mail_openratio").notNull().default(0),
+    mailLaatstGeopend: timestamp("mail_laatst_geopend", { withTimezone: true }),
+
+    /** Externe kanalen apart geteld. "Koopt bij ons én op Bol" is een eigen
+     *  groep: die klant kun je met een reden naar het eigen kanaal halen, en dat
+     *  scheelt marge. */
+    ordersBol: integer("orders_bol").notNull().default(0),
+    besteedBolCents: integer("besteed_bol_cents").notNull().default(0),
+    ordersShopify: integer("orders_shopify").notNull().default(0),
+    besteedShopifyCents: integer("besteed_shopify_cents").notNull().default(0),
+
+    retourRedenen: jsonb("retour_redenen").notNull().default([]),
+
     attributie: jsonb("attributie").notNull().default({}),
     berekendOp: timestamp("berekend_op", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("customer_profiles_segment_idx").on(t.segment),
+    index("customer_profiles_grote_maten_idx").on(t.groteMaten),
+    index("customer_profiles_korting_idx").on(t.kortingsaandeel),
+    index("customer_profiles_mail_idx").on(t.mailOpenratio),
     index("customer_profiles_kanaal_idx").on(t.kanaal),
     index("customer_profiles_besteed_idx").on(t.besteedTotaalCents),
     index("customer_profiles_laatste_idx").on(t.laatsteAankoop),
@@ -1975,4 +2022,110 @@ export const audienceSyncs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("audience_syncs_audience_idx").on(t.audienceId, t.createdAt)]
+);
+
+/* ───────────────── Externe bronnen in het klantbeeld ────────────────────── */
+
+/**
+ * Bestellingen die buiten ons eigen ordermodel omgaan: Bol.com, en straks elk
+ * ander marktplaats-kanaal.
+ *
+ * Eén tabel per SOORT FEIT, niet per systeem: een bestelling bij Bol en een bij
+ * een toekomstig kanaal zijn allebei "een externe order", ze verschillen in
+ * `bron`. Vijf losse tabellen zouden vijf keer dezelfde vraag anders
+ * beantwoorden. Shopify hoort hier bewust NIET bij: dat is onze eigen webshop,
+ * die landt via lib/shopify-sync gewoon in `orders`, zodat het profiel en alle
+ * rapportages er zonder uitzondering mee rekenen.
+ *
+ * `data` bewaart het ruwe record, zodat een verkeerde interpretatie later te
+ * herstellen is zonder opnieuw bij de bron te moeten trekken.
+ */
+export const externeOrders = pgTable(
+  "externe_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 'bol' | 'srs' | … */
+    bron: text("bron").notNull(),
+    externId: text("extern_id").notNull(),
+    orderNummer: text("order_nummer").notNull().default(""),
+    /** Brugsleutel: externe systemen kennen onze uuid niet. */
+    email: text("email").notNull().default(""),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    status: text("status").notNull().default(""),
+    totalCents: integer("total_cents").notNull().default(0),
+    kortingCents: integer("korting_cents").notNull().default(0),
+    besteldOp: timestamp("besteld_op", { withTimezone: true }).notNull(),
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    land: text("land").notNull().default("NL"),
+    telefoon: text("telefoon").notNull().default(""),
+    regels: jsonb("regels").notNull().default([]),
+    data: jsonb("data").notNull().default({}),
+    opgehaaldOp: timestamp("opgehaald_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Zonder deze unieke index verdubbelt élke sync de omzet van een klant.
+    uniqueIndex("externe_orders_uniek").on(t.bron, t.externId),
+    index("externe_orders_klant_idx").on(t.customerId),
+    index("externe_orders_tijd_idx").on(t.bron, t.besteldOp),
+  ]
+);
+
+/**
+ * Mailgedrag per adres (Spotler, en desgewenst Resend).
+ *
+ * Geaggregeerd, niet per bericht: we willen weten óf iemand onze mail leest,
+ * niet welke. Dat scheelt miljoenen rijen en het is precies wat een doelgroep
+ * nodig heeft — "opent al een jaar niets" verdient een eigen campagne, en een
+ * adres dat structureel bouncet moet je uit je uitleveringen houden voordat je
+ * afzenderreputatie eronder lijdt.
+ */
+export const mailEngagement = pgTable(
+  "mail_engagement",
+  {
+    email: text("email").primaryKey(),
+    bron: text("bron").notNull().default("spotler"),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    verstuurd: integer("verstuurd").notNull().default(0),
+    geopend: integer("geopend").notNull().default(0),
+    geklikt: integer("geklikt").notNull().default(0),
+    gebounced: integer("gebounced").notNull().default(0),
+    afgemeld: boolean("afgemeld").notNull().default(false),
+    laatstVerstuurd: timestamp("laatst_verstuurd", { withTimezone: true }),
+    laatstGeopend: timestamp("laatst_geopend", { withTimezone: true }),
+    laatstGeklikt: timestamp("laatst_geklikt", { withTimezone: true }),
+    bijgewerktOp: timestamp("bijgewerkt_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("mail_engagement_klant_idx").on(t.customerId)]
+);
+
+/**
+ * Retouren die buiten ons eigen retourportaal omgaan (Returnista).
+ *
+ * De REDEN is het hele punt van deze tabel. "Te klein" vraagt om beter
+ * maatadvies, "voldeed niet aan de verwachting" om betere foto's, "te laat
+ * geleverd" om iets heel anders. Zonder reden is een retour alleen een
+ * kostenpost en leer je er niets van.
+ */
+export const externeRetouren = pgTable(
+  "externe_retouren",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bron: text("bron").notNull().default("returnista"),
+    externId: text("extern_id").notNull(),
+    orderRef: text("order_ref").notNull().default(""),
+    email: text("email").notNull().default(""),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    status: text("status").notNull().default(""),
+    reden: text("reden").notNull().default(""),
+    bedragCents: integer("bedrag_cents").notNull().default(0),
+    regels: jsonb("regels").notNull().default([]),
+    aangemeldOp: timestamp("aangemeld_op", { withTimezone: true }),
+    data: jsonb("data").notNull().default({}),
+    opgehaaldOp: timestamp("opgehaald_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("externe_retouren_uniek").on(t.bron, t.externId),
+    index("externe_retouren_klant_idx").on(t.customerId),
+  ]
 );
