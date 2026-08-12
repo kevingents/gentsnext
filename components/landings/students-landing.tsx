@@ -13,18 +13,34 @@ type Props = {
 
 export async function StudentsLanding({ highlights }: Props) {
   const locale = await getLocale();
-  const USPS = [
-    { title: t("landing.students.usp.specialist.title", locale), body: t("landing.students.usp.specialist.body", locale) },
-    { title: t("landing.students.usp.stock.title", locale), body: t("landing.students.usp.stock.body", locale) },
-    { title: t("landing.students.usp.fitting.title", locale), body: t("landing.students.usp.fitting.body", locale) },
-    { title: t("landing.students.usp.personalisation.title", locale), body: t("landing.students.usp.personalisation.body", locale) },
-  ];
-
+  /**
+   * De pagina had twee 4-koloms tekstgrids boven elkaar die er identiek uitzagen
+   * én elkaar half herhaalden: de USP "Specialist in rokkostuums & smokings /
+   * voor gala's, corpsactiviteiten en diners" stond een blok lager nog eens als
+   * "Rokkostuums & smokings", en "Personalisatie mogelijk" als "Dassen &
+   * personalisatie". Twaalf tekstblokken vóór het eerste product.
+   *
+   * Nu: één grid met WAT we maken, en de twee overgebleven beloftes (voorraad,
+   * pasdagen) als smalle service-regel. De teksten zelf blijven ongewijzigd —
+   * anders vallen /en en /de terug op het Nederlands.
+   */
   const ITEMS = [
     { n: "01", t: t("landing.students.item.gala.title", locale), b: t("landing.students.item.gala.body", locale) },
     { n: "02", t: t("landing.students.item.board.title", locale), b: t("landing.students.item.board.body", locale) },
     { n: "03", t: t("landing.students.item.kroegjas.title", locale), b: t("landing.students.item.kroegjas.body", locale) },
     { n: "04", t: t("landing.students.item.ties.title", locale), b: t("landing.students.item.ties.body", locale) },
+  ];
+
+  const SERVICE = [
+    { title: t("landing.students.usp.stock.title", locale), body: t("landing.students.usp.stock.body", locale) },
+    { title: t("landing.students.usp.fitting.title", locale), body: t("landing.students.usp.fitting.body", locale) },
+  ];
+
+  const SHOP = [
+    { label: t("landing.students.shop.gala", locale), href: "/collections/rokkostuum" },
+    { label: t("landing.students.shop.smoking", locale), href: "/collections/smoking" },
+    { label: t("landing.students.shop.jacquets", locale), href: "/collections/jacquets" },
+    { label: t("landing.students.shop.kroegjasjes", locale), href: "/collections/kroegjasjes" },
   ];
 
   return (
@@ -67,45 +83,11 @@ export async function StudentsLanding({ highlights }: Props) {
         </div>
       </section>
 
-      {/* USPs */}
+      {/* Shop-tegels — direct onder de hero: eerst zien, dan lezen. */}
       <section className="border-b border-line bg-surface">
-        <div className="mx-auto grid max-w-page gap-6 px-gutter py-10 sm:grid-cols-2 lg:grid-cols-4">
-          {USPS.map((u) => (
-            <div key={u.title} className="border-l border-line pl-4">
-              <h2 className="font-display text-lg font-light">{u.title}</h2>
-              <p className="mt-1.5 font-sans text-sm text-ink-soft">{u.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Wat we aanbieden */}
-      <section className="mx-auto max-w-page px-gutter py-14">
-        <p className="label-brand">{t("landing.students.offer.eyebrow", locale)}</p>
-        <h2 className="mt-2 text-display-md">{t("landing.students.offer.title", locale)}</h2>
-        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {ITEMS.map((i) => (
-            <div key={i.n} className="border border-line p-5">
-              <p className="font-display text-xs tracking-widest text-muted">{i.n}</p>
-              <h3 className="mt-2 font-display text-lg font-light">{i.t}</h3>
-              <p className="mt-2 font-sans text-sm leading-relaxed text-ink-soft">{i.b}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Shop-strips */}
-      <section className="bg-surface">
-        <div className="mx-auto max-w-page px-gutter py-14">
-          <p className="label-brand">{t("landing.students.shopDirect.eyebrow", locale)}</p>
-          <h2 className="mt-2 text-display-md">{t("landing.students.shopDirect.title", locale)}</h2>
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { label: t("landing.students.shop.gala", locale), href: "/collections/rokkostuum" },
-              { label: t("landing.students.shop.smoking", locale), href: "/collections/smoking" },
-              { label: t("landing.students.shop.jacquets", locale), href: "/collections/jacquets" },
-              { label: t("landing.students.shop.kroegjasjes", locale), href: "/collections/kroegjasjes" },
-            ].map((c) => (
+        <div className="mx-auto max-w-page px-gutter py-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {SHOP.map((c) => (
               <Link
                 key={c.href}
                 href={c.href}
@@ -137,6 +119,32 @@ export async function StudentsLanding({ highlights }: Props) {
           </div>
         </section>
       ) : null}
+
+      {/* Wat we aanbieden — het enige tekstgrid dat overblijft. */}
+      <section className="bg-surface">
+        <div className="mx-auto max-w-page px-gutter py-14">
+          <p className="label-brand">{t("landing.students.offer.eyebrow", locale)}</p>
+          <h2 className="mt-2 text-display-md">{t("landing.students.offer.title", locale)}</h2>
+          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {ITEMS.map((i) => (
+              <div key={i.n} className="border border-line bg-canvas p-5">
+                <p className="font-display text-xs tracking-widest text-muted">{i.n}</p>
+                <h3 className="mt-2 font-display text-lg font-light">{i.t}</h3>
+                <p className="mt-2 font-sans text-sm leading-relaxed text-ink-soft">{i.b}</p>
+              </div>
+            ))}
+          </div>
+          {/* De twee beloftes die níét al in het grid hierboven staan. */}
+          <div className="mt-8 grid gap-6 border-t border-line pt-6 sm:grid-cols-2">
+            {SERVICE.map((s) => (
+              <div key={s.title} className="border-l border-line pl-4">
+                <h3 className="font-display text-lg font-light">{s.title}</h3>
+                <p className="mt-1.5 font-sans text-sm text-ink-soft">{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Stappen + contact */}
       <section className="mx-auto max-w-page px-gutter py-16">
