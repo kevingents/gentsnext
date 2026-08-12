@@ -47,6 +47,14 @@
     {
       "path": "/api/cron/klantprofielen",
       "schedule": "0 7,12,17 * * *"
+    },
+    {
+      "path": "/api/cron/shopify-sync",
+      "schedule": "25 * * * *"
+    },
+    {
+      "path": "/api/cron/klantbronnen",
+      "schedule": "50 5 * * *"
     }
   ],
   "regions": [

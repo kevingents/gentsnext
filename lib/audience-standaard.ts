@@ -148,6 +148,64 @@ export const STANDAARD_DOELGROEPEN: (AudienceInvoer & { doel: "bereiken" | "uits
     definitie: en({ veld: "wallet_pas", operator: "ja" }),
   },
 
+  {
+    slug: "grote-maten",
+    naam: "Grote maten",
+    doel: "bereiken",
+    omschrijving:
+      "Kocht maat 58+ of XXL en hoger. Deze klant loopt bij de meeste winkels tegen een lege rekken aan; laat zien dat het assortiment hier wél doorloopt. Afgeleid uit de gekochte maat, niet uit de collectie 'Grote maten' — die bevat driekwart van de catalogus en zegt alleen dat een artikel óók in grote maten leverbaar is.",
+    definitie: en({ veld: "grote_maten", operator: "ja" }),
+  },
+  {
+    slug: "vol-tarief-kopers",
+    naam: "Betaalt vol tarief",
+    doel: "bereiken",
+    omschrijving:
+      "Kocht meerdere keren en vrijwel nooit met korting. De meest winstgevende groep die er is. Actie: nieuwe collectie en persoonlijk advies — en NOOIT een kortingsmail, want je verlaagt de marge op omzet die er toch al was.",
+    definitie: en(
+      { veld: "kortingsaandeel", operator: "hoogstens", waarde: 10 },
+      { veld: "orders_totaal", operator: "minstens", waarde: 2 }
+    ),
+  },
+  {
+    slug: "kortingsjagers",
+    naam: "Koopt alleen met korting",
+    doel: "bereiken",
+    omschrijving:
+      "Meer dan driekwart van de orders had korting. Deze groep reageert op sale-momenten en vrijwel nergens anders op. Actie: bewaar ze voor opruiming en einde-seizoen; een campagne op vol tarief is aan hen verspild.",
+    definitie: en(
+      { veld: "kortingsaandeel", operator: "minstens", waarde: 75 },
+      { veld: "orders_totaal", operator: "minstens", waarde: 2 }
+    ),
+  },
+  {
+    slug: "bol-klanten-terughalen",
+    naam: "Koopt ook op Bol",
+    doel: "bereiken",
+    omschrijving:
+      "Bestelt bij ons én via Bol.com. Elke Bol-order kost commissie; deze klant kent ons al, dus er is een reden nodig om rechtstreeks te kopen (punten, maatprofiel, afhalen). Direct margewerk.",
+    definitie: en({ veld: "orders_bol", operator: "minstens", waarde: 1 }),
+  },
+  {
+    slug: "mail-slapers",
+    naam: "Ontvangt mail, opent nooit",
+    doel: "bereiken",
+    omschrijving:
+      "Kreeg minstens tien mails en opende er geen. Actie: één heractivatiemail met een andere insteek, en daarna uit de reguliere verzending halen — dode adressen slepen je afzenderreputatie omlaag en daarmee de bezorging bij iedereen.",
+    definitie: en(
+      { veld: "mail_verstuurd", operator: "minstens", waarde: 10 },
+      { veld: "mail_openratio", operator: "hoogstens", waarde: 0 }
+    ),
+  },
+  {
+    slug: "cadeaukopers",
+    naam: "Cadeaukopers",
+    doel: "bereiken",
+    omschrijving:
+      "Kocht ooit een cadeaubon. Reageert op heel andere momenten dan wie voor zichzelf koopt: feestdagen, Vaderdag, verjaardagen. Actie: seizoensherinnering, geen productaanbod.",
+    definitie: en({ veld: "cadeaukoper", operator: "ja" }),
+  },
+
   /* ──────────────────────────── Uitsluiten ────────────────────────────── */
   {
     slug: "uitsluiten-recent-gekocht",

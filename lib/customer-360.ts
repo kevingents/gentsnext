@@ -284,6 +284,97 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       from newsletter_subscribers where trim(email) <> '' group by 1
     ),
     wallet as (select distinct serial_number sn from wallet_apple_registrations),
+
+    /* ── Ordergedrag: hoe koopt deze klant, niet alleen hoeveel ───────────
+     * mode() geeft de meest gekozen waarde. Taal, betaalmethode en
+     * bezorgvoorkeur zijn geen optelsommen maar voorkeuren — een gemiddelde
+     * heeft er geen betekenis.
+     */
+    ordergedrag as (
+      select o.customer_id cid,
+             count(*)::int n,
+             count(*) filter (where o.discount_cents > 0)::int met_korting,
+             bool_or(o.company_name <> '' or o.vat_number <> '') zakelijk,
+             mode() within group (order by o.locale) taal,
+             mode() within group (order by nullif(o.betaalmethode, '')) betaalmethode,
+             mode() within group (order by o.delivery_method) bezorg,
+             -- Welke maanden koopt hij? Voedt seizoenscampagnes: wie elk jaar in
+             -- mei een pak koopt (trouwseizoen) benader je in april.
+             jsonb_agg(distinct extract(month from coalesce(o.paid_at, o.created_at))::int) maanden,
+             -- 'imported' = binnengehaald uit Shopify; de eigen checkout zet die
+             -- status nooit. Zo blijft zichtbaar hoeveel van het beeld nog uit
+             -- de oude winkel komt.
+             count(*) filter (where o.fulfillment_status = 'imported')::int shopify_n,
+             coalesce(sum(o.total_cents) filter (where o.fulfillment_status = 'imported'), 0)::int shopify_bedrag
+      from orders o
+      where o.customer_id is not null
+        and o.status in (${sql.join(AANKOOP_STATUSSEN.map((s) => sql`${s}`), sql`, `)})
+      group by 1
+    ),
+
+    /* ── Grote maten ──────────────────────────────────────────────────────
+     * Alleen de daadwerkelijk GEKOCHTE maat telt. Twee valkuilen die dit veld
+     * bij de eerste meting onbruikbaar maakten (18.816 van de 25.062 kopers):
+     *
+     *  1. De collectie 'Grote maten' bevat 2.252 van de 2.973 producten. Dat is
+     *     géén maat-signaal maar "ook in grote maten leverbaar" — driekwart van
+     *     de catalogus. Die weg is er daarom uit; hij vertelde iets over het
+     *     ARTIKEL, niet over de klant.
+     *  2. Maten als 102 en 106 zijn broeklengtes, geen confectiematen. Numeriek
+     *     staan ze boven 58 en dus telde elke normale broek mee. Daarom
+     *     uitsluitend TWEEcijferige maten (46–64 is de NL-confectiereeks).
+     *
+     * De cast staat in een CASE en niet in de WHERE, omdat Postgres een
+     * WHERE-filter naar voren mag halen en de query dan klapt op "One" of
+     * "XL 43/44".
+     */
+    grote_maten as (
+      select distinct o.customer_id cid
+      from order_lines ol
+      join orders o on o.id = ol.order_id
+      where o.customer_id is not null
+        and (
+          (case when ol.size ~ '^[0-9]{2}$' then ol.size::int else 0 end) >= 58
+          or ol.size ~* '^(xxl|xxxl|3xl|4xl|5xl)'
+        )
+    ),
+
+    -- Kocht ooit een cadeaubon voor iemand anders. Een cadeaukoper reageert op
+    -- heel andere momenten (feestdagen, verjaardagen) dan iemand die voor
+    -- zichzelf koopt.
+    cadeaukoper as (
+      select distinct lower(trim(buyer_email)) k from giftcards where trim(buyer_email) <> ''
+    ),
+
+    mail as (
+      select lower(email) k, verstuurd, geopend, geklikt, laatst_geopend
+      from mail_engagement
+    ),
+
+    bol as (
+      select customer_id cid, count(*)::int n, coalesce(sum(total_cents), 0)::int bedrag
+      from externe_orders where bron = 'bol' and customer_id is not null group by 1
+    ),
+
+    -- Retourredenen: het verschil tussen "bestelt drie maten en houdt er één"
+    -- en "product viel tegen". Zonder reden is een retour alleen een kostenpost.
+    retour_reden as (
+      select cid, jsonb_agg(jsonb_build_object('waarde', reden, 'aantal', n) order by n desc) lijst
+      from (
+        select cid, reden, n, row_number() over (partition by cid order by n desc) rk
+        from (
+          select o.customer_id cid, r.reason reden, count(*)::int n
+          from returns r join orders o on o.id = r.order_id
+          where o.customer_id is not null and trim(r.reason) <> ''
+          group by 1, 2
+          union all
+          select er.customer_id, er.reden, count(*)::int
+          from externe_retouren er
+          where er.customer_id is not null and trim(er.reden) <> ''
+          group by 1, 2
+        ) y
+      ) x where rk <= 3 group by 1
+    ),
     /* Adres én telefoon: eerst het opgeslagen adresboek, anders het BEZORGADRES
        van de laatste bestelling.
      *
@@ -346,7 +437,11 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       sessies_30d, productviews_30d, zoekopdrachten_30d, laatst_gezien, kar_verlaten_op, laatst_bekeken,
       tickets, afspraken, reviews,
       top_categorieen, top_merken, top_kleuren, maten, favoriete_winkel, kanaal,
-      marketing_opt_in, nieuwsbrief, whatsapp_opt_in, attributie, berekend_op
+      marketing_opt_in, nieuwsbrief, whatsapp_opt_in, attributie, berekend_op,
+      grote_maten, maatprofiel_compleet, kortingsaandeel, orders_met_korting,
+      zakelijk, cadeaukoper, taal, betaalmethode, bezorgvoorkeur, aankoopmaanden,
+      mail_verstuurd, mail_geopend, mail_geklikt, mail_openratio, mail_laatst_geopend,
+      orders_bol, besteed_bol_cents, orders_shopify, besteed_shopify_cents, retour_redenen
     )
     select
       c.id,
@@ -402,7 +497,28 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       coalesce(nb.mail_status, 'geen'),
       coalesce(nb.wa, false),
       coalesce(at.obj, '{}'::jsonb),
-      now()
+      now(),
+
+      (gm.cid is not null),
+      -- "Compleet" = minstens drie categorieën bekend. Met één maat kun je nog
+      -- niets adviseren; met drie weet je hoe iemand gebouwd is.
+      (coalesce(jsonb_array_length(coalesce(jsonb_path_query_array(mt.obj, '$.keyvalue().key'), '[]'::jsonb)), 0) >= 3),
+      case when coalesce(og.n, 0) > 0 then round(coalesce(og.met_korting, 0)::numeric * 100 / og.n)::int else 0 end,
+      coalesce(og.met_korting, 0),
+      coalesce(og.zakelijk, false),
+      (ck.k is not null),
+      coalesce(og.taal, 'nl'),
+      coalesce(og.betaalmethode, ''),
+      coalesce(og.bezorg, ''),
+      coalesce(og.maanden, '[]'::jsonb),
+
+      coalesce(ml.verstuurd, 0), coalesce(ml.geopend, 0), coalesce(ml.geklikt, 0),
+      case when coalesce(ml.verstuurd, 0) > 0 then round(ml.geopend::numeric * 100 / ml.verstuurd)::int else 0 end,
+      ml.laatst_geopend,
+
+      coalesce(bl.n, 0), coalesce(bl.bedrag, 0),
+      coalesce(og.shopify_n, 0), coalesce(og.shopify_bedrag, 0),
+      coalesce(rr.lijst, '[]'::jsonb)
     from customers c
     left join web            w   on w.cid   = c.id
     left join winkel_agg     k   on k.cid   = c.id
@@ -424,6 +540,12 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
     left join tickets_agg    tk  on tk.k    = lower(trim(c.email))
     left join afspraken_agg  af  on af.k    = lower(trim(c.email))
     left join nieuwsbrief    nb  on nb.k    = lower(trim(c.email))
+    left join ordergedrag    og  on og.cid  = c.id
+    left join grote_maten    gm  on gm.cid  = c.id
+    left join bol            bl  on bl.cid  = c.id
+    left join retour_reden   rr  on rr.cid  = c.id
+    left join cadeaukoper    ck  on ck.k    = lower(trim(c.email))
+    left join mail           ml  on ml.k    = lower(trim(c.email))
     ${filter}
     on conflict (customer_id) do update set
       email = excluded.email, email_sha256 = excluded.email_sha256,
@@ -452,6 +574,17 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       favoriete_winkel = excluded.favoriete_winkel, kanaal = excluded.kanaal,
       marketing_opt_in = excluded.marketing_opt_in, nieuwsbrief = excluded.nieuwsbrief,
       whatsapp_opt_in = excluded.whatsapp_opt_in, attributie = excluded.attributie,
+      grote_maten = excluded.grote_maten, maatprofiel_compleet = excluded.maatprofiel_compleet,
+      kortingsaandeel = excluded.kortingsaandeel, orders_met_korting = excluded.orders_met_korting,
+      zakelijk = excluded.zakelijk, cadeaukoper = excluded.cadeaukoper,
+      taal = excluded.taal, betaalmethode = excluded.betaalmethode,
+      bezorgvoorkeur = excluded.bezorgvoorkeur, aankoopmaanden = excluded.aankoopmaanden,
+      mail_verstuurd = excluded.mail_verstuurd, mail_geopend = excluded.mail_geopend,
+      mail_geklikt = excluded.mail_geklikt, mail_openratio = excluded.mail_openratio,
+      mail_laatst_geopend = excluded.mail_laatst_geopend,
+      orders_bol = excluded.orders_bol, besteed_bol_cents = excluded.besteed_bol_cents,
+      orders_shopify = excluded.orders_shopify, besteed_shopify_cents = excluded.besteed_shopify_cents,
+      retour_redenen = excluded.retour_redenen,
       berekend_op = now()
   `);
 

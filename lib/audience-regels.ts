@@ -112,6 +112,58 @@ export const VELDEN: VeldDef[] = [
   { key: "postcode", label: "Postcode", type: "tekst", kolom: "postcode" },
   { key: "plaats", label: "Plaats", type: "tekst", kolom: "plaats" },
   { key: "land", label: "Land", type: "tekst", kolom: "land" },
+
+  /* Pasvorm & maat */
+  {
+    key: "grote_maten", label: "Draagt grote maten", type: "jaNee", kolom: "grote_maten",
+    uitleg: "Kocht maat 58+ of XXL en hoger. Afgeleid uit de daadwerkelijk gekochte maat, niet uit de collectie.",
+  },
+  {
+    key: "maatprofiel_compleet", label: "Maatprofiel compleet", type: "jaNee", kolom: "maatprofiel_compleet",
+    uitleg: "Van minstens drie categorieën is de maat bekend — genoeg om echt advies te geven.",
+  },
+
+  /* Koopgedrag */
+  {
+    key: "kortingsaandeel", label: "Percentage orders met korting", type: "getal", kolom: "kortingsaandeel",
+    uitleg: "100 = koopt uitsluitend met korting. Stuur deze groep nooit vol tarief, en de tegenovergestelde groep nooit een kortingsmail.",
+  },
+  { key: "orders_met_korting", label: "Aantal orders met korting", type: "getal", kolom: "orders_met_korting" },
+  { key: "zakelijk", label: "Bestelt zakelijk", type: "jaNee", kolom: "zakelijk" },
+  { key: "cadeaukoper", label: "Kocht ooit een cadeaubon", type: "jaNee", kolom: "cadeaukoper" },
+  { key: "betaalmethode", label: "Betaalmethode", type: "tekst", kolom: "betaalmethode" },
+  {
+    key: "bezorgvoorkeur", label: "Bezorgvoorkeur", type: "keuze", kolom: "bezorgvoorkeur",
+    opties: [
+      { waarde: "standard", label: "Standaard bezorging" },
+      { waarde: "express", label: "Express" },
+      { waarde: "pickup", label: "Afhalen in de winkel" },
+    ],
+  },
+  {
+    key: "taal", label: "Taal", type: "keuze", kolom: "taal",
+    opties: [
+      { waarde: "nl", label: "Nederlands" }, { waarde: "en", label: "Engels" },
+      { waarde: "de", label: "Duits" }, { waarde: "fr", label: "Frans" }, { waarde: "es", label: "Spaans" },
+    ],
+  },
+
+  /* Mailgedrag */
+  {
+    key: "mail_openratio", label: "Mail-openratio (%)", type: "getal", kolom: "mail_openratio",
+    uitleg: "0 = ontvangt wel maar opent nooit. Zo'n adres sleept je afzenderreputatie omlaag.",
+  },
+  { key: "mail_verstuurd", label: "Aantal mails ontvangen", type: "getal", kolom: "mail_verstuurd" },
+  { key: "mail_geklikt", label: "Aantal mailkliks", type: "getal", kolom: "mail_geklikt" },
+  { key: "mail_laatst_geopend", label: "Laatst een mail geopend", type: "datum", kolom: "mail_laatst_geopend" },
+
+  /* Kanalen */
+  {
+    key: "orders_bol", label: "Aantal Bol-bestellingen", type: "getal", kolom: "orders_bol",
+    uitleg: "Koopt bij ons én op Bol. Die klant kun je met een reden naar het eigen kanaal halen — dat scheelt marge.",
+  },
+  { key: "besteed_bol", label: "Besteed via Bol", type: "bedrag", kolom: "besteed_bol_cents" },
+  { key: "retour_redenen", label: "Retourreden", type: "lijst", kolom: "retour_redenen" },
 ];
 
 const VELD_INDEX = new Map(VELDEN.map((v) => [v.key, v]));
