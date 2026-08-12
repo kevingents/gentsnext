@@ -179,8 +179,10 @@ export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): 
   const mood = MOODS[conf.mood] || MOODS.trouw;
   const scene = mood.scenes[Math.floor(Math.random() * mood.scenes.length)];
 
+  // Mét handle: de feedback op dít product telt als correctie in plaats van te
+  // verdrinken tussen die van alle andere producten. Zie lib/visual-learnings.ts.
   const learnings = await getVisualLearnings();
-  const prompt = `A man ${conf.wear}, ${scene}. ${mood.light} ${EVERYMAN}${learningsPromptBlock(learnings)}`;
+  const prompt = `A man ${conf.wear}, ${scene}. ${mood.light} ${EVERYMAN}${learningsPromptBlock(learnings, { handle })}`;
 
   const out = await run({ product_image: toFullRes(r.img), prompt, output_format: "jpeg" }, key);
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
