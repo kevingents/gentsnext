@@ -1450,6 +1450,14 @@ export const SITE_CATALOG: Record<string, string> = {
   "afspraak.mail.row.dagdeel": "Dagdeel",
   "afspraak.mail.row.wensen": "Je wensen",
   "afspraak.mail.outro": "Verhinderd of vragen? Antwoord op deze mail — we denken graag mee. Tot snel bij GENTS.",
+  /* De DEFINITIEVE bevestiging (winkel heeft het tijdstip vastgelegd) — de
+     ontvangstmail hierboven belooft dat deze nog komt. */
+  "afspraak.mail.bevestigd.subject": "Je afspraak bij {store} staat vast",
+  "afspraak.mail.bevestigd.heading": "Tot snel, {name}",
+  "afspraak.mail.bevestigd.body": "Je {type} bij {store} is bevestigd. We verwachten je op {date} om {time} uur.",
+  "afspraak.mail.bevestigd.bodyZonderTijd": "Je {type} bij {store} is bevestigd. We verwachten je op {date}.",
+  "afspraak.mail.bevestigd.row.date": "Datum",
+  "afspraak.mail.row.tijd": "Tijd",
   // — Support-widget: orderstatus-opzoek (gast-verificatie ordernummer + postcode) —
   "help.order.title": "Je bestelling opzoeken",
   "help.order.intro": "Vul je ordernummer en postcode in, dan zie je direct de actuele status.",

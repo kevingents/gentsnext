@@ -1428,6 +1428,9 @@ export const appointments = pgTable(
     preferredDate: date("preferred_date").notNull(),
     /** 'ochtend' | 'middag' | 'avond' | 'geen-voorkeur' */
     dagdeel: text("dagdeel").notNull().default("geen-voorkeur"),
+    /** Het afgesproken tijdstip ("14:30"), gezet zodra de winkel bevestigt.
+     *  Leeg zolang alleen het dagdeel bekend is (de online aanvraag). */
+    tijd: text("tijd").notNull().default(""),
     name: text("name").notNull(),
     email: text("email").notNull(),
     phone: text("phone").notNull().default(""),
