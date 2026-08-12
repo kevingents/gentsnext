@@ -216,6 +216,13 @@ export const ANONIMISEER_STAPPEN: Stap[] = [
     naam: "Reserveringen anonimiseren",
     sql: `UPDATE reservations SET customer_name = 'Sandbox Klant', note = '', lines = sandbox_schoon_json(lines);`,
   },
+  {
+    // Spaarpunten-grootboek: de naam is de enige echte persoonsinfo; het
+    // customer_id blijft staan omdat saldo-lookups in de sandbox anders nergens
+    // meer op aansluiten (zelfde afweging als bij pos_sales-koppelingen).
+    naam: "Loyalty-accounts anonimiseren",
+    sql: `UPDATE loyalty_accounts SET name = 'Sandbox Klant ' || substr(md5(customer_id), 1, 6);`,
+  },
 
   /* Recensies: de tekst zelf is persoonlijk geschreven en kan van alles
      bevatten. Sterren en datums houden we, de tekst gaat eruit. */
