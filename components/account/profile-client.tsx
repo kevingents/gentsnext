@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CLUB_PATH } from "@/lib/club";
 import { CheckIcon } from "@/components/icons";
 import { track } from "@/lib/track-client";
 import { useT } from "@/components/i18n/locale-provider";
@@ -484,7 +486,7 @@ function Retouren({ data }: { data: Data }) {
   );
 }
 
-/* ── Spaarpunten ──────────────────────────────────────────────────────────── */
+/* ── The Club of GENTS ────────────────────────────────────────────────────── */
 /** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). Koers uit de tool. */
 function RedeemPoints({ available, koers }: { available: number; koers: RedeemConfig }) {
   const t = useT();
@@ -624,7 +626,13 @@ function Punten({ data, walletEnabled, googleWalletEnabled, bonuses, redeem, onT
             )}
           </div>
         )}
-        <p className="mt-3 font-sans text-sm text-ink-soft">{t("account.points.explainer")}</p>
+        <p className="mt-3 font-sans text-sm text-ink-soft">
+          {t("account.points.explainer")}{" "}
+          <Link href={CLUB_PATH} className="text-ink underline underline-offset-4">
+            {t("account.points.clubLink")}
+          </Link>
+          .
+        </p>
         {(walletEnabled || googleWalletEnabled) && (
           <div className="mt-5">
             {/* Allebei tonen als ze aanstaan: welk toestel de klant heeft weten we

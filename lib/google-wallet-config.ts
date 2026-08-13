@@ -35,6 +35,10 @@ export function privateKeyPem(): string {
 }
 
 export function classSuffix(): string {
+  /* Blijft "gents-spaarpas", ook nu het programma The Club of GENTS heet: dit
+     achtervoegsel zit in de klasse-ID van elke bestaande kaart. Wie 'm omzet
+     knipt alle uitgegeven passen van hun klasse los. De weergavenaam
+     (programName, lib/google-wallet) is wél mee veranderd. */
   return (process.env.GOOGLE_WALLET_CLASS_SUFFIX || "gents-spaarpas").trim();
 }
 

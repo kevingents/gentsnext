@@ -2,12 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
 import { b64Pem, walletConfigured, walletWebServiceUrl, passAuthToken } from "@/lib/apple-wallet-config";
+import { CLUB_NAME, CLUB_PASS_NAME } from "@/lib/club";
 
 // Her-export zodat bestaande imports `from "@/lib/apple-wallet"` blijven werken.
 export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
 
 /**
- * Apple Wallet — GENTS spaarpas (.pkpass, storeCard).
+ * Apple Wallet — de GENTS Clubpas (.pkpass, storeCard) van The Club of GENTS.
  *
  * Een geldige pas moet ondertekend worden met een Apple **Pass Type ID-certificaat**
  * uit het GENTS Apple Developer-account. Die secrets staan in Vercel-env (base64),
@@ -58,7 +59,7 @@ export type LoyaltyPassInput = {
 };
 
 /**
- * Bouwt een ondertekende GENTS-spaarpas (.pkpass) voor één klant. Premium look:
+ * Bouwt een ondertekende GENTS Clubpas (.pkpass) voor één klant. Premium look:
  * zwarte pas met wit logo, QR met de klant-referentie (scanbaar aan de kassa om
  * te sparen/inwisselen). serialNumber = customerId → opnieuw downloaden werkt de
  * bestaande pas bij i.p.v. een tweede pas te maken.
@@ -100,7 +101,7 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       teamIdentifier: process.env.APPLE_TEAM_ID!,
       serialNumber: input.customerId,
       organizationName: "GENTS",
-      description: "GENTS Spaarpas",
+      description: CLUB_PASS_NAME,
       backgroundColor: "rgb(17, 17, 17)",
       foregroundColor: "rgb(255, 255, 255)",
       labelColor: "rgb(178, 174, 168)",
@@ -117,10 +118,10 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   pass.type = "storeCard";
   pass.primaryFields.push({
     key: "balance",
-    label: "Spaarpunten",
+    label: "Clubpunten",
     value: String(points),
     // iOS toont dit als melding zodra het saldo op de pas verandert.
-    changeMessage: "Je hebt nu %@ spaarpunten",
+    changeMessage: "Je hebt nu %@ clubpunten",
   });
   pass.secondaryFields.push({ key: "member", label: "Lid", value: input.name });
   /* Volgorde op waarde: tegoed (uitgeefbaar) → punten in behandeling (verklaart
@@ -151,7 +152,7 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       key: "how",
       label: "Zo werkt het",
       value:
-        "Je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen. Punten van een nieuwe aankoop worden besteedbaar na de retourtermijn.",
+        `${CLUB_NAME}: je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen. Punten van een nieuwe aankoop worden besteedbaar na de retourtermijn.`,
     },
     {
       key: "value",

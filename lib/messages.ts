@@ -126,7 +126,7 @@ const nl: Dict = {
   "order.status.refundedBody": "Het bedrag staat binnen enkele werkdagen op je rekening of als tegoed klaar. Vragen? Onze klantenservice helpt je graag.",
   // Punten verdienen zonder aankoop — drie eenmalige acties tegen retouren.
   // Bedragen staan nooit in de tekst: die komen als {n} uit de instellingen.
-  "account.bonus.title": "Extra punten verdienen",
+  "account.bonus.title": "Extra clubpunten verdienen",
   "account.bonus.intro": "Drie dingen die je één keer doet — en die ervoor zorgen dat je bestelt wat écht past.",
   "account.bonus.toEarn": "{n} punten te halen",
   "account.bonus.done": "Bijgeschreven",
@@ -137,7 +137,7 @@ const nl: Dict = {
   "account.bonus.size.title": "Bewaar je maten",
   "account.bonus.size.body": "Met je colbert- en overhemdmaat in je profiel zie je overal meteen wat er in jouw maat is.",
   "account.bonus.size.cta": "Invullen",
-  "account.bonus.wallet.title": "Zet je spaarpas in Apple Wallet",
+  "account.bonus.wallet.title": "Zet je clubpas in Apple Wallet",
   "account.bonus.wallet.body": "Je saldo altijd bij de hand — ook aan de kassa in de winkel.",
   "account.bonus.wallet.cta": "Toevoegen",
   "account.bonus.store.title": "Kies je vaste winkel",
@@ -169,8 +169,57 @@ const nl: Dict = {
   "account.prefs.check.colors": "Kleuren",
   "account.prefs.check.store": "Vaste winkel",
   "account.prefs.check.occasions": "Gelegenheden",
-  "sizeAdvisor.saveBonusHint": "Levert je eenmalig {n} spaarpunten op.",
+  "sizeAdvisor.saveBonusHint": "Levert je eenmalig {n} clubpunten op.",
   "sizeAdvisor.savedBonus": "+{n} punten",
+  /* — The Club of GENTS (/club) —
+     Alle getallen komen als {placeholder} uit loyaltyConfig (Instellingen), nooit
+     uit de tekst: draait Kevin aan de koers, dan verandert deze pagina mee. De
+     merknaam "The Club of GENTS" blijft in élke taal staan; lib/translate houdt
+     'm net als "GENTS" buiten de vertaalronde. */
+  "club.eyebrow": "Ons spaarprogramma",
+  "club.title": "The Club of GENTS",
+  "club.intro":
+    "Gratis lid worden, en bij alles wat je bij ons koopt spaar je punten — online én in onze winkels. Die punten verzilver je voor een tegoedbon die je gewoon bij het afrekenen gebruikt.",
+  "club.cta.join": "Word lid — gratis",
+  "club.cta.account": "Bekijk je punten",
+  "club.cta.note": "Je hebt alleen een e-mailadres nodig. Geen wachtwoord, geen pasje in je portemonnee.",
+  "club.how.title": "Hoe het werkt",
+  "club.how.step1.title": "Word lid",
+  "club.how.step1.body":
+    "Maak een GENTS-account aan met je e-mailadres, of laat je gegevens invoeren in de winkel. Lid worden kost niets.",
+  "club.how.step2.title": "Spaar bij elke aankoop",
+  "club.how.step2.body":
+    "Online schrijven we je punten automatisch bij. In de winkel laat je je clubpas of je e-mailadres scannen aan de kassa — winkelaankopen tellen dus net zo goed mee.",
+  "club.how.step3.title": "Verzilver voor tegoed",
+  "club.how.step3.body":
+    "Vanaf {min} punten wissel je in voor een tegoedbon van {amount}. Die gebruik je bij het afrekenen, online of in de winkel.",
+  "club.rate.title": "De koers",
+  "club.rate.earn.label": "Je spaart",
+  "club.rate.earn.one": "{points} punt per bestede euro",
+  "club.rate.earn.other": "{points} punten per bestede euro",
+  "club.rate.redeem.label": "Je verzilvert",
+  "club.rate.redeem.value": "{min} punten = {amount}",
+  "club.rate.step": "Daarna per {step} punten tegelijk.",
+  "club.rate.free": "Je wisselt elk aantal punten boven de drempel in.",
+  "club.bonus.title": "Extra punten, zonder iets te kopen",
+  "club.bonus.intro":
+    "Een paar dingen die je één keer doet — en die ervoor zorgen dat je bestelt wat écht past. Elk goed voor eenmalig extra punten.",
+  "club.bonus.points": "+{n} punten",
+  "club.bonus.account.title": "Word lid",
+  "club.bonus.account.body": "Een welkomstbonus zodra je je GENTS-account aanmaakt — online of aan de kassa.",
+  "club.pass.title": "Je clubpas",
+  "club.pass.body":
+    "Zet je clubpas in Apple Wallet of Google Wallet en je saldo staat altijd in je telefoon. Aan de kassa laat je 'm scannen: je punten van die aankoop staan er meteen op, en inwisselen kan er ook mee.",
+  "club.pass.cta": "Clubpas toevoegen",
+  "club.store.title": "Ook in de winkel",
+  "club.store.body":
+    "Kocht je iets in de winkel zonder je pas te laten scannen? Op je kassabon staat een QR-code — scan die, log in, en de punten van die bon komen alsnog op je account.",
+  "club.terms.title": "Goed om te weten",
+  "club.terms.vesting": "Punten uit een aankoop staan {days} dagen in behandeling — zolang de retourperiode loopt. Daarna kun je ze besteden.",
+  "club.terms.returns": "Stuur je iets terug, dan halen we de punten van die aankoop weer van je saldo af.",
+  "club.terms.voucher": "Een ingewisselde tegoedbon is {days} dagen geldig.",
+  "club.terms.free": "Lid worden is gratis en kan met elk e-mailadres — er zit geen abonnement of verplichting aan vast.",
+  "club.terms.rounding": "We rekenen per hele bestede euro; het deel onder een euro spaart niet mee.",
 };
 
 const en: Dict = {
