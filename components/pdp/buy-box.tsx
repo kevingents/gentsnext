@@ -83,6 +83,8 @@ type Props = {
   sticky?: boolean;
   /** A/B: "−30%"-label naast de prijs. De van-prijs zelf blijft altijd staan. */
   kortingLabel?: boolean;
+  /** A/B: het rijtje betaalmerken onder de koopknop. */
+  betaaliconen?: boolean;
 };
 
 export function BuyBox({
@@ -108,6 +110,7 @@ export function BuyBox({
   ctaLabel = null,
   sticky = true,
   kortingLabel = true,
+  betaaliconen = true,
 }: Props) {
   const cart = useCart();
   const t = useT();
@@ -505,7 +508,7 @@ export function BuyBox({
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
           {winkelBlok}
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted">
+          <div className={`mt-3 flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted ${betaaliconen ? "flex" : "hidden"}`}>
             <span>{t("pdp.payment.label")}</span>
             {["iDEAL", "Visa", "Mastercard", "Bancontact", "Apple Pay"].map((m) => (
               <span key={m} className="rounded border border-line px-1.5 py-0.5 text-ink-soft">{m}</span>

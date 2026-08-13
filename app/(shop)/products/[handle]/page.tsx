@@ -559,7 +559,7 @@ export default async function ProductPage({ params }: Props) {
             })()}
             title={product.title}
             sizeMedia={sizeMedia}
-            video={product.modelVideoUrl || null}
+            video={pdpAb.video === "uit" ? null : product.modelVideoUrl || null}
             lookHref={resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? "#shop-de-look" : undefined}
           />
           {/* Eerlijkheid: alleen AI-packshots (product zonder echte foto's) →
@@ -593,6 +593,7 @@ export default async function ProductPage({ params }: Props) {
             ctaLabel={pdpAb.ctaLabel || null}
             sticky={pdpAb.stickyKoopbalk !== "uit"}
             kortingLabel={pdpAb.kortingLabel !== "uit"}
+            betaaliconen={pdpAb.betaaliconen !== "uit"}
           />
 
           {pdpAb.socialProof === "uit" ? null : <SocialProof stats={viewStats} />}
