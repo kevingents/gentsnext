@@ -54,7 +54,7 @@ export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string
                   <p className="font-display text-lg">Onze maattabel</p>
                   <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">{t("common.close")}</button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-5 py-4">
+                <div className="flex-1 overflow-y-auto scroll-gents px-5 py-4">
                   <p className="mb-3 font-sans text-xs text-ink-soft">Lichaamsmaten in centimeters. Twijfel je tussen twee maten? Onze stylisten in de winkel helpen je graag.</p>
                   {target.boord ? <BoordTable /> : <CategoryTable category={target.category!} />}
                   <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-sans text-xs">

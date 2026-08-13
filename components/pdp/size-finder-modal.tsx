@@ -35,7 +35,7 @@ export function SizeFinderButton() {
                   <p className="font-display text-lg">{t("pdp.size.finder")}</p>
                   <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">{t("common.close")}</button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-5 py-5">
+                <div className="flex-1 overflow-y-auto scroll-gents px-5 py-5">
                   <SizeAdvisor variant="drawer" />
                 </div>
               </div>

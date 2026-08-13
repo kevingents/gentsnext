@@ -141,3 +141,37 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Scrollbalk in onze eigen lades en panelen. De systeembalk van Windows is
+   breed, hoekig en grijsblauw — die valt in een rustig, licht paneel meteen op
+   als "van het besturingssysteem", niet van ons. Dit is dezelfde lijnkleur als
+   de randen, dun en rond, en de baan blijft leeg.
+
+   `overscroll-behavior: contain` hoort erbij: zonder dat scrolt de pagina
+   eronder verder zodra je onderaan de lade komt, en dat voelt als haperen. */
+.scroll-gents {
+  scrollbar-width: thin;
+  scrollbar-color: theme("colors.line") transparent;
+  overscroll-behavior: contain;
+}
+.scroll-gents::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-gents::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-gents::-webkit-scrollbar-thumb {
+  /* Doorzichtige rand + background-clip laat de duim smaller ogen dan de baan
+     breed is, zodat hij niet tegen de rand van het paneel aan plakt. */
+  background-color: theme("colors.line");
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+.scroll-gents:hover::-webkit-scrollbar-thumb {
+  background-color: #d9d6cf;
+}
+.scroll-gents::-webkit-scrollbar-thumb:active {
+  background-color: theme("colors.muted");
+}
