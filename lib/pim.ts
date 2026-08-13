@@ -138,9 +138,16 @@ export function compleetheidScoreSql(): SQL {
   return sql`round(100.0 * (${sql.join(delen, sql` + `)}) / ${PIM_MAX_SCORE})::int`;
 }
 
-/** Per check een boolean, als jsonb — voor het detailscherm ("wat mist er nog"). */
+/**
+ * Per check een boolean, als jsonb — voor het detailscherm ("wat mist er nog").
+ *
+ * De sleutel gaat als `$n::text` mee en niet als kale parameter: de argumenten
+ * van jsonb_build_object zijn "any", en dan kan postgres het type van een
+ * ongetypeerde parameter niet afleiden ("could not determine data type of
+ * parameter $1"). De cast beantwoordt die vraag.
+ */
 export function compleetheidChecksSql(): SQL {
-  const paren = PIM_CHECKS.map((c) => sql`${c.sleutel}, (${c.conditie})`);
+  const paren = PIM_CHECKS.map((c) => sql`${c.sleutel}::text, (${c.conditie})`);
   return sql`jsonb_build_object(${sql.join(paren, sql`, `)})`;
 }
 
