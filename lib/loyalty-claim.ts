@@ -297,25 +297,20 @@ export async function claimReceiptPoints(input: { saleId: string; token: string;
   if (linked && !isMine) {
     return { ok: false, error: "Deze bon hoort bij een andere klant." };
   }
-  /* Hoort de bon al bij DEZE klant, dan is 't een kassa-verkoop op naam en heeft de
-     kassa de punten al toegekend — in het loyalty-grootboek van storegents
-     (api/store/pos-sale.js: earnLoyalty bij elke sale.customerId). Hier nogmaals
-     boeken levert dezelfde euro twee keer punten op, in twee verschillende
-     grootboeken. `creditOnce` is namelijk idempotent BINNEN Neon, en weet niets van
-     wat de kassa in de blob deed.
-     Zolang die twee grootboeken niet samengevoegd zijn, is niet-boeken het enige
-     juiste antwoord. De QR-claim op de bon blijft wél werken waarvoor hij bedoeld is:
-     een ANONIEME bon aan een account koppelen.
-     Voorwaarde is wél dat de bon een klant DRÁÁGT: alleen dan liet de kassa z'n
-     earnLoyalty lopen. Staat er enkel een e-mailadres op (bon zonder klantkoppeling),
-     dan kreeg niemand punten en hoort deze claim gewoon te boeken. */
-  if (linked && isMine) {
-    return {
-      ok: true,
-      points: 0,
-      alreadyClaimed: true,
-      balance: await ledgerBalance(customerId),
-    };
+  /* Draagt de bon al een klant, dan heeft de kassa er zelf punten voor geboekt —
+     sinds het samenvoegen in HÉTZELFDE grootboek, met refId "<klant>|<bon>|<reden>".
+     Vroeger moesten we hier bail-outen omdat die punten in een ander grootboek
+     landden en niet te zien waren; nu kunnen we gewoon kijken of er al iets voor
+     deze bon staat. Zo levert scannen niets dubbel op, en krijgt een klant van wie
+     de kassa de punten NIET kon boeken ze alsnog. */
+  const db = getDb();
+  const [alGeboekt] = await db
+    .select({ id: loyaltyEvents.id })
+    .from(loyaltyEvents)
+    .where(and(eq(loyaltyEvents.refType, "pos_sale"), sql`${loyaltyEvents.refId} like ${`%|${saleId}|%`}`))
+    .limit(1);
+  if (alGeboekt) {
+    return { ok: true, points: 0, alreadyClaimed: true, balance: await ledgerBalance(customerId) };
   }
   const points = await earnedPointsFor(Math.round((Number(s.total) || 0) * 100));
   const saleDate = (sale as { createdAt?: string }).createdAt ? new Date(String((sale as { createdAt?: string }).createdAt)) : null;
