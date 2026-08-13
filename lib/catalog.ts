@@ -1245,18 +1245,31 @@ export async function matenVoorHandles(handles: string[]): Promise<Map<string, T
   const uit = new Map<string, TegelMaat[]>();
   if (!clean.length) return uit;
   const db = getDb();
-  const res = await db.execute<{ handle: string; size: string; sku: string; price_cents: number }>(sql`
-    select p.handle, coalesce(v.size, '') as size, coalesce(v.sku, '') as sku, v.price_cents
+  const res = await db.execute<{ handle: string; size: string; sku: string; price_cents: number; color: string }>(sql`
+    select p.handle, coalesce(v.size, '') as size, coalesce(v.sku, '') as sku, v.price_cents,
+           coalesce(v.color, '') as color
     from ${products} p
     join ${productVariants} v on v.product_id = p.id
     where p.handle in (${sqlInList(clean)})
       and coalesce(v.size, '') <> ''
       and coalesce(v.sku, '') <> ''
   `);
+  /* Meer dan één kleur onder dezelfde handle? Dan géén snelknop. Maat "S" zou
+     anders de SKU van een willekeurige kleur pakken — de klant ziet beige op de
+     tegel en krijgt blauw in de wagen. Die keuze hoort op de productpagina, waar
+     de kleurkiezer staat. */
+  const kleurenPerHandle = new Map<string, Set<string>>();
+  for (const r of res.rows) {
+    const set = kleurenPerHandle.get(String(r.handle)) ?? new Set<string>();
+    if (r.color) set.add(String(r.color));
+    kleurenPerHandle.set(String(r.handle), set);
+  }
+
   const beschikbaar = await availableForSkus(res.rows.map((r) => String(r.sku)));
   const bekend = await stockAvailable();
   for (const r of res.rows) {
     const handle = String(r.handle);
+    if ((kleurenPerHandle.get(handle)?.size ?? 0) > 1) continue;
     const lijst = uit.get(handle) ?? [];
     if (lijst.some((m) => m.size === r.size)) continue; // één rij per maat
     const st = beschikbaar.get(String(r.sku));
