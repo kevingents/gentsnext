@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
- * Lichte config-/auth-helpers voor de Apple-Wallet spaarpas — BEWUST zonder de
+ * Lichte config-/auth-helpers voor de Apple-Wallet clubpas — BEWUST zonder de
  * zware `passkit-generator`/`node:fs`-import (die zit in lib/apple-wallet.ts).
  * Zo sleept een module die alleen `walletConfigured()` of de auth nodig heeft
  * (loyalty-claim, push, de web-service-routes) passkit-generator niet mee in

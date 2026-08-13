@@ -1,3 +1,4 @@
+import { CLUB_NAME } from "@/lib/club";
 import { getSiteUrl } from "@/lib/site-url";
 import {
   googleWalletConfigured,
@@ -12,7 +13,7 @@ import {
 export { googleWalletConfigured } from "@/lib/google-wallet-config";
 
 /**
- * Google Wallet — GENTS-spaarpas voor Android.
+ * Google Wallet — de GENTS Clubpas voor Android.
  *
  * De Android-tegenhanger van lib/apple-wallet, maar technisch een heel ander
  * beest: bij Apple bouwen én ondertekenen we een .pkpass-bestand, bij Google
@@ -86,7 +87,7 @@ function loyaltyObject(input: GoogleLoyaltyInput) {
     accountId: input.customerId,
     accountName: input.name,
     loyaltyPoints: {
-      label: "Spaarpunten",
+      label: "Clubpunten",
       balance: { int: points },
     },
     barcode: {
@@ -111,7 +112,11 @@ function loyaltyClass() {
   return {
     id: loyaltyClassId(),
     issuerName: "GENTS",
-    programName: "GENTS Spaarpas",
+    /* Alleen de weergavenaam. De klasse-ID (loyaltyClassId) blijft onaangeraakt —
+       die veranderen zou elke bestaande pas van z'n klasse losknippen. Let op:
+       Google leest de klasse uit de JWT alléén bij het AANMAKEN; bestaande
+       klassen houden hun oude programName tot ze via de API gepatcht worden. */
+    programName: CLUB_NAME,
     reviewStatus: "UNDER_REVIEW",
     hexBackgroundColor: "#111111",
     programLogo: {

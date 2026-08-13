@@ -87,7 +87,7 @@ export const VELDEN: VeldDef[] = [
   /* Retour & loyaliteit */
   { key: "retourquote", label: "Retourpercentage", type: "getal", kolom: "retourquote" },
   { key: "retouren", label: "Aantal retouren", type: "getal", kolom: "retouren" },
-  { key: "punten_beschikbaar", label: "Beschikbare spaarpunten", type: "getal", kolom: "punten_beschikbaar" },
+  { key: "punten_beschikbaar", label: "Beschikbare clubpunten", type: "getal", kolom: "punten_beschikbaar" },
   { key: "tegoed_cents", label: "Openstaand tegoed", type: "bedrag", kolom: "tegoed_cents" },
   { key: "actieve_vouchers", label: "Actieve vouchers", type: "getal", kolom: "actieve_vouchers" },
   { key: "wallet_pas", label: "Heeft Apple Wallet-pas", type: "jaNee", kolom: "wallet_pas" },

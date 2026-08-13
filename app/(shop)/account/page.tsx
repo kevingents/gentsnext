@@ -13,7 +13,7 @@ import { getStores } from "@/lib/stores";
 import { getSettings } from "@/lib/settings";
 import { ProfileClient } from "@/components/account/profile-client";
 
-/** Staat de spaarpas op minstens één toestel? serialNumber = het klant-id. */
+/** Staat de clubpas op minstens één toestel? serialNumber = het klant-id. */
 async function walletInstalled(customerId: string): Promise<boolean> {
   try {
     const rows = await getDb()

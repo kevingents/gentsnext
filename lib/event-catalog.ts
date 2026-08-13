@@ -134,7 +134,7 @@ export const EVENT_CATALOG: EventDef[] = [
   { naam: "hulp_geopend",                            groep: "service",   uitleg: "Hulpknop of chat geopend." },
 
   /* ───────────────────────────────── Loyalty ─────────────────────────────── */
-  { naam: "punten_ingewisseld",                      groep: "loyalty",   uitleg: "Spaarpunten omgezet in tegoed." },
+  { naam: "punten_ingewisseld",                      groep: "loyalty",   uitleg: "Clubpunten omgezet in tegoed." },
   { naam: "giftcard_gekocht",                        groep: "loyalty",   uitleg: "Cadeaubon gekocht." },
   { naam: "giftcard_ingewisseld",                    groep: "loyalty",   uitleg: "Cadeaubon gebruikt als betaalmiddel." },
   { naam: "wallet_toegevoegd",                       groep: "loyalty",   uitleg: "Loyaliteitspas aan Apple Wallet toegevoegd." },

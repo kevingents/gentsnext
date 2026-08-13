@@ -7,6 +7,7 @@ import { CATEGORIES } from "@/lib/categories";
 import { BRANDS } from "@/lib/brands";
 import { getBlogPosts } from "@/lib/blog";
 import { getAllLooks } from "@/lib/looks";
+import { CLUB_PATH } from "@/lib/club";
 
 export const revalidate = 3600;
 
@@ -41,6 +42,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${siteUrl}/afspraak`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/afspraak") },
     { url: `${siteUrl}/maatadvies`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/maatadvies") },
     { url: `${siteUrl}/maattabellen`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, "/maattabellen") },
+    { url: `${siteUrl}${CLUB_PATH}`, changeFrequency: "monthly", priority: 0.6, ...withLanguages(siteUrl, CLUB_PATH) },
     // Canonieke categorie-PLP's (de volledige listings) — statisch, dus altijd mee.
     ...CATEGORIES.map((c) => ({
       url: `${siteUrl}/categorie/${c.slug}`,

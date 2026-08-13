@@ -298,7 +298,7 @@ function brandHeaderRow(): string {
  *  op een apparaat zonder onze taal-cookie, en dan zou de klant alsnog op de
  *  Nederlandse pagina belanden. */
 /**
- * Spaarpas-regel onder elke gebrande KLANTMAIL. Bewust in de gedeelde footer en
+ * Clubpas-regel onder elke gebrande KLANTMAIL. Bewust in de gedeelde footer en
  * niet per mailsoort: dan staat 'ie automatisch onder alles wat de klant krijgt,
  * en is er één plek om 'm weer weg te halen.
  *
@@ -476,7 +476,7 @@ export async function sendProfileCompletionIncentiveEmail(email: string, firstNa
   const inner = `
     <tr><td style="padding:24px 28px 8px">
       <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Rond je profiel af — 50 punten cadeau</h1>
-      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} maak je GENTS-profiel even compleet (je maten + voorkeuren). We zetten dan <strong>50 spaarpunten</strong> op je voucherkaart, en je krijgt voortaan advies en aanbiedingen die echt bij je passen.</p>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} maak je GENTS-profiel even compleet (je maten + voorkeuren). We zetten dan <strong>50 clubpunten</strong> op je voucherkaart, en je krijgt voortaan advies en aanbiedingen die echt bij je passen.</p>
     </td></tr>
     <tr><td style="padding:18px 28px 28px">
       <a href="${url}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Profiel afronden (+50 punten)</a>
