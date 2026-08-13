@@ -1651,4 +1651,22 @@ export const SITE_CATALOG: Record<string, string> = {
   // — Welkomstpopup: varianten die na de review bijkwamen —
   "welcome.discountSubtitleNext": "op je volgende bestelling",
   "welcome.codeNoteMailed": "We hebben de code ook naar je gemaild. Plak 'm in je winkelwagen bij het afrekenen. 30 dagen geldig.",
+  // — Mijn GENTS → Mijn maten: de maatcalculator staat nu naast het formulier —
+  "account.sizes.calcTitle": "Weet je je maat niet precies?",
+  "account.sizes.calcBody": "Vul je lengte en gewicht in — we rekenen je colbert-, boord- en lengtemaat uit en zetten ze meteen in je maten.",
+  "sizeAdvisor.applyButton": "Overnemen in mijn maten",
+  "sizeAdvisor.applyLabel": "Advies overnemen",
+  "sizeAdvisor.applyHint": "we vullen je maten hiermee in.",
+  "sizeAdvisor.applied": "Overgenomen in je maten",
+  "sizeAdvisor.appliedMessage": "Controleer ze en klik op “Maten opslaan” om ze te bewaren.",
+  // — Mijn GENTS → Gegevens: nieuwsbrief per kanaal aan/uit —
+  "account.newsletter.title": "Nieuwsbrief & berichten",
+  "account.newsletter.intro": "Kies zelf waarlangs we je iets sturen. Je kunt dit altijd weer aanpassen.",
+  "account.newsletter.emailLabel": "E-mailnieuwsbrief",
+  "account.newsletter.emailHint": "Nieuwe collecties, styling-tips en exclusieve aanbiedingen.",
+  "account.newsletter.whatsappLabel": "WhatsApp",
+  "account.newsletter.whatsappHint": "Af en toe een kort bericht — hooguit een paar per maand.",
+  "account.newsletter.needPhone": "Vul eerst je telefoonnummer in en sla je gegevens op.",
+  "account.newsletter.pending": "Je aanmelding is nog niet bevestigd — zet 'm hier aan, dan ronden we het meteen af.",
+  "account.newsletter.transactional": "Berichten over je bestelling, bezorging en retour krijg je altijd; die staan hier los van.",
 };

@@ -28,7 +28,9 @@ import type { ClubPassData } from "@/lib/club-pass";
 import { AppleWalletButton } from "@/components/account/apple-wallet-button";
 import { GoogleWalletButton } from "@/components/account/google-wallet-button";
 import { Bestellingen, type OrderRow, type StoreBuyRow } from "@/components/account/bestellingen";
+import { SizeAdvisor, type AdviceSizes } from "@/components/maatadvies/size-advisor";
 import type { ProductCardData } from "@/lib/catalog";
+import type { NewsletterPrefs } from "@/lib/newsletter";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
 // Order- en winkelbon-vorm staan bij het besteloverzicht dat ze rendert.
@@ -112,6 +114,7 @@ export function ProfileClient({
   bonuses = [],
   redeem = REDEEM_FALLBACK,
   stores = [],
+  newsletter,
 }: {
   customer: Customer;
   data: Data;
@@ -122,6 +125,8 @@ export function ProfileClient({
   bonuses?: BonusTask[];
   redeem?: RedeemConfig;
   stores?: StoreOption[];
+  /** Stand van de nieuwsbrief per kanaal; server-side gelezen (geen flikkering). */
+  newsletter?: NewsletterPrefs;
 }) {
   const t = useT();
   const [tab, setTab] = useState<TabKey>("overzicht");
@@ -179,7 +184,7 @@ export function ProfileClient({
         {tab === "punten" && <Punten data={data} pass={pass} walletEnabled={walletEnabled} googleWalletEnabled={googleWalletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
-        {tab === "gegevens" && <Gegevens customer={customer} stores={stores} />}
+        {tab === "gegevens" && <Gegevens customer={customer} stores={stores} newsletter={newsletter} />}
         {tab === "adressen" && <Adressen data={data} />}
         {tab === "vragen" && <SupportTickets />}
         {tab === "privacy" && <Privacy />}
@@ -855,6 +860,20 @@ function Maten({ customer }: { customer: Customer }) {
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [bonus, setBonus] = useState(0);
 
+  /**
+   * De adviseur vult dit formulier, hij slaat niet zelf op — zo blijft er één
+   * opslag-knop (en één bonus-moment) op dit scherm. Lege adviesvelden slaan we
+   * over: die mogen nooit een maat wissen die de klant zelf heeft ingevuld.
+   */
+  function applyAdvice(sizes: AdviceSizes) {
+    setSize((p) => {
+      const next = { ...p };
+      for (const [k, v] of Object.entries(sizes)) if (v) next[k] = v;
+      return next;
+    });
+    setState("idle");
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setState("busy");
@@ -885,7 +904,11 @@ function Maten({ customer }: { customer: Customer }) {
   }
 
   return (
-    <form onSubmit={save} className="max-w-2xl">
+    // Twee kolommen op groot scherm: links wat je bewaart, rechts de rekenhulp
+    // die het invult. In één kolom bleef de halve pagina leeg — en stond de
+    // maatcalculator drie klikken verderop op /maatadvies.
+    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] lg:gap-12">
+    <form onSubmit={save}>
       <p className="font-sans text-sm text-ink-soft">
         {t("account.sizes.intro1")} <span className="text-ink">&ldquo;{t("plp.filters.shopMySize")}&rdquo;</span>.{" "}
         {t("account.sizes.intro2")}
@@ -921,6 +944,16 @@ function Maten({ customer }: { customer: Customer }) {
         <p role="alert" className="mt-2 font-sans text-sm text-danger">{t("account.form.saveError")}</p>
       ) : null}
     </form>
+
+      <aside className="border border-line p-5 lg:p-6">
+        <p className="label-brand">{t("nav.sizeAdvice")}</p>
+        <h2 className="mt-2 font-display text-xl font-light">{t("account.sizes.calcTitle")}</h2>
+        <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.sizes.calcBody")}</p>
+        <div className="mt-6">
+          <SizeAdvisor variant="panel" onApply={applyAdvice} />
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -988,12 +1021,11 @@ function Privacy() {
 }
 
 /* ── Gegevens ─────────────────────────────────────────────────────────────── */
-function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOption[] }) {
+function Gegevens({ customer, stores, newsletter }: { customer: Customer; stores: StoreOption[]; newsletter?: NewsletterPrefs }) {
   const t = useT();
   const router = useRouter();
   const [form, setForm] = useState({
     firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone,
-    marketingOptIn: customer.marketingOptIn,
   });
   const [prefs, setPrefs] = useState<ProfilePreferences>({
     birthDate: customer.preferences?.birthDate ?? "",
@@ -1076,7 +1108,8 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
   }
 
   return (
-    <form onSubmit={save} className="max-w-xl space-y-4">
+    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] lg:gap-12">
+    <form onSubmit={save} className="space-y-4">
       {bonus > 0 ? <BonusMelding points={bonus} /> : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
@@ -1096,15 +1129,10 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
           <input type="email" value={customer.email} disabled className="mt-1 w-full border border-line bg-surface px-3 py-2.5 font-sans text-sm text-muted" />
         </label>
       </div>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={form.marketingOptIn} onChange={(e) => setForm((p) => ({ ...p, marketingOptIn: e.target.checked }))} />
-        <span className="font-sans text-sm">{t("account.details.marketingOptIn")}</span>
-      </label>
-
       {/* ── Voorkeuren ─────────────────────────────────────────────────────────
           Hoe beter dit staat, hoe gerichter we tonen wat er in jouw maat, kleur
           en winkel ligt — en hoe minder er terug hoeft. De nieuwsbrief-opt-in
-          hierboven telt bewust NIET mee voor de bonus: toestemming die je met
+          (rechts) telt bewust NIET mee voor de bonus: toestemming die je met
           punten koopt is geen vrije toestemming. */}
       <div className="!mt-8 border-t border-line pt-6">
         <p className="label-brand">{t("account.prefs.title")}</p>
@@ -1237,6 +1265,112 @@ function Gegevens({ customer, stores }: { customer: Customer; stores: StoreOptio
         <p role="alert" className="font-sans text-sm text-danger">{t("account.form.saveError")}</p>
       ) : null}
     </form>
+
+      <Nieuwsbrief prefs={newsletter} hasPhone={Boolean(customer.phone?.trim())} />
+    </div>
+  );
+}
+
+/* ── Nieuwsbrief-voorkeuren ───────────────────────────────────────────────── */
+/**
+ * Eén vinkje "hou me op de hoogte" zei niets over waar dat dan langs ging, en
+ * het stond los van de inschrijving zelf: je kon in je account "uit" staan en
+ * toch mail krijgen, omdat de campagne op newsletter_subscribers draait. Hier
+ * zet je het per kanaal aan/uit en schrijft dat meteen door naar allebei
+ * (zie /api/account/newsletter).
+ *
+ * Los van het gegevens-formulier ernaast, want het slaat direct op: een
+ * toestemming die pas telt als je onderaan nog een knop vindt, is er geen.
+ */
+function Nieuwsbrief({ prefs, hasPhone }: { prefs?: NewsletterPrefs; hasPhone: boolean }) {
+  const t = useT();
+  const [email, setEmail] = useState(prefs?.email === "subscribed");
+  const [whatsapp, setWhatsapp] = useState(prefs?.whatsapp === "subscribed");
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error" | "phone">("idle");
+  const pending = prefs?.email === "pending" && !email;
+
+  async function toggle(channel: "email" | "whatsapp", value: boolean) {
+    // Optimistisch omzetten: een schakelaar die pas na het antwoord meebeweegt
+    // voelt stuk. Bij een fout draaien we 'm terug.
+    const setLocal = channel === "email" ? setEmail : setWhatsapp;
+    setLocal(value);
+    setState("busy");
+    try {
+      const res = await fetch("/api/account/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [channel]: value }),
+      });
+      if (!res.ok) {
+        setLocal(!value);
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setState(body?.error === "geen-telefoonnummer" ? "phone" : "error");
+        return;
+      }
+      setState("done");
+      setTimeout(() => setState("idle"), 2500);
+    } catch {
+      setLocal(!value);
+      setState("error");
+    }
+  }
+
+  return (
+    <aside className="border border-line p-5 lg:p-6">
+      <p className="label-brand">{t("newsletter.label")}</p>
+      <h2 className="mt-2 font-display text-xl font-light">{t("account.newsletter.title")}</h2>
+      <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.newsletter.intro")}</p>
+
+      <div className="mt-5 divide-y divide-line border-y border-line">
+        <Kanaal
+          label={t("account.newsletter.emailLabel")}
+          hint={t("account.newsletter.emailHint")}
+          checked={email}
+          disabled={state === "busy"}
+          onChange={(v) => toggle("email", v)}
+        />
+        <Kanaal
+          label={t("account.newsletter.whatsappLabel")}
+          hint={hasPhone ? t("account.newsletter.whatsappHint") : t("account.newsletter.needPhone")}
+          checked={whatsapp}
+          disabled={state === "busy" || !hasPhone}
+          onChange={(v) => toggle("whatsapp", v)}
+        />
+      </div>
+
+      {pending ? <p className="mt-3 font-sans text-xs text-ink-soft">{t("account.newsletter.pending")}</p> : null}
+      <p className="mt-3 font-sans text-xs text-muted">{t("account.newsletter.transactional")}</p>
+      {state === "done" ? (
+        <p role="status" className="mt-2 font-sans text-sm text-ink-soft">
+          {t("account.form.saved")} <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" />
+        </p>
+      ) : null}
+      {state === "error" || state === "phone" ? (
+        <p role="alert" className="mt-2 font-sans text-sm text-danger">
+          {t(state === "phone" ? "account.newsletter.needPhone" : "account.form.saveError")}
+        </p>
+      ) : null}
+    </aside>
+  );
+}
+
+function Kanaal({ label, hint, checked, disabled, onChange }: {
+  label: string; hint: string; checked: boolean; disabled: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className={`flex items-start gap-3 py-4 ${disabled ? "opacity-60" : "cursor-pointer"}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0"
+      />
+      <span className="min-w-0">
+        <span className="block font-sans text-sm text-ink">{label}</span>
+        <span className="mt-0.5 block font-sans text-xs text-ink-soft">{hint}</span>
+      </span>
+    </label>
   );
 }
 
