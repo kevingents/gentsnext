@@ -35,7 +35,13 @@ function passImages() {
     // wit logo"). Wit vierkant icoon (notificaties/lockscreen) + witte wordmark.
     // De wordmark is die van het programma: dit ÍS de clubpas. Het icoon blijft
     // het GENTS-merk — daar is geen ruimte voor twee regels tekst.
-    icon: readFileSync(join(root, "public/brand/wallet-icon-wit.png")),
+    /* Het pas-icoon verschijnt NIET op de pas zelf maar in meldingen en op het
+       toegangsscherm - en daar zet iOS het op een LICHTE achtergrond. Een wit
+       merkteken op transparant is daar dus onzichtbaar (Kevin, 13 aug: de melding
+       "Je hebt nu 310 clubpunten" kwam binnen met een leeg wit vlakje ervoor).
+       Het officiële vierkante logo heeft een dekkende zwarte achtergrond en werkt
+       daardoor op licht én donker. */
+    icon: readFileSync(join(root, "public/brand/brand-logo-vierkant.png")),
     logo: readFileSync(join(root, CLUB_LOGO_LIGHT.replace(/^\//, "public/"))),
   };
   return imgCache;
