@@ -278,3 +278,83 @@ export async function syncShopifyOrders(
 
   return { vanaf, gezien, nieuw, bestond, regels: regelAantal, nieuweKlanten, ms: Date.now() - start };
 }
+
+/* ─────────────────── Klantvelden uit Shopify: het SRS-nummer ──────────────── */
+
+const KLANTEN_Q = `
+query Klanten($cursor: String, $q: String) {
+  customers(first: 100, after: $cursor, sortKey: UPDATED_AT, reverse: true, query: $q) {
+    edges { node {
+      email
+      srs: metafield(namespace: "SRSERP", key: "customer_id") { value }
+    } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+/**
+ * Haalt het SRS-klantnummer uit Shopify en zet het op onze klant.
+ *
+ * Dit is de brug waarvan ik dacht dat hij ontbrak. Bij de meting had géén
+ * enkele van de 48.000 klanten een SRS-nummer, waardoor de hele winkelkant van
+ * het profiel leeg bleef en `kanaal` bij vrijwel iedereen op "online" stond. Ik
+ * zocht de oplossing in de SRS-SOAP-API via storegents — maar Shopify heeft het
+ * gewoon als metaveld `SRSERP.customer_id`, bij 79% van de recente klanten.
+ *
+ * Dat is de betere weg: geen SOAP, geen extra sleutels, en het nummer komt uit
+ * dezelfde synchronisatie die de winkel al jaren draait.
+ *
+ * Alleen invullen waar het leeg is: een bestaand nummer overschrijven zou een
+ * handmatige correctie ongedaan maken. En het gaat óók de identiteitsgrafiek in,
+ * want dát is de plek waar de koppeling web ↔ winkel wordt gelegd.
+ */
+export async function syncShopifySrsNummers(
+  opts: { maxKlanten?: number; sindsDagen?: number } = {},
+): Promise<{ gezien: number; metNummer: number; gekoppeld: number; ms: number }> {
+  const start = Date.now();
+  if (!shopifyGeconfigureerd()) throw new Error("SHOPIFY_SHOP_DOMAIN + SHOPIFY_ADMIN_ACCESS_TOKEN ontbreken.");
+  const db = getDb();
+  const maxKlanten = opts.maxKlanten ?? 5000;
+  // Standaard alleen recent gewijzigde klanten; de eerste volledige vulling
+  // draai je met een ruime periode.
+  const q = opts.sindsDagen
+    ? `updated_at:>='${new Date(Date.now() - opts.sindsDagen * 86400_000).toISOString()}'`
+    : null;
+
+  let cursor: string | null = null;
+  let gezien = 0;
+  let metNummer = 0;
+  let gekoppeld = 0;
+
+  for (;;) {
+    const data = await gql(KLANTEN_Q, { cursor, q });
+    const conn = data.customers;
+
+    for (const { node } of conn.edges) {
+      gezien++;
+      const email = String(node.email || "").trim().toLowerCase();
+      const srs = String(node.srs?.value || "").trim();
+      if (!email || !srs) continue;
+      metNummer++;
+
+      const rijen = await db
+        .update(customers)
+        .set({ srsCustomerId: srs, updatedAt: sql`now()` })
+        .where(sql`lower(${customers.email}) = ${email} and coalesce(${customers.srsCustomerId}, '') = ''`)
+        .returning({ id: customers.id });
+
+      if (rijen.length) {
+        gekoppeld++;
+        // De identiteitsgrafiek is waar web en winkel elkaar vinden; zonder deze
+        // regel staat het nummer wel op de klant maar kent de grafiek hem niet.
+        await koppelIdentiteit(rijen[0].id, "srs", srs, { bron: "shopify-metaveld" });
+      }
+    }
+
+    if (gezien >= maxKlanten) break;
+    if (!conn.pageInfo.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+
+  return { gezien, metNummer, gekoppeld, ms: Date.now() - start };
+}

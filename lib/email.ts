@@ -988,3 +988,54 @@ export async function sendOpsAlert(to: string[], subject: string, text: string):
   }
   return true;
 }
+
+/**
+ * Verjaardagsmail.
+ *
+ * Het voorkeurenscherm belooft dit letterlijk ("Voor een attentie rond je
+ * verjaardag") en er stond niets tegenover — geen cron, geen template. Een
+ * belofte in de UI die nergens op uitkomt is erger dan het veld niet vragen.
+ *
+ * Bewust géén korting of aanbieding: dan is het geen felicitatie maar een
+ * campagne met een strikje, en dat prikt iedereen door. Wél een verwijzing naar
+ * het spaartegoed dat er al staat — dat is van hem, en het is een reden om
+ * langs te komen die niets aan marge kost.
+ */
+export async function sendVerjaardagEmail(
+  email: string,
+  firstName: string,
+  opts: { puntenBeschikbaar?: number; tegoedCents?: number } = {},
+): Promise<boolean> {
+  const site = getSiteUrl();
+  const hi = firstName ? `Gefeliciteerd, ${firstName}` : "Gefeliciteerd";
+  const punten = Math.max(0, Math.round(opts.puntenBeschikbaar ?? 0));
+  const tegoed = Math.max(0, Math.round(opts.tegoedCents ?? 0));
+
+  // Alleen noemen wat er écht staat. "Je hebt 0 punten" is geen felicitatie.
+  const extra =
+    tegoed > 0
+      ? `<p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:14px 0 0">
+           Je hebt trouwens nog <strong>${euro(tegoed)}</strong> aan tegoed openstaan — leek ons een goed moment om dat te noemen.
+         </p>`
+      : punten >= 100
+        ? `<p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:14px 0 0">
+             Je hebt <strong>${punten.toLocaleString("nl-NL")} spaarpunten</strong> staan bij The Club of GENTS — leek ons een goed moment om dat te noemen.
+           </p>`
+        : "";
+
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${hi}</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">
+        Vandaag even geen aanbieding — gewoon een fijne dag gewenst namens iedereen bij GENTS.
+      </p>
+      ${extra}
+    </td></tr>
+    <tr><td style="padding:14px 28px 28px">
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:0">
+        Kom je binnenkort langs? In onze winkels helpen we je graag persoonlijk verder —
+        <a href="${site}/winkels" style="color:#0A0A0A">bekijk waar we zitten</a>.
+      </p>
+    </td></tr>`;
+  return sendEmail(email, "Gefeliciteerd met je verjaardag", shell(inner));
+}
