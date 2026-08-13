@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CLUB_PATH } from "@/lib/club";
+import { CLUB_LOGO_DARK, CLUB_LOGO_SIZE, CLUB_NAME, CLUB_PATH } from "@/lib/club";
 import { CheckIcon } from "@/components/icons";
 import { track } from "@/lib/track-client";
 import { useT } from "@/components/i18n/locale-provider";
@@ -664,6 +665,15 @@ function Punten({ data, walletEnabled, googleWalletEnabled, bonuses, redeem, onT
   return (
     <div className="space-y-6">
       <div className="border border-line p-6">
+        {/* Het merkteken boven het saldo: het tabblad heet naar het programma,
+            dus hoort het merk hier te staan en niet alleen als tabtekst. */}
+        <Image
+          src={CLUB_LOGO_DARK}
+          alt={CLUB_NAME}
+          width={CLUB_LOGO_SIZE.width}
+          height={CLUB_LOGO_SIZE.height}
+          className="mb-5 h-auto w-full max-w-[14rem]"
+        />
         <p className="label-brand">{t("account.points.balanceTitle")}</p>
         <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
         {data.pointsPending > 0 && (

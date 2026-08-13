@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
-import { CLUB_NAME, CLUB_PATH } from "@/lib/club";
+import { CLUB_LOGO_DARK, CLUB_LOGO_SIZE, CLUB_NAME, CLUB_PATH } from "@/lib/club";
 import { formatEuro } from "@/lib/format";
 import { getLocale } from "@/lib/locale-server";
 import { getSessionCustomer } from "@/lib/account";
@@ -82,8 +83,19 @@ export default async function ClubPage() {
     <div className="mx-auto max-w-page px-gutter py-14">
       <header className="max-w-2xl">
         <p className="label-brand">{t("club.eyebrow")}</p>
-        {/* De merknaam staat er als merknaam, niet als vertaalde kop. */}
-        <h1 className="mt-2 text-display-lg">{CLUB_NAME}</h1>
+        {/* Het merkteken ÍS de kop. In een h1 met alt-tekst, zodat de pagina voor
+            Google en een schermlezer nog steeds "The Club of GENTS" heet. */}
+        <h1 className="mt-4">
+          <Image
+            src={CLUB_LOGO_DARK}
+            alt={CLUB_NAME}
+            width={CLUB_LOGO_SIZE.width}
+            height={CLUB_LOGO_SIZE.height}
+            priority
+            sizes="(max-width: 640px) 80vw, 384px"
+            className="h-auto w-full max-w-[24rem]"
+          />
+        </h1>
         <p className="mt-4 font-sans text-ink-soft">{t("club.intro")}</p>
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <Link

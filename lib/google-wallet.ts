@@ -1,4 +1,4 @@
-import { CLUB_NAME } from "@/lib/club";
+import { CLUB_LOGO_LIGHT, CLUB_NAME } from "@/lib/club";
 import { getSiteUrl } from "@/lib/site-url";
 import {
   googleWalletConfigured,
@@ -120,8 +120,9 @@ function loyaltyClass() {
     reviewStatus: "UNDER_REVIEW",
     hexBackgroundColor: "#111111",
     programLogo: {
-      sourceUri: { uri: `${getSiteUrl()}/brand/brand-logo-wit.png` },
-      contentDescription: { defaultValue: { language: "nl", value: "GENTS" } },
+      // Wit merkteken: de kaart heeft een zwarte achtergrond (#111111).
+      sourceUri: { uri: `${getSiteUrl()}${CLUB_LOGO_LIGHT}` },
+      contentDescription: { defaultValue: { language: "nl", value: CLUB_NAME } },
     },
   };
 }
