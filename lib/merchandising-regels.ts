@@ -67,6 +67,15 @@ export type MerchRegel = {
   vanaf?: string;
   tot?: string;
   aangemaakt?: string;
+  /**
+   * Alleen voor bezoekers in één variant van één experiment: "<experiment>:<variant>".
+   *
+   * Hiermee is een hele merchandising-regelset A/B-testbaar zonder een tweede
+   * rangschik-engine: je bouwt de regels in hetzelfde scherm, hangt er een
+   * variant aan, en alleen die helft van de bezoekers krijgt ze. Leeg = geldt
+   * voor iedereen, zoals altijd.
+   */
+  alleenVoor?: string;
 };
 
 export const MAX_REGELS = 40;
@@ -136,6 +145,13 @@ function schoon(raw: unknown, index: number): MerchRegel | null {
     vanaf: datum(r.vanaf),
     tot: datum(r.tot),
     aangemaakt: datum(r.aangemaakt) || undefined,
+    // Vorm: "<experiment>:<variant>", zelfde slugs als de A/B-motor. Verwijst
+    // hij naar een experiment dat niet (meer) draait, dan matcht hij nooit —
+    // de regel is dan stil uit, en dat is de veilige kant.
+    alleenVoor: (() => {
+      const v = String(r.alleenVoor ?? "").trim().toLowerCase();
+      return /^[a-z0-9-]{1,40}:[a-z0-9-]{1,12}$/.test(v) ? v : undefined;
+    })(),
   };
 }
 
@@ -195,19 +211,37 @@ export function vandaagNl(): string {
 }
 
 /** Telt deze regel vandaag mee in deze PLP-context? */
-export function regelGeldt(regel: MerchRegel, kind: PinContextKind, slug: string, vandaag = vandaagNl()): boolean {
+export function regelGeldt(
+  regel: MerchRegel,
+  kind: PinContextKind,
+  slug: string,
+  vandaag = vandaagNl(),
+  abSleutels: string[] = [],
+): boolean {
   if (!regel.actief) return false;
   if (regel.context !== "*" && regel.context !== pinKey(kind, slug)) return false;
   if (regel.vanaf && vandaag < regel.vanaf) return false;
   if (regel.tot && vandaag > regel.tot) return false;
+  // Variant-regel: alleen voor bezoekers die in díé variant zitten. Wie geen
+  // toewijzing heeft (geen cookie, experiment gestopt) valt er dus buiten en
+  // ziet de gewone rangschikking — de veilige kant.
+  if (regel.alleenVoor && !abSleutels.includes(regel.alleenVoor)) return false;
   return true;
 }
 
-/** De regels die nú gelden voor deze PLP — dit is wat de query in gaat. */
-export async function getActieveRegels(kind: PinContextKind, slug: string): Promise<MerchRegel[]> {
+/**
+ * De regels die nú gelden voor deze PLP — dit is wat de query in gaat.
+ * `abSleutels` zijn de toewijzingen van deze bezoeker ("<experiment>:<variant>");
+ * zonder die lijst doen variant-regels niet mee.
+ */
+export async function getActieveRegels(
+  kind: PinContextKind,
+  slug: string,
+  abSleutels: string[] = [],
+): Promise<MerchRegel[]> {
   const alle = await getAlleRegels();
   const vandaag = vandaagNl();
-  return alle.filter((r) => regelGeldt(r, kind, slug, vandaag));
+  return alle.filter((r) => regelGeldt(r, kind, slug, vandaag, abSleutels));
 }
 
 /* ───────────────────────────── SQL-compilatie ───────────────────────────── */

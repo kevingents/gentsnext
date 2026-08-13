@@ -74,6 +74,15 @@ type Props = {
   fitNote?: string | null;
   /** Drempel gratis verzending (cents) uit de settings-store. */
   freeShipThresholdCents?: number;
+  /**
+   * A/B: eigen knoptekst ("Nu bestellen" i.p.v. "In winkelwagen"). Losse tekst
+   * uit het experiment, dus NL — zelfde taalregel als de aankondigingsbalk.
+   */
+  ctaLabel?: string | null;
+  /** A/B: mobiele meelopende koopbalk aan/uit. */
+  sticky?: boolean;
+  /** A/B: "−30%"-label naast de prijs. De van-prijs zelf blijft altijd staan. */
+  kortingLabel?: boolean;
 };
 
 export function BuyBox({
@@ -96,6 +105,9 @@ export function BuyBox({
   mySize,
   fitNote,
   freeShipThresholdCents,
+  ctaLabel = null,
+  sticky = true,
+  kortingLabel = true,
 }: Props) {
   const cart = useCart();
   const t = useT();
@@ -248,7 +260,10 @@ export function BuyBox({
           <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents!)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
-        {hasDiscount ? (
+        {/* Alleen het PERCENTAGE is testbaar. De doorgestreepte referentieprijs
+            en de toelichting eronder blijven staan: die zijn bij een korting
+            wettelijk verplicht (Omnibus), en dat is geen A/B-vraag. */}
+        {hasDiscount && kortingLabel ? (
           <span className="rounded bg-danger/10 px-1.5 py-0.5 font-sans text-xs font-medium text-danger">
             −{Math.round((1 - priceCents / referenceCents!) * 100)}%
           </span>
@@ -472,8 +487,11 @@ export function BuyBox({
                 t("pdp.cta.chooseSize")
               ) : soldOut ? (
                 t("pdp.button.sold")
-              ) : oneSize ? (
-                t("pdp.cta.addToCart")
+              ) : oneSize || ctaLabel ? (
+                // Eigen knoptekst uit een A/B-variant krijgt géén maat-
+                // achtervoegsel: "Nu bestellen — maat 52" is niet wat er
+                // getest wordt, en de maat staat vlak erboven al opgelicht.
+                ctaLabel || t("pdp.cta.addToCart")
               ) : (
                 <>
                   {/* Op smalle schermen zonder maat-achtervoegsel: "In winkelwagen
@@ -498,7 +516,7 @@ export function BuyBox({
 
       {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is
           én de footer nog niet in beeld is (anders blijft de onderkant bedekt). */}
-      {stickyOn && !footerVisible && !allSoldOut ? (
+      {sticky && stickyOn && !footerVisible && !allSoldOut ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-page items-center gap-3">
             <div className="min-w-0 flex-1">
@@ -516,7 +534,7 @@ export function BuyBox({
               disabled={!size || soldOut}
               className="btn-primary !px-5"
             >
-              {!size ? t("pdp.sticky.choosesize") : soldOut ? t("pdp.button.sold") : t("pdp.cta.addToCart")}
+              {!size ? t("pdp.sticky.choosesize") : soldOut ? t("pdp.button.sold") : ctaLabel || t("pdp.cta.addToCart")}
             </button>
           </div>
         </div>

@@ -9,6 +9,8 @@ import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { ProductCardBadge } from "@/components/product-card-badge";
 import { track } from "@/lib/track-client";
 import { packshotContain } from "@/lib/packshot-weergave";
+import { SnelToevoegen } from "@/components/plp/snel-toevoegen";
+import type { TegelMaat } from "@/lib/catalog";
 
 export function ProductCard({
   product,
@@ -17,11 +19,25 @@ export function ProductCard({
   listId,
   sort,
   inMyStore,
+  beeld,
+  badges = true,
+  maten,
 }: {
   product: ProductCardData;
   priority?: boolean;
   /** Ligt dit artikel in (één van) de winkels van deze klant? Stad of "jouw winkel". */
   inMyStore?: string | null;
+  /**
+   * A/B: welk SOORT beeld vooraan hoort te staan. Staat dat er al (kleding
+   * leidt standaard met het model, accessoires met de packshot), dan verandert
+   * er niets; anders wisselen voorgrond en hover van plek. Zonder tweede beeld
+   * gebeurt er sowieso niets — dan is er niets om te wisselen.
+   */
+  beeld?: "model" | "packshot";
+  /** A/B: sale-/nieuw-/laatste-maten-badge op de tegel. */
+  badges?: boolean;
+  /** A/B: maten voor "snel toevoegen". Leeg/afwezig = geen snelknop. */
+  maten?: TegelMaat[];
   /** 1-gebaseerde plek in de lijst — zonder positie beloont een populariteits-
    *  ranking alleen wat toevallig bovenaan stond (positie-bias). */
   position?: number;
@@ -31,6 +47,18 @@ export function ProductCard({
 }) {
   const t = useT();
   const contain = packshotContain(product.category || "");
+  /* Welk beeld vooraan staat verschilt per categorie: kleding leidt met de
+     AI-modelfoto, accessoires met de packshot (zie lib/catalog). Een A/B-variant
+     vraagt om een SOORT beeld, niet om "draai ze om" — anders test dezelfde
+     variant op overhemden iets anders dan op dassen. Klopt de wens al met wat
+     er staat, dan verandert er niets. */
+  const wissel =
+    Boolean(beeld) && Boolean(product.hoverImageUrl) && (beeld === "model") !== Boolean(product.leidtMetModel);
+  const voorgrond = wissel ? product.hoverImageUrl : product.imageUrl;
+  const achtergrond = wissel ? product.imageUrl : product.hoverImageUrl;
+  // Een gedragen beeld is een sfeerfoto (cover); alleen een packshot kan contain zijn.
+  const voorgrondIsModel = Boolean(product.leidtMetModel) !== wissel;
+  const voorgrondContain = voorgrondIsModel ? false : contain;
   return (
     <Link
       href={`/products/${product.handle}`}
@@ -43,7 +71,7 @@ export function ProductCard({
       // Geen grijs browser-tapblok over de tegel; wel eigen feedback bij indrukken.
       className="group relative flex flex-col gap-3 transition-opacity duration-150 ease-brand active:opacity-70 [-webkit-tap-highlight-color:transparent]"
     >
-      {product.hasSale ? (
+      {!badges ? null : product.hasSale ? (
         <ProductCardBadge label={t("plp.badge.sale")} tone="sale" />
       ) : product.lowStock ? (
         <ProductCardBadge label={t("plp.badge.lastItems")} tone="sale" />
@@ -53,10 +81,10 @@ export function ProductCard({
       <WishlistButton handle={product.handle} />
       {/* Accessoire-packshots staan op puur wit; met bg-surface eronder werden de
           contain-randen een zichtbare balk. Zie lib/packshot-weergave. */}
-      <div className={`relative aspect-[3/4] overflow-hidden rounded-card ${contain ? "bg-white" : "bg-surface"}`}>
-        {product.imageUrl ? (
+      <div className={`relative aspect-[3/4] overflow-hidden rounded-card ${voorgrondContain ? "bg-white" : "bg-surface"}`}>
+        {voorgrond ? (
           <Image
-            src={product.imageUrl}
+            src={voorgrond}
             alt={product.imageAlt}
             fill
             // Boven-de-vouw kaarten (eerste rij) niet lazy-loaden → sneller LCP op de PLP.
@@ -66,7 +94,7 @@ export function ProductCard({
             // :hover bij een tap (en op iOS blijft die plakken); zonder deze gate
             // fade't de packshot weg terwijl het hoverbeeld display:none is — dan
             // kijk je tegen de kale tegelachtergrond aan (het "grijze vlak").
-            className={`transition duration-500 ease-brand [@media(hover:hover)]:group-hover:scale-[1.04] ${contain ? "object-contain" : "object-cover"} ${product.hoverImageUrl ? "[@media(hover:hover)]:group-hover:opacity-0" : ""}`}
+            className={`transition duration-500 ease-brand [@media(hover:hover)]:group-hover:scale-[1.04] ${voorgrondContain ? "object-contain" : "object-cover"} ${achtergrond ? "[@media(hover:hover)]:group-hover:opacity-0" : ""}`}
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">
@@ -77,10 +105,10 @@ export function ProductCard({
             Alleen op hover-capable devices renderen: op touch (het gros van het verkeer)
             is er geen hover, dus dat tweede beeld hoeft niet gedownload te worden. De
             display:none-wrapper houdt 'm buiten Next's lazy-loader (geen fetch). */}
-        {product.hoverImageUrl ? (
+        {achtergrond ? (
           <span aria-hidden className="absolute inset-0 hidden [@media(hover:hover)]:block">
             <Image
-              src={product.hoverImageUrl}
+              src={achtergrond}
               alt=""
               aria-hidden
               fill
@@ -123,6 +151,17 @@ export function ProductCard({
         </p>
         {product.colorCount && product.colorCount > 1 ? (
           <p className="font-sans text-xs text-muted">{t("product.colorCount", { n: product.colorCount })}</p>
+        ) : null}
+        {maten?.length ? (
+          <div className="mt-2">
+            <SnelToevoegen
+              handle={product.handle}
+              title={product.title}
+              imageUrl={product.imageUrl}
+              hoofdgroep={product.category || ""}
+              maten={maten}
+            />
+          </div>
         ) : null}
       </div>
     </Link>
