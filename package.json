@@ -25,6 +25,7 @@
     "translate:catalog": "tsx scripts/translate-catalog.ts",
     "generate:model-photos": "tsx scripts/generate-model-photos.ts",
     "check:verzenddagen": "tsx scripts/check-verzenddagen.ts",
+    "gen:lifestyle": "tsx scripts/generate-lifestyle-media.ts",
     "verify:possales": "tsx scripts/verify-pos-sales.ts",
     "backfill:punten": "tsx scripts/backfill-loyalty.ts",
     "db:migratie": "tsx scripts/migratie-uitvoeren.ts",
