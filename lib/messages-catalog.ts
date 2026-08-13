@@ -1480,6 +1480,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "mail.line.size": "maat {size}",
   "mail.footer.pricesInclVat": "Alle prijzen incl. btw",
   "mail.footer.usps": "Persoonlijk advies in 19 winkels · 14 dagen retourrecht · alle prijzen incl. btw",
+  "mail.footer.wallet": "Zet je spaarpas in Apple Wallet — je punten en tegoed altijd bij de hand, en scanbaar aan de kassa.",
+  "mail.footer.walletLink": "Spaarpas toevoegen",
   "mail.order.subject": "Je GENTS-bestelling {orderNumber} is bevestigd",
   "mail.order.heading": "Bedankt voor je bestelling, {name}",
   "mail.order.headingNoName": "Bedankt voor je bestelling",

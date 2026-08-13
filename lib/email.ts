@@ -3,6 +3,7 @@ import { formatEuro as euro } from "@/lib/format";
 import { DEFAULT_LOCALE, localizedPath, type Locale } from "@/lib/i18n";
 import { t as tStatic } from "@/lib/messages";
 import { getT } from "@/lib/t-server";
+import { walletConfigured } from "@/lib/apple-wallet-config";
 
 /**
  * Transactionele mail via Resend (env-gated op RESEND_API_KEY). Bewust zonder
@@ -296,6 +297,28 @@ function brandHeaderRow(): string {
  *  De links krijgen het locale-prefix mee (/en/…): een mail wordt ook geopend
  *  op een apparaat zonder onze taal-cookie, en dan zou de klant alsnog op de
  *  Nederlandse pagina belanden. */
+/**
+ * Spaarpas-regel onder elke gebrande KLANTMAIL. Bewust in de gedeelde footer en
+ * niet per mailsoort: dan staat 'ie automatisch onder alles wat de klant krijgt,
+ * en is er één plek om 'm weer weg te halen.
+ *
+ * De link gaat naar /account en NIET rechtstreeks naar /api/wallet/apple: die
+ * route eist een ingelogde sessie, dus vanuit de mail zou 'm dat een 401 opleveren
+ * in plaats van een pas. Via het account loopt de klant door de magic-link heen en
+ * staat de knop er gewoon.
+ *
+ * `?bron=mail` is het meetpunt: zo is te zien hoeveel passen uit de mail komen.
+ * Env-gated — zonder pass-certificaat bieden we niets aan wat 503 geeft.
+ */
+function walletFooterBlock(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
+  if (!walletConfigured()) return "";
+  const href = `${getSiteUrl()}${localizedPath("/account", locale)}?tab=punten&bron=mail`;
+  return `<div style="border-top:1px solid #F0EEEA;margin-top:14px;padding-top:14px">
+      <div style="font:12px Arial,sans-serif;color:#2C2C2C;line-height:1.5">${t("mail.footer.wallet")}</div>
+      <a href="${attrUrl(href)}" style="display:inline-block;margin-top:8px;border:1px solid #111111;color:#111111;font:12px Arial,sans-serif;padding:8px 16px;text-decoration:none;letter-spacing:.3px">${t("mail.footer.walletLink")}</a>
+    </div>`;
+}
+
 function brandFooterRow(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
   const site = getSiteUrl();
   const link = (href: string, label: string) =>
@@ -305,6 +328,7 @@ function brandFooterRow(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
       <div style="font:12px Arial,sans-serif;color:#111111">
         ${link("/account", t("common.account"))} &nbsp;·&nbsp; ${link("/pages/winkels", t("nav.stores"))} &nbsp;·&nbsp; ${link("/retourneren", t("retourneren.title"))} &nbsp;·&nbsp; ${link("/pages/klantenservice", t("help.link.service"))}
       </div>
+      ${walletFooterBlock(t, locale)}
       <div style="font:11px Arial,sans-serif;color:#B2AEA8;margin-top:12px">${t("mail.footer.usps")}</div>
     </div>
   </td></tr>`;
