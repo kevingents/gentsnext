@@ -42,7 +42,6 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
   const cart = useCart();
   const [niveauId, setNiveauId] = useState(pakket.niveaus[0]!.id);
   const [keuzes, setKeuzes] = useState<Partial<Record<SmokingRole, Keuze>>>({});
-  const [tab, setTab] = useState<SmokingRole>("jas");
   const [extras, setExtras] = useState<Record<string, string | null>>({});
   const [bezig, setBezig] = useState(false);
 
@@ -61,7 +60,6 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
     if (id === niveauId) return;
     setNiveauId(id);
     setKeuzes({}); // een wollen jas hoort niet bij het polyviscose-pakket
-    setTab("jas");
   }
 
   function kiesOptie(rol: SmokingRole, optie: SmokingOptie) {
@@ -174,7 +172,7 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
         {/* Stof / niveau */}
         <section>
           <h2 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted">
-            Kies je stof
+            <span className="mr-2 tabular-nums text-ink/40">1</span>Kies je stof
           </h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {pakket.niveaus.map((n) => (
@@ -183,12 +181,28 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
           </div>
         </section>
 
-        {/* Per rol: welk artikel */}
-        {niveau.rollen.map((rij) => (
-          <section key={rij.rol}>
-            <h2 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted">
-              {rij.label}
-            </h2>
+        {/* Per rol: eerst het artikel, dan METEEN de maat eronder. De maten in een
+            aparte sectie onderaan zetten betekende: kies vier keer een model,
+            scrol terug, kies vier keer een maat. Nu maak je één onderdeel in één
+            keer af en zie je direct wat er nog open staat. */}
+        {niveau.rollen.map((rij, i) => {
+          const gekozenOptie = optieVan(rij.rol);
+          const gekozenMaat = keuzes[rij.rol]?.size ?? null;
+          return (
+          <section key={rij.rol} className="border-t border-line pt-6">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted">
+                <span className="mr-2 tabular-nums text-ink/40">{i + 2}</span>
+                {rij.label}
+              </h2>
+              <span className="font-sans text-xs text-muted">
+                {gekozenMaat
+                  ? `${gekozenOptie?.title ?? ""} · maat ${gekozenMaat}`
+                  : gekozenOptie
+                    ? "kies je maat"
+                    : "inbegrepen in de pakketprijs"}
+              </span>
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {rij.opties.map((optie) => {
                 const actief = keuzes[rij.rol]?.handle === optie.handle;
@@ -223,46 +237,25 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
                 );
               })}
             </div>
-          </section>
-        ))}
 
-        {/* Maten — één matrix tegelijk, net als de pak-samensteller */}
-        <section>
-          <h2 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted">
-            Kies je maat per onderdeel
-          </h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {SMOKING_ROLES.map((rol) => {
-              const gekozen = keuzes[rol]?.size;
-              return (
-                <button
-                  key={rol}
-                  type="button"
-                  onClick={() => setTab(rol)}
-                  aria-pressed={rol === tab}
-                  className={`rounded-full border px-3.5 py-1.5 font-sans text-sm transition ${
-                    rol === tab ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"
-                  }`}
-                >
-                  {ROL_LABEL[rol]}
-                  {gekozen ? ` · ${gekozen}` : ""}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-4">
-            {optieVan(tab) ? (
-              <SizeMatrix
-                sizes={optieVan(tab)!.sizes}
-                hoofdgroep={ROL_HG[tab]}
-                selected={keuzes[tab]?.size ?? null}
-                onSelect={(size) => kiesMaat(tab, size)}
-              />
-            ) : (
-              <p className="font-sans text-sm text-muted">Kies hierboven eerst een {ROL_LABEL[tab].toLowerCase()}.</p>
+            {gekozenOptie && (
+              <div className="mt-4 rounded-lg bg-surface p-4">
+                <p className="font-sans text-xs font-semibold uppercase tracking-wider text-muted">
+                  Maat — {gekozenOptie.title}
+                </p>
+                <div className="mt-2">
+                  <SizeMatrix
+                    sizes={gekozenOptie.sizes}
+                    hoofdgroep={ROL_HG[rij.rol]}
+                    selected={gekozenMaat}
+                    onSelect={(size) => kiesMaat(rij.rol, size)}
+                  />
+                </div>
+              </div>
             )}
-          </div>
-        </section>
+          </section>
+          );
+        })}
 
         {/* Extra's — buiten de pakketprijs */}
         {pakket.extras.length > 0 && (
@@ -292,7 +285,7 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
                     >
                       <span
                         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                          aan ? "border-ink bg-ink text-paper" : "border-line"
+                          aan ? "border-ink bg-ink text-canvas" : "border-line"
                         }`}
                         aria-hidden="true"
                       >
@@ -402,7 +395,7 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
           type="button"
           onClick={voegToe}
           disabled={!kanToevoegen}
-          className="mt-4 h-12 w-full rounded-lg bg-ink font-sans text-sm font-semibold text-paper transition disabled:cursor-not-allowed disabled:opacity-40"
+          className="mt-4 h-12 w-full rounded-lg bg-ink font-sans text-sm font-semibold text-canvas transition disabled:cursor-not-allowed disabled:opacity-40"
         >
           {pakket.knoptekst || "Voeg complete smoking toe"}
         </button>
@@ -437,7 +430,7 @@ function NiveauKaart({
       }`}
     >
       {niveau.badge && (
-        <span className="absolute -top-2 right-3 rounded-full bg-ink px-2 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-paper">
+        <span className="absolute -top-2 right-3 rounded-full bg-ink px-2 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-canvas">
           {niveau.badge}
         </span>
       )}

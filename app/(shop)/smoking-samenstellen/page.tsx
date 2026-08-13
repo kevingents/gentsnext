@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SmokingBuilder } from "@/components/smoking/smoking-builder";
+import { SmokingLook } from "@/components/smoking/smoking-look";
 import { getSmokingPakket } from "@/lib/smoking-pakket";
 
 /**
@@ -50,6 +51,31 @@ export default async function SmokingSamenstellenPage() {
       <div className="mt-8">
         <SmokingBuilder pakket={pakket} />
       </div>
+
+      {/* Verdwijnt vanzelf als de generator uitstaat of de sleutel ontbreekt. */}
+      <SmokingLook smokingNaam="smoking" />
+
+      <section className="mt-16 grid gap-6 border-t border-line pt-10 sm:grid-cols-3">
+        {[
+          {
+            k: "Elk deel je eigen maat",
+            v: "Een jas 52 met een broek 50 is doodnormaal. Je kiest per onderdeel, niet één maat voor alles.",
+          },
+          {
+            k: "Vaste prijs, vrije keuze",
+            v: "Welke revers, welk overhemd en welke strik je ook kiest binnen je stof — de pakketprijs verandert niet.",
+          },
+          {
+            k: "Passen in de winkel",
+            v: "Alles komt als losse artikelen binnen, dus ruilen of een maat wisselen doe je gewoon in een van onze winkels.",
+          },
+        ].map((b) => (
+          <div key={b.k}>
+            <h3 className="font-sans text-sm font-semibold">{b.k}</h3>
+            <p className="mt-1.5 font-sans text-sm leading-relaxed text-muted">{b.v}</p>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }
