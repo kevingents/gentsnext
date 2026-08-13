@@ -2183,3 +2183,135 @@ export const externeRetouren = pgTable(
     index("externe_retouren_klant_idx").on(t.customerId),
   ]
 );
+
+/* ──────────────────────────────── Heatmap ─────────────────────────────────
+ * Klik- en scroll-heatmap van de storefront. Twee lagen, met opzet:
+ *
+ *  - RUW (heatmap_klikken, heatmap_scroll) — één rij per klik / per
+ *    paginaweergave, mét sessie-id zodat "hoeveel SESSIES kwamen tot hier" te
+ *    beantwoorden is. Dit is de laag die groeit, en de laag die wordt opgeruimd.
+ *  - SAMENVATTING (heatmap_cellen, heatmap_elementen, heatmap_scroll_dag) —
+ *    per dag opgeteld, zónder sessie-id. Dit is wat overblijft en wat de
+ *    grafieken op lange termijn voedt.
+ *
+ * Die scheiding is er om de bewaartermijn te kunnen inkorten zonder de
+ * geschiedenis kwijt te raken: na de rollup mag het ruwe materiaal weg (zie
+ * lib/heatmap: rolHeatmapOp), en dan blijft er een reeks tellingen staan waar
+ * geen enkel individueel bezoek meer uit te halen is.
+ *
+ * Er staat NERGENS een customer_id in. Een heatmap beantwoordt "waar klikt men",
+ * niet "waar klikte deze klant" — dat tweede is een sessie-opname en dat bouwen
+ * we bewust niet.
+ */
+
+/** Eén klik. `pagina_key` is het sjabloon (/products/[handle]), `pad` de echte URL. */
+export const heatmapKlikken = pgTable(
+  "heatmap_klikken",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paginaKey: text("pagina_key").notNull(),
+    pad: text("pad").notNull().default(""),
+    apparaat: text("apparaat").notNull(),
+    sessionId: text("session_id").notNull().default(""),
+    /** x als promille (0–1000) van de vensterbreedte. */
+    x: integer("x").notNull(),
+    /** y in CSS-pixels vanaf de bovenkant van het document. */
+    y: integer("y").notNull(),
+    /** Positie binnen het geraakte element, promille — overleeft herindeling. */
+    ox: integer("ox").notNull().default(0),
+    oy: integer("oy").notNull().default(0),
+    selector: text("selector").notNull().default(""),
+    label: text("label").notNull().default(""),
+    /** 'klik' | 'dood' (niets klikbaars geraakt) | 'woede' (herhaald rammen). */
+    soort: text("soort").notNull().default("klik"),
+    docHoogte: integer("doc_hoogte").notNull().default(0),
+    vensterBreedte: integer("venster_breedte").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("heatmap_klik_pagina_idx").on(t.paginaKey, t.apparaat, t.createdAt),
+    index("heatmap_klik_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/** Eén rij per paginaweergave: hoe diep is de bezoeker gekomen. */
+export const heatmapScroll = pgTable(
+  "heatmap_scroll",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    sessionId: text("session_id").notNull().default(""),
+    /** Diepste bereikte punt, 0–100. */
+    maxPct: integer("max_pct").notNull().default(0),
+    docHoogte: integer("doc_hoogte").notNull().default(0),
+    vensterHoogte: integer("venster_hoogte").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("heatmap_scroll_pagina_idx").on(t.paginaKey, t.apparaat, t.createdAt),
+    index("heatmap_scroll_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/** Rollup: kliks per rastercel per dag (50 kolommen breed, rijen van 20 px). */
+export const heatmapCellen = pgTable(
+  "heatmap_cellen",
+  {
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    dag: date("dag").notNull(),
+    cx: integer("cx").notNull(),
+    cy: integer("cy").notNull(),
+    n: integer("n").notNull().default(0),
+    doden: integer("doden").notNull().default(0),
+    woede: integer("woede").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.paginaKey, t.apparaat, t.dag, t.cx, t.cy] }),
+    index("heatmap_cellen_dag_idx").on(t.dag),
+  ]
+);
+
+/** Rollup: kliks per element per dag — voedt de "waarop wordt geklikt"-lijst. */
+export const heatmapElementen = pgTable(
+  "heatmap_elementen",
+  {
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    dag: date("dag").notNull(),
+    selector: text("selector").notNull(),
+    label: text("label").notNull().default(""),
+    n: integer("n").notNull().default(0),
+    doden: integer("doden").notNull().default(0),
+    woede: integer("woede").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.paginaKey, t.apparaat, t.dag, t.selector] }),
+    index("heatmap_elementen_dag_idx").on(t.dag),
+  ]
+);
+
+/**
+ * Rollup: scrollbereik per dag, één rij per drempel van 5%.
+ *
+ * `weergaven` telt de paginaweergaven die deze drempel HAALDEN — bucket 0 is
+ * dus het totaal. Bewust rijen en geen jsonb-verdeling: dagen bij elkaar
+ * optellen is dan een gewone `sum(...) group by bucket`, en een mediaan over
+ * meerdere dagen is een leesbare query in plaats van jsonb-rekenwerk.
+ */
+export const heatmapScrollDag = pgTable(
+  "heatmap_scroll_dag",
+  {
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    dag: date("dag").notNull(),
+    /** 0, 5, 10, … 100. */
+    bucket: integer("bucket").notNull(),
+    weergaven: integer("weergaven").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.paginaKey, t.apparaat, t.dag, t.bucket] }),
+    index("heatmap_scroll_dag_dag_idx").on(t.dag),
+  ]
+);
