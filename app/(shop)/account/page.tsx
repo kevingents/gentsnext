@@ -12,6 +12,10 @@ import type { ProfilePreferences } from "@/lib/profiel-voorkeuren";
 import { getStores } from "@/lib/stores";
 import { getSettings } from "@/lib/settings";
 import { ProfileClient } from "@/components/account/profile-client";
+// De QR van de clubpas wordt hier op de SERVER gebouwd: aan een kassa moet de
+// code er al staan bij de eerste render, niet pas als de browser klaar is met
+// JavaScript laden.
+import { clubPassData } from "@/lib/club-pass";
 
 /** Staat de clubpas op minstens één toestel? serialNumber = het klant-id. */
 async function walletInstalled(customerId: string): Promise<boolean> {
@@ -73,6 +77,7 @@ export default async function AccountPage() {
     <ProfileClient
       customer={safeCustomer}
       data={safe}
+      pass={clubPassData(customer.id)}
       redeem={{
         minPoints: loyaltyConfig.redeemMinPoints,
         stepPoints: loyaltyConfig.redeemStepPoints || loyaltyConfig.redeemMinPoints,
