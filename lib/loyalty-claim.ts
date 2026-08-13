@@ -90,6 +90,46 @@ export async function pendingBalance(customerId: string): Promise<number> {
   return row?.total || 0;
 }
 
+export type LoyaltyPassSummary = {
+  /** Besteedbaar (gevest) saldo — het getal dat aan de kassa telt. */
+  redeemable: number;
+  /** Nog niet besteedbaar: punten van een recente aankoop. */
+  pending: number;
+  /** Wanneer de eerstvolgende punten besteedbaar worden (null = niets in behandeling). */
+  nextVestsAt: Date | null;
+  /** Wanneer de PASINHOUD voor het laatst veranderde — voor Last-Modified/304. */
+  lastChangedAt: Date | null;
+};
+
+/**
+ * Alles wat de Apple-Wallet-pas nodig heeft in ÉÉN query. De pas toonde alleen het
+ * geveste saldo, dus wie net gekocht had zag "0 punten" terwijl z'n punten wél
+ * geteld waren — met een vesting van 21 dagen is dat drie weken lang.
+ *
+ * `lastChangedAt` telt bewust TWEE momenten mee: het aanmaken van een event (nieuwe
+ * punten in behandeling) én het moment van vesten. Alleen op vests_at kijken gaf een
+ * 304 op een pas waarvan het "in behandeling"-getal net was gewijzigd.
+ */
+export async function loyaltyPassSummary(customerId: string): Promise<LoyaltyPassSummary> {
+  const db = getDb();
+  const gevest = sql`(${loyaltyEvents.vestsAt} is null or ${loyaltyEvents.vestsAt} <= now())`;
+  const [row] = await db
+    .select({
+      redeemable: sql<number>`coalesce(sum(case when ${gevest} then ${loyaltyEvents.points} else 0 end), 0)::int`,
+      pending: sql<number>`coalesce(sum(case when not ${gevest} then ${loyaltyEvents.points} else 0 end), 0)::int`,
+      nextVestsAt: sql<string | null>`min(case when not ${gevest} then ${loyaltyEvents.vestsAt} end)`,
+      lastChangedAt: sql<string | null>`max(greatest(${loyaltyEvents.createdAt}, case when ${gevest} then coalesce(${loyaltyEvents.vestsAt}, ${loyaltyEvents.createdAt}) else ${loyaltyEvents.createdAt} end))`,
+    })
+    .from(loyaltyEvents)
+    .where(eq(loyaltyEvents.customerId, customerId));
+  return {
+    redeemable: Math.max(0, Number(row?.redeemable) || 0),
+    pending: Math.max(0, Number(row?.pending) || 0),
+    nextVestsAt: row?.nextVestsAt ? new Date(row.nextVestsAt) : null,
+    lastChangedAt: row?.lastChangedAt ? new Date(row.lastChangedAt) : null,
+  };
+}
+
 /** Unieke inwissel-voucher-code (PUNT-XXXXXXXX, zonder verwarrende tekens). */
 function randVoucherCode(): string {
   const ab = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
