@@ -25,6 +25,9 @@ import { NEW_COLLECTION_HANDLE } from "@/lib/new-collection";
 import { colorIsArticle } from "@/lib/variant-grouping";
 import { crossSellDoelen, isFormeel, FORMELE_KLEUREN } from "@/lib/cross-sell-regels";
 import { mySizeBuckets } from "@/lib/size-match";
+import { sortSizes } from "@/lib/sizing";
+import { stockAvailable } from "@/lib/stock";
+import { availableForSkus } from "@/lib/stock-reservations";
 import {
   rowSortIndex,
   rowDisplayLabel,
@@ -1222,6 +1225,54 @@ export async function handlesInStores(handles: string[], branchIds: string[]): P
   `);
   return new Set(res.rows.map((r) => String(r.handle)));
 }
+/** Eén maat op een tegel: genoeg om er direct mee in de winkelwagen te komen. */
+export type TegelMaat = { size: string; sku: string; priceCents: number; leverbaar: boolean };
+
+/**
+ * Leverbare maten voor een hele lijstpagina, in één query.
+ *
+ * Bestaat voor "snel toevoegen" op de tegel. Bewust één query voor alle handles
+ * samen (zoals handlesInStores) en niet per kaart: 24 losse queries per
+ * paginaweergave is precies het soort stille vertraging waar een A/B-test dan
+ * ten onrechte de schuld van krijgt.
+ *
+ * De voorraadbron is dezelfde als op de productpagina — availableForSkus, dus
+ * mét de reserveringen en de veiligheidsvoorraad erin verwerkt. Een tegel die
+ * een maat aanbiedt die de PDP daarna weigert is erger dan geen snelknop.
+ */
+export async function matenVoorHandles(handles: string[]): Promise<Map<string, TegelMaat[]>> {
+  const clean = [...new Set(handles.filter(Boolean))];
+  const uit = new Map<string, TegelMaat[]>();
+  if (!clean.length) return uit;
+  const db = getDb();
+  const res = await db.execute<{ handle: string; size: string; sku: string; price_cents: number }>(sql`
+    select p.handle, coalesce(v.size, '') as size, coalesce(v.sku, '') as sku, v.price_cents
+    from ${products} p
+    join ${productVariants} v on v.product_id = p.id
+    where p.handle in (${sqlInList(clean)})
+      and coalesce(v.size, '') <> ''
+      and coalesce(v.sku, '') <> ''
+  `);
+  const beschikbaar = await availableForSkus(res.rows.map((r) => String(r.sku)));
+  const bekend = await stockAvailable();
+  for (const r of res.rows) {
+    const handle = String(r.handle);
+    const lijst = uit.get(handle) ?? [];
+    if (lijst.some((m) => m.size === r.size)) continue; // één rij per maat
+    const st = beschikbaar.get(String(r.sku));
+    lijst.push({
+      size: String(r.size),
+      sku: String(r.sku),
+      priceCents: Number(r.price_cents) || 0,
+      // Zonder voorraadgeneratie weten we het niet; dan niet blokkeren (zoals de PDP).
+      leverbaar: !bekend || (st?.online ?? 0) > 0,
+    });
+    uit.set(handle, lijst);
+  }
+  for (const [handle, lijst] of uit) uit.set(handle, sortSizes(lijst));
+  return uit;
+}
+
 export function getStoreStockCount(f: ProductFilters, branchId: string): Promise<number> {
   return _storeStockCountCached(f.collectionId || "", f.category || "", branchId);
 }

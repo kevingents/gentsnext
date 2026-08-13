@@ -6,7 +6,7 @@ import { TrackLijst } from "@/components/analytics/track-lijst";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
-import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTasteCats, isTechnicalCollection, handlesInStores } from "@/lib/catalog";
+import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTasteCats, isTechnicalCollection, handlesInStores, matenVoorHandles } from "@/lib/catalog";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
@@ -84,10 +84,16 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     resolveAb({ oppervlak: "plp", categorieen: [collection.handle] }),
   ]);
   const plpAb = ab.overrides.plp ?? {};
+  // Sleutels voor merchandising-regels die aan één variant hangen. Ook een
+  // geforceerde preview telt mee — anders kun je een variant-regelset nooit
+  // bekijken zonder in de bucket te vallen.
+  const abSleutels = ab.assignments.map((a) => `${a.id}:${a.variant}`.toLowerCase());
   const plpAbExposure = ab.assignments.filter((a) => !a.forced).map(({ id, variant }) => ({ id, variant }));
   // Variant-sortering wijkt alleen als de bezoeker zelf niets koos.
   const sort = !sel.sortExpliciet && plpAb.sortering ? plpAb.sortering : sel.sort;
   const perPagina = plpAb.perPagina ?? PER_PAGE;
+  // Filters bovenaan = geen vaste zijkolom, dus ook geen tweekoloms raster.
+  const bovenFilters = plpAb.filterPositie === "boven";
   // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
   const storeProps = await plpStoreProps(sel.stores, sessionCustomer?.preferences, {
     collectionId: collection.id,
@@ -104,7 +110,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const [tasteCats, pinnedHandles, regels] = await Promise.all([
     isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
     isDefault ? getMerchandisingPins("collection", handle) : Promise.resolve([]),
-    isDefault ? getActieveRegels("collection", handle) : Promise.resolve([]),
+    isDefault ? getActieveRegels("collection", handle, abSleutels) : Promise.resolve([]),
   ]);
   const { items, total } = await getFilteredProducts(filters, sort, sel.page, perPagina, {
     mySizeRows: mySizeBuckets(sessionCustomer?.sizeProfile),
@@ -118,6 +124,10 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const inMyStore = myBranches.length
     ? await handlesInStores(items.map((p) => p.handle), myBranches.map((b) => b.branchId))
     : new Set<string>();
+  /* Maten voor "snel toevoegen" — één query voor de hele pagina, en alleen als
+     de variant erom vraagt. Zonder die voorwaarde betaalt iedereen de query
+     voor een knop die niemand ziet. */
+  const maten = plpAb.snelToevoegen === "aan" ? await matenVoorHandles(items.map((p) => p.handle)) : null;
   // Eén winkel? Dan de stad ("In Utrecht"). Meerdere: geen stad noemen, want dan
   // zouden we moeten zeggen wélke — en dat weet dit label niet.
   const storeLabel = myBranches.length === 1 ? myBranches[0].city : t("plp.card.inMyStoreGeneric");
@@ -165,12 +175,12 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         ) : null}
       </div>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className={`mt-8 grid gap-10 ${bovenFilters ? "" : "lg:grid-cols-[16rem_minmax(0,1fr)]"}`}>
         {/* Sidebar / mobiele drawer */}
         {/* Zie de categoriepagina: eigen schuifbalk, anders is het onderste deel
             van een lange filterlijst pas bereikbaar ná alle producten. */}
-        <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} {...filterProps} />
+        <aside className={bovenFilters ? "" : "lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"}>
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} positie={plpAb.filterPositie} {...filterProps} />
         </aside>
 
         {/* Grid */}
@@ -192,7 +202,8 @@ export default async function CollectionPage({ params, searchParams }: Props) {
             <div className={`grid gap-x-4 gap-y-8 sm:grid-cols-3 ${plpAb.kolommenMobiel === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
               <TrackLijst producten={items} listId={`collection:${handle}`} listName={colTitle} />
               {items.map((product, i) => (
-                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * perPagina + i + 1} listId={`collection:${handle}`} sort={sort} inMyStore={inMyStore.has(product.handle) ? storeLabel : null} beeld={plpAb.tegelBeeld} badges={plpAb.tegelBadges !== "uit"} />
+                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * perPagina + i + 1} listId={`collection:${handle}`} sort={sort} inMyStore={inMyStore.has(product.handle) ? storeLabel : null} beeld={plpAb.tegelBeeld} badges={plpAb.tegelBadges !== "uit"}
+                  maten={maten?.get(product.handle)} />
               ))}
             </div>
           )}

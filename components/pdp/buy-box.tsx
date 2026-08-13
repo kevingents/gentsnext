@@ -81,6 +81,8 @@ type Props = {
   ctaLabel?: string | null;
   /** A/B: mobiele meelopende koopbalk aan/uit. */
   sticky?: boolean;
+  /** A/B: "−30%"-label naast de prijs. De van-prijs zelf blijft altijd staan. */
+  kortingLabel?: boolean;
 };
 
 export function BuyBox({
@@ -105,6 +107,7 @@ export function BuyBox({
   freeShipThresholdCents,
   ctaLabel = null,
   sticky = true,
+  kortingLabel = true,
 }: Props) {
   const cart = useCart();
   const t = useT();
@@ -257,7 +260,10 @@ export function BuyBox({
           <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents!)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
-        {hasDiscount ? (
+        {/* Alleen het PERCENTAGE is testbaar. De doorgestreepte referentieprijs
+            en de toelichting eronder blijven staan: die zijn bij een korting
+            wettelijk verplicht (Omnibus), en dat is geen A/B-vraag. */}
+        {hasDiscount && kortingLabel ? (
           <span className="rounded bg-danger/10 px-1.5 py-0.5 font-sans text-xs font-medium text-danger">
             −{Math.round((1 - priceCents / referenceCents!) * 100)}%
           </span>

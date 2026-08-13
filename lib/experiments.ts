@@ -75,6 +75,12 @@ export type AbOverrides = {
     aanbevelingen?: "aan" | "uit";
     /** Begint de galerij met de AI-modelfoto of met de packshot? */
     galerijStart?: "model" | "packshot";
+    /** Hoeveel beelden de galerij hoogstens toont (1-12). */
+    galerijMax?: number;
+    /** Reviews direct onder de koopkolom ("boven") of onderaan de pagina ("onder"). */
+    reviewsPositie?: "boven" | "onder";
+    /** "-30%"-label naast de prijs bij een echte korting. */
+    kortingLabel?: "aan" | "uit";
     /** Materiaal/verzorging standaard uitgeklapt. */
     accordionsOpen?: boolean;
     /** Vervangt het vertrouwenslijstje onder de koopknop (max 5). */
@@ -94,6 +100,10 @@ export type AbOverrides = {
     tegelBeeld?: "model" | "packshot";
     /** Sale/nieuw/laatste-maten-badges op de tegel. */
     tegelBadges?: "aan" | "uit";
+    /** Filters als vaste zijkolom of als knop met lade bovenaan (ook desktop). */
+    filterPositie?: "zijkant" | "boven";
+    /** Maat kiezen en toevoegen vanaf de tegel, zonder de productpagina. */
+    snelToevoegen?: "aan" | "uit";
   };
 };
 
@@ -129,6 +139,15 @@ export type Experiment = {
   varianten: AbVariant[];
   /** Vrije notitie: wat test dit, en wanneer is het geslaagd? */
   hypothese?: string;
+  /**
+   * Rem op te vroeg stoppen. Vóór deze looptijd én steekproef toont de
+   * resultatenroute géén significantie-oordeel — zie lib/ab-regels/oordeelKlaar.
+   */
+  minLooptijdDagen: number;
+  /** 0 = laat de server het uitrekenen uit de gemeten conversie + verwachtEffectPct. */
+  doelBezoekersPerVariant: number;
+  /** Relatieve verbetering die je wilt kunnen zien (15 = 15% meer conversie). */
+  verwachtEffectPct: number;
   /** Meetvenster — door de server gestempeld bij een statuswissel. */
   gestartOp?: string;
   gestoptOp?: string;

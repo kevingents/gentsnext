@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { events } from "@/db/schema";
 import { adminOrToken } from "@/lib/studio-token";
 import { getExperiments, type AbDoel } from "@/lib/experiments";
+import { oordeelKlaar, benodigdeSteekproef } from "@/lib/ab-regels";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -173,14 +174,50 @@ export async function GET(req: Request) {
       }
     }
 
-    // Tweezijdige z-toets op het doel, tegen de eerste variant (de controle).
+    /* Peeking-rem. Wie elke dag naar een p-waarde kijkt en stopt zodra die
+       onder 0,05 duikt, vindt vroeg of laat altijd een "winnaar" — ook als er
+       niets aan de hand is. De rem is niet een strengere drempel maar het
+       enige dat echt werkt: geen uitslag tónen vóór de vooraf afgesproken
+       looptijd én steekproef gehaald zijn. Tot die tijd zie je wél de
+       aantallen (en de SRM-waakhond), maar geen oordeel. */
     const controle = varianten[0];
+    const nu = Date.now();
+    const start = exp?.gestartOp ? new Date(exp.gestartOp).getTime() : 0;
+    const eind = exp?.gestoptOp ? new Date(exp.gestoptOp).getTime() : nu;
+    const dagenGelopen = start ? Math.max(0, (Math.min(eind, nu) - start) / 86400000) : 0;
+    const kleinsteVariant = varianten.length ? Math.min(...varianten.map((v) => v.bezoekers)) : 0;
+
+    /* Hoeveel bezoekers zijn er nodig? Niet uit de duim, maar uit de gemeten
+       basisconversie van de controle plus het effect dat je vóóraf zei te
+       willen zien. Dat maakt het doel eerlijk én zelfcorrigerend: valt de
+       conversie in werkelijkheid lager uit, dan stijgt de benodigde steekproef
+       automatisch mee. Een handmatig doel wint als het is ingevuld. */
+    const berekendDoel = benodigdeSteekproef(controle?.conversiePct ?? 0, exp?.verwachtEffectPct ?? 15);
+    const doelPerVariant = Math.max(100, exp?.doelBezoekersPerVariant || berekendDoel || 0);
+
+    const venster = oordeelKlaar({
+      dagenGelopen,
+      minDagen: exp?.minLooptijdDagen ?? 7,
+      kleinsteVariant,
+      doelPerVariant,
+    });
+    // Tempo in het venster: hiermee kan de portal zeggen hoevéél dagen er nog
+    // te gaan zijn in plaats van alleen "nog niet klaar".
+    const bezoekersPerDag =
+      dagenGelopen >= 0.5 ? Math.round(varianten.reduce((s, v) => s + v.bezoekers, 0) / dagenGelopen) : 0;
+    // Nog te gaan, in dagen — op basis van de kleinste variant, want die is de
+    // bottleneck bij een 90/10-verdeling.
+    const aandeelKleinste = kleinsteVariant && dagenGelopen >= 0.5 ? kleinsteVariant / dagenGelopen : 0;
+    const dagenTeGaan =
+      venster.klaar || !aandeelKleinste ? 0 : Math.ceil((doelPerVariant - kleinsteVariant) / aandeelKleinste);
+
+    // Tweezijdige z-toets op het doel, tegen de eerste variant (de controle).
     const vergelijking = varianten.slice(1).map((v) => {
       const n1 = controle?.bezoekers || 0;
       const n2 = v.bezoekers;
       const x1 = controle?.doelN || 0;
       const x2 = v.doelN;
-      const genoeg = n1 >= 100 && n2 >= 100;
+      const genoeg = venster.klaar && n1 >= 100 && n2 >= 100;
       let z = 0;
       let pWaarde = 1;
       if (genoeg && n1 && n2) {
@@ -220,6 +257,18 @@ export async function GET(req: Request) {
       vergelijking,
       controle: controle?.variant ?? null,
       srm,
+      venster: {
+        dagenGelopen: Math.round(dagenGelopen * 10) / 10,
+        minLooptijdDagen: exp?.minLooptijdDagen ?? 7,
+        doelPerVariant,
+        doelZelfBerekend: !exp?.doelBezoekersPerVariant,
+        verwachtEffectPct: exp?.verwachtEffectPct ?? 15,
+        kleinsteVariant,
+        bezoekersPerDag,
+        dagenTeGaan,
+        klaar: venster.klaar,
+        reden: venster.reden,
+      },
     });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });

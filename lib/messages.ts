@@ -44,6 +44,8 @@ const nl: Dict = {
   "plp.sort.prijs-af": "Prijs aflopend",
   "plp.sort.naam": "Naam (A–Z)",
   "plp.badge.sale": "Sale",
+  "plp.snel.knop": "Snel toevoegen",
+  "plp.snel.toegevoegd": "Maat {size} toegevoegd",
   // Subkopjes in het maatfilter: lettermaten, boordmaten, schoen- en riemmaten
   // door elkaar in één rij was onleesbaar — en "41" betekent per matensysteem
   // iets heel anders. Zie lib/size-taxonomy.
@@ -211,6 +213,8 @@ const en: Dict = {
   "plp.sort.prijs-af": "Price: high to low",
   "plp.sort.naam": "Name (A–Z)",
   "plp.badge.sale": "Sale",
+  "plp.snel.knop": "Quick add",
+  "plp.snel.toegevoegd": "Size {size} added",
   "reserve.intro": "Free and without obligation: reserve to try on — we'll set it aside for you in store.",
   "reserve.cta": "Set aside for me",
   "reserve.formIntro": "Reserve to try on at {store} — we'll hold it for you, nothing to pay now.",

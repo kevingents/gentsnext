@@ -489,6 +489,17 @@ export default async function ProductPage({ params }: Props) {
     })),
   };
 
+  /* Reviews staan standaard onderaan. Een variant mag ze direct onder de
+     koopkolom zetten: het onderzoek wijst reviews-plek aan als een van de
+     zwaardere hefbomen, en onderaan een lange PDP ziet driekwart ze nooit.
+     Eén definitie, twee plekken — anders lopen de twee uitvoeringen uit elkaar. */
+  const reviewsBlok = (
+    <>
+      <AiReviewSummary summary={reviewAi} />
+      <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
+    </>
+  );
+
   return (
     <div className="mx-auto max-w-page px-gutter py-8 pb-28 lg:pb-8">
       <JsonLd data={productJsonLd} />
@@ -540,7 +551,11 @@ export default async function ProductPage({ params }: Props) {
               // A/B: variant kan de packshot vooropzetten. Alleen de VOLGORDE
               // wisselt — geen enkel beeld verdwijnt, zodat beide varianten
               // dezelfde informatie tonen.
-              return pdpAb.galerijStart === "packshot" ? [...packshots, ...aiBeelden] : [...aiBeelden, ...packshots];
+              const alles = pdpAb.galerijStart === "packshot" ? [...packshots, ...aiBeelden] : [...aiBeelden, ...packshots];
+              // …en een variant mag de galerij kórter maken. Dat is wél een
+              // echte inhoudelijke wijziging (er verdwijnen beelden), dus alleen
+              // als het experiment er expliciet om vraagt.
+              return pdpAb.galerijMax ? alles.slice(0, pdpAb.galerijMax) : alles;
             })()}
             title={product.title}
             sizeMedia={sizeMedia}
@@ -577,6 +592,7 @@ export default async function ProductPage({ params }: Props) {
             freeShipThresholdCents={settings.freeShippingCents}
             ctaLabel={pdpAb.ctaLabel || null}
             sticky={pdpAb.stickyKoopbalk !== "uit"}
+            kortingLabel={pdpAb.kortingLabel !== "uit"}
           />
 
           {pdpAb.socialProof === "uit" ? null : <SocialProof stats={viewStats} />}
@@ -607,6 +623,8 @@ export default async function ProductPage({ params }: Props) {
         </div>
       </div>
       </PdpSizeProvider>
+
+      {pdpAb.reviewsPositie === "boven" ? reviewsBlok : null}
 
       {/* Sfeerbeeld — AI-lifestyle (model in setting), groot en ongecropt */}
       {product.lifestyleImageUrl ? (
@@ -667,9 +685,7 @@ export default async function ProductPage({ params }: Props) {
         </section>
       ) : null}
 
-      <AiReviewSummary summary={reviewAi} />
-
-      <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
+      {pdpAb.reviewsPositie === "boven" ? null : reviewsBlok}
 
       {blogPosts.length > 0 ? (
         <section className="mt-20">

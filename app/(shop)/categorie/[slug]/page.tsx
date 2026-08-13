@@ -6,7 +6,7 @@ import { TrackLijst } from "@/components/analytics/track-lijst";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
 import { JsonLd } from "@/components/json-ld";
-import { getFilteredProducts, getFacets, getCustomerTasteCats, handlesInStores } from "@/lib/catalog";
+import { getFilteredProducts, getFacets, getCustomerTasteCats, handlesInStores, matenVoorHandles } from "@/lib/catalog";
 import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
@@ -69,6 +69,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     resolveAb({ oppervlak: "plp", categorieen: [cat.slug, cat.hoofdgroep] }),
   ]);
   const plpAb = ab.overrides.plp ?? {};
+  // Sleutels voor merchandising-regels die aan één variant hangen. Ook een
+  // geforceerde preview telt mee — anders kun je een variant-regelset nooit
+  // bekijken zonder in de bucket te vallen.
+  const abSleutels = ab.assignments.map((a) => `${a.id}:${a.variant}`.toLowerCase());
   const plpAbExposure = ab.assignments.filter((a) => !a.forced).map(({ id, variant }) => ({ id, variant }));
   // Standaardsortering van de variant geldt alleen zolang de bezoeker zelf
   // niets koos. Alles hieronder rekent met déze sortering — óók de meting op
@@ -76,6 +80,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // "nieuw" zag.
   const sort = !sel.sortExpliciet && plpAb.sortering ? plpAb.sortering : sel.sort;
   const perPagina = plpAb.perPagina ?? PER_PAGE;
+  // Filters bovenaan = geen vaste zijkolom, dus ook geen tweekoloms raster.
+  const bovenFilters = plpAb.filterPositie === "boven";
   // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
   const storeProps = await plpStoreProps(sel.stores, sessionCustomer?.preferences, {
     category: cat.hoofdgroep,
@@ -90,7 +96,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const [tasteCats, pinnedHandles, regels] = await Promise.all([
     isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
     isDefault ? getMerchandisingPins("categorie", slug) : Promise.resolve([]),
-    isDefault ? getActieveRegels("categorie", slug) : Promise.resolve([]),
+    isDefault ? getActieveRegels("categorie", slug, abSleutels) : Promise.resolve([]),
   ]);
   const { items, total } = await getFilteredProducts(filters, sort, sel.page, perPagina, {
     mySizeRows: my ? [my.row] : [],
@@ -104,6 +110,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const inMyStore = myBranches.length
     ? await handlesInStores(items.map((p) => p.handle), myBranches.map((b) => b.branchId))
     : new Set<string>();
+  /* Maten voor "snel toevoegen" — één query voor de hele pagina, en alleen als
+     de variant erom vraagt. Zonder die voorwaarde betaalt iedereen de query
+     voor een knop die niemand ziet. */
+  const maten = plpAb.snelToevoegen === "aan" ? await matenVoorHandles(items.map((p) => p.handle)) : null;
   // Eén winkel? Dan de stad ("In Utrecht"). Meerdere: geen stad noemen, want dan
   // zouden we moeten zeggen wélke — en dat weet dit label niet.
   const storeLabel = myBranches.length === 1 ? myBranches[0].city : t("plp.card.inMyStoreGeneric");
@@ -145,13 +155,13 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         <h1 className="text-display-md sm:mt-2">{catLabel}</h1>
       </div>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className={`mt-8 grid gap-10 ${bovenFilters ? "" : "lg:grid-cols-[16rem_minmax(0,1fr)]"}`}>
         {/* Het filter scrolt mee tot het vastplakt, en krijgt daarna een eigen
             schuifbalk. Zonder die maximumhoogte bleef een lange filterlijst
             onderaan buiten beeld hangen: je kon er pas bij nadat je langs álle
             producten had gescrold. */}
-        <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} {...filterProps} />
+        <aside className={bovenFilters ? "" : "lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"}>
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} positie={plpAb.filterPositie} {...filterProps} />
         </aside>
 
         <div>
@@ -185,6 +195,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                   inMyStore={inMyStore.has(product.handle) ? storeLabel : null}
                   beeld={plpAb.tegelBeeld}
                   badges={plpAb.tegelBadges !== "uit"}
+                  maten={maten?.get(product.handle)}
                 />
               ))}
             </div>

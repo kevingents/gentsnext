@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bucketVoor, variantVoorBucket, doetMee, pastBijPagina, schoonExperimentsDoc } from "../lib/ab-regels.js";
+import { bucketVoor, variantVoorBucket, doetMee, pastBijPagina, schoonExperimentsDoc, benodigdeSteekproef, oordeelKlaar } from "../lib/ab-regels.js";
 
 /* De toewijzing bepaalt wie welke variant ziet — fouten hier vertekenen elke
    testuitslag zonder dat iemand het merkt. Vandaar tests op de wiskunde. */
@@ -264,4 +264,112 @@ test("sanering: pdp- en plp-knoppen laten alleen bekende waarden door", () => {
   assert.equal(o.plp.perPagina, undefined); // buiten 8-48
   assert.equal(o.plp.tegelBeeld, "model");
   assert.equal(o.plp.tegelBadges, "uit");
+});
+
+/* ── Steekproef en de rem op te vroeg stoppen ─────────────────────────────
+   Dit is de rekenkant van "mag ik hier al iets uit concluderen". Fout hier =
+   een uitslag die te vroeg als winnaar wordt doorgevoerd, en dat is precies
+   het soort fout dat niemand opmerkt omdat de site er daarna gewoon uitziet. */
+
+test("steekproef: bekende ordegroottes kloppen", () => {
+  // 2% basis, +15% relatief (2% → 2,3%): een aankooptest van deze omvang heeft
+  // tienduizenden bezoekers per kant nodig. Dat is precies waarom je bij dun
+  // verkeer op winkelwagen of doorklik meet.
+  const n = benodigdeSteekproef(2, 15);
+  assert.ok(n > 25000 && n < 40000, `2%/+15% gaf ${n}`);
+  // Groter effect = veel minder bezoekers (kwadratisch in het verschil).
+  assert.ok(benodigdeSteekproef(2, 50) < n / 5);
+  // Hogere basisconversie = minder bezoekers nodig bij hetzelfde relatieve effect.
+  assert.ok(benodigdeSteekproef(20, 15) < benodigdeSteekproef(2, 15));
+  // Onzin levert null, geen NaN dat verderop stil een drempel van 0 wordt.
+  for (const [b, l] of [[0, 15], [2, 0], [-1, 10], [100, 10], ["", ""]]) {
+    assert.equal(benodigdeSteekproef(b, l), null, `${b}/${l}`);
+  }
+});
+
+test("oordeel: pas na de looptijd én de steekproef", () => {
+  const vol = { dagenGelopen: 10, kleinsteVariant: 5000, minDagen: 7, doelPerVariant: 4000 };
+  assert.equal(oordeelKlaar(vol).klaar, true);
+
+  const teVroeg = oordeelKlaar({ ...vol, dagenGelopen: 3 });
+  assert.equal(teVroeg.klaar, false);
+  assert.match(teVroeg.reden, /nog 4 dagen/);
+
+  const teWeinig = oordeelKlaar({ ...vol, kleinsteVariant: 1200 });
+  assert.equal(teWeinig.klaar, false);
+  assert.match(teWeinig.reden, /2800 bezoekers/);
+
+  // Ondergrens van 100 geldt altijd, ook zonder eigen doel — anders zou een
+  // experiment zonder instellingen al na één bezoeker "klaar" zijn.
+  assert.equal(oordeelKlaar({ dagenGelopen: 30, kleinsteVariant: 40, minDagen: 0, doelPerVariant: 0 }).klaar, false);
+  assert.equal(oordeelKlaar({ dagenGelopen: 30, kleinsteVariant: 150, minDagen: 0, doelPerVariant: 0 }).klaar, true);
+});
+
+test("sanering: looptijd, steekproefdoel en verwacht effect", () => {
+  const { experimenten } = schoonExperimentsDoc({
+    experimenten: [
+      { id: "leeg", varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }] },
+      {
+        id: "gevuld",
+        minLooptijdDagen: 14,
+        doelBezoekersPerVariant: 5000,
+        verwachtEffectPct: 25,
+        varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }],
+      },
+      {
+        id: "onzin",
+        minLooptijdDagen: -5,
+        doelBezoekersPerVariant: "veel",
+        verwachtEffectPct: 0,
+        varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }],
+      },
+    ],
+  });
+  const [leeg, gevuld, onzin] = experimenten;
+  assert.equal(leeg.minLooptijdDagen, 7); // een volle week is de standaard
+  assert.equal(leeg.doelBezoekersPerVariant, 0); // 0 = server rekent het uit
+  assert.equal(leeg.verwachtEffectPct, 15);
+  assert.equal(gevuld.minLooptijdDagen, 14);
+  assert.equal(gevuld.doelBezoekersPerVariant, 5000);
+  assert.equal(gevuld.verwachtEffectPct, 25);
+  assert.equal(onzin.minLooptijdDagen, 0);
+  assert.equal(onzin.doelBezoekersPerVariant, 0);
+  assert.equal(onzin.verwachtEffectPct, 15);
+});
+
+test("sanering: de nieuwe pdp- en plp-knoppen", () => {
+  const { experimenten } = schoonExperimentsDoc({
+    experimenten: [
+      {
+        id: "meer-knoppen",
+        oppervlak: "plp",
+        varianten: [
+          { key: "A", gewicht: 1 },
+          {
+            key: "B",
+            gewicht: 1,
+            overrides: {
+              pdp: { reviewsPositie: "boven", kortingLabel: "uit", galerijMax: 4 },
+              plp: { filterPositie: "boven", snelToevoegen: "aan" },
+            },
+          },
+          {
+            key: "C",
+            gewicht: 1,
+            overrides: { pdp: { reviewsPositie: "zijkant", galerijMax: 99 }, plp: { filterPositie: "onder" } },
+          },
+        ],
+      },
+    ],
+  });
+  const [, b, c] = experimenten[0].varianten;
+  assert.equal(b.overrides.pdp.reviewsPositie, "boven");
+  assert.equal(b.overrides.pdp.kortingLabel, "uit");
+  assert.equal(b.overrides.pdp.galerijMax, 4);
+  assert.equal(b.overrides.plp.filterPositie, "boven");
+  assert.equal(b.overrides.plp.snelToevoegen, "aan");
+  // Onbekende waarden vallen weg i.p.v. door te lekken naar de site.
+  assert.equal(c.overrides?.pdp?.reviewsPositie, undefined);
+  assert.equal(c.overrides?.pdp?.galerijMax, undefined); // buiten 1-12
+  assert.equal(c.overrides?.plp, undefined);
 });

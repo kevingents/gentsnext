@@ -9,6 +9,8 @@ import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { ProductCardBadge } from "@/components/product-card-badge";
 import { track } from "@/lib/track-client";
 import { packshotContain } from "@/lib/packshot-weergave";
+import { SnelToevoegen } from "@/components/plp/snel-toevoegen";
+import type { TegelMaat } from "@/lib/catalog";
 
 export function ProductCard({
   product,
@@ -19,6 +21,7 @@ export function ProductCard({
   inMyStore,
   beeld,
   badges = true,
+  maten,
 }: {
   product: ProductCardData;
   priority?: boolean;
@@ -33,6 +36,8 @@ export function ProductCard({
   beeld?: "model" | "packshot";
   /** A/B: sale-/nieuw-/laatste-maten-badge op de tegel. */
   badges?: boolean;
+  /** A/B: maten voor "snel toevoegen". Leeg/afwezig = geen snelknop. */
+  maten?: TegelMaat[];
   /** 1-gebaseerde plek in de lijst — zonder positie beloont een populariteits-
    *  ranking alleen wat toevallig bovenaan stond (positie-bias). */
   position?: number;
@@ -141,6 +146,17 @@ export function ProductCard({
         </p>
         {product.colorCount && product.colorCount > 1 ? (
           <p className="font-sans text-xs text-muted">{t("product.colorCount", { n: product.colorCount })}</p>
+        ) : null}
+        {maten?.length ? (
+          <div className="mt-2">
+            <SnelToevoegen
+              handle={product.handle}
+              title={product.title}
+              imageUrl={product.imageUrl}
+              hoofdgroep={product.category || ""}
+              maten={maten}
+            />
+          </div>
         ) : null}
       </div>
     </Link>

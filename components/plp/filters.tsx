@@ -31,6 +31,11 @@ type Props = {
   storeOptions?: PlpStoreOption[];
   /** Winkelnamen van de klant — de kiezer werkt op naam. */
   myStoreTitles?: string[];
+  /**
+   * A/B: vaste zijkolom (standaard) of een knop met lade bovenaan, ook op
+   * desktop. Mobiel verandert er niets — daar was het altijd al een lade.
+   */
+  positie?: "zijkant" | "boven";
 };
 
 function priceBrackets(
@@ -53,7 +58,13 @@ function trackFilter(facet: string, value: string, on: boolean) {
   track("filter", { props: { facet, value, on } });
 }
 
-export function PlpFilters({ facets, selection, total, mySize, sort, storeOptions = [], myStoreTitles = [] }: Props) {
+export function PlpFilters({ facets, selection, total, mySize, sort, storeOptions = [], myStoreTitles = [], positie = "zijkant" }: Props) {
+  /* "boven" laat de vaste zijkolom vallen en geeft ook desktop de knop-plus-lade
+     die mobiel al had. Dat is de klassieke merchandising-afweging: filters altijd
+     in beeld (meer verfijnen) versus een breder productraster (meer producten per
+     scherm). Één schakelaar, dezelfde lade — geen tweede filterimplementatie. */
+  const bovenaan = positie === "boven";
+  const alleenMobiel = bovenaan ? "" : "lg:hidden";
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -79,7 +90,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
   // naar desktop terwijl de drawer open staat, dan lijkt de pagina bevroren (onzichtbare
   // modal houdt #main inert). Sluit 'm dus zodra de viewport ≥ lg wordt.
   useEffect(() => {
-    if (!openMobile) return;
+    if (!openMobile || bovenaan) return; // bovenaan is de lade óók op desktop de bediening
     const mq = window.matchMedia("(min-width: 1024px)");
     const onChange = () => { if (mq.matches) setOpenMobile(false); };
     onChange();
@@ -396,7 +407,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
     <>
       {/* Mobiel: filterknop bovenaan; de zwevende pil verschijnt pas zodra deze
           balk uit beeld scrolt (anders twee bedieningslagen tegelijk). */}
-      <div ref={topBarRef} className="mb-4 flex items-center justify-between lg:hidden">
+      <div ref={topBarRef} className={`mb-4 flex items-center justify-between ${alleenMobiel}`}>
         <button
           type="button"
           onClick={() => setOpenMobile(true)}
@@ -410,7 +421,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
         <button
           type="button"
           onClick={() => setOpenMobile(true)}
-          className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop lg:hidden"
+          className={`fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop ${alleenMobiel}`}
         >
           {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `· ${activeCount}` : ""}
         </button>
@@ -418,7 +429,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
 
       {openMobile && typeof document !== "undefined"
         ? createPortal(
-            <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t("plp.filters.mobileDrawerTitle")}>
+            <div className={`fixed inset-0 z-50 ${alleenMobiel}`} role="dialog" aria-modal="true" aria-label={t("plp.filters.mobileDrawerTitle")}>
               <div className="absolute inset-0 bg-ink/40" onClick={() => setOpenMobile(false)} />
               <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
                 <div className="mb-4 flex items-center justify-between">
@@ -448,8 +459,8 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
           )
         : null}
 
-      {/* Desktop: sidebar */}
-      <div className="hidden lg:block">{body}</div>
+      {/* Desktop: vaste zijkolom — tenzij de variant de filters bovenaan wil. */}
+      {bovenaan ? null : <div className="hidden lg:block">{body}</div>}
     </>
   );
 }
