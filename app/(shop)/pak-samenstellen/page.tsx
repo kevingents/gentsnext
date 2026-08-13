@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { listSuits } from "@/lib/suit-pairing";
-import { formatEuro } from "@/lib/pricing";
+import { SuitFilters } from "@/components/pak/suit-filters";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 
@@ -40,30 +38,20 @@ export default async function PakSamenstellenPage() {
           {t("suit_builder.no_suits")}
         </p>
       ) : (
-        <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-          {suits.map((s) => (
-            <Link key={s.code} href={`/pak-samenstellen/${s.colbertHandle}`} className="group flex flex-col gap-3">
-              <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-surface">
-                {s.image ? (
-                  <Image
-                    src={s.image}
-                    alt={s.title}
-                    fill
-                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                    className="object-cover transition duration-500 ease-brand group-hover:scale-[1.04]"
-                  />
-                ) : null}
-                <span className="absolute left-2 top-2 bg-canvas/90 px-2 py-0.5 font-sans text-[0.65rem] uppercase tracking-wide">
-                  {s.threePiece ? t("suit_builder.two_or_three_piece") : t("suit_builder.two_piece")}
-                </span>
-              </div>
-              <div>
-                <h2 className="font-sans text-sm text-ink">{s.title}</h2>
-                <p className="font-sans text-sm text-ink-soft">{t("suit_builder.from")} {formatEuro(s.fromCents)}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <SuitFilters
+          suits={suits}
+          labels={{
+            twoPiece: t("suit_builder.two_piece"),
+            twoOrThreePiece: t("suit_builder.two_or_three_piece"),
+            from: t("suit_builder.from"),
+            allFits: t("suit_builder.all_fits"),
+            allColors: t("suit_builder.all_colors"),
+            threePieceOnly: t("suit_builder.three_piece_only"),
+            results: t("suit_builder.results"),
+            reset: t("suit_builder.reset"),
+            noMatch: t("suit_builder.no_match"),
+          }}
+        />
       )}
     </div>
   );

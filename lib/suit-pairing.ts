@@ -42,6 +42,21 @@ export function styleCode(artikelId: string): string {
 
 export type SuitRole = "colbert" | "broek" | "gilet";
 
+/**
+ * De AI-media naast de packshot. Deze stukken hebben op hun eigen PDP allang een
+ * modelfoto/sfeerbeeld/video, maar de samensteller vroeg ze niet op en toonde dus
+ * alleen een platte packshot van het colbert.
+ */
+type PieceMedia = {
+  /** Modelfoto (studio, 4:5) — leidt de galerij, net als op de PDP. */
+  modelImage: string;
+  /** Sfeerbeeld op locatie. */
+  lifestyleImage: string;
+  /** Tweede modelfoto/editorial (model_image_url2). */
+  modelImage2: string;
+  video: string;
+};
+
 type RawPiece = {
   id: string;
   handle: string;
@@ -49,15 +64,20 @@ type RawPiece = {
   role: SuitRole;
   image: string;
   minPrice: number;
-};
+} & PieceMedia & { fit: string; color: string };
 
 export type SuitCard = {
   code: string;
   colbertHandle: string;
   title: string;
   image: string;
+  /** Tegel-beeld: modelfoto als die er is, anders de packshot. */
+  tileImage: string;
   fromCents: number; // colbert + broek (2-delig)
   threePiece: boolean;
+  /** Facetten voor de filterbalk (uit het colbert). */
+  fit: string;
+  color: string;
 };
 
 async function fetchPieces(): Promise<Map<string, RawPiece[]>> {
@@ -70,17 +90,33 @@ async function fetchPieces(): Promise<Map<string, RawPiece[]>> {
     art: string;
     image: string | null;
     min_price: number | null;
+    model_image: string | null;
+    model_image2: string | null;
+    lifestyle_image: string | null;
+    video: string | null;
+    fit: string | null;
+    color: string | null;
   }>(sql`
     select p.id, p.handle, p.title,
            p.attributes ->> 'hoofdgroep_omschrijving' as hg,
            p.attributes ->> 'artikel_id' as art,
            (select url from ${productImages} pi where pi.product_id = p.id order by position limit 1) as image,
-           (select min(price_cents) from ${productVariants} v where v.product_id = p.id) as min_price
+           (select min(price_cents) from ${productVariants} v where v.product_id = p.id) as min_price,
+           p.model_image_url as model_image,
+           p.model_image_url2 as model_image2,
+           p.lifestyle_image_url as lifestyle_image,
+           p.model_video_url as video,
+           p.attributes ->> 'pasvorm' as fit,
+           p.variant_color_label as color
     from ${products} p
     where p.status = 'active'
       and p.attributes ->> 'mix_and_match' = 'Ja'
       and p.attributes ->> 'hoofdgroep_omschrijving' in ('Colberts','Broeken','Gilets')
       and coalesce(p.attributes ->> 'artikel_id', '') <> ''
+      -- Dameskleding staat óók als hoofdgroep "Colberts" in de data, waardoor er een
+      -- damesblazer in de herenpak-samensteller stond. Niet op 'Heren' filteren:
+      -- bij een deel van de heren-artikelen is 'geslacht' leeg.
+      and coalesce(p.attributes ->> 'geslacht', '') <> 'Dames'
   `);
 
   const groups = new Map<string, RawPiece[]>();
@@ -95,6 +131,12 @@ async function fetchPieces(): Promise<Map<string, RawPiece[]>> {
       role,
       image: r.image || "",
       minPrice: Number(r.min_price ?? 0),
+      modelImage: r.model_image || "",
+      modelImage2: r.model_image2 || "",
+      lifestyleImage: r.lifestyle_image || "",
+      video: r.video || "",
+      fit: r.fit || "",
+      color: r.color || "",
     };
     if (!groups.has(code)) groups.set(code, []);
     groups.get(code)!.push(piece);
@@ -120,6 +162,11 @@ export async function listSuits(): Promise<SuitCard[]> {
       colbertHandle: colbert.handle,
       title: colbert.title.replace(/^colbert[\s-]*/i, "").trim() || colbert.title,
       image: colbert.image,
+      // Model eerst, net als op de PLP: een pak op een mens verkoopt beter dan een
+      // los colbert op wit. Valt terug op de packshot als er nog geen modelfoto is.
+      tileImage: colbert.modelImage || colbert.lifestyleImage || colbert.image,
+      fit: colbert.fit,
+      color: colbert.color,
       fromCents: colbert.minPrice + broek.minPrice,
       threePiece: Boolean(gilet),
     });
@@ -147,6 +194,8 @@ export type SuitPieceDetail = {
   handle: string;
   title: string;
   image: string;
+  /** Modelfoto/sfeerbeeld/video van dít onderdeel — voor de galerij naast de packshot. */
+  media: PieceMedia;
   /** maatLabel → { size, sku, priceCents, qty (online), known, winkelvoorraad } */
   sizes: {
     sizeLabel: string;
@@ -231,6 +280,12 @@ export async function getSuitByColbertHandle(handle: string): Promise<SuitDetail
     handle: p.handle,
     title: p.title,
     image: p.image,
+    media: {
+      modelImage: p.modelImage,
+      modelImage2: p.modelImage2,
+      lifestyleImage: p.lifestyleImage,
+      video: p.video,
+    },
     sizes: sortSizes(byProduct.get(p.id) || []),
   }));
 
