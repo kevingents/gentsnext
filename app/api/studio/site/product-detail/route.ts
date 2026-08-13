@@ -7,6 +7,15 @@ import { getSeoOverride } from "@/lib/seo-overrides";
 import { getRecommendations } from "@/lib/catalog";
 import { getSuitPieceHandles } from "@/lib/suit-pairing";
 import { getReviewSummary } from "@/lib/reviews-db";
+import {
+  compleetheidChecksSql,
+  compleetheidScoreSql,
+  leesLogboek,
+  veldLabel,
+  PIM_CHECKS,
+  PIM_VELDEN,
+  PIM_LAGEN,
+} from "@/lib/pim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -113,6 +122,8 @@ export async function GET(req: Request) {
       verkoop,
       retour,
       voorraad,
+      compleetheid,
+      logboek,
     ] = await Promise.all([
       db.execute<{ url: string; alt: string; position: number; source: string; is_packshot: boolean }>(sql`
         select url, alt, position, source, is_packshot
@@ -186,6 +197,14 @@ export async function GET(req: Request) {
         where s.gen = (select active_gen from srs_stock_meta where id = 'latest')
           and s.sku in (select sku from product_variants where product_id = ${prod.id} and sku <> '')
         order by s.store, s.sku`),
+
+      /* Compleetheid: dezelfde expressie als de lijst en het kwaliteitsoverzicht
+         (lib/pim.ts). Eén definitie — anders zegt dit scherm 85 en de lijst 78. */
+      db.execute<{ score: number; checks: Record<string, boolean> }>(sql`
+        select ${compleetheidScoreSql()} score, ${compleetheidChecksSql()} checks
+        from products p where p.id = ${prod.id}`),
+
+      leesLogboek(handle, 50),
     ]);
 
     const g = Object.fromEntries(gedrag.rows.map((r) => [r.type, r]));
@@ -239,15 +258,44 @@ export async function GET(req: Request) {
         seoOverride: { title: seo?.title || "", description: seo?.description || "" },
       },
       /* Metavelden als lijst i.p.v. los object: het scherm wil ze sorteren en
-         per veld tonen of een SRS-import eraf blijft. */
+         per veld tonen of een SRS-import eraf blijft. De slot-sleutel van een
+         metaveld is 'attr:<naam>' (zie lib/pim.ts); de kale naam wordt ook nog
+         geaccepteerd voor als er ooit met de hand iets in de kolom gezet is. */
       metavelden: Object.entries(attrs)
         .filter(([k]) => !k.startsWith("_"))
         .map(([sleutel, waarde]) => ({
           sleutel,
           waarde: typeof waarde === "object" ? JSON.stringify(waarde) : String(waarde ?? ""),
-          handmatig: handmatig.has(sleutel),
+          handmatig: handmatig.has(`attr:${sleutel}`) || handmatig.has(sleutel),
         }))
         .sort((a, b) => a.sleutel.localeCompare(b.sleutel)),
+
+      /* Het PIM-blok: wat mag je bewerken, wat is er vastgezet, hoe compleet is
+         het, en wie heeft wat gedaan. */
+      pim: {
+        score: Number(compleetheid.rows[0]?.score) || 0,
+        checks: PIM_CHECKS.map((c) => ({
+          sleutel: c.sleutel,
+          label: c.label,
+          gewicht: c.gewicht,
+          uitleg: c.uitleg,
+          ok: !!compleetheid.rows[0]?.checks?.[c.sleutel],
+        })),
+        velden: PIM_VELDEN.map((veld) => ({
+          sleutel: veld.sleutel,
+          label: veld.label,
+          type: veld.type,
+          opties: veld.opties ?? null,
+          maxLengte: veld.maxLengte,
+          uitleg: veld.uitleg,
+          bulk: veld.bulk,
+          waarde: String((prod as unknown as Record<string, unknown>)[veld.kolom] ?? ""),
+          vergrendeld: handmatig.has(veld.sleutel),
+        })),
+        lagen: PIM_LAGEN.map((l) => ({ ...l })),
+        handmatig: [...handmatig],
+      },
+      logboek: logboek.map((r) => ({ ...r, veldLabel: veldLabel(r.veld) })),
       beelden: {
         catalogus: beelden.rows.map((r) => ({
           url: r.url,

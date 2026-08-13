@@ -2382,3 +2382,37 @@ export const orderLogboek = pgTable(
     index("order_logboek_tijd_idx").on(t.createdAt),
   ]
 );
+
+/**
+ * Logboek van handmatige productwijzigingen uit het PIM (Site → Producten).
+ *
+ * Eén regel per gewijzigd VELD, niet per opslag-actie: de vraag achteraf is
+ * altijd "wie heeft dít veld veranderd", en een regel per formulier-post dwingt
+ * je dan om jsonb te doorzoeken.
+ *
+ * Alleen invoegen, nooit bijwerken — audit-spoor. INTERN: `actor` is een
+ * medewerkersnaam en is nooit klantzichtbaar.
+ */
+export const productWijzigingen = pgTable(
+  "product_wijzigingen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Handle is leidend voor het lezen; het id koppelt aan het product zelf. */
+    productId: uuid("product_id"),
+    handle: text("handle").notNull(),
+    /** Kolomnaam ('title'), metaveld ('attr:pasvorm') of laag ('override:descriptionHtml'). Zie lib/pim.ts. */
+    veld: text("veld").notNull(),
+    /** 'bewerkt' | 'vergrendeld' | 'ontgrendeld' | 'bulk' */
+    actie: text("actie").notNull().default("bewerkt"),
+    /** Afgekapt op 2000 tekens — een omschrijving van 8kB tweemaal bewaren maakt dit groter dan de catalogus. */
+    oudeWaarde: text("oude_waarde").notNull().default(""),
+    nieuweWaarde: text("nieuwe_waarde").notNull().default(""),
+    /** Portal-gebruiker (naam of e-mail); leeg = via de API/token. */
+    actor: text("actor").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("product_wijzigingen_handle_idx").on(t.handle, t.createdAt),
+    index("product_wijzigingen_tijd_idx").on(t.createdAt),
+  ]
+);
