@@ -28,3 +28,15 @@ export const CLUB_PATH = "/club";
  * bestaande pas van een klant losknippen.
  */
 export const CLUB_PASS_NAME = "GENTS Clubpas";
+
+/**
+ * Het clubmerkteken. Twee kleuren, verder identiek: transparante achtergrond,
+ * 1200x389. Zwart voor de canvas-achtergrond, wit voor alles wat op ink staat
+ * (de zwarte wallet-pas, donkere blokken). Kies op ondergrond, niet op thema.
+ *
+ * Verhouding staat er expliciet bij zodat <Image> niet hoeft te gokken en de
+ * pagina niet verspringt terwijl het beeld laadt.
+ */
+export const CLUB_LOGO_DARK = "/brand/club-of-gents-zwart.png";
+export const CLUB_LOGO_LIGHT = "/brand/club-of-gents-wit.png";
+export const CLUB_LOGO_SIZE = { width: 1200, height: 389 } as const;

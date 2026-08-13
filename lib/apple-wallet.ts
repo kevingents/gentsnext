@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
 import { b64Pem, walletConfigured, walletWebServiceUrl, passAuthToken } from "@/lib/apple-wallet-config";
-import { CLUB_NAME, CLUB_PASS_NAME } from "@/lib/club";
+import { CLUB_LOGO_LIGHT, CLUB_NAME, CLUB_PASS_NAME } from "@/lib/club";
 
 // Her-export zodat bestaande imports `from "@/lib/apple-wallet"` blijven werken.
 export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
@@ -33,8 +33,10 @@ function passImages() {
   imgCache = {
     // Zwarte pas → WITTE merk-assets (Kevin, 21 juli: "zoals onze zwarte pas,
     // wit logo"). Wit vierkant icoon (notificaties/lockscreen) + witte wordmark.
+    // De wordmark is die van het programma: dit ÍS de clubpas. Het icoon blijft
+    // het GENTS-merk — daar is geen ruimte voor twee regels tekst.
     icon: readFileSync(join(root, "public/brand/wallet-icon-wit.png")),
-    logo: readFileSync(join(root, "public/brand/brand-logo-wit.png")),
+    logo: readFileSync(join(root, CLUB_LOGO_LIGHT.replace(/^\//, "public/"))),
   };
   return imgCache;
 }

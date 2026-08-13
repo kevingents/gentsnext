@@ -5,9 +5,11 @@ const nextConfig = {
   // in de serverless functie (public/ wordt anders niet in de lambda opgenomen).
   outputFileTracingIncludes: {
     // Zwarte pas → witte merk-assets meebundelen (public/ zit anders niet in de lambda).
-    '/api/wallet/apple': ['./public/brand/wallet-icon-wit.png', './public/brand/brand-logo-wit.png'],
+    // Het clubmerkteken is de wordmark op de pas; het vierkante GENTS-icoon blijft
+    // het icoon (notificaties/lockscreen).
+    '/api/wallet/apple': ['./public/brand/wallet-icon-wit.png', './public/brand/club-of-gents-wit.png'],
     // De PassKit-webservice bouwt de pas óók (verse ophaal na een push).
-    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/wallet-icon-wit.png', './public/brand/brand-logo-wit.png'],
+    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/wallet-icon-wit.png', './public/brand/club-of-gents-wit.png'],
   },
   images: {
     // Modern AVIF eerst (kleiner, betere kwaliteit), WebP als fallback.
