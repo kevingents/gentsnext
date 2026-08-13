@@ -27,10 +27,10 @@ type Props = {
   /** Actieve sortering — de sticky pil belooft "Filter & sorteer", dus de mobiele
       drawer moet óók een sorteer-keuze bevatten. */
   sort?: ProductSort;
-  /** Winkels met een vinkje: die van de klant + wat er in de URL staat. */
+  /** Winkels van de klant (+ wat er in de URL staat) — hier alleen nog om te
+   *  weten óf er al een winkel gekozen is; het filteren zelf staat als pil bij
+   *  de resultaten. */
   storeOptions?: PlpStoreOption[];
-  /** Winkelnamen van de klant — de kiezer werkt op naam. */
-  myStoreTitles?: string[];
   /**
    * A/B: vaste zijkolom (standaard) of een knop met lade bovenaan, ook op
    * desktop. Mobiel verandert er niets — daar was het altijd al een lade.
@@ -58,7 +58,7 @@ function trackFilter(facet: string, value: string, on: boolean) {
   track("filter", { props: { facet, value, on } });
 }
 
-export function PlpFilters({ facets, selection, total, mySize, sort, storeOptions = [], myStoreTitles = [], positie = "zijkant" }: Props) {
+export function PlpFilters({ facets, selection, total, mySize, sort, storeOptions = [], positie = "zijkant" }: Props) {
   /* "boven" laat de vaste zijkolom vallen en geeft ook desktop de knop-plus-lade
      die mobiel al had. Dat is de klassieke merchandising-afweging: filters altijd
      in beeld (meer verfijnen) versus een breder productraster (meer producten per
@@ -120,13 +120,6 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
 
-  /** Winkel aan/uit in het filter. De winkelkeuze zelf blijft staan. */
-  function toggleStoreFilter(handle: string) {
-    const aan = !selection.stores.includes(handle);
-    trackFilter("winkel", handle, aan);
-    apply({ stores: toggle(selection.stores, handle) });
-  }
-
   const maxEuro = Math.ceil(facets.priceMaxCents / 100);
   const activeCount =
     selection.types.length +
@@ -147,49 +140,19 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
           maatfilter eronder. Het staat nu als chip bij de resultaten
           (components/plp/active-chips): aan = gevuld met een kruisje, uit = een
           omlijnd aanbod. Zie PlpActiveChips voor de afweging. */}
-      {/* Winkelvoorraad — "ligt dit in mijn winkel?" is een andere vraag dan
-          "is het leverbaar". De winkels hier zijn dezelfde "mijn winkels" die op
-          de productpagina per maat melden of 'ie er ligt; meerdere aanvinken =
-          op voorraad in ten mínste één ervan. */}
-      <div className="mb-4 border border-line p-3">
-        <p className="label-brand">{t("plp.filters.storeStock")}</p>
-        {storeOptions.length ? (
-          <>
-            <div className="mt-2 space-y-1.5">
-              {storeOptions.map((s) => (
-                <label key={s.pageHandle} className="flex min-h-11 cursor-pointer items-center gap-2 font-sans text-sm lg:min-h-0">
-                  <input
-                    type="checkbox"
-                    checked={selection.stores.includes(s.pageHandle)}
-                    onChange={() => toggleStoreFilter(s.pageHandle)}
-                    className="h-4 w-4 accent-ink"
-                  />
-                  <span className="flex-1">{s.city}</span>
-                  {typeof s.count === "number" ? <span className="text-muted">{s.count}</span> : null}
-                </label>
-              ))}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <StoreChooser myStores={myStoreTitles} variant="link" bron="plp" />
-              {selection.stores.length ? (
-                <button
-                  type="button"
-                  onClick={() => apply({ stores: [] })}
-                  className="font-sans text-xs text-ink underline underline-offset-4"
-                >
-                  {t("plp.filters.storeAll")}
-                </button>
-              ) : null}
-            </div>
-            {selection.stores.length ? (
-              <p className="mt-1.5 font-sans text-xs text-muted">{t("plp.filters.storeDisclaimer")}</p>
-            ) : null}
-          </>
-        ) : (
-          /* Nog geen winkel gekozen: hier hoort de uitnodiging, geen lege lijst. */
+      {/* Winkelvoorraad — "ligt dit in mijn winkel?" is een andere vraag dan "is
+          het leverbaar". Het stond hier als aanvinklijst in een kadertje; het
+          staat nu als pil bij de resultaten, naast "Alleen mijn maat"
+          (components/plp/active-chips). Dezelfde soort keuze hoort er hetzelfde
+          uit te zien, en daar zie je meteen wat 'ie oplevert.
+          Wat hier blijft: de uitnodiging voor wie nog géén winkel koos — dan valt
+          er bij de resultaten niets aan te bieden en zou de keuze nergens staan. */}
+      {storeOptions.length === 0 ? (
+        <div className="mb-4 border border-line p-3">
+          <p className="label-brand">{t("plp.filters.storeStock")}</p>
           <StoreChooser variant="card" bron="plp" />
-        )}
-      </div>
+        </div>
+      ) : null}
 
       {/* Maat staat bewust bovenaan en open: is het er niet in jouw maat, dan
           doet de rest er niet toe. Binnen de groep staan de maten per
