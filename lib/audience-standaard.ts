@@ -41,6 +41,20 @@ export const STANDAARD_DOELGROEPEN: (AudienceInvoer & { doel: "bereiken" | "uits
     definitie: en({ veld: "segment", operator: "is_een_van", waarde: ["risico"] }),
   },
   {
+    slug: "nooit-welkomstpunten-gehad",
+    naam: "Nooit welkomstpunten gehad",
+    doel: "bereiken",
+    omschrijving:
+      "Klanten van vóór de welkomstbonus. Met terugwerkende kracht uitbetalen kost ± € 120.000 en levert niets terug — " +
+      "een klant die stil 50 punten krijgt doet er niets voor en merkt het meestal niet eens. Actie: geef ze in plaats " +
+      "daarvan een REDEN om iets te doen dat wél helpt (maten opgeven, profiel afmaken) en laat ze de punten verdienen. " +
+      "Dezelfde punten, wel een tegenprestatie, en het drukt het retourpercentage.",
+    definitie: en(
+      { veld: "welkomstbonus", operator: "nee" },
+      { veld: "marketing_opt_in", operator: "ja" }
+    ),
+  },
+  {
     slug: "kopers-zonder-maatprofiel",
     naam: "Kocht al, maar gaf z'n maat nooit door",
     doel: "bereiken",
