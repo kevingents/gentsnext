@@ -197,7 +197,10 @@ export async function GET(req: Request) {
 
     const venster = oordeelKlaar({
       dagenGelopen,
-      minDagen: exp?.minLooptijdDagen ?? 7,
+      // Zonder startstempel (experiment van vóór het meetvenster) weten we niet
+      // hoe lang hij liep. Dan geen looptijd-eis stellen — anders zou zo'n
+      // experiment nooit meer een uitslag krijgen, terwijl hij al weken draait.
+      minDagen: start ? exp?.minLooptijdDagen ?? 7 : 0,
       kleinsteVariant,
       doelPerVariant,
     });
