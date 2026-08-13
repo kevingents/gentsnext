@@ -2,11 +2,13 @@ import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, returns, returnLines, giftcards } from "@/db/schema";
+import { releaseVoucher } from "@/lib/vouchers";
 import { getSettings } from "@/lib/settings";
 import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
 import { refundMolliePayment } from "@/lib/mollie";
 import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
 import { sendReturnRegistered, sendReturnRefunded } from "@/lib/email";
+import { canonicalReturnReason, REASON_NOTE_SEP } from "@/lib/retour-redenen";
 
 /**
  * Retouren — klant start vanuit z'n bestelling. Methode: DHL-retourlabel of in de
@@ -242,6 +244,11 @@ export type CreateReturnInput = {
   method: ReturnMethod;
   refundType: RefundType;
   pickupStore?: string;
+  /** Code uit RETURN_REASONS — verplicht voor nieuwe aanroepers. */
+  reasonCode?: string;
+  /** Vrije toelichting bij die code (verplicht bij `beschadigd` en `anders`). */
+  reasonNote?: string;
+  /** Legacy: kant-en-klare reden-regel. Alleen nog als er geen code meekomt. */
   reason?: string;
 };
 
@@ -272,6 +279,14 @@ export async function createReturn(input: CreateReturnInput): Promise<
   }
   if (!picked.length) return { ok: false, error: "Selecteer minimaal één artikel om te retourneren." };
 
+  // Reden is verplicht en de server is de baas: het formulier kan de keuze
+  // afdwingen, maar wie de API rechtstreeks aanroept komt er anders alsnog
+  // langs — en dan staat de retour zonder reden in de statistieken.
+  const reason = input.reasonCode
+    ? canonicalReturnReason(input.reasonCode, input.reasonNote || "")
+    : (input.reason || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (!reason) return { ok: false, error: "Kies een reden voor je retour — bij 'beschadigd of verkeerd geleverd' en 'andere reden' ook een korte toelichting." };
+
   const method: ReturnMethod = input.method === "store" ? "store" : "dhl";
   const refundType: RefundType = input.refundType === "credit" ? "credit" : "money";
 
@@ -301,7 +316,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
       method,
       refundType,
       pickupStore: method === "store" ? (input.pickupStore || "").trim() : "",
-      reason: (input.reason || "").trim().slice(0, 500),
+      reason: reason.slice(0, 500),
       itemsCents,
       shippingCostCents,
     })
@@ -317,7 +332,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
       color: p.line.color,
       qty: p.qty,
       unitPriceCents: p.line.unitPriceCents,
-      reason: (input.reason || "").trim().slice(0, 200),
+      reason: reason.slice(0, 200),
     })),
   );
 
@@ -465,6 +480,7 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
       firstName: orders.firstName,
       subtotalCents: orders.subtotalCents,
       discountCents: orders.discountCents,
+      voucherCode: orders.voucherCode,
       giftcardCents: orders.giftcardCents,
       shippingCents: orders.shippingCents,
       totalCents: orders.totalCents,
@@ -475,6 +491,63 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
 
   // Bij een mislukte verwerking terug naar 'received' zodat het opnieuw kan.
   const unclaim = () => db.update(returns).set({ status: "received", updatedAt: sql`now()` }).where(eq(returns.id, ret.id));
+
+  /**
+   * Tegoedbon terug bij een retour. Zonder dit was een ingezette code definitief
+   * weg: de refund is PRO-RATA (itemsCents = brutowaarde minus het evenredige deel
+   * van de kortingscode), dus de klant krijgt alleen terug wat 'ie betaald heeft.
+   * Van een tegoedbon van EUR 25 op een order van EUR 100 bleef bij volledige
+   * retour EUR 75 over en verdampte de EUR 25.
+   *
+   * Het aandeel van DEZE retour = brutowaarde van de teruggestuurde regels minus
+   * het al pro-rata gekorte itemsCents. discountCents komt in deze rail uitsluitend
+   * uit de kortingscode (createOrder zet 'm alleen daar), dus dat verschil IS de
+   * code-waarde en niets anders.
+   *
+   * Gaat de hele order terug én is dit de eerste retour erop, dan zetten we de
+   * ORIGINELE code weer op actief — dat is wat de klant verwacht, en er ontstaat
+   * geen nieuwe waarde. In elk ander geval kan dat niet (je kunt een code niet half
+   * activeren) en geven we het onbenutte deel als tegoedbon terug. De
+   * eerste-retour-eis voorkomt dat een deelretour eerst tegoed krijgt en de
+   * afsluitende retour daarna ook nog de volle code terugzet.
+   */
+  async function tegoedbonTerug(): Promise<void> {
+    const code = (order?.voucherCode || "").trim();
+    if (!code) return;
+
+    const [bruto] = await db
+      .select({ cents: sql<number>`coalesce(sum(${returnLines.qty} * ${returnLines.unitPriceCents}), 0)::int` })
+      .from(returnLines)
+      .where(eq(returnLines.returnId, ret.id));
+    const aandeel = Math.max(0, (Number(bruto?.cents) || 0) - ret.itemsCents);
+    if (aandeel <= 0) return;
+
+    const [besteld] = await db
+      .select({ stuks: sql<number>`coalesce(sum(${orderLines.quantity}), 0)::int` })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, ret.orderId));
+    // Alle retouren op deze order behalve geannuleerde — inclusief deze.
+    const [retour] = await db.execute<{ stuks: number; retouren: number }>(sql`
+      select coalesce(sum(rl.qty), 0)::int as stuks, count(distinct r.id)::int as retouren
+      from returns r join return_lines rl on rl.return_id = r.id
+      where r.order_id = ${ret.orderId} and r.status <> 'cancelled'`).then((x) => x.rows);
+
+    const allesTerug = (Number(besteld?.stuks) || 0) > 0 && Number(retour?.stuks) >= Number(besteld?.stuks);
+    const eersteRetour = Number(retour?.retouren) <= 1;
+
+    if (allesTerug && eersteRetour) {
+      await releaseVoucher(code);
+      console.info(`[returns] tegoedbon ${code} weer actief na volledige retour ${ret.orderNumber}`);
+      return;
+    }
+    const nieuw = await issueStoreCredit(
+      aandeel,
+      ret.email,
+      order?.customerId ?? null,
+      `Onbenut deel van code ${code} (retour ${ret.orderNumber})`,
+    );
+    console.info(`[returns] onbenut deel van ${code} (${aandeel} cent) teruggegeven als ${nieuw} bij retour ${ret.orderNumber}`);
+  }
 
   async function mailRefunded(refundType: RefundType, amountCents: number, code: string) {
     try {
@@ -491,6 +564,7 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
       try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
       catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
     }
+    try { await tegoedbonTerug(); } catch (e) { console.error("[returns] tegoedbon teruggeven mislukt:", (e as Error).message); }
     await mailRefunded("credit", ret.itemsCents, code);
     return { ok: true, status: "completed", refundedCents: ret.itemsCents, creditCode: code };
   }
@@ -530,6 +604,7 @@ export async function processReturnReceived(returnId: string): Promise<{ ok: boo
     try { await reverseOrderLoyalty(order.customerId, ret.orderId, ret.itemsCents, ret.id); }
     catch (e) { console.warn("[returns] punten terugdraaien mislukt:", (e as Error).message); }
   }
+  try { await tegoedbonTerug(); } catch (e) { console.error("[returns] tegoedbon teruggeven mislukt:", (e as Error).message); }
   await mailRefunded("money", cashRefund, creditCode);
   return { ok: true, status: "completed", refundedCents, creditCode };
 }
@@ -676,8 +751,13 @@ export async function getReturnStats(days = 90): Promise<ReturnStats> {
 
   const byStatus = (await db.execute<{ status: string; n: number }>(sql`
     select status, count(*)::int n from returns where created_at >= ${since} group by status order by n desc`)).rows;
+  // Groeperen op het VASTE deel van de reden: alles ná het scheidingsteken is de
+  // vrije toelichting van de klant, en die maakt van elke retour weer z'n eigen
+  // balkje. Oude retouren (vrij tekstveld, geen scheidingsteken) blijven gewoon
+  // heel — split_part geeft dan de hele regel terug.
   const topReasons = (await db.execute<{ reason: string; n: number }>(sql`
-    select reason, count(*)::int n from returns where created_at >= ${since} and status<>'cancelled' and reason <> '' group by reason order by n desc limit 6`)).rows;
+    select split_part(reason, ${REASON_NOTE_SEP}, 1) reason, count(*)::int n from returns
+    where created_at >= ${since} and status<>'cancelled' and reason <> '' group by 1 order by n desc limit 6`)).rows;
   const topProducts = (await db.execute<{ title: string; qty: number }>(sql`
     select rl.title, sum(rl.qty)::int qty from return_lines rl join returns r on r.id = rl.return_id
     where r.created_at >= ${since} and r.status <> 'cancelled' group by rl.title order by qty desc limit 6`)).rows;

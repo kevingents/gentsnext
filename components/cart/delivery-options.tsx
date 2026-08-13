@@ -23,14 +23,19 @@ export function DeliveryOptions({
   items,
   value,
   onChange,
+  country = "NL",
 }: {
   items: Item[];
   value: "standard" | "express";
   onChange: (method: "standard" | "express", surchargeCents: number) => void;
+  /** Bezorgland: bepaalt hoeveel werkdagen er onderweg bijkomen. */
+  country?: string;
 }) {
   const t = useT();
   const [est, setEst] = useState<Estimate | null>(null);
-  const key = items.map((i) => `${i.sku}:${i.qty}`).join(",");
+  // Het land hoort in de sleutel: bij een landwissel moet de datum opnieuw
+  // opgehaald worden, anders blijft de Nederlandse belofte staan.
+  const key = items.map((i) => `${i.sku}:${i.qty}`).join(",") + `|${country}`;
   // Verse waarde in de fetch-callback: de closure hing aan het mount-moment,
   // waardoor een laat antwoord een inmiddels gekozen "express" stil terugzette.
   const valueRef = useRef(value);
@@ -44,7 +49,7 @@ export function DeliveryOptions({
     fetch("/api/delivery-estimate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items, country }),
     })
       .then((r) => r.json())
       .then((d) => {

@@ -68,7 +68,8 @@ export function ProductCard({
           props: { ...(position ? { position } : {}), ...(listId ? { listId } : {}), ...(sort ? { sort } : {}) },
         })
       }
-      className="group relative flex flex-col gap-3"
+      // Geen grijs browser-tapblok over de tegel; wel eigen feedback bij indrukken.
+      className="group relative flex flex-col gap-3 transition-opacity duration-150 ease-brand active:opacity-70 [-webkit-tap-highlight-color:transparent]"
     >
       {!badges ? null : product.hasSale ? (
         <ProductCardBadge label={t("plp.badge.sale")} tone="sale" />
@@ -89,7 +90,11 @@ export function ProductCard({
             // Boven-de-vouw kaarten (eerste rij) niet lazy-loaden → sneller LCP op de PLP.
             priority={priority}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${voorgrondContain ? "object-contain" : "object-cover"} ${achtergrond ? "group-hover:opacity-0" : ""}`}
+            // Hover-effecten alleen op hover-capable devices. Op touch zet de browser
+            // :hover bij een tap (en op iOS blijft die plakken); zonder deze gate
+            // fade't de packshot weg terwijl het hoverbeeld display:none is — dan
+            // kijk je tegen de kale tegelachtergrond aan (het "grijze vlak").
+            className={`transition duration-500 ease-brand [@media(hover:hover)]:group-hover:scale-[1.04] ${voorgrondContain ? "object-contain" : "object-cover"} ${achtergrond ? "[@media(hover:hover)]:group-hover:opacity-0" : ""}`}
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">

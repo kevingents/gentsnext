@@ -22,6 +22,13 @@
  * de dataLayer mag als de bezoeker marketing-cookies heeft geaccepteerd, omdat
  * het bedoeld is voor advertentieplatforms. Naar onze eigen Neon-tabel gaat het
  * al bij analytics-toestemming — dat is de eerste partij en een ander doel.
+ *
+ * WAT HIER BEWUST NIET IN STAAT: de klik-heatmap (lib/heatmap-client →
+ * /api/heatmap → heatmap_klikken). Die telt tientallen kliks per
+ * paginaweergave; door de wachtrij van deze catalogus geduwd zou hij de
+ * funnel-events verdringen. Eigen rail, eigen tabel, eigen bewaartermijn —
+ * maar dit staat hier zodat niemand hoeft te zoeken waar die kliks gebleven
+ * zijn.
  */
 
 export type EventGroep =
@@ -116,6 +123,11 @@ export const EVENT_CATALOG: EventDef[] = [
   { naam: "afspraak_geboekt",ga4: "generate_lead",   marketing: true,    groep: "service", uitleg: "Afspraak geboekt (type + winkel). Server-side bevestigd." },
   { naam: "retour_gestart",                          groep: "service",   uitleg: "Retourportaal geopend." },
   { naam: "retour_aangemeld",                        groep: "service",   uitleg: "Retour daadwerkelijk aangemeld." },
+  // De vermaak-hint bij een pasvorm-reden. Alleen de KANS en de KLIK: of er
+  // daarna echt vermaakt is staat in de kassa (VERMAAK-sku's), en dat overtypen
+  // naar events zou een tweede telling maken die ermee kan gaan verschillen.
+  { naam: "retour_vermaak_getoond",                  groep: "service",   uitleg: "Vermaak-hint getoond in de retourflow (de kans), handle = de retourreden." },
+  { naam: "retour_vermaak_klik",                     groep: "service",   uitleg: "Doorklik van die hint naar een pasafspraak — houdt vermaken een retour tegen?" },
   { naam: "ticket_gesteld",                          groep: "service",   uitleg: "Klantvraag gesteld via de site." },
   { naam: "nieuwsbrief",     ga4: "generate_lead",   marketing: true,    groep: "service", uitleg: "Nieuwsbriefinschrijving bevestigd." },
   { naam: "whatsapp_optin",  ga4: "generate_lead",   marketing: true,    groep: "service", uitleg: "WhatsApp-opt-in." },
@@ -175,7 +187,7 @@ export const NOG_NIET_AANGESLOTEN: ReadonlySet<string> = new Set([
   // Account
   "login", "sign_up", "magic_link", "profiel_afgerond", "maatprofiel_opgeslagen",
   // Service
-  "afspraak_start", "retour_gestart", "retour_aangemeld", "ticket_gesteld",
+  "afspraak_start", "retour_gestart", "ticket_gesteld",
   "whatsapp_optin", "hulp_geopend",
   // Loyalty
   "punten_ingewisseld", "giftcard_gekocht", "wallet_toegevoegd", "bon_geclaimd",

@@ -315,7 +315,7 @@ export async function createOrder(
 
   // Onbekend land zou stil het NL-tarief krijgen — liever weigeren dan een
   // order aannemen die we niet tegen het juiste tarief kunnen verzenden.
-  if (deliveryMethod !== "pickup" && contact.country && !isKnownCountry(contact.country)) {
+  if (deliveryMethod !== "pickup" && contact.country && !isKnownCountry(contact.country, settings.shippingZones)) {
     throw new CheckoutError("We bezorgen (nog) niet in dit land. Kies een ander land of haal je bestelling op in de winkel.");
   }
 
@@ -358,10 +358,12 @@ export async function createOrder(
   // instelbare settings lopen zodat één knop de baas is over het thuisland.
   const baseShipping = isPickup
     ? 0
-    : shippingCentsFor(contact.country || DEFAULT_COUNTRY, subtotalCents, {
-        rateCents: settings.shippingCents,
-        freeFromCents: settings.freeShippingCents,
-      });
+    : shippingCentsFor(
+        contact.country || DEFAULT_COUNTRY,
+        subtotalCents,
+        { rateCents: settings.shippingCents, freeFromCents: settings.freeShippingCents },
+        settings.shippingZones,
+      );
   const surcharge = method === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
   const totalBeforeGiftcard = Math.max(0, subtotalCents - discountCents) + shippingCents;

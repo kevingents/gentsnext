@@ -3,6 +3,8 @@ import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { DEFAULT_SYNONYMS } from "@/lib/search-helpers";
 import { DEFAULT_PAYMENT_TOP, type PaymentTopConfig } from "@/lib/payment-methods";
+import type { ShippingZoneOverrides } from "@/lib/shipping-zones";
+import type { PuntenActie } from "@/lib/punten-acties";
 
 /**
  * Centrale, in de backend instelbare configuratie. Eén bron van waarheid
@@ -203,7 +205,20 @@ export type Settings = {
       /** Profiel compleet: leeftijd, kleuren, vaste winkel, gelegenheden. */
       profileComplete: number;
     };
+    /**
+     * Hoeveel punten een medewerker in één keer met de hand mag toekennen
+     * (coulance na een klacht). Een dak, geen doel: wie meer wil geven moet
+     * het twee keer doen, en dat staat dan ook twee keer in het logboek.
+     */
+    serviceMaxPerActie: number;
   };
+  /**
+   * Eigen puntenacties: "koop dit, krijg extra punten". Regels als data
+   * (lib/punten-acties), in de portal te maken zonder release. Ze geven PUNTEN
+   * en geen korting — punten kosten pas geld bij het inwisselen, en dan alleen
+   * vanaf de drempel; een korting kost meteen marge.
+   */
+  puntenActies: PuntenActie[];
   /**
    * Terug-op-voorraad-meldingen: aan/uit + welke kanalen (mail/WhatsApp) mogen
    * versturen, en of + na hoeveel dagen een klant een ALTERNATIEF-op-maat krijgt
@@ -263,6 +278,31 @@ export type Settings = {
    * via de experimenten-rail (lib/experiments, override `betaalmethoden`).
    */
   paymentTop: PaymentTopConfig;
+  /**
+   * Bezorglanden: per landcode aan/uit, tarief, gratis-vanaf en hoeveel
+   * werkdagen er bovenop de binnenlandse transittijd komen. Leeg = de tabel
+   * in lib/shipping-zones geldt. Voor NEDERLAND blijven `shippingCents` en
+   * `freeShippingCents` hierboven de baas over het tarief — anders zijn er
+   * twee knoppen voor hetzelfde land.
+   */
+  shippingZones: ShippingZoneOverrides;
+  /**
+   * Klik- en scroll-heatmap (lib/heatmap).
+   *
+   * `aan` staat aan de SERVERKANT: uitzetten gooit binnenkomend materiaal weg
+   * in plaats van de meting in de browser te stoppen. Dat is met opzet — een
+   * knop die pas werkt nadat iedereen zijn pagina herladen heeft, is geen knop.
+   *
+   * `bewaardagen` geldt alleen voor het RUWE materiaal (heatmap_klikken,
+   * heatmap_scroll). De dagtotalen blijven staan: die bevatten geen sessie-id
+   * en zijn niet meer tot een bezoek te herleiden.
+   *
+   * `steekproefPct` = welk deel van de sessies wordt vastgelegd. De keuze valt
+   * per sessie, niet per klik: anders krijg je halve pagina's waarop de ene
+   * knop wél en de andere niet geteld is, en dan is de vergelijking tussen twee
+   * knoppen stuk. 100 = alles vastleggen.
+   */
+  heatmap: { aan: boolean; bewaardagen: number; steekproefPct: number };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -379,7 +419,9 @@ export const DEFAULT_SETTINGS: Settings = {
       favoriteStore: num(process.env.GENTS_LOYALTY_BONUS_STORE, 50),
       profileComplete: num(process.env.GENTS_LOYALTY_BONUS_PROFILE, 50),
     },
+    serviceMaxPerActie: num(process.env.GENTS_LOYALTY_SERVICE_MAX, 500),
   },
+  puntenActies: [],
   stockNotifyConfig: {
     enabled: true,
     emailEnabled: true,
@@ -400,6 +442,10 @@ export const DEFAULT_SETTINGS: Settings = {
     .map((a) => a.trim())
     .filter(Boolean),
   paymentTop: DEFAULT_PAYMENT_TOP,
+  shippingZones: {},
+  // 45 dagen ruw is ruim genoeg om twee volle maandpatronen te zien en kort
+  // genoeg om niet zonder reden bezoekgedrag te bewaren.
+  heatmap: { aan: true, bewaardagen: 45, steekproefPct: 100 },
 };
 
 let _cache: Settings | null = null;
@@ -433,6 +479,7 @@ export async function getSettings(): Promise<Settings> {
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
+      heatmap: { ...DEFAULT_SETTINGS.heatmap, ...(stored.heatmap || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
       /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
          gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */
@@ -442,6 +489,9 @@ export async function getSettings(): Promise<Settings> {
          en mag dus niet stil terugvallen op de env-default; alleen als het veld
          nooit gezet is telt die default nog. */
       alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
+      /* Vervanging, geen samenvoeging: een land dat je in de tool uitzet moet
+         uit blijven en niet via de code-default terugkomen. */
+      shippingZones: stored.shippingZones ?? DEFAULT_SETTINGS.shippingZones,
       paymentTop: {
         ...DEFAULT_SETTINGS.paymentTop,
         ...(stored.paymentTop || {}),

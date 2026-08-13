@@ -91,6 +91,7 @@ export async function redeemVoucherForRef(
     const owner = claimed[0].customerId;
     if (owner) {
       try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(owner); } catch { /* best-effort */ }
+      try { await (await import("@/lib/google-wallet-push")).pushGoogleWalletForCustomer(owner); } catch { /* best-effort */ }
     }
     return { ok: true };
   }
@@ -117,7 +118,7 @@ export async function redeemVoucherForRef(
  * bij een andere, gewoon afgeronde verkoop hoorden. Alleen wie 'm verzilverde
  * mag 'm teruggeven.
  */
-export async function releaseVoucherForRef(code: string, ref: string): Promise<{ ok: boolean; error?: string }> {
+export async function releaseVoucherForRef(code: string, ref: string): Promise<{ ok: boolean; hersteld?: boolean; error?: string }> {
   const norm = code.trim().toUpperCase();
   const bon = String(ref || "").trim();
   if (!norm || !bon) return { ok: false, error: "Code en bon-referentie vereist." };
@@ -126,15 +127,18 @@ export async function releaseVoucherForRef(code: string, ref: string): Promise<{
     .set({ status: "active", redeemedAt: null, redeemedRef: "" })
     .where(and(eq(vouchers.code, norm), eq(vouchers.status, "redeemed"), eq(vouchers.redeemedRef, bon)))
     .returning({ id: vouchers.id, customerId: vouchers.customerId });
-  // Niets geraakt = niet door deze bon verzilverd. Geen fout: een release die
-  // twee keer binnenkomt (retry) hoort geen storing te veroorzaken.
+  /* Niets geraakt = niet door deze bon verzilverd. Geen fout: een release die twee
+     keer binnenkomt (retry) hoort geen storing te veroorzaken. Maar `ok` zegt dan
+     ook niets over wat er gebeurd is - vandaar `hersteld`, zodat een aanroeper
+     (kassa-retour) niet "code staat weer klaar" logt terwijl er niets veranderde. */
   if (rows.length) {
     const owner = rows[0].customerId;
     if (owner) {
       try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(owner); } catch { /* best-effort */ }
+      try { await (await import("@/lib/google-wallet-push")).pushGoogleWalletForCustomer(owner); } catch { /* best-effort */ }
     }
   }
-  return { ok: true };
+  return { ok: true, hersteld: rows.length > 0 };
 }
 
 /** Maakt een net-verzilverde single-use code weer actief (bij een teruggedraaide order). */
