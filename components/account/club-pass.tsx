@@ -113,38 +113,65 @@ function GrootScherm({ pass, onClose }: { pass: ClubPassData; onClose: () => voi
 }
 
 /**
- * De pas als kaart: het merk en de code.
+ * De pas als kaart: code links, gegevens rechts — de vorm van een pasje, niet
+ * van een banner. Vandaar ook de breedtelimiet: over de volle kolom uitgerekt
+ * bleef er rechts een half scherm zwart over.
  *
- * Bewust ZONDER saldo. Dat staat in de kaart eronder, mét het onderscheid tussen
- * besteedbaar en in behandeling — twee getallen die niet gelijk zijn. Datzelfde
- * getal hier nog eens los neerzetten is precies hoe je een klant aan de kassa
- * krijgt die een ander saldo voorleest dan de kassier ziet.
+ * Het saldo staat hier op de pas, waar een klant het verwacht. Het getal dat
+ * hier staat is het BESTEEDBARE saldo — hetzelfde getal dat de kassier ziet.
+ * Punten in behandeling staan er als aparte regel onder en nooit opgeteld: dat
+ * verschil is precies waar anders ruzie over ontstaat aan de kassa.
  */
-export function ClubPassCard({ pass }: { pass: ClubPassData }) {
+export function ClubPassCard({
+  pass,
+  available,
+  pending = 0,
+}: {
+  pass: ClubPassData;
+  available: number;
+  pending?: number;
+}) {
   const t = useT();
   const [groot, setGroot] = useState(false);
   return (
-    <div className="bg-ink p-6 text-canvas">
+    <div className="max-w-2xl bg-ink p-5 text-canvas sm:p-6">
       <Image
         src={CLUB_LOGO_LIGHT}
         alt={CLUB_NAME}
         width={CLUB_LOGO_SIZE.width}
         height={CLUB_LOGO_SIZE.height}
-        style={{ height: "auto", width: "11rem", maxWidth: "100%" }}
+        style={{ height: "auto", width: "10rem", maxWidth: "100%" }}
       />
-      <div className="mt-6 flex flex-wrap items-center gap-6">
+      {/* Twee kolommen, ook op een telefoon — gestapeld wordt dit een lap en
+          geen pasje. Op klein scherm een krappere tussenruimte, anders houdt de
+          rechterkolom te weinig over en breekt het lidnummer over twee regels. */}
+      <div className="mt-6 flex items-start gap-4 sm:gap-6">
         {/* De code is de knop: aan de kassa tik je op wat je wilt laten zien. */}
         <button
           type="button"
           onClick={() => setGroot(true)}
           aria-label={t("account.pass.showBig")}
-          className="bg-white p-2.5"
+          className="shrink-0 bg-white p-2.5"
         >
-          <QrSvg qr={pass.qr} px={136} />
+          {/* Eén vaste maat, geen responsieve breedteklasse. Groter dan dit en
+              de rechterkolom wordt op een telefoon zo smal dat het lidnummer
+              over twee regels breekt. Dit is de tikdoel-variant; scannen doe je
+              met "Groter tonen", en dát is de maat die een scanner moet halen. */}
+          <QrSvg qr={pass.qr} px={104} />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="label-brand !text-canvas/55">{t("account.pass.member")}</p>
           <p className="mt-1 font-sans text-sm tracking-widest text-canvas">{pass.memberCode}</p>
+          <p className="label-brand mt-5 !text-canvas/55">{t("account.points.balanceTitle")}</p>
+          <p className="mt-1 font-display text-3xl font-light leading-none text-canvas">
+            {available} <span className="text-base text-canvas/60">{t("account.points.available")}</span>
+          </p>
+          {/* De KORTE variant van "in behandeling": op een pasje past geen hele
+              zin. De uitleg erbij ("beschikbaar na de retourperiode") staat in
+              de kaart eronder, waar wel ruimte is. */}
+          {pending > 0 && (
+            <p className="mt-1.5 font-sans text-xs text-canvas/60">{t("account.overview.pointsPending", { n: pending })}</p>
+          )}
         </div>
       </div>
       <p className="mt-5 font-sans text-sm leading-relaxed text-canvas/70">{t("account.pass.scanHint")}</p>

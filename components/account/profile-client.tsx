@@ -680,19 +680,22 @@ function Punten({ data, pass, walletEnabled, googleWalletEnabled, bonuses, redee
   return (
     <div className="space-y-6">
       {/* De pas staat bovenaan, niet onderaan: dit is het enige op deze pagina
-          dat je stáánd aan een kassa nodig hebt. Het merkteken zit erop, dus de
-          saldokaart eronder heeft 'm niet nog een keer nodig. */}
-      {pass && <ClubPassCard pass={pass} />}
+          dat je stáánd aan een kassa nodig hebt. Saldo en lidnummer staan eróp,
+          dus de kaart eronder herhaalt die niet — die gaat over de weg naar je
+          volgende tegoedbon en over de uitleg. */}
+      {pass && <ClubPassCard pass={pass} available={data.pointsAvailable} pending={data.pointsPending} />}
       <div className="border border-line p-6">
-        <p className="label-brand">{t("account.points.balanceTitle")}</p>
-        <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
-        {data.pointsPending > 0 && (
-          <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
+        {!pass && (
+          <>
+            <p className="label-brand">{t("account.points.balanceTitle")}</p>
+            <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
+            {data.pointsPending > 0 && (
+              <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
+            )}
+          </>
         )}
-        <div className="mt-4">
-          <PuntenVoortgang available={data.pointsAvailable} pending={data.pointsPending} redeem={redeem} />
-        </div>
-        <p className="mt-3 font-sans text-sm text-ink-soft">
+        <PuntenVoortgang available={data.pointsAvailable} pending={data.pointsPending} redeem={redeem} />
+        <p className="mt-4 font-sans text-sm text-ink-soft">
           {t("account.points.explainer")}{" "}
           <Link href={CLUB_PATH} className="text-ink underline underline-offset-4">
             {t("account.points.clubLink")}
