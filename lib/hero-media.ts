@@ -4,11 +4,20 @@ import { list, put, del } from "@vercel/blob";
  * Hero-/bannerbeelden: de merkbeelden bovenaan de homepage en de
  * landingspagina's. Gemaakt met fal.ai (FLUX) — tekst-naar-beeld, vanaf nul.
  *
- * WAAROM NIET FASHN: FASHN is virtuele pas-techniek (een écht kledingstuk op
- * een model zetten). Het heeft geen tekst-naar-beeld en kan dus geen straat,
- * atelier of bruiloft verzinnen. FASHN blijft voor product-op-model met onze
- * eigen artikelen; banners maakt fal.ai. Zie lib/model-photo.ts voor de andere
- * kant van die scheiding.
+ * TWEE WEGEN, en de keuze zit in de vraag "hangt er een echt artikel in beeld?":
+ *
+ *  1. `maakHeroBeeld`  — fal.ai (FLUX), tekst-naar-beeld. Puur sfeer: de kleding
+ *     is verzonnen. Voor een banner waar geen product in hoeft.
+ *  2. `maakHeroVanProduct` — FASHN product-to-model. Je geeft een ECHT artikel
+ *     mee (de packshot) én een scène-omschrijving; FASHN bouwt de scène eromheen
+ *     met dat artikel aan. Dit is de betere weg zodra de banner over een product
+ *     gaat: wat je ziet is dan wat we verkopen, en dat is ook de huisregel
+ *     (visuals = onze eigen producten, geen stock).
+ *
+ * FASHN heeft dus wél een prompt — alleen geen lege start: er moet een product
+ * als anker in. Zonder artikel kan het niets, met artikel kan het een straat,
+ * atelier of bruiloft. Zie lib/lifestyle.ts, dat langs dezelfde weg de
+ * sfeerbeelden per product maakt.
  *
  * Opslag: Vercel Blob onder `ai-hero/<slug>.jpg`. Dat is dezelfde plek waar
  * scripts/generate-hero-media.ts al schreef, zodat de banners die er al staan
@@ -63,6 +72,47 @@ export const HERO_THEMAS: HeroThema[] = [
 
 /** Beeldverhoudingen die het model aankan; alles daarbuiten wordt 21:9. */
 export const HERO_ASPECTS = ["21:9", "16:9", "3:2", "4:3", "1:1"] as const;
+
+/**
+ * FASHN werkt rond een model in beeld en gaat niet zo breed als FLUX: 21:9 zit
+ * er niet in. 16:9 is het breedst dat een banner met een persoon erin nog
+ * fatsoenlijk oplevert.
+ */
+export const HERO_ASPECTS_PRODUCT = ["16:9", "3:2", "4:3", "1:1", "4:5"] as const;
+
+/**
+ * Dezelfde thema's, maar dan als ALLEEN de scène — zonder de kleding erin. Bij
+ * FASHN komt de kleding uit de packshot; zou de prompt ook nog een pak
+ * beschrijven, dan gaat het model twee kanten op en verliest het artikel het.
+ */
+export const HERO_SCENES: Record<string, string> = {
+  "peaky-blinders":
+    "standing confident and brooding on a moody cobblestone industrial street at dusk, dramatic overcast light, atmospheric haze, cinematic vintage colour grade",
+  "italiaanse-zomer":
+    "leaning on a sun-bleached balustrade above a glittering Italian coastline, warm midday Mediterranean light, relaxed dolce-vita mood, vivid and bright",
+  "gala-black-tie":
+    "in a grand dimly-lit classical hall, warm chandelier glow, refined black-tie elegance, cinematic and moody",
+  dandy:
+    "against a richly coloured vintage interior with velvet and brass, warm directional light, characterful and elegant",
+  "wedding-golden-hour":
+    "laughing on the sun-drenched whitewashed steps of a Mediterranean coastal village at golden hour, the turquoise sea glittering behind him, relaxed and joyful",
+  "city-editorial":
+    "walking a sunlit historic European city street in the soft early morning, relaxed elegant stride, warm tones, candid and timeless",
+  "atelier-tailor":
+    "in a refined tailor's atelier bathed in warm window light, adjusting his cuff before a tall antique mirror, rolls of fine wool fabric softly out of focus",
+  "terrace-aperitivo":
+    "relaxing at a sunlit Italian terrace cafe, glass raised in a warm toast, colourful old-town facades behind, lively golden-hour light",
+  "business-portrait":
+    "standing calm and confident in a bright modern interior with soft daylight, understated luxury, clean refined composition",
+  "autumn-knitwear":
+    "walking a misty tree-lined lane in soft overcast light, warm earthy tones, refined countryside elegance",
+  "landing-zakelijk":
+    "in a bright modern glass-walled office boardroom, professional and approachable, soft clean daylight, plenty of space on the left for a headline",
+  "landing-students":
+    "raising a toast at an elegant candle-lit student-society gala dinner, celebratory and warm, golden ambient light, characterful and joyful",
+  "landing-etiquette":
+    "in a refined classic interior, warm soft directional light, attention on the details of the outfit, elegant and timeless",
+};
 
 export type HeroBeeld = {
   /** Bestandsnaam zonder map/extensie — ook het label als er geen thema bij past. */
@@ -206,6 +256,113 @@ export async function maakHeroBeeld(opts: {
     label: labelVoor(slug),
     url,
     thema: thema?.slug || "",
+    aspect,
+    gemaaktOp: new Date().toISOString(),
+    bytes: 0,
+  };
+}
+
+/* ── Weg 2: hero MÉT een echt artikel (FASHN product-to-model) ───────────── */
+
+const FASHN_API = "https://api.fashn.ai/v1";
+
+/**
+ * Merk- en stijlregels voor de product-weg. Kort gehouden: de scène en het
+ * artikel vullen de prompt al, en hoe langer de prompt, hoe minder gewicht het
+ * echte artikel krijgt. "must stay accurate to the reference photo" staat er
+ * bewust in — zonder die zin gaat FASHN het kledingstuk hertekenen.
+ */
+const HERO_STYLE_PRODUCT =
+  "Editorial menswear campaign photograph for an upscale men's formalwear brand, photorealistic and elegant, natural light, subtle film grain, generous negative space for a headline. A crisp collared dress shirt under the jacket — never a t-shirt. If a waistcoat is shown, its bottom button is left open. No text, no logo, no watermark anywhere in the image. The shown product must stay accurate to the reference photo.";
+
+/** Hoe je het artikel benoemt, per hoofdgroep. Spiegelt lib/model-photo.ts. */
+function draagtekstVoor(hoofdgroep: string): string {
+  switch (hoofdgroep) {
+    case "Pakken": return "wearing THIS suit with a crisp white dress shirt and brown leather shoes";
+    case "Colberts": return "wearing THIS blazer over a crisp white dress shirt, with matching trousers";
+    case "Gilets": return "wearing THIS waistcoat over a crisp white dress shirt, with matching trousers";
+    case "Broeken": return "wearing THESE trousers with a tucked crisp white shirt and leather shoes";
+    case "Overhemden": return "wearing THIS shirt, neatly styled with tailored trousers";
+    case "Truien": case "Vesten": return "wearing THIS knitwear over a shirt collar, with tailored trousers";
+    case "Polo-shirts": return "wearing THIS polo shirt, styled with tailored trousers";
+    case "Jassen": return "wearing THIS coat over neat menswear, with trousers and leather shoes";
+    case "Schoenen": return "wearing THESE shoes with a tailored suit and a crisp white shirt";
+    case "Dassen": case "Stropdassen": return "wearing THIS tie with a tailored suit and a crisp white shirt";
+    default: return "wearing THIS item, neatly styled with tailored menswear";
+  }
+}
+
+/** Start een FASHN-run en wacht op het resultaat (kan minuten duren). */
+async function fashnProductToModel(productImage: string, prompt: string, aspect: string): Promise<string | null> {
+  const key = process.env.FASHN_API_KEY || "";
+  if (!key) throw new Error("FASHN_API_KEY ontbreekt.");
+  const start = await fetch(`${FASHN_API}/run`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_name: "product-to-model",
+      inputs: { product_image: productImage, prompt, output_format: "jpeg", aspect_ratio: aspect },
+    }),
+  });
+  if (!start.ok) throw new Error(`FASHN ${start.status}: ${(await start.text()).slice(0, 200)}`);
+  const { id } = (await start.json()) as { id?: string };
+  if (!id) throw new Error("FASHN gaf geen run-id terug.");
+
+  for (let i = 0; i < 80; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const st = await fetch(`${FASHN_API}/status/${id}`, { headers: { Authorization: `Bearer ${key}` } });
+    if (!st.ok) continue;
+    const j = (await st.json()) as { status?: string; output?: string[]; error?: unknown };
+    if (j.status === "completed" && j.output?.[0]) return j.output[0];
+    if (j.status === "failed") throw new Error(`FASHN mislukt: ${String(j.error || "onbekende fout").slice(0, 160)}`);
+  }
+  throw new Error("FASHN duurde te lang.");
+}
+
+/** Shopify levert standaard een verkleinde variant; wij willen het origineel. */
+function volleResolutie(url: string): string {
+  return String(url || "").replace(/_(\d+)x(\d+)?(_crop_[a-z]+)?(?=\.[a-z]+(\?|$))/i, "");
+}
+
+export type HeroProductBron = { handle: string; titel: string; hoofdgroep: string; packshot: string };
+
+/**
+ * Maakt een banner MET een echt artikel erin. `thema` kiest de scène uit
+ * HERO_SCENES, `prompt` overschrijft die met een eigen scène-omschrijving.
+ *
+ * De aanroeper levert het product (handle + packshot + hoofdgroep) aan, zodat
+ * deze functie niets van de database hoeft te weten en ook vanuit een script
+ * bruikbaar blijft.
+ */
+export async function maakHeroVanProduct(
+  bron: HeroProductBron,
+  opts: { thema?: string; prompt?: string; aspect?: string; naam?: string } = {},
+): Promise<HeroBeeld> {
+  if (!bron.packshot) throw new Error("Dit product heeft geen productfoto om op te baseren.");
+
+  const scene = (opts.prompt || "").trim() || HERO_SCENES[opts.thema || ""] || "";
+  if (!scene) throw new Error("Geen thema of scène-omschrijving opgegeven.");
+
+  const aspect = (HERO_ASPECTS_PRODUCT as readonly string[]).includes(opts.aspect || "")
+    ? (opts.aspect as string)
+    : "16:9";
+
+  const basis =
+    slugify(opts.naam || `${opts.thema || "hero"}-${bron.handle}`) || `hero-${slugify(bron.handle)}`;
+  const bestaand = new Set((await listHeroBeelden()).map((b) => b.slug));
+  let slug = basis;
+  for (let n = 2; bestaand.has(slug) && n < 100; n++) slug = `${basis}-${n}`;
+
+  const prompt = `A man ${draagtekstVoor(bron.hoofdgroep)}, ${scene}. ${HERO_STYLE_PRODUCT}`;
+  const out = await fashnProductToModel(volleResolutie(bron.packshot), prompt, aspect);
+  if (!out) throw new Error("FASHN gaf geen beeld terug.");
+  const url = await bewaarHeroBeeld(out, slug);
+
+  return {
+    slug,
+    label: `${bron.titel} — ${HERO_THEMAS.find((h) => h.slug === opts.thema)?.label || "eigen scène"}`,
+    url,
+    thema: opts.thema || "",
     aspect,
     gemaaktOp: new Date().toISOString(),
     bytes: 0,

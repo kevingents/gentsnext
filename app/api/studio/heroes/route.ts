@@ -2,12 +2,21 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { adminOrToken } from "@/lib/studio-token";
-import { HERO_ASPECTS, HERO_THEMAS, listHeroBeelden, maakHeroBeeld, verwijderHeroBeeld } from "@/lib/hero-media";
+import {
+  HERO_ASPECTS,
+  HERO_ASPECTS_PRODUCT,
+  HERO_SCENES,
+  HERO_THEMAS,
+  listHeroBeelden,
+  maakHeroBeeld,
+  maakHeroVanProduct,
+  verwijderHeroBeeld,
+} from "@/lib/hero-media";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-/* fal doet er voor een 21:9-beeld op flux-pro-ultra tientallen seconden over. */
-export const maxDuration = 120;
+/* fal doet tientallen seconden over een beeld, FASHN kan minuten duren. */
+export const maxDuration = 300;
 
 /**
  * Hero-/bannerbeeldbank voor de portal ("Site → Instellingen → Hero" en de
@@ -63,11 +72,22 @@ export async function GET(req: Request) {
       beelden,
       blobFout,
       videos,
-      themas: HERO_THEMAS.map((h) => ({ slug: h.slug, label: h.label, aspect: h.aspect })),
+      themas: HERO_THEMAS.map((h) => ({
+        slug: h.slug,
+        label: h.label,
+        aspect: h.aspect,
+        /* Een thema zonder scène-tekst kan alleen de sfeer-weg, niet de
+           product-weg — dan valt 'ie in de keuzelijst weg zodra je een artikel
+           erbij pakt. */
+        metProduct: Boolean(HERO_SCENES[h.slug]),
+      })),
       aspects: HERO_ASPECTS,
-      /* Zonder FAL_KEY kan de portal wél kiezen maar niet genereren — dan de
-         knop verbergen in plaats van 'm op een 500 laten lopen. */
+      aspectsProduct: HERO_ASPECTS_PRODUCT,
+      /* Zonder sleutel kan de portal wél kiezen maar niet genereren — dan de
+         knop verbergen in plaats van 'm op een 500 laten lopen. De twee wegen
+         hebben elk hun eigen sleutel. */
       kanGenereren: Boolean(process.env.FAL_KEY || process.env.FAL_API_KEY),
+      kanProduct: Boolean(process.env.FASHN_API_KEY),
     });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
@@ -78,13 +98,35 @@ export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { thema?: string; prompt?: string; aspect?: string; naam?: string };
+  let body: { bron?: "sfeer" | "product"; handle?: string; thema?: string; prompt?: string; aspect?: string; naam?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
   }
+
   try {
+    /* Met een artikel erbij: FASHN zet ONS product op het model en bouwt de
+       scène eromheen. Zonder artikel: fal.ai verzint alles, inclusief de
+       kleding — prima voor pure sfeer, maar dan hangt er geen echt pak in. */
+    if (body.bron === "product") {
+      const handle = (body.handle || "").trim();
+      if (!handle) return NextResponse.json({ ok: false, error: "Geen product gekozen." }, { status: 400 });
+
+      const rows = await getDb().execute<{ handle: string; title: string; hg: string; img: string }>(sql`
+        select p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
+          (select url from product_images pi where pi.product_id=p.id order by pi.position limit 1) img
+        from products p where p.handle=${handle} limit 1`);
+      const r = rows.rows[0];
+      if (!r) return NextResponse.json({ ok: false, error: "Product niet gevonden." }, { status: 404 });
+
+      const beeld = await maakHeroVanProduct(
+        { handle: r.handle, titel: r.title || r.handle, hoofdgroep: r.hg || "", packshot: r.img || "" },
+        body,
+      );
+      return NextResponse.json({ ok: true, beeld });
+    }
+
     const beeld = await maakHeroBeeld(body);
     return NextResponse.json({ ok: true, beeld });
   } catch (e) {
