@@ -142,31 +142,11 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
 
   const body = (
     <div className={pending ? "opacity-60 transition-opacity" : ""}>
-      {/* Shop in jouw maat — één klik naar alleen je eigen maat */}
-      {myFacet && mySize ? (
-        <button
-          type="button"
-          onClick={() => apply({ sizes: myActive ? [] : [mySize.facet] })}
-          aria-pressed={myActive}
-          className={`mb-4 flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors ${
-            myActive ? "border-ink bg-ink text-canvas" : "border-ink bg-canvas hover:bg-surface"
-          }`}
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" />
-          </svg>
-          <span className="min-w-0 flex-1 font-sans text-sm leading-tight">
-            <span className="block font-medium">{myActive ? t("plp.filters.viewingMySize") : t("plp.filters.shopMySize")}</span>
-            <span className={`block text-xs ${myActive ? "text-canvas/70" : "text-muted"}`}>
-              {t("plp.filters.mySizePrefix")} {mySize.raw} · {myFacet.count} {myFacet.count === 1 ? t("plp.filters.itemSingular") : t("plp.filters.itemPlural")}
-            </span>
-          </span>
-          <span className={`shrink-0 font-sans text-xs underline underline-offset-2 ${myActive ? "text-canvas/80" : "text-ink"}`}>
-            {myActive ? t("plp.filters.clear") : t("plp.filters.show")}
-          </span>
-        </button>
-      ) : null}
-
+      {/* "Shop in jouw maat" stond hier als zwart blok bovenaan. Dat las als een
+          waarschuwing terwijl het een service is, en het dubbelde met het
+          maatfilter eronder. Het staat nu als chip bij de resultaten
+          (components/plp/active-chips): aan = gevuld met een kruisje, uit = een
+          omlijnd aanbod. Zie PlpActiveChips voor de afweging. */}
       {/* Winkelvoorraad — "ligt dit in mijn winkel?" is een andere vraag dan
           "is het leverbaar". De winkels hier zijn dezelfde "mijn winkels" die op
           de productpagina per maat melden of 'ie er ligt; meerdere aanvinken =
