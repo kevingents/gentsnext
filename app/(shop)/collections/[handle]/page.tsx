@@ -5,6 +5,7 @@ import { ProductCard } from "@/components/product-card";
 import { TrackLijst } from "@/components/analytics/track-lijst";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
+import { PlpActiveChips } from "@/components/plp/active-chips";
 import { JsonLd } from "@/components/json-ld";
 import { getCollectionByHandle, getFilteredProducts, getFacets, getCustomerTasteCats, isTechnicalCollection, handlesInStores, matenVoorHandles } from "@/lib/catalog";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
@@ -186,6 +187,15 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         {/* Grid */}
         <div>
           {/* Mobiel geen losse sorteer-rij — sorteren zit in de filter-drawer. */}
+          {/* Actieve persoonlijke filters (jouw maat / op voorraad in je winkel)
+              als chips. Bewust BUITEN de lg-only sorteerregel: ook op een telefoon
+              moet zichtbaar zijn dat je een deel van de lijst ziet. */}
+          <PlpActiveChips
+            selection={sel}
+            mySize={mySize}
+            mySizeCount={mySize ? (facets.sizes.find((x) => x.value === mySize.facet)?.count ?? null) : null}
+            storeOptions={filterProps.storeOptions}
+          />
           <div className="mb-6 hidden items-center justify-between lg:flex">
             <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
             <SortSelect value={sort} />

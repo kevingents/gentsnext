@@ -968,6 +968,10 @@ export const SITE_CATALOG: Record<string, string> = {
   "plp.filters.mobileButton": "Filters",
   "plp.filters.mobileDrawerTitle": "Filters",
   "plp.filters.mySizePrefix": "Maat",
+  // Chips boven de resultaten: actieve persoonlijke filters (maat/winkel).
+  "plp.chips.mySizeOffer": "Alleen mijn maat ({size})",
+  "plp.chips.inStore": "Op voorraad in {city}",
+  "plp.chips.remove": "filter verwijderen",
   "plp.filters.pattern": "Dessin",
   "plp.filters.price": "Prijs",
   "plp.filters.season": "Seizoen",
