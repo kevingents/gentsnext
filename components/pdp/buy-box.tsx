@@ -417,6 +417,9 @@ export function BuyBox({
             size={selectedSize?.size}
             color={active?.color}
             variant="compact"
+            /* Niets meer te kopen? Dan is dit formulier de enige actie die er nog
+               is — niet dichtklappen tot een linkje. */
+            startOpen={allSoldOut}
           />
         ) : null}
       </div>
