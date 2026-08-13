@@ -847,6 +847,34 @@ export const vouchers = pgTable(
   ]
 );
 
+/**
+ * Logboek van met de hand toegekende punten (coulance na een klacht).
+ *
+ * Waarom apart van loyaltyEvents: de `reason` daar staat in het puntenoverzicht
+ * van de KLANT. Een interne notitie hoort daar niet. Het grootboek krijgt een
+ * neutrale klanttekst; de echte reden en wie het deed staan hier.
+ */
+export const loyaltyServiceGrants = pgTable(
+  "loyalty_service_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    points: integer("points").notNull(),
+    /** Interne reden — niet zichtbaar voor de klant. */
+    reason: text("reason").notNull().default(""),
+    /** Wie het deed (portal-gebruiker); de API weigert een lege actor. */
+    actor: text("actor").notNull().default(""),
+    ticketId: text("ticket_id").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("loyalty_service_grants_customer_idx").on(t.customerId, t.createdAt),
+    index("loyalty_service_grants_actor_idx").on(t.actor, t.createdAt),
+  ]
+);
+
 /** Spaarpunten-mutaties — saldo = som. Bron: online + winkelaankopen. */
 export const loyaltyEvents = pgTable(
   "loyalty_events",

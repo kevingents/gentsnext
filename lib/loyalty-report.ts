@@ -96,8 +96,22 @@ export type BonusReport = {
   adoptie: BonusAdoptie[];
   trechter: BonusTrechter[];
   effect: BonusEffect[];
+  /** Wat de eigen puntenacties ("koop dit, krijg extra punten") uitkeerden. */
+  acties: ActieOpbrengst[];
+  /** Wat de klantenservice met de hand weggaf. */
+  coulance: { toekenningen: number; klanten: number; punten: number; waardeCents: number; perMedewerker: { actor: string; n: number; punten: number }[] };
   /** Waarschuwing die met dit rapport mee hoort te reizen. */
   kanttekening: string;
+};
+
+export type ActieOpbrengst = {
+  slug: string;
+  /** Naam uit de instellingen; leeg als de actie inmiddels verwijderd is. */
+  naam: string;
+  orders: number;
+  klanten: number;
+  punten: number;
+  waardeCents: number;
 };
 
 const KANTTEKENING =
@@ -107,12 +121,13 @@ const KANTTEKENING =
 
 export async function bonusReport(r: Range): Promise<BonusReport> {
   const db = getDb();
-  const lc = (await getSettings()).loyaltyConfig;
+  const instellingen = await getSettings();
+  const lc = instellingen.loyaltyConfig;
   const centsPerPoint = Number(lc?.redeemCentsPerPoint) > 0 ? Number(lc.redeemCentsPerPoint) : 5;
   const refs = ALLE_BONUSSEN.map((k) => REF_TYPE[k]);
   const kindVanRef = new Map(ALLE_BONUSSEN.map((k) => [REF_TYPE[k], k]));
 
-  const [adoptieRijen, trechterRijen, effectRijen] = await Promise.all([
+  const [adoptieRijen, trechterRijen, effectRijen, actieRijen, coulanceRijen, coulancePerActor] = await Promise.all([
     db.execute<{ ref_type: string; klanten: number; nieuw: number; punten: number }>(sql`
       select ref_type,
              count(distinct customer_id)::int klanten,
@@ -160,8 +175,36 @@ export async function bonusReport(r: Range): Promise<BonusReport> {
         and ${GEKOCHT}
         and o.created_at between ${r.from} and ${r.to}
       group by 1, 2`),
+
+    /* Eigen puntenacties. refId is "<orderId>:<slug>", dus de actiecode zit
+       achter de dubbele punt. split_part i.p.v. een LIKE per actie: dan hoeft dit
+       rapport de actielijst niet te kennen en zie je ook wat een inmiddels
+       verwijderde actie ooit heeft uitgekeerd. */
+    db.execute<{ slug: string; orders: number; klanten: number; punten: number }>(sql`
+      select split_part(ref_id, ':', 2) slug,
+             count(*)::int orders,
+             count(distinct customer_id)::int klanten,
+             coalesce(sum(points), 0)::int punten
+      from loyalty_events
+      where ref_type = 'punten_actie' and created_at between ${r.from} and ${r.to}
+      group by 1 order by 4 desc`),
+
+    db.execute<{ n: number; klanten: number; punten: number }>(sql`
+      select count(*)::int n, count(distinct customer_id)::int klanten, coalesce(sum(points), 0)::int punten
+      from loyalty_service_grants where created_at between ${r.from} and ${r.to}`),
+
+    /* Per medewerker. Niet om iemand af te rekenen, maar omdat een uitschieter
+       hier het enige signaal is dat er structureel weggegeven wordt. */
+    db.execute<{ actor: string; n: number; punten: number }>(sql`
+      select actor, count(*)::int n, coalesce(sum(points), 0)::int punten
+      from loyalty_service_grants where created_at between ${r.from} and ${r.to}
+      group by 1 order by 3 desc limit 25`),
   ]);
 
+  /* Namen van de acties zoals ze nu in de instellingen staan. Een actie die
+     inmiddels verwijderd is houdt z'n regels in het grootboek maar heeft hier
+     geen naam meer — dan tonen we de code, niet niets. */
+  const actieNamen = new Map((instellingen.puntenActies ?? []).map((a) => [a.slug, a.naam]));
   const adoptieMap = new Map(adoptieRijen.rows.map((x) => [x.ref_type, x]));
   const trechterMap = new Map(trechterRijen.rows.map((x) => [x.kind, x]));
 
@@ -216,6 +259,28 @@ export async function bonusReport(r: Range): Promise<BonusReport> {
         zonder: groep(rijen.find((x) => !x.met)),
       };
     }),
+    acties: actieRijen.rows.map((x) => {
+      const punten = Number(x.punten) || 0;
+      return {
+        slug: String(x.slug || ""),
+        naam: actieNamen.get(String(x.slug || "")) ?? "",
+        orders: Number(x.orders) || 0,
+        klanten: Number(x.klanten) || 0,
+        punten,
+        waardeCents: punten * centsPerPoint,
+      };
+    }),
+    coulance: {
+      toekenningen: Number(coulanceRijen.rows[0]?.n) || 0,
+      klanten: Number(coulanceRijen.rows[0]?.klanten) || 0,
+      punten: Number(coulanceRijen.rows[0]?.punten) || 0,
+      waardeCents: (Number(coulanceRijen.rows[0]?.punten) || 0) * centsPerPoint,
+      perMedewerker: coulancePerActor.rows.map((x) => ({
+        actor: String(x.actor || "onbekend"),
+        n: Number(x.n) || 0,
+        punten: Number(x.punten) || 0,
+      })),
+    },
     kanttekening: KANTTEKENING,
   };
 }

@@ -337,7 +337,22 @@ export async function creditOrderLoyalty(
   // Vesting vanaf de betaaldatum (betaald + N dagen); val bij ontbrekende paidAt terug
   // op de orderdatum (niet nu) zodat oude/geïmporteerde orders niet onterecht weer
   // een vol venster "in behandeling" gaan.
-  return creditOnce(customerId, points, "Weborder gekoppeld", "web_order", order.id, await vestsAtFrom(order.paidAt ?? order.createdAt ?? null));
+  const vestsAt = await vestsAtFrom(order.paidAt ?? order.createdAt ?? null);
+  const basis = await creditOnce(customerId, points, "Weborder gekoppeld", "web_order", order.id, vestsAt);
+
+  /* Lopende puntenacties ("koop dit, krijg extra punten") erbovenop. Zelfde
+     vestingdatum als de gewone punten: ze hangen aan dezelfde aankoop, en die
+     kan teruggestuurd worden. Nooit fataal — een misgelopen actie mag de
+     normale punten niet kosten. */
+  try {
+    const { actiePuntenVoorOrder } = await import("@/lib/punten-acties");
+    for (const t of await actiePuntenVoorOrder(order.id, order.paidAt ?? order.createdAt ?? null)) {
+      await creditOnce(customerId, t.punten, `Actie: ${t.naam}`, "punten_actie", `${order.id}:${t.slug}`, vestsAt);
+    }
+  } catch (e) {
+    console.warn("[loyalty] puntenacties overgeslagen:", e instanceof Error ? e.message : e);
+  }
+  return basis;
 }
 
 /**
@@ -367,13 +382,24 @@ export async function reverseOrderLoyalty(customerId: string, orderId: string, b
     .where(and(eq(loyaltyEvents.refType, "loyalty_reversal"), eq(loyaltyEvents.refId, refKey)))
     .limit(1);
   if (dup[0]) return;
-  // Nooit méér terugdraaien dan voor déze order is gecrediteerd (na eerdere reversals).
-  // Lost de grondslag-mismatch op: credit = pointsForCents(totalCents, net), reversal-
-  // basis = itemsCents (bruto) → cap voorkomt een negatief saldo dat in andere orders bijt.
+  /* Nooit méér terugdraaien dan voor déze order is gecrediteerd (na eerdere reversals).
+     Lost de grondslag-mismatch op: credit = pointsForCents(totalCents, net), reversal-
+     basis = itemsCents (bruto) → cap voorkomt een negatief saldo dat in andere orders bijt.
+     De actie-punten van deze order tellen mee in het plafond: wie het artikel
+     terugstuurt waarmee hij de actie haalde, mag die bonus ook kwijtraken —
+     anders is "koop dit, krijg extra punten, stuur terug" gratis geld. */
   const [cr] = await db
     .select({ total: sql<number>`coalesce(sum(${loyaltyEvents.points}), 0)::int` })
     .from(loyaltyEvents)
-    .where(and(eq(loyaltyEvents.customerId, cid), eq(loyaltyEvents.refType, "web_order"), eq(loyaltyEvents.refId, oid)));
+    .where(
+      and(
+        eq(loyaltyEvents.customerId, cid),
+        sql`(
+          (${loyaltyEvents.refType} = 'web_order' and ${loyaltyEvents.refId} = ${oid})
+          or (${loyaltyEvents.refType} = 'punten_actie' and ${loyaltyEvents.refId} like ${oid + ":%"})
+        )`,
+      ),
+    );
   const credited = Math.max(0, cr?.total || 0);
   const [rv] = await db
     .select({ total: sql<number>`coalesce(sum(${loyaltyEvents.points}), 0)::int` })
