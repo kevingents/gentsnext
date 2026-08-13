@@ -1985,6 +1985,12 @@ export const customerProfiles = pgTable(
 
     retourRedenen: jsonb("retour_redenen").notNull().default([]),
 
+    verjaardag: date("verjaardag"),
+    /** Apart van de datum: een doelgroep "jarig deze maand" is de meest voor de
+     *  hand liggende die we niet hadden, en die filtert op maand, niet op jaar. */
+    geboortemaand: integer("geboortemaand"),
+    geslacht: text("geslacht").notNull().default(""),
+
     attributie: jsonb("attributie").notNull().default({}),
     berekendOp: timestamp("berekend_op", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2153,6 +2159,16 @@ export const mailEngagement = pgTable(
     laatstVerstuurd: timestamp("laatst_verstuurd", { withTimezone: true }),
     laatstGeopend: timestamp("laatst_geopend", { withTimezone: true }),
     laatstGeklikt: timestamp("laatst_geklikt", { withTimezone: true }),
+    /** Uit Spotler — staat nergens anders in ons klantbeeld. Een verjaardag is
+     *  een campagnemoment dat je precies één keer per jaar per klant hebt; een
+     *  mobiel nummer is een tweede matchsleutel bij Meta en Google Ads. */
+    verjaardag: date("verjaardag"),
+    geslacht: text("geslacht").notNull().default(""),
+    mobiel: text("mobiel").notNull().default(""),
+    taal: text("taal").notNull().default(""),
+    /** Wanneer we Spotler het laatst over dit adres bevraagd hebben — stuurt de
+     *  rollende verrijking (oudste eerst). */
+    gezochtOp: timestamp("gezocht_op", { withTimezone: true }),
     bijgewerktOp: timestamp("bijgewerkt_op", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("mail_engagement_klant_idx").on(t.customerId)]

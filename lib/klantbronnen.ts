@@ -274,3 +274,116 @@ export async function haalSpotlerContacten(maxPaginas = 20): Promise<{
     gekoppeld: Number((gekoppeld as { rowCount?: number }).rowCount ?? 0),
   };
 }
+
+/**
+ * Verrijk ONZE klanten met wat Spotler over hen weet — rollend, N per run.
+ *
+ * De richting is bewust omgedraaid. Eerst haalden we de Spotler-contactenlijst
+ * op en matchten die tegen onze klanten. Dat werkt niet: `GET contact` geeft er
+ * 250 terug en bladert niet (niet met `page`, niet met `start`). Met `page`
+ * kwam twintig keer dezelfde pagina terug, wat las als "5.000 opgehaald" en tot
+ * de conclusie leidde dat Spotler een heel ander klantbestand zou bevatten.
+ * Het waren 250 mensen.
+ *
+ * Wíj weten wie onze klanten zijn. Dus vragen we per adres wat Spotler ervan
+ * weet. Rollend, oudste bevraging eerst, zodat 48.000 klanten over een paar
+ * dagen langskomen zonder de API te overladen — en zodat een nieuwe klant
+ * vanzelf aan de beurt is.
+ */
+export async function verrijkViaSpotler(max = 500): Promise<{
+  gevraagd: number;
+  gevonden: number;
+  onbekend: number;
+  metVerjaardag: number;
+}> {
+  const db = getDb();
+
+  // Klanten die we nog nooit (of het langst geleden) bij Spotler opvroegen.
+  // NULLS FIRST zet de nooit-bevraagden vooraan; zonder die volgorde blijft de
+  // eerste groep eeuwig aan de beurt en komt de rest nooit.
+  const doel = await db.execute<{ email: string }>(sql`
+    select lower(c.email) email
+    from ${customers} c
+    left join ${mailEngagement} m on m.email = lower(c.email)
+    where trim(c.email) <> ''
+    order by m.gezocht_op asc nulls first
+    limit ${Math.min(2000, Math.max(1, max))}
+  `);
+  const adressen = doel.rows.map((r) => r.email).filter(Boolean);
+  if (!adressen.length) return { gevraagd: 0, gevonden: 0, onbekend: 0, metVerjaardag: 0 };
+
+  let gevonden = 0;
+  let onbekend = 0;
+  let metVerjaardag = 0;
+
+  // Per 100 — dat is wat het endpoint accepteert, en het houdt de URL binnen
+  // een redelijke lengte.
+  for (let i = 0; i < adressen.length; i += 100) {
+    const groep = adressen.slice(i, i + 100);
+    const data = await haal<{
+      gevraagd: number;
+      onbekend: number;
+      contacten: {
+        email: string; afgemeld: boolean; verjaardag: string; geslacht: string;
+        mobiel: string; taal: string;
+      }[];
+    }>("spotler-zoek", { emails: groep.join(",") });
+
+    onbekend += data.onbekend ?? 0;
+    const rijen = ontdubbel(
+      data.contacten.map((c) => ({
+        email: c.email,
+        bron: "spotler",
+        afgemeld: Boolean(c.afgemeld),
+        // Een onbruikbare datum wordt null, geen 1970: een verkeerde verjaardag
+        // levert een felicitatie op de verkeerde dag, en dat is erger dan geen.
+        verjaardag: /^\d{4}-\d{2}-\d{2}/.test(c.verjaardag || "") ? c.verjaardag.slice(0, 10) : null,
+        geslacht: (c.geslacht || "").slice(0, 20),
+        mobiel: (c.mobiel || "").slice(0, 40),
+        taal: (c.taal || "").slice(0, 10),
+        gezochtOp: new Date(),
+      })),
+      (r) => r.email,
+    );
+    gevonden += rijen.length;
+    metVerjaardag += rijen.filter((r) => r.verjaardag).length;
+
+    if (rijen.length) {
+      await inStukken(rijen, 500, (deel) =>
+        db
+          .insert(mailEngagement)
+          .values(deel)
+          .onConflictDoUpdate({
+            target: mailEngagement.email,
+            set: {
+              afgemeld: sql`excluded.afgemeld`,
+              verjaardag: sql`coalesce(excluded.verjaardag, ${mailEngagement.verjaardag})`,
+              geslacht: sql`coalesce(nullif(excluded.geslacht, ''), ${mailEngagement.geslacht})`,
+              mobiel: sql`coalesce(nullif(excluded.mobiel, ''), ${mailEngagement.mobiel})`,
+              taal: sql`coalesce(nullif(excluded.taal, ''), ${mailEngagement.taal})`,
+              gezochtOp: sql`now()`,
+              bijgewerktOp: sql`now()`,
+            },
+          }),
+      );
+    }
+
+    // Ook de NIET-gevonden adressen krijgen een stempel. Zonder dat blijven ze
+    // elke run opnieuw vooraan staan en komt de rest van het bestand nooit aan
+    // de beurt.
+    await db.execute(sql`
+      insert into ${mailEngagement} (email, bron, gezocht_op)
+      select x.email, 'spotler', now()
+      from (select unnest(array[${sql.join(groep.map((e) => sql`${e}`), sql`, `)}]::text[]) email) x
+      on conflict (email) do update set gezocht_op = now()
+    `);
+  }
+
+  await db.execute(sql`
+    update ${mailEngagement} m set customer_id = c.id
+    from ${customers} c
+    where lower(c.email) = m.email and m.customer_id is null
+  `);
+
+  return { gevraagd: adressen.length, gevonden, onbekend, metVerjaardag };
+}
