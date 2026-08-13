@@ -4,6 +4,7 @@ import { appSettings } from "@/db/schema";
 import { DEFAULT_SYNONYMS } from "@/lib/search-helpers";
 import { DEFAULT_PAYMENT_TOP, type PaymentTopConfig } from "@/lib/payment-methods";
 import type { ShippingZoneOverrides } from "@/lib/shipping-zones";
+import type { PuntenActie } from "@/lib/punten-acties";
 
 /**
  * Centrale, in de backend instelbare configuratie. Eén bron van waarheid
@@ -204,7 +205,20 @@ export type Settings = {
       /** Profiel compleet: leeftijd, kleuren, vaste winkel, gelegenheden. */
       profileComplete: number;
     };
+    /**
+     * Hoeveel punten een medewerker in één keer met de hand mag toekennen
+     * (coulance na een klacht). Een dak, geen doel: wie meer wil geven moet
+     * het twee keer doen, en dat staat dan ook twee keer in het logboek.
+     */
+    serviceMaxPerActie: number;
   };
+  /**
+   * Eigen puntenacties: "koop dit, krijg extra punten". Regels als data
+   * (lib/punten-acties), in de portal te maken zonder release. Ze geven PUNTEN
+   * en geen korting — punten kosten pas geld bij het inwisselen, en dan alleen
+   * vanaf de drempel; een korting kost meteen marge.
+   */
+  puntenActies: PuntenActie[];
   /**
    * Terug-op-voorraad-meldingen: aan/uit + welke kanalen (mail/WhatsApp) mogen
    * versturen, en of + na hoeveel dagen een klant een ALTERNATIEF-op-maat krijgt
@@ -388,7 +402,9 @@ export const DEFAULT_SETTINGS: Settings = {
       favoriteStore: num(process.env.GENTS_LOYALTY_BONUS_STORE, 50),
       profileComplete: num(process.env.GENTS_LOYALTY_BONUS_PROFILE, 50),
     },
+    serviceMaxPerActie: num(process.env.GENTS_LOYALTY_SERVICE_MAX, 500),
   },
+  puntenActies: [],
   stockNotifyConfig: {
     enabled: true,
     emailEnabled: true,
