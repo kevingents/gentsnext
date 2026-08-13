@@ -300,12 +300,96 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
   );
 }
 
+
+/**
+ * Weg naar je volgende tegoedbon. Eén component voor het overzicht én het
+ * punten-tabblad: er stonden twee balken met elk hun eigen rekensom, en die
+ * gaven ook elk een ander antwoord — de ene rekende met het totale saldo, de
+ * andere met wat je écht kunt uitgeven.
+ *
+ * Punten in behandeling zijn een lichter stuk van dezelfde balk: verdiend, maar
+ * nog niet vrij. Zonder dat stuk lijkt de klant verder weg dan hij is.
+ */
+function PuntenVoortgang({
+  available,
+  pending,
+  redeem,
+  onInwisselen,
+}: {
+  available: number;
+  pending: number;
+  redeem: RedeemConfig;
+  /** Naar het punten-tabblad; weglaten als je daar al bent. */
+  onInwisselen?: () => void;
+}) {
+  const t = useT();
+  const stap = Math.max(1, redeem.stepPoints || redeem.minPoints);
+  const drempel = Math.max(1, redeem.minPoints);
+  const kanInwisselen = available >= drempel;
+
+  /* Voorbij de drempel is "510 / 500" onzin: de balk stond vol en zei nog steeds
+     dat je onderweg was. Dan meten we naar de VOLGENDE mijlpaal, vanaf de vorige
+     — dus bij 510 punten en stappen van 500: 10 op weg naar de volgende 500. */
+  const doel = kanInwisselen ? stap : drempel;
+  const gedaan = kanInwisselen ? available % stap : available;
+  const wachtend = Math.min(pending, Math.max(0, doel - gedaan));
+  const nogNodig = Math.max(0, doel - gedaan);
+  const pctGedaan = Math.min(100, Math.round((gedaan / doel) * 100));
+  const pctMetWachtend = Math.min(100, Math.round(((gedaan + wachtend) / doel) * 100));
+  const wachtendDekt = pending >= nogNodig;
+  /* Wat er nu klaarstaat: hele stappen, niet het losse restant. */
+  const inwisselbaarCents = Math.floor(available / stap) * stap * redeem.centsPerPoint;
+
+  return (
+    <div className="border border-line p-5">
+      {kanInwisselen ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="font-sans text-sm font-medium text-ink">
+            {t("account.points.canRedeem", { amount: formatEuro(inwisselbaarCents) })}
+          </p>
+          {onInwisselen ? (
+            <button type="button" onClick={onInwisselen} className="font-sans text-sm text-ink underline underline-offset-4">
+              {t("account.points.canRedeemCta")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={`flex flex-wrap items-baseline justify-between gap-x-3 ${kanInwisselen ? "mt-2" : ""}`}>
+        <p className={`font-sans text-sm ${kanInwisselen ? "text-ink-soft" : ""}`}>
+          {kanInwisselen
+            ? t("account.points.toNextReward", { n: nogNodig, amount: formatEuro(stap * redeem.centsPerPoint) })
+            : t("account.points.toFirstReward", { n: nogNodig, amount: formatEuro(drempel * redeem.centsPerPoint) })}
+        </p>
+        <p className="font-sans text-sm text-muted">{gedaan} / {doel}</p>
+      </div>
+
+      <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+        {/* Eerst het wachtende deel, daaroverheen het besteedbare — zo lees je in
+            één balk allebei de standen. */}
+        <div className="absolute inset-y-0 left-0 bg-ink/25 transition-all" style={{ width: `${pctMetWachtend}%` }} />
+        <div className="absolute inset-y-0 left-0 bg-ink transition-all" style={{ width: `${pctGedaan}%` }} />
+      </div>
+
+      {/* Alleen iets zeggen als er punten in behandeling staan. Een regel als
+          "nog X euro besteden" zou een omrekening claimen die niet vastligt: de
+          punten-per-euro is een aparte knop en verschilt voor web en kassa. */}
+      {pending > 0 ? (
+        <p className="mt-1.5 font-sans text-xs text-muted">
+          {wachtendDekt && !kanInwisselen
+            ? t("account.points.pendingCovers")
+            : t("account.points.pendingCounts", { n: pending })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /* ── Overzicht ────────────────────────────────────────────────────────────── */
 function Overzicht({ customer, data, bonuses, redeem, onTab }: { customer: Customer; data: Data; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const totalOrders = data.onlineOrders.length + data.storeBuys.length;
-  const toNext = Math.max(0, redeem.minPoints - data.pointsBalance);
-  const pct = Math.min(100, Math.round((data.pointsBalance / Math.max(1, redeem.minPoints)) * 100));
+  const toNext = Math.max(0, redeem.minPoints - data.pointsAvailable);
   return (
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -313,6 +397,15 @@ function Overzicht({ customer, data, bonuses, redeem, onTab }: { customer: Custo
         <Stat label={t("account.overview.activeVouchers")} value={String(data.activeVouchers.length)} sub={t("account.overview.viewCredit")} onClick={() => onTab("vouchers")} />
         <Stat label={t("account.overview.purchases")} value={String(totalOrders)} sub={t("account.overview.onlinePlusStore")} onClick={() => onTab("bestellingen")} />
       </div>
+
+      {/* Vlak onder de cijfers, niet onderaan de pagina: dit is waarom je
+          spaart, en daar scrolde niemand naartoe. */}
+      <PuntenVoortgang
+        available={data.pointsAvailable}
+        pending={data.pointsPending}
+        redeem={redeem}
+        onInwisselen={() => onTab("punten")}
+      />
 
       <PuntenActies bonuses={bonuses} onTab={onTab} compact />
 
@@ -349,16 +442,6 @@ function Overzicht({ customer, data, bonuses, redeem, onTab }: { customer: Custo
           </div>
         </div>
       ) : null}
-
-      <div className="border border-line p-5">
-        <div className="flex items-center justify-between">
-          <p className="font-sans text-sm">{t("account.overview.progressTitle")}</p>
-          <p className="font-sans text-sm text-muted">{data.pointsBalance} / {redeem.minPoints}</p>
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
-          <div className="h-full bg-ink transition-all" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
 
       {!customer.sizeProfile?.colbert && !customer.sizeProfile?.overhemd ? (
         <button type="button" onClick={() => onTab("maten")} className="block w-full border border-dashed border-line p-5 text-left hover:border-ink">
@@ -578,16 +661,6 @@ function RedeemPoints({ available, koers }: { available: number; koers: RedeemCo
 function Punten({ data, walletEnabled, googleWalletEnabled, bonuses, redeem, onTab }: { data: Data; walletEnabled: boolean; googleWalletEnabled?: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const walletBonus = bonuses.find((b) => b.kind === "wallet");
-  /* Weg naar de eerste tegoedbon. Alleen zolang je er nog niet bent: kun je al
-     inwisselen, dan staat de inwisselknop eronder en is "nog zoveel te gaan"
-     onzin. Punten in behandeling tellen als een lichter stuk van de balk mee —
-     ze zijn verdiend, alleen nog niet vrij, en zonder dat stuk lijkt de klant
-     verder weg dan hij is. */
-  const drempel = Math.max(1, redeem.minPoints);
-  const nogNodig = Math.max(0, drempel - data.pointsAvailable);
-  const pctBeschikbaar = Math.min(100, Math.round((data.pointsAvailable / drempel) * 100));
-  const pctMetWachtend = Math.min(100, Math.round(((data.pointsAvailable + data.pointsPending) / drempel) * 100));
-  const wachtendDekt = data.pointsPending >= nogNodig;
   return (
     <div className="space-y-6">
       <div className="border border-line p-6">
@@ -596,36 +669,9 @@ function Punten({ data, walletEnabled, googleWalletEnabled, bonuses, redeem, onT
         {data.pointsPending > 0 && (
           <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
         )}
-        {nogNodig > 0 && (
-          <div className="mt-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-              <p className="font-sans text-sm">
-                {t("account.points.toFirstReward", {
-                  n: nogNodig,
-                  amount: formatEuro(drempel * redeem.centsPerPoint),
-                })}
-              </p>
-              <p className="font-sans text-sm text-muted">{data.pointsAvailable} / {drempel}</p>
-            </div>
-            <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
-              {/* Eerst het wachtende deel, daaroverheen het besteedbare — zo
-                  lees je in één balk allebei de standen. */}
-              <div className="absolute inset-y-0 left-0 bg-ink/25 transition-all" style={{ width: `${pctMetWachtend}%` }} />
-              <div className="absolute inset-y-0 left-0 bg-ink transition-all" style={{ width: `${pctBeschikbaar}%` }} />
-            </div>
-            {/* Alleen iets zeggen als er punten in behandeling staan. Een regel
-                als "nog X euro besteden" zou hier een omrekening claimen die niet
-                vastligt: de punten-per-euro is een aparte knop, en die verschilt
-                voor web en kassa. */}
-            {data.pointsPending > 0 && (
-              <p className="mt-1.5 font-sans text-xs text-muted">
-                {wachtendDekt
-                  ? t("account.points.pendingCovers")
-                  : t("account.points.pendingCounts", { n: data.pointsPending })}
-              </p>
-            )}
-          </div>
-        )}
+        <div className="mt-4">
+          <PuntenVoortgang available={data.pointsAvailable} pending={data.pointsPending} redeem={redeem} />
+        </div>
         <p className="mt-3 font-sans text-sm text-ink-soft">
           {t("account.points.explainer")}{" "}
           <Link href={CLUB_PATH} className="text-ink underline underline-offset-4">
