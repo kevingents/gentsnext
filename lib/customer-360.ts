@@ -392,7 +392,8 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
     ),
 
     mail as (
-      select lower(email) k, verstuurd, geopend, geklikt, laatst_geopend
+      select lower(email) k, verstuurd, geopend, geklikt, laatst_geopend,
+             verjaardag, geslacht
       from mail_engagement
     ),
 
@@ -487,7 +488,8 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       grote_maten, maatprofiel_compleet, kortingsaandeel, orders_met_korting,
       zakelijk, cadeaukoper, taal, betaalmethode, bezorgvoorkeur, aankoopmaanden,
       mail_verstuurd, mail_geopend, mail_geklikt, mail_openratio, mail_laatst_geopend,
-      orders_bol, besteed_bol_cents, orders_shopify, besteed_shopify_cents, retour_redenen
+      orders_bol, besteed_bol_cents, orders_shopify, besteed_shopify_cents, retour_redenen,
+      verjaardag, geboortemaand, geslacht
     )
     select
       c.id,
@@ -565,7 +567,13 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
 
       coalesce(bl.n, 0), coalesce(bl.bedrag, 0),
       coalesce(og.shopify_n, 0), coalesce(og.shopify_bedrag, 0),
-      coalesce(rr.lijst, '[]'::jsonb)
+      coalesce(rr.lijst, '[]'::jsonb),
+
+      ml.verjaardag,
+      -- Apart van de datum: een doelgroep "jarig deze maand" filtert op maand,
+      -- niet op jaar, en dat moet indexeerbaar zijn.
+      case when ml.verjaardag is not null then extract(month from ml.verjaardag)::int end,
+      coalesce(ml.geslacht, '')
     from customers c
     left join web            w   on w.cid   = c.id
     left join winkel_agg     k   on k.cid   = c.id
@@ -634,6 +642,11 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       orders_bol = excluded.orders_bol, besteed_bol_cents = excluded.besteed_bol_cents,
       orders_shopify = excluded.orders_shopify, besteed_shopify_cents = excluded.besteed_shopify_cents,
       retour_redenen = excluded.retour_redenen,
+      -- coalesce, geen overschrijven: een klant die Spotler even niet kent mag
+      -- zijn verjaardag niet kwijtraken.
+      verjaardag = coalesce(excluded.verjaardag, customer_profiles.verjaardag),
+      geboortemaand = coalesce(excluded.geboortemaand, customer_profiles.geboortemaand),
+      geslacht = coalesce(nullif(excluded.geslacht, ''), customer_profiles.geslacht),
       berekend_op = now()
   `);
 

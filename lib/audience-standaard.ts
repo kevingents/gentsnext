@@ -244,6 +244,15 @@ export const STANDAARD_DOELGROEPEN: (AudienceInvoer & { doel: "bereiken" | "uits
     definitie: en({ veld: "cadeaukoper", operator: "ja" }),
   },
 
+  {
+    slug: "verjaardag-bekend",
+    naam: "Verjaardag bekend",
+    doel: "bereiken",
+    omschrijving:
+      "Van deze klanten kennen we de geboortedatum (uit Spotler). Een verjaardag is het enige campagnemoment dat je precies één keer per jaar per klant hebt en dat volledig ontbrak in ons klantbeeld. Maak hiervan twaalf maand-doelgroepen, of filter op 'jarig in maand'. Actie: felicitatie met iets kleins — geen generieke aanbieding, want dan is het geen felicitatie.",
+    definitie: en({ veld: "verjaardag", operator: "gevuld" }),
+  },
+
   /* ──────────────────────────── Uitsluiten ────────────────────────────── */
   {
     slug: "uitsluiten-recent-gekocht",

@@ -180,6 +180,24 @@ export const VELDEN: VeldDef[] = [
   },
   { key: "besteed_bol", label: "Besteed via Bol", type: "bedrag", kolom: "besteed_bol_cents" },
   { key: "retour_redenen", label: "Retourreden", type: "lijst", kolom: "retour_redenen" },
+
+  /* Persoon (uit Spotler) */
+  {
+    key: "geboortemaand",
+    label: "Jarig in maand (1–12)",
+    type: "getal",
+    kolom: "geboortemaand",
+    uitleg:
+      "Verjaardagscampagne. Een verjaardag is het enige campagnemoment dat je precies één keer per jaar per klant hebt — en dat we tot nu toe helemaal niet kenden.",
+  },
+  { key: "verjaardag", label: "Verjaardag bekend", type: "datum", kolom: "verjaardag" },
+  {
+    key: "geslacht",
+    label: "Geslacht",
+    type: "tekst",
+    kolom: "geslacht",
+    uitleg: "Zoals in Spotler vastgelegd. Leeg = onbekend, en dat is voorlopig de grootste groep.",
+  },
 ];
 
 const VELD_INDEX = new Map(VELDEN.map((v) => [v.key, v]));

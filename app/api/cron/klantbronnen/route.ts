@@ -4,7 +4,7 @@ import { cronSecretOk } from "@/lib/cron-auth";
 import {
   bronnenGeconfigureerd,
   haalReturnistaRetouren,
-  haalSpotlerContacten,
+  verrijkViaSpotler,
   koppelSrsKlantnummers,
 } from "@/lib/klantbronnen";
 
@@ -47,12 +47,14 @@ export async function GET(req: Request) {
     uit.retouren = { fout: (e as Error).message };
   }
   try {
-    // `veldnamen` komt bewust mee in het antwoord: per-contact open- en
-    // klikcijfers staan niet in de gedocumenteerde Spotler-API, en of dit
-    // account ze als custom property bijhoudt zie je pas bij de eerste échte
-    // call. Zo vertelt de eerste run zelf wat er beschikbaar is, in plaats van
-    // stil nullen te produceren.
-    uit.spotler = await haalSpotlerContacten();
+    /* Rollend ONZE klanten bij Spotler opvragen, N per run.
+     *
+     * Niet andersom. `GET contact` geeft er 250 terug en bladert niet — met
+     * `page` kwam twintig keer dezelfde pagina terug, wat las als "5.000
+     * opgehaald" en tot de conclusie leidde dat Spotler een heel ander
+     * klantbestand zou bevatten. Het waren 250 mensen. Wíj weten wie onze
+     * klanten zijn; we vragen per adres wat Spotler ervan weet. */
+    uit.spotler = await verrijkViaSpotler(Number(url.searchParams.get("spotler")) || 500);
   } catch (e) {
     uit.spotler = { fout: (e as Error).message };
   }
