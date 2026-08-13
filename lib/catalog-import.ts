@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { colorFamily } from "@/lib/colors";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
@@ -203,16 +203,38 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
     }
   }
 
+  /**
+   * Het handmatig-slot (products.handmatige_velden), zie lib/pim.ts.
+   *
+   * De kolom bestond al jaren maar werd door niemand gelezen: elke import
+   * overschreef onvoorwaardelijk, en dat is precies hoe de onzin-omschrijvingen
+   * destijds terugkwamen. Sinds het PIM kan een medewerker deze velden zetten,
+   * en dan moet de import ervan afblijven — anders is elke bewerking één import
+   * lang houdbaar.
+   *
+   * `veilig()` bouwt per kolom: staat de veldsleutel in handmatige_velden, hou
+   * dan de bestaande waarde; anders die uit de feed. De veldsleutels zijn
+   * dezelfde als PIM_VELDEN.sleutel — verandert daar iets, dan hier ook.
+   */
+  const veilig = (veldSleutel: string, kolom: string, uitFeed: SQL) =>
+    sql`case when jsonb_exists("products"."handmatige_velden", ${veldSleutel})
+             then "products".${sql.identifier(kolom)}
+             else ${uitFeed} end`;
+
   const productSet = preserve
     ? {
         handle: sql`excluded.handle`,
-        title: sql`excluded.title`,
-        descriptionHtml: sql`excluded.description_html`,
-        vendor: sql`excluded.vendor`,
-        productType: sql`excluded.product_type`,
+        title: veilig("title", "title", sql`excluded.title`),
+        descriptionHtml: veilig("descriptionHtml", "description_html", sql`excluded.description_html`),
+        vendor: veilig("vendor", "vendor", sql`excluded.vendor`),
+        productType: veilig("productType", "product_type", sql`excluded.product_type`),
         status: sql`"products"."status"`,
-        seoTitle: sql`coalesce(nullif(excluded.seo_title, ''), "products"."seo_title")`,
-        seoDescription: sql`coalesce(nullif(excluded.seo_description, ''), "products"."seo_description")`,
+        seoTitle: veilig("seoTitle", "seo_title", sql`coalesce(nullif(excluded.seo_title, ''), "products"."seo_title")`),
+        seoDescription: veilig(
+          "seoDescription",
+          "seo_description",
+          sql`coalesce(nullif(excluded.seo_description, ''), "products"."seo_description")`,
+        ),
         // Bestaande (rijkere) attribute-keys winnen; nieuwe keys vullen aan.
         attributes: sql`excluded.attributes || "products"."attributes"`,
         sourceCreatedAt: sql`coalesce(excluded.source_created_at, "products"."source_created_at")`,
@@ -221,14 +243,16 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
       }
     : {
         handle: sql`excluded.handle`,
-        title: sql`excluded.title`,
-        descriptionHtml: sql`excluded.description_html`,
-        vendor: sql`excluded.vendor`,
-        productType: sql`excluded.product_type`,
-        status: sql`excluded.status`,
-        seoTitle: sql`excluded.seo_title`,
-        seoDescription: sql`excluded.seo_description`,
-        attributes: sql`excluded.attributes`,
+        title: veilig("title", "title", sql`excluded.title`),
+        descriptionHtml: veilig("descriptionHtml", "description_html", sql`excluded.description_html`),
+        vendor: veilig("vendor", "vendor", sql`excluded.vendor`),
+        productType: veilig("productType", "product_type", sql`excluded.product_type`),
+        status: veilig("status", "status", sql`excluded.status`),
+        seoTitle: veilig("seoTitle", "seo_title", sql`excluded.seo_title`),
+        seoDescription: veilig("seoDescription", "seo_description", sql`excluded.seo_description`),
+        /* Metavelden: de feed wint, behalve de sleutels die met de hand gezet
+           zijn. Rechts van || wint — zie pim_vergrendelde_attrs in drizzle/0058. */
+        attributes: sql`excluded.attributes || pim_vergrendelde_attrs("products"."attributes", "products"."handmatige_velden")`,
         sourceCreatedAt: sql`excluded.source_created_at`,
         publishedAt: sql`excluded.published_at`,
         updatedAt: sql`now()`,
