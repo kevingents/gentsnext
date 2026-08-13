@@ -1,6 +1,6 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { customers, orderLogboek, orders, products, productVariants } from "@/db/schema";
+import { customers, orderLogboek, orderShipmentPicks, orders, products, productVariants } from "@/db/schema";
 import {
   attachMolliePayment,
   applyPaymentStatus,
@@ -8,6 +8,7 @@ import {
   createOrder,
   finalizeGiftcardCoveredOrder,
   getOrderByNumber,
+  planAndPushFulfillmentOnce,
   releaseOrderGiftcard,
   sendOrderConfirmationOnce,
   updateOrderStatus,
@@ -30,6 +31,10 @@ import {
   refundSleutel,
   betaallinkSleutel,
   isSynthetischeBetaalref,
+  magAdresWijzigen,
+  magRouteOpnieuw,
+  schoonAdres,
+  ADRESVELDEN,
 } from "@/lib/order-acties-regels";
 import { redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
@@ -88,7 +93,10 @@ export type LogboekActie =
   | "betaalstatus"
   | "geannuleerd"
   | "bevestiging"
-  | "status";
+  | "status"
+  | "adres"
+  | "route"
+  | "notitie";
 
 /**
  * Schrijf één regel in het logboek. FAIL-SOFT: een ontbrekende tabel (migratie
@@ -182,6 +190,10 @@ export type BetaalOverzicht = {
   /** Mag deze order een (nieuwe) betaallink? */
   betaallinkMag: boolean;
   betaallinkReden?: string;
+  /** Aantal winkeldelen dat al gepickt is (order_shipment_picks). */
+  picks: number;
+  adres: { mag: boolean; reden?: string; landVast: boolean; waarschuwing?: string };
+  routeOpnieuw: { mag: boolean; reden?: string };
 };
 
 async function mollieMomentopname(paymentRef: string | null | undefined): Promise<MolliePayment | null> {
@@ -197,14 +209,34 @@ async function mollieMomentopname(paymentRef: string | null | undefined): Promis
   }
 }
 
+/**
+ * Hoeveel winkeldelen van deze order zijn al gepickt? Bepaalt of een
+ * adreswijziging riskant is (het verzendlabel kan al gedrukt zijn) en of de
+ * route nog opnieuw berekend mag worden. Faalt zacht naar "al gepickt": bij
+ * twijfel liever een waarschuwing te veel dan een pakket naar het oude adres.
+ */
+export async function picksVoorOrder(orderNumber: string): Promise<number> {
+  try {
+    const [r] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(orderShipmentPicks)
+      .where(eq(orderShipmentPicks.orderNumber, orderNumber));
+    return Number(r?.n) || 0;
+  } catch {
+    return 1;
+  }
+}
+
 /** Betaal-context voor de orderpagina: wat kan er nu wél en niet met deze order. */
 export async function betaalOverzicht(orderNumber: string): Promise<BetaalOverzicht | null> {
   const data = await getOrderByNumber(orderNumber);
   if (!data) return null;
   const o = data.order;
-  const p = await mollieMomentopname(o.molliePaymentId);
+  const [p, picks] = await Promise.all([mollieMomentopname(o.molliePaymentId), picksVoorOrder(orderNumber)]);
   const ruimte = terugbetaalRuimte(o, p);
   const link = magNieuweBetaallink(o);
+  const adres = magAdresWijzigen(o, picks);
+  const route = magRouteOpnieuw(o, picks);
   return {
     mollie: p
       ? { id: p.id, status: p.status, method: p.method, amountCents: p.amountCents, refundedCents: p.refundedCents, remainingCents: p.remainingCents }
@@ -213,6 +245,9 @@ export async function betaalOverzicht(orderNumber: string): Promise<BetaalOverzi
     refundReden: ruimte.reden,
     betaallinkMag: link.ok,
     betaallinkReden: link.error,
+    picks,
+    adres: { mag: adres.ok, reden: adres.error, landVast: adres.landVast, waarschuwing: adres.waarschuwing },
+    routeOpnieuw: { mag: route.ok, reden: route.error },
   };
 }
 
@@ -717,6 +752,259 @@ export async function maakHandmatigeOrder(invoer: HandmatigeOrderInvoer, opts: A
     gemaild: link.gemaild,
     confirmUrl,
     waarschuwing: link.waarschuwing,
+  };
+}
+
+/* ─────────────────────── adres & contactgegevens ─────────────────────── */
+
+/**
+ * Wijzig het bezorgadres en de contactgegevens van een bestelling — de meest
+ * gevraagde correctie aan de telefoon ("ik heb het verkeerde huisnummer
+ * ingevuld").
+ *
+ * Drie grenzen, alle drie in lib/order-acties-regels met een test eronder:
+ *  · Een verzonden pakket wijzigen kan niet — dat is een gesprek met de
+ *    vervoerder, geen databaseveld.
+ *  · Een leeg formulierveld laat de bestaande waarde staan. Zonder die regel
+ *    maakt één per ongeluk gewiste regel een order onbezorgbaar.
+ *  · Het LAND ligt vast zodra er betaald is: de verzendkosten per land zijn dan
+ *    al geïnd, en stil naar een ander land omzetten betekent verzenden tegen
+ *    het verkeerde tarief.
+ *
+ * Is de order al gepland (allocatie naar filialen), dan verandert een andere
+ * postcode of ander land in principe de route. Dat doen we NIET automatisch —
+ * de portal krijgt het advies terug en de knop "route opnieuw berekenen" staat
+ * ernaast.
+ */
+export async function adresWijzigen(
+  orderNumber: string,
+  velden: Record<string, unknown>,
+  opts: ActieContext = {},
+): Promise<ActieResultaat> {
+  const data = await getOrderByNumber(orderNumber);
+  if (!data) return { ok: false, error: "Bestelling niet gevonden." };
+  const o = data.order;
+  const picks = await picksVoorOrder(orderNumber);
+  const mag = magAdresWijzigen(o, picks);
+  if (!mag.ok) return { ok: false, error: mag.error };
+
+  const huidig: Record<string, string> = {};
+  for (const veld of ADRESVELDEN) huidig[veld] = String((o as unknown as Record<string, unknown>)[veld] ?? "");
+  const schoon = schoonAdres(velden, huidig, { landVast: mag.landVast, bezorgen: o.deliveryMethod !== "pickup" });
+  if (schoon.fouten.length) return { ok: false, error: schoon.fouten.join(" ") };
+  if (!schoon.gewijzigd.length) {
+    return { ok: true, gewijzigd: [], waarschuwing: "Er was niets gewijzigd." };
+  }
+
+  const w = schoon.waarden;
+  await getDb()
+    .update(orders)
+    .set({
+      firstName: w.firstName, lastName: w.lastName, phone: w.phone, email: w.email,
+      street: w.street, houseNumber: w.houseNumber, postalCode: w.postalCode, city: w.city,
+      country: w.country, companyName: w.companyName, vatNumber: w.vatNumber,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(orders.id, o.id));
+
+  const omschrijving = schoon.gewijzigd.map((veld) => `${veld}: "${huidig[veld]}" → "${w[veld]}"`).join(", ");
+  await logboekSchrijf({
+    orderId: o.id,
+    orderNumber: o.orderNumber,
+    actie: "adres",
+    actor: opts.actor,
+    notitie: omschrijving.slice(0, 480),
+    meta: { gewijzigd: schoon.gewijzigd, picks },
+  });
+
+  // Een andere postcode of ander land betekent een andere route; melden, niet
+  // stiekem opnieuw plannen (de winkel kan al aan het werk zijn).
+  const routeRaakt = schoon.gewijzigd.some((v) => v === "postalCode" || v === "country");
+  const route = magRouteOpnieuw(o, picks);
+  const waarschuwingen = [
+    mag.waarschuwing,
+    schoon.landGeweigerd ? "Het land is niet gewijzigd: de verzendkosten van deze bestelling zijn al betaald. Annuleer 'm en maak een nieuwe als het echt naar een ander land moet." : "",
+    routeRaakt && o.fulfillmentPlan && route.ok ? "De postcode is gewijzigd terwijl de route al berekend was — bereken 'm opnieuw zodat het juiste filiaal levert." : "",
+  ].filter(Boolean);
+
+  return {
+    ok: true,
+    gewijzigd: schoon.gewijzigd,
+    routeAdvies: routeRaakt && Boolean(o.fulfillmentPlan) && route.ok,
+    waarschuwing: waarschuwingen.join(" ") || undefined,
+  };
+}
+
+/* ─────────────────────── route opnieuw berekenen ─────────────────────── */
+
+/**
+ * Bereken de order-route (welk filiaal levert wat) opnieuw. Voor na een
+ * adreswijziging, of als de voorraad intussen is verschoven en het toegewezen
+ * filiaal het niet meer heeft.
+ *
+ * Zet de fulfilment-claim terug op 'pending' en laat daarna exact dezelfde
+ * planner lopen als na een betaling — geen tweede, afwijkende planlogica.
+ * Alleen zolang er nog niets gepickt is: daarna zou een nieuw plan de
+ * winkelvloer tegenspreken.
+ */
+export async function routeOpnieuw(orderNumber: string, opts: ActieContext = {}): Promise<ActieResultaat> {
+  const data = await getOrderByNumber(orderNumber);
+  if (!data) return { ok: false, error: "Bestelling niet gevonden." };
+  const o = data.order;
+  const picks = await picksVoorOrder(orderNumber);
+  const mag = magRouteOpnieuw(o, picks);
+  if (!mag.ok) return { ok: false, error: mag.error };
+
+  const db = getDb();
+  const vorige = o.fulfillmentStatus;
+  await db
+    .update(orders)
+    .set({ fulfillmentStatus: "pending" })
+    .where(and(eq(orders.id, o.id), sql`${orders.fulfillmentStatus} <> 'imported'`));
+  try {
+    await planAndPushFulfillmentOnce(String(o.molliePaymentId));
+  } catch (e) {
+    return { ok: false, error: `Opnieuw plannen mislukte: ${(e as Error).message}` };
+  }
+
+  const na = await getOrderByNumber(orderNumber);
+  const plan = na?.order.fulfillmentPlan as { splitCount?: number; fullyAllocated?: boolean } | null;
+  await logboekSchrijf({
+    orderId: o.id,
+    orderNumber: o.orderNumber,
+    actie: "route",
+    actor: opts.actor,
+    notitie: `Route opnieuw berekend (${vorige} → ${na?.order.fulfillmentStatus || "?"})`,
+    meta: { splitCount: plan?.splitCount ?? null, fullyAllocated: plan?.fullyAllocated ?? null },
+  });
+  return {
+    ok: true,
+    fulfillmentStatus: na?.order.fulfillmentStatus,
+    volledig: plan?.fullyAllocated ?? null,
+    splitCount: plan?.splitCount ?? null,
+  };
+}
+
+/* ─────────────────────── interne notitie ─────────────────────── */
+
+/**
+ * Interne notitie bij een bestelling. Komt in hetzelfde logboek als de acties,
+ * zodat het verhaal van een order op één plek staat: "klant belde, wil maat 54
+ * i.p.v. 52" naast "betaallink opnieuw gestuurd".
+ *
+ * NIET klantzichtbaar — bewust in het logboek en niet in een orderveld dat ooit
+ * op een pakbon of in een klantmail belandt (de les van loyalty_events.reason).
+ */
+export async function notitieToevoegen(orderNumber: string, tekst: string, opts: ActieContext = {}): Promise<ActieResultaat> {
+  const notitie = String(tekst || "").trim();
+  if (!notitie) return { ok: false, error: "Lege notitie." };
+  const data = await getOrderByNumber(orderNumber);
+  if (!data) return { ok: false, error: "Bestelling niet gevonden." };
+  await logboekSchrijf({
+    orderId: data.order.id,
+    orderNumber: data.order.orderNumber,
+    actie: "notitie",
+    actor: opts.actor,
+    notitie: notitie.slice(0, 480),
+  });
+  return { ok: true };
+}
+
+/* ─────────────────────── bestelling dupliceren ─────────────────────── */
+
+export type DuplicaatVoorstel = {
+  contact: Record<string, string>;
+  deliveryMethod: string;
+  pickupStore: string;
+  soldByStore: string;
+  regels: (VariantHit & { qty: number })[];
+  /** Regels die niet meer besteld kunnen worden (artikel weg of niet actief). */
+  vervallen: string[];
+};
+
+/**
+ * Zet een bestaande bestelling klaar als voorstel voor een nieuwe: klantgegevens
+ * plus de regels die vandaag nog besteld kunnen worden.
+ *
+ * Voor "klant belt: stuur nog een keer hetzelfde", maar net zo goed het
+ * praktische pad om een bestelling te WIJZIGEN: dupliceren, aanpassen, en de
+ * oude annuleren. Bewust die volgorde in plaats van regels bijwerken op een
+ * bestaande order — dan zou een order z'n voorraadclaim, kortingscode en
+ * bedragen half moeten herberekenen, en dat is precies waar bedragen gaan
+ * afwijken van wat de klant ziet.
+ *
+ * Prijzen komen VERS uit de catalogus, niet uit de oude order: een duplicaat van
+ * een order uit de uitverkoop mag geen oude prijs opnieuw beloven.
+ */
+export async function dupliceerVoorbereiden(orderNumber: string): Promise<DuplicaatVoorstel | null> {
+  const data = await getOrderByNumber(orderNumber);
+  if (!data) return null;
+  const o = data.order;
+  const skus = [...new Set(data.lines.map((l) => l.sku).filter(Boolean))] as string[];
+
+  const db = getDb();
+  const rows = skus.length
+    ? await db
+        .select({
+          sku: productVariants.sku,
+          size: productVariants.size,
+          color: productVariants.color,
+          priceCents: productVariants.priceCents,
+          handle: products.handle,
+          title: products.title,
+          image: productVariants.imageUrl,
+        })
+        .from(productVariants)
+        .innerJoin(products, eq(products.id, productVariants.productId))
+        .where(and(inArray(productVariants.sku, skus), eq(products.status, "active")))
+    : [];
+  const bySku = new Map(rows.map((r) => [r.sku, r]));
+
+  let voorraad = new Map<string, { online: number }>();
+  try {
+    voorraad = (await availableForSkus(skus)) as unknown as Map<string, { online: number }>;
+  } catch {
+    // Voorraad onbekend is iets anders dan nul — dan toont de bouwer geen getal.
+  }
+
+  const regels: (VariantHit & { qty: number })[] = [];
+  const vervallen: string[] = [];
+  for (const l of data.lines) {
+    const v = l.sku ? bySku.get(l.sku) : undefined;
+    if (!v) {
+      vervallen.push(`${l.title}${l.size ? ` (maat ${l.size})` : ""}`);
+      continue;
+    }
+    regels.push({
+      sku: v.sku || "",
+      title: v.title || l.title,
+      handle: v.handle || "",
+      size: v.size || "",
+      color: v.color || "",
+      priceCents: Number(v.priceCents) || 0,
+      image: v.image || "",
+      online: voorraad.has(v.sku || "") ? Math.max(0, voorraad.get(v.sku || "")?.online ?? 0) : null,
+      qty: Math.max(1, Math.min(20, l.quantity)),
+    });
+  }
+
+  return {
+    contact: {
+      firstName: o.firstName || "",
+      lastName: o.lastName || "",
+      email: o.email || "",
+      phone: o.phone || "",
+      street: o.street || "",
+      houseNumber: o.houseNumber || "",
+      postalCode: o.postalCode || "",
+      city: o.city || "",
+      country: o.country || "NL",
+    },
+    deliveryMethod: o.deliveryMethod || "standard",
+    pickupStore: o.pickupStore || "",
+    soldByStore: o.soldByStore || "",
+    regels,
+    vervallen,
   };
 }
 

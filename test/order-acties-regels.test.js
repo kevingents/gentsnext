@@ -8,6 +8,9 @@ import {
   betaallinkSleutel,
   isSynthetischeBetaalref,
   BETAALDE_STATUSSEN,
+  magAdresWijzigen,
+  schoonAdres,
+  magRouteOpnieuw,
 } from "../lib/order-acties-regels.js";
 
 /* Twee knoppen in het back-office raken direct het geld van een klant: "stuur
@@ -131,4 +134,84 @@ test("de idempotency-sleutels blijven binnen Mollie's 40 tekens én onderscheide
   assert.notEqual(link, betaallinkSleutel(orderId, nu + 61_000));
   // Twee verschillende orders krijgen nooit dezelfde sleutel.
   assert.notEqual(link, betaallinkSleutel("11112222-3333-4444-5555-666677778888", nu));
+});
+
+/* ── Adres wijzigen ── */
+
+test("een verzonden pakket krijgt geen adreswijziging meer", () => {
+  for (const status of ["shipped", "delivered"]) {
+    const r = magAdresWijzigen({ status });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /onderweg/i);
+  }
+  assert.equal(magAdresWijzigen({ status: "canceled" }).ok, false);
+  assert.equal(magAdresWijzigen({ status: "refunded" }).ok, false);
+});
+
+test("gepickt maar niet verzonden mag wél, mét waarschuwing over het label", () => {
+  const r = magAdresWijzigen({ status: "paid" }, 1);
+  assert.equal(r.ok, true);
+  assert.match(r.waarschuwing, /label/i);
+  // Niets gepickt → geen ruis.
+  assert.equal(magAdresWijzigen({ status: "paid" }, 0).waarschuwing, undefined);
+});
+
+const ADRES = {
+  firstName: "Jan", lastName: "Jansen", phone: "0612345678", email: "jan@voorbeeld.nl",
+  street: "Kerkstraat", houseNumber: "12", postalCode: "2011 AB", city: "Haarlem", country: "NL",
+  companyName: "", vatNumber: "",
+};
+
+test("een leeg veld maakt het bezorgadres niet leeg", () => {
+  // Dit is het scenario dat een order onbezorgbaar maakt: iemand wist een veld
+  // en slaat op. De oude waarde hoort te blijven staan.
+  const r = schoonAdres({ street: "", city: "   " }, ADRES);
+  assert.equal(r.waarden.street, "Kerkstraat");
+  assert.equal(r.waarden.city, "Haarlem");
+  assert.deepEqual(r.gewijzigd, []);
+});
+
+test("alleen de velden die echt veranderen worden gemeld", () => {
+  const r = schoonAdres({ houseNumber: "14", city: "Haarlem" }, ADRES);
+  assert.equal(r.waarden.houseNumber, "14");
+  assert.deepEqual(r.gewijzigd, ["houseNumber"]);
+});
+
+test("postcode wordt genormaliseerd, maar alleen voor Nederland", () => {
+  assert.equal(schoonAdres({ postalCode: "2011ab" }, ADRES).waarden.postalCode, "2011 AB");
+  assert.equal(schoonAdres({ postalCode: " 2011  AB " }, ADRES).waarden.postalCode, "2011 AB");
+  // Belgische postcode is vier cijfers zonder letters — niet forceren.
+  const be = schoonAdres({ postalCode: "1000", country: "be" }, { ...ADRES, country: "BE" });
+  assert.equal(be.waarden.postalCode, "1000");
+  assert.equal(be.waarden.country, "BE");
+});
+
+test("het land ligt vast zodra er betaald is", () => {
+  // Verzendkosten per land zijn bij het afrekenen al geïnd; stil naar Duitsland
+  // omzetten betekent een pakket versturen tegen het verkeerde tarief.
+  const r = schoonAdres({ country: "DE" }, ADRES, { landVast: true });
+  assert.equal(r.waarden.country, "NL");
+  assert.equal(r.landGeweigerd, true);
+  // Onbetaald mag het gewoon.
+  const open = schoonAdres({ country: "DE" }, ADRES, { landVast: false });
+  assert.equal(open.waarden.country, "DE");
+  assert.equal(open.landGeweigerd, false);
+});
+
+test("een onleesbaar e-mailadres wordt geweigerd, niet opgeslagen", () => {
+  const r = schoonAdres({ email: "jan@" }, ADRES);
+  assert.equal(r.waarden.email, "jan@voorbeeld.nl");
+  assert.equal(r.fouten.length, 1);
+  // Een geldig adres gaat er wel in, in kleine letters.
+  assert.equal(schoonAdres({ email: "Jan@Voorbeeld.NL" }, ADRES).waarden.email, "jan@voorbeeld.nl");
+});
+
+test("de route mag alleen opnieuw als er nog niets gepickt is", () => {
+  const basis = { status: "paid", deliveryMethod: "standard", molliePaymentId: "tr_x" };
+  assert.equal(magRouteOpnieuw(basis, 0).ok, true);
+  assert.equal(magRouteOpnieuw(basis, 1).ok, false);
+  assert.equal(magRouteOpnieuw({ ...basis, status: "open" }, 0).ok, false);
+  assert.equal(magRouteOpnieuw({ ...basis, status: "shipped" }, 0).ok, false);
+  assert.equal(magRouteOpnieuw({ ...basis, deliveryMethod: "pickup" }, 0).ok, false);
+  assert.equal(magRouteOpnieuw({ ...basis, molliePaymentId: "" }, 0).ok, false);
 });

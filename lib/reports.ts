@@ -374,24 +374,27 @@ export async function exportOrders(opts: OrderListOpts): Promise<string> {
   if (opts.status) conds.push(sql`status = ${opts.status}`);
   if (opts.channel === "online") conds.push(sql`mollie_payment_id is not null and fulfillment_status <> 'imported'`);
   if (opts.channel === "import") conds.push(sql`fulfillment_status = 'imported'`);
+  if (opts.channel === "store") conds.push(sql`sold_by_store <> ''`);
+  if (opts.betaling) conds.push(betaalFilter(opts.betaling));
   if (opts.from) conds.push(sql`created_at >= ${opts.from}`);
   if (opts.to) conds.push(sql`created_at <= ${opts.to}`);
   const where = sql.join(conds, sql` and `);
   const rows = await db.execute<{
     order_number: string; created_at: string; status: string; channel: string; fulfillment_status: string;
-    email: string; name: string; postal_code: string; city: string;
+    email: string; name: string; postal_code: string; city: string; payment_status: string | null;
     total_cents: number; discount_cents: number; giftcard_cents: number;
   }>(sql`
     select order_number, to_char(created_at,'YYYY-MM-DD HH24:MI') created_at, status,
-           case when fulfillment_status='imported' then 'import' when mollie_payment_id is not null then 'online' else 'online' end channel,
+           case when fulfillment_status='imported' then 'import' when sold_by_store <> '' then sold_by_store else 'online' end channel,
            fulfillment_status, email, (first_name||' '||last_name) name, coalesce(postal_code,'') postal_code, coalesce(city,'') city,
+           coalesce(payment_status,'') payment_status,
            total_cents, coalesce(discount_cents,0) discount_cents, coalesce(giftcard_cents,0) giftcard_cents
     from orders where ${where}
     order by created_at desc limit ${EXPORT_CAP}`);
   return toCsv(
-    ["Ordernummer", "Datum", "Status", "Kanaal", "Fulfilment", "E-mail", "Naam", "Postcode", "Plaats", "Totaal", "Korting", "Cadeaubon"],
+    ["Ordernummer", "Datum", "Status", "Betaling", "Kanaal", "Fulfilment", "E-mail", "Naam", "Postcode", "Plaats", "Totaal", "Korting", "Cadeaubon"],
     rows.rows.map((x) => [
-      x.order_number, x.created_at, x.status, x.channel, x.fulfillment_status, x.email, (x.name || "").trim(),
+      x.order_number, x.created_at, x.status, x.payment_status || "", x.channel, x.fulfillment_status, x.email, (x.name || "").trim(),
       x.postal_code, x.city, euros(x.total_cents), euros(x.discount_cents), euros(x.giftcard_cents),
     ]),
   );
