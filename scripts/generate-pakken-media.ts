@@ -2,6 +2,7 @@ import "@/lib/load-env";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
 import { cleanModelTo45 } from "./clean-model";
+import { MODEL_REFS } from "@/lib/brand-models";
 import { newCollectionCond } from "@/lib/new-collection";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
@@ -45,16 +46,7 @@ const MOTIONS = [
   "The model runs a hand through his hair and gives a laid-back smile, calm natural movement.",
 ];
 
-// Vaste merk-modellen (blob-URL's), geroteerd voor diversiteit. Vul aan zodra de
-// modellen klaar zijn (gebruiker levert er 2, ik genereer er 1). Leeg = FASHN
-// kiest zelf een model (huidig gedrag).
-const MODEL_REFS: string[] = [
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-a.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-b.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-c.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-d.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-e.jpg",
-];
+// Vaste merk-modellen, geroteerd voor diversiteit — één bron in @/lib/brand-models.
 
 /** product-to-model-inputs, met optioneel een vast merk-model via face_reference. */
 function modelInputs(img: string, prompt: string, i: number) {

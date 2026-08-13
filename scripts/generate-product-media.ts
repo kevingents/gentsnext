@@ -1,6 +1,7 @@
 import "@/lib/load-env";
 import { put } from "@vercel/blob";
 import { cleanModelTo45 } from "./clean-model";
+import { MODEL_REFS } from "@/lib/brand-models";
 import { newCollectionCond } from "@/lib/new-collection";
 import sharp from "sharp";
 import { getDb } from "@/db";
@@ -72,14 +73,6 @@ const CAT: Record<string, { wear: string; frame: Frame; kind: Kind }> = {
   Stropdassen: { wear: "wearing THIS necktie neatly knotted over a crisp white dress shirt under a navy suit jacket", frame: "upper", kind: "tie" },
   Strikken: { wear: "wearing THIS bow tie with a crisp white dress shirt and a black tuxedo", frame: "upper", kind: "tie" },
 };
-
-const MODEL_REFS = [
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-a.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-b.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-c.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-d.jpg",
-  "https://aokh8l4hrkrnedl2.public.blob.vercel-storage.com/gents-models/brand-model-e.jpg",
-];
 
 function poseFor(frame: Frame, i: number) {
   const pool = frame === "full" ? POSES_FULL : frame === "upper" ? POSES_UPPER : POSES_LOWER;
