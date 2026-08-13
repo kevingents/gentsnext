@@ -115,7 +115,7 @@ export function ProfileClient({
 }: {
   customer: Customer;
   data: Data;
-  /** De scanbare clubpas; de server bouwt de QR (lib/club-pass). */
+  /** De scanbare memberspas; de server bouwt de QR (lib/club-pass). */
   pass?: ClubPassData | null;
   walletEnabled?: boolean;
   googleWalletEnabled?: boolean;
@@ -585,7 +585,7 @@ function Retouren({ data }: { data: Data }) {
   );
 }
 
-/* ── The Club of GENTS ────────────────────────────────────────────────────── */
+/* ── GENTS MEMBERS ────────────────────────────────────────────────────── */
 /** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). Koers uit de tool. */
 function RedeemPoints({ available, koers }: { available: number; koers: RedeemConfig }) {
   const t = useT();
@@ -679,45 +679,56 @@ function Punten({ data, pass, walletEnabled, googleWalletEnabled, bonuses, redee
   const walletBonus = bonuses.find((b) => b.kind === "wallet");
   return (
     <div className="space-y-6">
-      {/* De pas staat bovenaan, niet onderaan: dit is het enige op deze pagina
-          dat je stáánd aan een kassa nodig hebt. Saldo en lidnummer staan eróp,
-          dus de kaart eronder herhaalt die niet — die gaat over de weg naar je
-          volgende tegoedbon en over de uitleg. */}
-      {pass && <ClubPassCard pass={pass} available={data.pointsAvailable} pending={data.pointsPending} />}
-      <div className="border border-line p-6">
-        {!pass && (
-          <>
-            <p className="label-brand">{t("account.points.balanceTitle")}</p>
-            <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
-            {data.pointsPending > 0 && (
-              <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
-            )}
-          </>
+      {/* Pas en saldokaart NAAST elkaar op een breed scherm. Onder elkaar liet
+          de pas rechts een half scherm leeg — en dat lege vlak is precies waar
+          de kaart met de voortgang thuishoort. Onder lg stapelen ze, met de pas
+          bovenaan: dat is het enige op deze pagina dat je stáánd aan een kassa
+          nodig hebt.
+          items-start, anders rekt de kortste kaart mee met de langste. */}
+      <div className={`grid items-start gap-6 ${pass ? "lg:grid-cols-2" : ""}`}>
+        {pass && (
+          <ClubPassCard
+            pass={pass}
+            available={data.pointsAvailable}
+            pending={data.pointsPending}
+            walletEnabled={walletEnabled}
+            googleWalletEnabled={googleWalletEnabled}
+            /* De wallet-bonus alleen tonen zolang hij te halen valt. */
+            walletBonusPoints={walletBonus && !walletBonus.done ? walletBonus.points : 0}
+          />
         )}
-        <PuntenVoortgang available={data.pointsAvailable} pending={data.pointsPending} redeem={redeem} />
-        <p className="mt-4 font-sans text-sm text-ink-soft">
-          {t("account.points.explainer")}{" "}
-          <Link href={CLUB_PATH} className="text-ink underline underline-offset-4">
-            {t("account.points.clubLink")}
-          </Link>
-          .
-        </p>
-        {(walletEnabled || googleWalletEnabled) && (
-          <div className="mt-5">
-            {/* Allebei tonen als ze aanstaan: welk toestel de klant heeft weten we
-                hier niet, en raden op de user-agent gaat op tablets/desktop mis. */}
-            <div className="flex flex-wrap gap-2">
-              {walletEnabled && <AppleWalletButton />}
-              {googleWalletEnabled && <GoogleWalletButton />}
+        <div className="border border-line p-6">
+          {/* Zonder pas (theoretisch: prop niet meegegeven) valt het saldo hier
+              terug, anders staat het nergens. */}
+          {!pass && (
+            <>
+              <p className="label-brand">{t("account.points.balanceTitle")}</p>
+              <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
+              {data.pointsPending > 0 && (
+                <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
+              )}
+            </>
+          )}
+          <PuntenVoortgang available={data.pointsAvailable} pending={data.pointsPending} redeem={redeem} />
+          <p className="mt-4 font-sans text-sm text-ink-soft">
+            {t("account.points.explainer")}{" "}
+            <Link href={CLUB_PATH} className="text-ink underline underline-offset-4">
+              {t("account.points.clubLink")}
+            </Link>
+            .
+          </p>
+          {/* De wallet-knoppen staan bij de pas, niet hier: je voegt een pas toe,
+              geen saldo. Zonder pas-kaart horen ze alsnog hier thuis. */}
+          {!pass && (walletEnabled || googleWalletEnabled) && (
+            <div className="mt-5">
+              <div className="flex flex-wrap gap-2">
+                {walletEnabled && <AppleWalletButton />}
+                {googleWalletEnabled && <GoogleWalletButton />}
+              </div>
+              <p className="mt-2 font-sans text-xs text-muted">{t("account.points.walletHint")}</p>
             </div>
-            <p className="mt-2 font-sans text-xs text-muted">
-              {t("account.points.walletHint")}
-              {walletBonus && !walletBonus.done && walletBonus.points > 0
-                ? ` ${t("account.bonus.walletInline", { n: walletBonus.points })}`
-                : ""}
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       <PuntenActies bonuses={bonuses} onTab={onTab} />
       <RedeemPoints available={data.pointsAvailable} koers={redeem} />

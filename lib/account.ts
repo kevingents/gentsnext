@@ -346,7 +346,7 @@ export async function claimGuestData(customerId: string, email: string): Promise
     .update(storePurchases)
     .set({ customerId })
     .where(and(eq(storePurchases.email, email), isNull(storePurchases.customerId)));
-  // Clubpunten van de (zojuist gekoppelde) betaalde weborders bijschrijven — idempotent,
+  // Punten van de (zojuist gekoppelde) betaalde weborders bijschrijven — idempotent,
   // dus opnieuw inloggen schrijft nooit dubbel bij. Non-fataal.
   try {
     const linked = await db
@@ -638,7 +638,7 @@ export async function exportMyData(customerId: string, email: string) {
           maatprofiel: cust.sizeProfile,
           voorkeuren: cust.preferences,
           nieuwsbriefAangemeld: cust.marketingOptIn,
-          clubpunten: profile.pointsBalance,
+          punten: profile.pointsBalance,
           klantSinds: cust.createdAt,
         }
       : null,
@@ -647,7 +647,7 @@ export async function exportMyData(customerId: string, email: string) {
     adresboek: profile.addresses,
     tegoedbonnen: profile.vouchers,
     cadeaubonnen: profile.giftcards,
-    clubpuntenHistorie: profile.loyalty,
+    puntenHistorie: profile.loyalty,
   };
 }
 

@@ -17,7 +17,7 @@ import { CLUB_NAME } from "@/lib/club";
  * Zonder sleutel doet niets (de cron geeft dan netjes 412 terug).
  *
  * Merk-veilig: de merknaam "GENTS", de tagline "GENTS — Suits You" en de naam van
- * het spaarprogramma "The Club of GENTS" (lib/club) blijven ONVERTAALD;
+ * het spaarprogramma "GENTS MEMBERS" (lib/club) blijven ONVERTAALD;
  * maten/getallen/prijzen/HTML-tags blijven intact.
  */
 

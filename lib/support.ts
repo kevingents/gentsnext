@@ -61,10 +61,10 @@ CADEAUBONNEN:
   const club = `
 ${CLUB_NAME.toUpperCase()} (SPAARPROGRAMMA):
 - Ons spaarprogramma heet "${CLUB_NAME}". Gratis lid met een GENTS-account; uitleg staat op ${CLUB_PATH}.
-- Sparen: ${perEuro} punt per hele bestede euro, online én in de winkel (in de winkel de clubpas of het e-mailadres laten scannen).
+- Sparen: ${perEuro} punt per hele bestede euro, online én in de winkel (in de winkel de memberspas of het e-mailadres laten scannen).
 - Verzilveren: vanaf ${minPunten} punten voor een tegoedbon van ${formatEuro(minPunten * centsPerPunt)}, te besteden bij het afrekenen.
 - Punten van een aankoop staan ${lc?.vestingDays ?? 21} dagen in behandeling (de retourperiode) en zijn daarna besteedbaar; bij een retour gaan ze er weer af.
-- Clubpas in Apple Wallet of Google Wallet: saldo in je telefoon, scanbaar aan de kassa.
+- Memberspas in Apple Wallet of Google Wallet: saldo in je telefoon, scanbaar aan de kassa.
 - Kocht iemand in de winkel zonder scan? Op de kassabon staat een QR-code om de punten alsnog te claimen.`;
   return `
 GENTS is dé Nederlandse herenmode-specialist voor formele momenten (pakken, overhemden, smoking, accessoires, schoenen). 19 winkels in NL en België + webshop.
@@ -97,7 +97,7 @@ VERMAKEN (BETAALDE SERVICE):
 - Passen gebeurt in de winkel; vraag ernaar bij het afhalen of bij een pasafspraak. Vermaakte artikelen kunnen niet geretourneerd worden.
 
 ACCOUNT:
-- Inloggen met een veilige login-link (geen wachtwoord). In je account zie je online- én winkelaankopen, clubpunten, vouchers en je maatprofiel.
+- Inloggen met een veilige login-link (geen wachtwoord). In je account zie je online- én winkelaankopen, punten, vouchers en je maatprofiel.
 ${club}
 
 DRESSCODES:

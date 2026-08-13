@@ -4,7 +4,7 @@ import { clubMemberCode } from "@/lib/club";
 /**
  * lib/club-pass.ts
  *
- * De clubpas op het SCHERM — dezelfde pas als in Apple/Google Wallet, maar dan
+ * De memberspas op het SCHERM — dezelfde pas als in Apple/Google Wallet, maar dan
  * in het account, zodat een klant die geen wallet gebruikt 'm alsnog kan laten
  * scannen aan de kassa.
  *

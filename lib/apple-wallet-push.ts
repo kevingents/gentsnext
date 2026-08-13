@@ -5,7 +5,7 @@ import { walletAppleRegistrations } from "@/db/schema";
 import { walletConfigured } from "@/lib/apple-wallet-config";
 
 /**
- * APNs-push voor de Apple-Wallet clubpas. Bij een saldowijziging sturen we een
+ * APNs-push voor de Apple-Wallet memberspas. Bij een saldowijziging sturen we een
  * lege push naar elk geregistreerd device; iOS haalt daarna zélf de verse pas op
  * (GET /api/wallet/apple/v1/passes/…). De provider-verbinding gebruikt hetzelfde
  * Pass Type ID-certificaat als de ondertekening (client-TLS), topic =

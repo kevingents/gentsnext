@@ -8,7 +8,7 @@ import { CLUB_LOGO_LIGHT, CLUB_NAME, CLUB_PASS_NAME, clubMemberCode } from "@/li
 export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
 
 /**
- * Apple Wallet — de GENTS Clubpas (.pkpass, storeCard) van The Club of GENTS.
+ * Apple Wallet — de GENTS Memberspas (.pkpass, storeCard) van GENTS MEMBERS.
  *
  * Een geldige pas moet ondertekend worden met een Apple **Pass Type ID-certificaat**
  * uit het GENTS Apple Developer-account. Die secrets staan in Vercel-env (base64),
@@ -33,12 +33,12 @@ function passImages() {
   imgCache = {
     // Zwarte pas → WITTE merk-assets (Kevin, 21 juli: "zoals onze zwarte pas,
     // wit logo"). Wit vierkant icoon (notificaties/lockscreen) + witte wordmark.
-    // De wordmark is die van het programma: dit ÍS de clubpas. Het icoon blijft
+    // De wordmark is die van het programma: dit ÍS de memberspas. Het icoon blijft
     // het GENTS-merk — daar is geen ruimte voor twee regels tekst.
     /* Het pas-icoon verschijnt NIET op de pas zelf maar in meldingen en op het
        toegangsscherm - en daar zet iOS het op een LICHTE achtergrond. Een wit
        merkteken op transparant is daar dus onzichtbaar (Kevin, 13 aug: de melding
-       "Je hebt nu 310 clubpunten" kwam binnen met een leeg wit vlakje ervoor).
+       "Je hebt nu 310 punten" kwam binnen met een leeg wit vlakje ervoor).
        Het officiële vierkante logo heeft een dekkende zwarte achtergrond en werkt
        daardoor op licht én donker. */
     icon: readFileSync(join(root, "public/brand/brand-logo-vierkant.png")),
@@ -67,7 +67,7 @@ export type LoyaltyPassInput = {
 };
 
 /**
- * Bouwt een ondertekende GENTS Clubpas (.pkpass) voor één klant. Premium look:
+ * Bouwt een ondertekende GENTS Memberspas (.pkpass) voor één klant. Premium look:
  * zwarte pas met wit logo, QR met de klant-referentie (scanbaar aan de kassa om
  * te sparen/inwisselen). serialNumber = customerId → opnieuw downloaden werkt de
  * bestaande pas bij i.p.v. een tweede pas te maken.
@@ -126,10 +126,10 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   pass.type = "storeCard";
   pass.primaryFields.push({
     key: "balance",
-    label: "Clubpunten",
+    label: "Punten",
     value: String(points),
     // iOS toont dit als melding zodra het saldo op de pas verandert.
-    changeMessage: "Je hebt nu %@ clubpunten",
+    changeMessage: "Je hebt nu %@ punten",
   });
   pass.secondaryFields.push({ key: "member", label: "Lid", value: input.name });
   /* Volgorde op waarde: tegoed (uitgeefbaar) → punten in behandeling (verklaart
