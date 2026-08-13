@@ -1,6 +1,33 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { loyaltyAccounts, loyaltyMutations } from "@/db/schema";
+import { customers, loyaltyAccounts, loyaltyEvents, loyaltyMutations, posSales } from "@/db/schema";
+import { boekInGrootboek, neonKlantVoorKassa } from "@/lib/loyalty-brug";
+import { redeemableBalance } from "@/lib/loyalty-claim";
+import { getSettings } from "@/lib/settings";
+
+/** De kassareden in klanttaal: dit staat straks in het puntenoverzicht van de klant. */
+function kassaReden(reden: string): string {
+  const r = clean(reden).toLowerCase();
+  if (r === "ingewisseld") return "Ingewisseld aan de kassa";
+  if (r === "retour") return "Retour in de winkel";
+  if (r.includes("achteraf")) return "Kassabon gekoppeld";
+  return "Aankoop in de winkel";
+}
+
+/**
+ * Wanneer worden kassapunten besteedbaar? Zelfde regel als een weborder: de
+ * bondatum plus het vestingvenster, want ook een winkelaankoop kan terug.
+ */
+async function vestsAtVoorBon(saleId: string): Promise<Date> {
+  const dagen = Math.max(0, (await getSettings()).loyaltyConfig?.vestingDays ?? 21);
+  let basis = new Date();
+  const id = clean(saleId);
+  if (id) {
+    const [bon] = await getDb().select({ op: posSales.createdAt }).from(posSales).where(eq(posSales.id, id)).limit(1);
+    if (bon?.op instanceof Date && !isNaN(bon.op.getTime())) basis = bon.op;
+  }
+  return new Date(basis.getTime() + dagen * 86400000);
+}
 
 /**
  * Loyalty-core: kassa-spaarpunten in Neon (bron-van-waarheid; vervangt de
@@ -52,9 +79,24 @@ function rowToMutation(r: { id: string; delta: number; reason: string; saleId: s
   };
 }
 
+/**
+ * Saldo voor de kassa. Leest HET grootboek (`loyalty_events`) zodra we de klant
+ * kunnen thuisbrengen — zie lib/loyalty-brug.
+ *
+ * Bewust het BESTEEDBARE (geveste) saldo: dat is wat de klant aan de balie
+ * daadwerkelijk kan inwisselen, en het is hetzelfde getal waar
+ * `redeemPointsForVoucher` mee rekent. Een hoger getal tonen dat je vervolgens
+ * niet mag uitgeven is precies de discussie die je aan de kassa niet wilt.
+ *
+ * Valt de klant niet thuis te brengen, dan lezen we het oude kassa-grootboek —
+ * anders zou een onbekend nummer stil op 0 uitkomen.
+ */
 export async function getLoyaltyBalanceCore(customerId: string): Promise<number> {
   const cid = clean(customerId);
   if (!cid) return 0;
+  const { customerId: klant } = await neonKlantVoorKassa(cid);
+  if (klant) return Math.max(0, await redeemableBalance(klant));
+
   const db = getDb();
   const [r] = await db.select({ balance: loyaltyAccounts.balance })
     .from(loyaltyAccounts).where(eq(loyaltyAccounts.customerId, cid)).limit(1);
@@ -70,6 +112,34 @@ export async function getLoyaltyAccountCore(customerId: string, limit = 20): Pro
   if (!cid) return { customerId: "", name: "", balance: 0, mutations: [] };
   const db = getDb();
   const lim = Math.max(1, Math.min(200, Number(limit) || 20));
+
+  /* Zelfde bron als het saldo: kunnen we de klant thuisbrengen, dan toont de
+     kassa de ECHTE historie uit het grootboek — inclusief wat de klant online
+     spaarde. Dat is precies wat een verkoper aan de balie moet kunnen zien. */
+  const brug = await neonKlantVoorKassa(cid);
+  if (brug.customerId) {
+    const [klant, rijen] = await Promise.all([
+      db.select({ naam: sql<string>`trim(${customers.firstName} || ' ' || ${customers.lastName})` })
+        .from(customers).where(eq(customers.id, brug.customerId)).limit(1),
+      db.select().from(loyaltyEvents).where(eq(loyaltyEvents.customerId, brug.customerId))
+        .orderBy(desc(loyaltyEvents.createdAt)).limit(lim),
+    ]);
+    return {
+      customerId: cid,
+      name: clean(klant[0]?.naam),
+      balance: Math.max(0, await redeemableBalance(brug.customerId)),
+      mutations: rijen.map((r) => ({
+        id: r.id,
+        delta: r.points,
+        reason: r.reason,
+        // De kassa verwacht een bon-id; dat zit vooraan in de sleutel "<klant>|<bon>|<reden>".
+        saleId: String(r.refId || "").split("|")[1] ?? "",
+        store: "",
+        at: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      })),
+    };
+  }
+
   const [[acc], muts] = await Promise.all([
     db.select().from(loyaltyAccounts).where(eq(loyaltyAccounts.customerId, cid)).limit(1),
     db.select().from(loyaltyMutations).where(eq(loyaltyMutations.customerId, cid))
@@ -114,6 +184,24 @@ export async function mutateLoyaltyCore(input: {
   const actor = clean(input.actor);
   const key = saleId ? `${cid}|${saleId}|${reason}` : newMutId();
 
+  /* ── Eén grootboek ────────────────────────────────────────────────────────
+     Kunnen we deze kassa-klant thuisbrengen, dan boeken we in `loyalty_events`
+     — hetzelfde grootboek waar de klant online uit spaart én waar de kassa via
+     `redeemPointsForVoucher` al uit inwisselt. Zonder dit spaarde een klant aan
+     de balie in de ene pot en gaf hij uit uit de andere.
+
+     Verdiende punten krijgen dezelfde vesting als een weborder (de bon kan
+     retour); een afboeking is direct. Lukt het thuisbrengen niet, dan valt hij
+     terug op het oude kassa-grootboek — luid gelogd, want na de migratie hoort
+     dat niet meer voor te komen. */
+  const brug = await neonKlantVoorKassa(cid, { saleId });
+  if (brug.customerId) {
+    const vestsAt = d > 0 ? await vestsAtVoorBon(saleId) : null;
+    await boekInGrootboek({ customerId: brug.customerId, punten: d, reden: kassaReden(reason), sleutel: key, vestsAt });
+    return { ok: true, balance: Math.max(0, await redeemableBalance(brug.customerId)), applied: d };
+  }
+  console.warn(`[loyalty-core] kassa-klant ${cid} niet thuis te brengen — geboekt in het oude kassa-grootboek.`);
+
   const db = getDb();
   const res = await db.execute<{ new_balance: number | null; applied: number }>(sql`
     with ins as (
@@ -155,13 +243,29 @@ export async function reverseLoyaltySaleCore(input: {
   const REV = "verkoop geannuleerd";
   const db = getDb();
 
-  const [already] = await db.select({ id: loyaltyMutations.id }).from(loyaltyMutations)
-    .where(eq(loyaltyMutations.mutationKey, `${cid}|${sid}|${REV}`)).limit(1);
-  if (already) return { ok: true, balance: await getLoyaltyBalanceCore(cid), applied: 0 };
+  /* Hoeveel is er voor DEZE bon geboekt? Sinds het samenvoegen kan dat in het
+     grootboek staan (refId begint met "<klant>|<bon>|") of nog in het oude
+     kassa-grootboek. Allebei optellen: een bon van vóór de migratie moet ook
+     terug te draaien zijn. */
+  const brug = await neonKlantVoorKassa(cid, { saleId: sid });
+  if (brug.customerId) {
+    const [al] = await db
+      .select({ id: loyaltyEvents.id })
+      .from(loyaltyEvents)
+      .where(and(eq(loyaltyEvents.refType, "pos_sale"), eq(loyaltyEvents.refId, `${cid}|${sid}|${REV}`)))
+      .limit(1);
+    if (al) return { ok: true, balance: await getLoyaltyBalanceCore(cid), applied: 0 };
+  }
 
   const net = await db.execute<{ net: number }>(sql`
-    select coalesce(sum("delta"), 0)::int as net from ${loyaltyMutations}
-    where "customer_id" = ${cid} and "sale_id" = ${sid} and "reason" <> ${REV}
+    select coalesce((
+      select sum("delta")::int from ${loyaltyMutations}
+      where "customer_id" = ${cid} and "sale_id" = ${sid} and "reason" <> ${REV}
+    ), 0) + coalesce((
+      select sum(e."points")::int from ${loyaltyEvents} e
+      where e."ref_type" = 'pos_sale' and e."ref_id" like ${`${cid}|${sid}|%`}
+        and e."ref_id" <> ${`${cid}|${sid}|${REV}`}
+    ), 0) as net
   `);
   const n = Number(net.rows?.[0]?.net) || 0;
   if (n === 0) return { ok: true, balance: await getLoyaltyBalanceCore(cid), applied: 0 };
