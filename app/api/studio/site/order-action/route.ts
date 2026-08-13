@@ -3,11 +3,14 @@ import { adminOrToken } from "@/lib/studio-token";
 import { getOrderByNumber, updateOrderStatus } from "@/lib/orders";
 import { reportUnfulfillable, resolveUnfulfillable } from "@/lib/unfulfillable";
 import {
+  adresWijzigen,
   betaalstatusVernieuwen,
   bevestigingOpnieuw,
   logboekSchrijf,
   nieuweBetaallink,
+  notitieToevoegen,
   orderAnnuleren,
+  routeOpnieuw,
   terugbetalen,
 } from "@/lib/order-admin";
 
@@ -27,6 +30,9 @@ export const maxDuration = 30;
  *  - "betaalstatus"        status bij Mollie ophalen (gemiste webhook)
  *  - "annuleren"           onbetaalde bestelling terugdraaien
  *  - "bevestiging"         orderbevestiging opnieuw sturen
+ *  - "adres"               bezorgadres/contactgegevens corrigeren
+ *  - "route"               allocatie naar filialen opnieuw berekenen
+ *  - "notitie"             interne notitie in het logboek
  *
  * De geld-acties zitten in lib/order-admin; deze route is alleen de deur:
  * authenticeren, invoer schoonmaken, doorgeven. `actor` (de portal-gebruiker)
@@ -50,6 +56,8 @@ export async function POST(req: Request) {
     actor?: unknown;
     mail?: unknown;
     amountCents?: unknown;
+    adres?: unknown;
+    notitie?: unknown;
   };
   try {
     body = await req.json();
@@ -130,6 +138,22 @@ export async function POST(req: Request) {
 
     if (action === "bevestiging") {
       const res = await bevestigingOpnieuw(orderNumber, { actor });
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    if (action === "adres") {
+      const velden = (body?.adres && typeof body.adres === "object" ? body.adres : {}) as Record<string, unknown>;
+      const res = await adresWijzigen(orderNumber, velden, { actor });
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    if (action === "route") {
+      const res = await routeOpnieuw(orderNumber, { actor });
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    if (action === "notitie") {
+      const res = await notitieToevoegen(orderNumber, String(body?.notitie || ""), { actor });
       return NextResponse.json(res, { status: res.ok ? 200 : 400 });
     }
 
