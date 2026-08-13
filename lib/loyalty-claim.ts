@@ -11,6 +11,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, loyaltyEvents, vouchers } from "@/db/schema";
 import { pushPassUpdate } from "@/lib/apple-wallet-push";
+import { pushGoogleWalletForCustomer } from "@/lib/google-wallet-push";
 import { getPosSaleCore } from "@/lib/pos-sales-core";
 import { verifyReceiptToken, receiptSecretConfigured } from "@/lib/receipt-token";
 import { getSettings } from "@/lib/settings";
@@ -165,6 +166,7 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     });
     // Apple-Wallet pas verversen (best-effort, env-gated → no-op zonder certs).
     await pushPassUpdate(customerId).catch(() => 0);
+    await pushGoogleWalletForCustomer(customerId).catch(() => false);
     return { ok: true, code, valueCents, points: pts, newBalance: Number(dec[0].balance) || 0 };
   } catch {
     // Cache terug + het negatieve ledger-event verwijderen → cache én grootboek blijven
@@ -214,6 +216,7 @@ async function creditOnce(customerId: string, points: number, reason: string, re
       .set({ loyaltyPoints: sql`${customers.loyaltyPoints} + ${points}`, updatedAt: new Date() })
       .where(eq(customers.id, customerId));
     await pushPassUpdate(customerId).catch(() => 0);
+    await pushGoogleWalletForCustomer(customerId).catch(() => false);
   }
   return { ok: true, points: inserted.length ? points : 0, alreadyClaimed: !inserted.length, balance: await ledgerBalance(customerId) };
 }
@@ -350,5 +353,6 @@ export async function reverseOrderLoyalty(customerId: string, orderId: string, b
       .set({ loyaltyPoints: sql`greatest(0, ${customers.loyaltyPoints} - ${toReverse})`, updatedAt: new Date() })
       .where(eq(customers.id, cid));
     await pushPassUpdate(cid).catch(() => 0);
+    await pushGoogleWalletForCustomer(cid).catch(() => false);
   }
 }

@@ -6,6 +6,7 @@ import { walletAppleRegistrations } from "@/db/schema";
 import { getSessionCustomer, getProfileData } from "@/lib/account";
 import { getNewArrivalsInSize, getRecommendedFromHistory } from "@/lib/catalog";
 import { walletConfigured } from "@/lib/apple-wallet";
+import { googleWalletConfigured } from "@/lib/google-wallet-config";
 import { bonusTasks } from "@/lib/loyalty-bonus";
 import type { ProfilePreferences } from "@/lib/profiel-voorkeuren";
 import { getStores } from "@/lib/stores";
@@ -78,6 +79,7 @@ export default async function AccountPage() {
         centsPerPoint: loyaltyConfig.redeemCentsPerPoint,
       }}
       walletEnabled={walletConfigured()}
+      googleWalletEnabled={googleWalletConfigured()}
       bonuses={bonussen}
       stores={getStores().map((s) => ({ pageHandle: s.pageHandle, title: s.title, city: s.city }))}
     />

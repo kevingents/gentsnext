@@ -91,6 +91,7 @@ export async function redeemVoucherForRef(
     const owner = claimed[0].customerId;
     if (owner) {
       try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(owner); } catch { /* best-effort */ }
+      try { await (await import("@/lib/google-wallet-push")).pushGoogleWalletForCustomer(owner); } catch { /* best-effort */ }
     }
     return { ok: true };
   }
@@ -132,6 +133,7 @@ export async function releaseVoucherForRef(code: string, ref: string): Promise<{
     const owner = rows[0].customerId;
     if (owner) {
       try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(owner); } catch { /* best-effort */ }
+      try { await (await import("@/lib/google-wallet-push")).pushGoogleWalletForCustomer(owner); } catch { /* best-effort */ }
     }
   }
   return { ok: true };
