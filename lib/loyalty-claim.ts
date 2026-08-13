@@ -2,7 +2,7 @@
  * lib/loyalty-claim.ts
  *
  * Anonieme-punten-claim-engine. Een kassabon (zonder account) of een gast-weborder
- * levert clubpunten op; die worden bijgeschreven zodra de klant een account heeft.
+ * levert punten op; die worden bijgeschreven zodra de klant een account heeft.
  * Geclaimde punten landen in het ACCOUNT-grootboek (loyaltyEvents in Neon) — de
  * bron-van-waarheid voor het account. Idempotent op refType+refId, dus dubbel
  * claimen (dubbelklik, opnieuw inloggen) schrijft nooit dubbel bij.
@@ -141,7 +141,7 @@ function randVoucherCode(): string {
 export type RedeemResult = { ok: boolean; code?: string; valueCents?: number; points?: number; newBalance?: number; error?: string };
 
 /**
- * Wissel clubpunten in voor een GENTS-tegoedbon — VOLLEDIG Neon-native, geen SRS.
+ * Wissel punten in voor een GENTS-tegoedbon — VOLLEDIG Neon-native, geen SRS.
  * Vervangt de oude SRS CreateFromLoyaltyPoints-flow. Boekt de punten af via een negatief
  * loyalty_events-event én maakt een vaste-bedrag-voucher aan (aan deze klant). Rekent op
  * het BESTEEDBARE (gevest) saldo; koers/minimum/stap/looptijd uit de settings-store.
@@ -197,7 +197,7 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     await db.insert(vouchers).values({
       code,
       customerId,
-      description: `Ingewisseld: ${pts} clubpunten`,
+      description: `Ingewisseld: ${pts} punten`,
       kind: "amount",
       valueCents,
       status: "active",
@@ -273,7 +273,7 @@ export async function creditBonusOnce(customerId: string, points: number, reason
   return creditOnce(cid, points, reason, refType, cid, null);
 }
 
-/** Verzilver de clubpunten van een ANONIEME kassabon naar een account. */
+/** Verzilver de punten van een ANONIEME kassabon naar een account. */
 export async function claimReceiptPoints(input: { saleId: string; token: string; customerId: string; email?: string }): Promise<ClaimResult> {
   const saleId = String(input.saleId || "").trim();
   const customerId = String(input.customerId || "").trim();

@@ -1,5 +1,5 @@
 /**
- * De clubpas is het enige scherm in het account dat een APPARAAT moet lezen in
+ * De memberspas is het enige scherm in het account dat een APPARAAT moet lezen in
  * plaats van een mens. Twee fouten zijn daarom hier duurder dan elders, en
  * allebei zien ze er goed uit:
  *

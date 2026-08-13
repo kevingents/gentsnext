@@ -7,7 +7,7 @@ import { useT } from "@/components/i18n/locale-provider";
 
 /**
  * /punten-claim?bon=<saleId>&t=<token> — landingspagina van de QR/CTA op een
- * anonieme kassabon. Verzilvert de clubpunten van de bon naar het ingelogde
+ * anonieme kassabon. Verzilvert de punten van de bon naar het ingelogde
  * account. Niet ingelogd? Dan vraagt de pagina zelf een magic-inloglink aan met
  * een next terug naar deze pagina, zodat de punten ná het inloggen klaarstaan.
  */

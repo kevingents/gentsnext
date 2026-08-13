@@ -1,25 +1,26 @@
 /**
  * lib/club.ts
  *
- * "The Club of GENTS" — de merknaam van ons spaarprogramma. Eén bron, want de
+ * "GENTS MEMBERS" — de merknaam van ons spaarprogramma (t/m 13 aug 2026 "The
+ * Club of GENTS"; de code houdt de oude CLUB_-namen aan, zie onderaan). Eén bron, want de
  * naam staat op tientallen plekken (site, klantmails, wallet-passen, de uitleg
  * aan de kassa) en een merknaam die je overal los intikt staat er binnen een
  * half jaar op drie manieren.
  *
  * Taalmodel — bewust uit elkaar gehouden:
- *   het PROGRAMMA  → "The Club of GENTS"  (merknaam, blijft onvertaald)
- *   de MUNTEENHEID → "punten" / "clubpunten"
- *   de PAS         → "clubpas" (Apple/Google Wallet)
+ *   het PROGRAMMA  → "GENTS MEMBERS"  (merknaam, blijft onvertaald)
+ *   de MUNTEENHEID → "punten"
+ *   de PAS         → "memberspas" (in Apple/Google Wallet én in het account)
  *
  * De naam blijft in élke taal ongewijzigd; lib/translate houdt 'm daarom net als
  * "GENTS" en de tagline buiten de vertaalronde.
  */
 
 /** De merknaam van het spaarprogramma. Nooit vertalen, nooit afkorten. */
-export const CLUB_NAME = "The Club of GENTS";
+export const CLUB_NAME = "GENTS MEMBERS";
 
 /** De publieke uitlegpagina van het programma. */
-export const CLUB_PATH = "/club";
+export const CLUB_PATH = "/members";
 
 /**
  * De spaarpas in Apple/Google Wallet, zoals de klant 'm in z'n telefoon ziet.
@@ -27,7 +28,7 @@ export const CLUB_PATH = "/club";
  * APPLE_PASS_TYPE_ID) staan hier bewust los van — die veranderen zou elke
  * bestaande pas van een klant losknippen.
  */
-export const CLUB_PASS_NAME = "GENTS Clubpas";
+export const CLUB_PASS_NAME = "GENTS Memberspas";
 
 /**
  * Het clubmerkteken. Twee kleuren, verder identiek: transparante achtergrond,
@@ -37,8 +38,8 @@ export const CLUB_PASS_NAME = "GENTS Clubpas";
  * Verhouding staat er expliciet bij zodat <Image> niet hoeft te gokken en de
  * pagina niet verspringt terwijl het beeld laadt.
  */
-export const CLUB_LOGO_DARK = "/brand/club-of-gents-zwart.png";
-export const CLUB_LOGO_LIGHT = "/brand/club-of-gents-wit.png";
+export const CLUB_LOGO_DARK = "/brand/gents-members-zwart.png";
+export const CLUB_LOGO_LIGHT = "/brand/gents-members-wit.png";
 export const CLUB_LOGO_SIZE = { width: 1200, height: 389 } as const;
 
 /**
@@ -57,3 +58,11 @@ export const CLUB_LOGO_SIZE = { width: 1200, height: 389 } as const;
  * lib/punten-acties-regels.js).
  */
 export { lidcode as clubMemberCode } from "@/lib/club-pas-regels";
+
+/*
+ * Waarom de constanten en de i18n-sleutels nog CLUB_/club. heten terwijl het
+ * programma GENTS MEMBERS is: de sleutels zijn de sleutel van de vertaalstore.
+ * Hernoemen gooit de en/de/fr/es-vertalingen van élke sleutel weg tot de
+ * vertaal-cron opnieuw draait, en levert verder niets op voor een klant. De
+ * NAAM leeft in CLUB_NAME; dit bestand is de enige plek waar je 'm verandert.
+ */

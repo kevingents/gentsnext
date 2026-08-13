@@ -6,9 +6,11 @@ import { CLUB_LOGO_LIGHT, CLUB_LOGO_SIZE, CLUB_NAME } from "@/lib/club";
 import type { ClubPassData, ClubPassQr } from "@/lib/club-pass";
 import { qrPad } from "@/lib/club-pas-regels";
 import { useT } from "@/components/i18n/locale-provider";
+import { AppleWalletButton } from "@/components/account/apple-wallet-button";
+import { GoogleWalletButton } from "@/components/account/google-wallet-button";
 
 /**
- * De clubpas in het account — dezelfde pas als in Apple/Google Wallet, maar dan
+ * De memberspas in het account — dezelfde pas als in Apple/Google Wallet, maar dan
  * op het scherm, zodat een klant zonder wallet 'm gewoon kan laten scannen.
  *
  * Twee dingen sturen het ontwerp, allebei omdat dit ding aan een kassa gebruikt
@@ -126,15 +128,23 @@ export function ClubPassCard({
   pass,
   available,
   pending = 0,
+  walletEnabled = false,
+  googleWalletEnabled = false,
+  walletBonusPoints = 0,
 }: {
   pass: ClubPassData;
   available: number;
   pending?: number;
+  walletEnabled?: boolean;
+  googleWalletEnabled?: boolean;
+  /** 0 = geen bonus meer te halen; dan zeggen we er niets over. */
+  walletBonusPoints?: number;
 }) {
   const t = useT();
   const [groot, setGroot] = useState(false);
+  const wallet = walletEnabled || googleWalletEnabled;
   return (
-    <div className="max-w-2xl bg-ink p-5 text-canvas sm:p-6">
+    <div className="bg-ink p-5 text-canvas sm:p-6">
       <Image
         src={CLUB_LOGO_LIGHT}
         alt={CLUB_NAME}
@@ -182,6 +192,21 @@ export function ClubPassCard({
       >
         {t("account.pass.showBig")}
       </button>
+      {/* De wallet-knoppen horen bíj de pas: je voegt een pas toe, geen saldo.
+          Allebei tonen als ze aanstaan — welk toestel de klant heeft weten we
+          hier niet, en raden op de user-agent gaat op tablets en desktop mis. */}
+      {wallet && (
+        <div className="mt-6 border-t border-canvas/15 pt-5">
+          <div className="flex flex-wrap gap-2">
+            {walletEnabled && <AppleWalletButton opDonker />}
+            {googleWalletEnabled && <GoogleWalletButton opDonker />}
+          </div>
+          <p className="mt-2.5 font-sans text-xs leading-relaxed text-canvas/55">
+            {t("account.pass.walletHint")}
+            {walletBonusPoints > 0 ? ` ${t("account.bonus.walletInline", { n: walletBonusPoints })}` : ""}
+          </p>
+        </div>
+      )}
       {groot && <GrootScherm pass={pass} onClose={() => setGroot(false)} />}
     </div>
   );

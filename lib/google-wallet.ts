@@ -13,7 +13,7 @@ import {
 export { googleWalletConfigured } from "@/lib/google-wallet-config";
 
 /**
- * Google Wallet — de GENTS Clubpas voor Android.
+ * Google Wallet — de GENTS Memberspas voor Android.
  *
  * De Android-tegenhanger van lib/apple-wallet, maar technisch een heel ander
  * beest: bij Apple bouwen én ondertekenen we een .pkpass-bestand, bij Google
@@ -82,7 +82,7 @@ function loyaltyObject(input: GoogleLoyaltyInput) {
     accountId: input.customerId,
     accountName: input.name,
     loyaltyPoints: {
-      label: "Clubpunten",
+      label: "Punten",
       balance: { int: points },
     },
     barcode: {

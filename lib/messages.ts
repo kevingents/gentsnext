@@ -130,7 +130,7 @@ const nl: Dict = {
   "order.status.refundedBody": "Het bedrag staat binnen enkele werkdagen op je rekening of als tegoed klaar. Vragen? Onze klantenservice helpt je graag.",
   // Punten verdienen zonder aankoop — drie eenmalige acties tegen retouren.
   // Bedragen staan nooit in de tekst: die komen als {n} uit de instellingen.
-  "account.bonus.title": "Extra clubpunten verdienen",
+  "account.bonus.title": "Extra punten verdienen",
   "account.bonus.intro": "Drie dingen die je één keer doet — en die ervoor zorgen dat je bestelt wat écht past.",
   "account.bonus.toEarn": "{n} punten te halen",
   "account.bonus.done": "Bijgeschreven",
@@ -141,7 +141,7 @@ const nl: Dict = {
   "account.bonus.size.title": "Bewaar je maten",
   "account.bonus.size.body": "Met je colbert- en overhemdmaat in je profiel zie je overal meteen wat er in jouw maat is.",
   "account.bonus.size.cta": "Invullen",
-  "account.bonus.wallet.title": "Zet je clubpas in Apple Wallet",
+  "account.bonus.wallet.title": "Zet je memberspas in Apple Wallet",
   "account.bonus.wallet.body": "Je saldo altijd bij de hand — ook aan de kassa in de winkel.",
   "account.bonus.wallet.cta": "Toevoegen",
   "account.bonus.store.title": "Kies je vaste winkel",
@@ -150,14 +150,15 @@ const nl: Dict = {
   "account.bonus.profile.title": "Maak je profiel compleet",
   "account.bonus.profile.body": "Leeftijd, favoriete kleuren, je vaste winkel en waarvoor je bij ons shopt.",
   "account.bonus.profile.cta": "Aanvullen",
-  /* De clubpas op het scherm — het is een kassa-schermpje, dus de teksten zijn
+  /* De memberspas op het scherm — het is een kassa-schermpje, dus de teksten zijn
      instructies en geen marketing. "Lidnummer" en niet "klantnummer": dat is
      wat er op de wallet-pas ook staat. */
   "account.pass.member": "Lidnummer",
   "account.pass.scanHint": "Laat deze code scannen aan de kassa — je punten van die aankoop staan er meteen op, en inwisselen kan er ook mee.",
   "account.pass.showBig": "Groter tonen",
-  "account.pass.open": "Toon clubpas",
+  "account.pass.open": "Toon memberspas",
   "account.pass.close": "Sluiten",
+  "account.pass.walletHint": "Liever in je telefoon? Zet je memberspas in Apple of Google Wallet — dan hoef je hier niet eens in te loggen aan de kassa.",
   "account.pass.brightness": "Lukt het scannen niet meteen? Zet je scherm even op vol licht.",
   // Voorkeuren-formulier op /account → tabblad Gegevens.
   "account.prefs.title": "Voorkeuren",
@@ -182,21 +183,21 @@ const nl: Dict = {
   "account.prefs.check.colors": "Kleuren",
   "account.prefs.check.store": "Vaste winkel",
   "account.prefs.check.occasions": "Gelegenheden",
-  "sizeAdvisor.saveBonusHint": "Levert je eenmalig {n} clubpunten op.",
+  "sizeAdvisor.saveBonusHint": "Levert je eenmalig {n} punten op.",
   "sizeAdvisor.savedBonus": "+{n} punten",
-  /* — The Club of GENTS (/club) —
+  /* — GENTS MEMBERS (/members) —
      Alle getallen komen als {placeholder} uit loyaltyConfig (Instellingen), nooit
      uit de tekst: draait Kevin aan de koers, dan verandert deze pagina mee. De
-     merknaam "The Club of GENTS" blijft in élke taal staan; lib/translate houdt
+     merknaam "GENTS MEMBERS" blijft in élke taal staan; lib/translate houdt
      'm net als "GENTS" buiten de vertaalronde. */
   /* Paginatitel + omschrijving voor Google. Wél via de vertaalrail: /club staat in
      de sitemap met hreflang naar /en /de /fr /es, en een Nederlandse title in een
      Duits zoekresultaat is precies de klik die je misloopt. */
-  "club.meta.title": "The Club of GENTS — het spaarprogramma van GENTS",
+  "club.meta.title": "GENTS MEMBERS — het spaarprogramma van GENTS",
   "club.meta.description":
-    "Word gratis lid van The Club of GENTS: spaar punten bij elke aankoop, online én in onze winkels, en verzilver ze voor GENTS-tegoed.",
+    "Word gratis lid van GENTS MEMBERS: spaar punten bij elke aankoop, online én in onze winkels, en verzilver ze voor GENTS-tegoed.",
   "club.eyebrow": "Ons spaarprogramma",
-  "club.title": "The Club of GENTS",
+  "club.title": "GENTS MEMBERS",
   "club.intro":
     "Gratis lid worden, en bij alles wat je bij ons koopt spaar je punten — online én in onze winkels. Die punten verzilver je voor een tegoedbon die je gewoon bij het afrekenen gebruikt.",
   "club.cta.join": "Word lid — gratis",
@@ -208,7 +209,7 @@ const nl: Dict = {
     "Maak een GENTS-account aan met je e-mailadres, of laat je gegevens invoeren in de winkel. Lid worden kost niets.",
   "club.how.step2.title": "Spaar bij elke aankoop",
   "club.how.step2.body":
-    "Online schrijven we je punten automatisch bij. In de winkel laat je je clubpas of je e-mailadres scannen aan de kassa — winkelaankopen tellen dus net zo goed mee.",
+    "Online schrijven we je punten automatisch bij. In de winkel laat je je memberspas of je e-mailadres scannen aan de kassa — winkelaankopen tellen dus net zo goed mee.",
   "club.how.step3.title": "Verzilver voor tegoed",
   "club.how.step3.body":
     "Vanaf {min} punten wissel je in voor een tegoedbon van {amount}. Die gebruik je bij het afrekenen, online of in de winkel.",
@@ -226,10 +227,10 @@ const nl: Dict = {
   "club.bonus.points": "+{n} punten",
   "club.bonus.account.title": "Word lid",
   "club.bonus.account.body": "Een welkomstbonus zodra je je GENTS-account aanmaakt — online of aan de kassa.",
-  "club.pass.title": "Je clubpas",
+  "club.pass.title": "Je memberspas",
   "club.pass.body":
-    "Zet je clubpas in Apple Wallet of Google Wallet en je saldo staat altijd in je telefoon. Aan de kassa laat je 'm scannen: je punten van die aankoop staan er meteen op, en inwisselen kan er ook mee.",
-  "club.pass.cta": "Clubpas toevoegen",
+    "Zet je memberspas in Apple Wallet of Google Wallet en je saldo staat altijd in je telefoon. Aan de kassa laat je 'm scannen: je punten van die aankoop staan er meteen op, en inwisselen kan er ook mee.",
+  "club.pass.cta": "Memberspas toevoegen",
   "club.store.title": "Ook in de winkel",
   "club.store.body":
     "Kocht je iets in de winkel zonder je pas te laten scannen? Op je kassabon staat een QR-code — scan die, log in, en de punten van die bon komen alsnog op je account.",

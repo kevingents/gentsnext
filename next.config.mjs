@@ -8,9 +8,9 @@ const nextConfig = {
     // Het clubmerkteken is de wordmark OP de pas; het vierkante GENTS-icoon is het
     // icoon voor meldingen/toegangsscherm. Dat laatste moet een dekkende
     // achtergrond hebben: iOS zet het op licht, en wit-op-transparant verdwijnt.
-    '/api/wallet/apple': ['./public/brand/brand-logo-vierkant.png', './public/brand/club-of-gents-wit.png'],
+    '/api/wallet/apple': ['./public/brand/brand-logo-vierkant.png', './public/brand/gents-members-wit.png'],
     // De PassKit-webservice bouwt de pas óók (verse ophaal na een push).
-    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/brand-logo-vierkant.png', './public/brand/club-of-gents-wit.png'],
+    '/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]': ['./public/brand/brand-logo-vierkant.png', './public/brand/gents-members-wit.png'],
   },
   images: {
     // Modern AVIF eerst (kleiner, betere kwaliteit), WebP als fallback.
@@ -67,11 +67,19 @@ const nextConfig = {
       fulfilment: '/site/fulfilment',
       team: '/site',
     };
-    return Object.entries(naar).flatMap(([van, pad]) => [
-      { source: `/account/${van}`, destination: `${portal}${pad}`, permanent: false },
-      // Subpaden mee (/account/klanten/<id> → /site/klanten).
-      { source: `/account/${van}/:rest*`, destination: `${portal}${pad}`, permanent: false },
-    ]);
+    return [
+      /* Het spaarprogramma heette t/m 13 aug 2026 "The Club of GENTS" en woonde
+         op /club. Die URL stond in de sitemap, in de footer en in de mobiele
+         menu-drawer, dus hij blijft werken — permanent, zodat Google de nieuwe
+         kent. Ook de vertaalde varianten (/en/club enz.). */
+      { source: '/club', destination: '/members', permanent: true },
+      { source: '/:locale(en|de|fr|es)/club', destination: '/:locale/members', permanent: true },
+      ...Object.entries(naar).flatMap(([van, pad]) => [
+        { source: `/account/${van}`, destination: `${portal}${pad}`, permanent: false },
+        // Subpaden mee (/account/klanten/<id> → /site/klanten).
+        { source: `/account/${van}/:rest*`, destination: `${portal}${pad}`, permanent: false },
+      ]),
+    ];
   },
 
   // Veilige, breed-toepasbare beveiligingsheaders (uit de Lighthouse-best-practices):

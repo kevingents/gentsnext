@@ -1,12 +1,12 @@
 /**
  * lib/loyalty-bonus.ts
  *
- * Eenmalige clubpunten-bonussen die RETOUREN moeten terugdringen. Eén keer per
+ * Eenmalige punten-bonussen die RETOUREN moeten terugdringen. Eén keer per
  * klant, direct besteedbaar:
  *
  *   account    → profiel aangemaakt, online (eerste bevestigde login) of aan de kassa
  *   maatadvies → de klant heeft z'n maten bewaard (via /maatadvies of Mijn maten)
- *   wallet     → de clubpas staat écht in Apple Wallet (device-registratie)
+ *   wallet     → de memberspas staat écht in Apple Wallet (device-registratie)
  *   winkel     → er staat een vaste winkel in het profiel
  *   profiel    → leeftijd, kleuren, vaste winkel en gelegenheden zijn ingevuld
  *
@@ -56,7 +56,7 @@ const REF_TYPE: Record<BonusKind, string> = {
 const REASON: Record<BonusKind, string> = {
   account: "Welkom bij GENTS",
   maatadvies: "Maatprofiel ingevuld",
-  wallet: "Clubpas in Apple Wallet",
+  wallet: "Memberspas in Apple Wallet",
   winkel: "Vaste winkel gekozen",
   profiel: "Profiel afgerond",
 };

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * POST /api/account/claim-receipt — verzilver de clubpunten van een anonieme
+ * POST /api/account/claim-receipt — verzilver de punten van een anonieme
  * kassabon naar het ingelogde account. Vereist een sessie (de bon-token alleen
  * verzilvert niet — je moet ingelogd zijn, zodat de punten naar een echt account
  * gaan). Idempotent.

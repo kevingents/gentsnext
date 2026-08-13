@@ -140,7 +140,7 @@ export const STANDAARD_DOELGROEPEN: (AudienceInvoer & { doel: "bereiken" | "uits
   },
   {
     slug: "punten-onbenut",
-    naam: "Onbenutte clubpunten",
+    naam: "Onbenutte punten",
     doel: "bereiken",
     omschrijving:
       "Heeft een noemenswaardig puntensaldo staan en kwam al een half jaar niet. Actie: herinner aan het saldo — dat is een reden om te komen die niets kost aan marge, want de punten zijn al verdiend.",
