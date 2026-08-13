@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { schoonPakbon } from "@/lib/pakbon-instelling";
+import { schoonReturnConfig } from "@/lib/retour-instellingen";
 import { adminOrToken } from "@/lib/studio-token";
 import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
@@ -12,8 +13,9 @@ export const runtime = "nodejs";
 
 /**
  * Portal-"Nieuwe site"-CMS → Instellingen. Beheert de VEILIGE, operationele
- * knoppen (verzending, levertijd, cutoffs, cadeaubon) uit app_settings.global
- * én de homepage-content (announcement, hero, USP's) uit app_settings.site.
+ * knoppen (verzending, levertijd, cutoffs, cadeaubon, retouren) uit
+ * app_settings.global én de homepage-content (announcement, hero, USP's) uit
+ * app_settings.site.
  *
  * NIET hier: go-live-schakelaars (Mollie live, SRS_PUSH, Resend, indexable) —
  * die blijven env/secret. Auth: gentsnext-admin OF STUDIO_API_TOKEN.
@@ -180,6 +182,12 @@ function sanitizeOperational(input: unknown, huidig: Settings): Partial<Settings
       validityMonths: Math.max(1, Math.round(Number(g.validityMonths) || 24)),
     };
   }
+  /* RETOUREN — bedenktijd, retourkosten, gratis-bij-tegoed en de signaaldrempels.
+     Stonden al in `returnConfig` en de portal kreeg ze via GET keurig te zien,
+     maar ze ontbraken in deze whitelist: opslaan deed niets. Hetzelfde gat als
+     eerder bij storeEmails. Grenzen + toelichting in lib/retour-instellingen. */
+  const retour = schoonReturnConfig(b.returnConfig, huidig.returnConfig);
+  if (retour) out.returnConfig = retour;
   /* SPAARPUNTEN — alle knoppen, want elk bedrag dat een klant kan verdienen of
      inwisselen moet in de tool te zetten zijn, niet in code.
      Bewust op de HUIDIGE loyaltyConfig gestapeld: updateSettings merget ondiep,
