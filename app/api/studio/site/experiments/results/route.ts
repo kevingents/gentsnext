@@ -44,6 +44,8 @@ const DOEL_LABEL: Record<AbDoel, string> = {
   purchase: "aankoop",
   add_to_cart: "in winkelwagen",
   checkout_start: "checkout gestart",
+  product_click: "doorklik naar een product",
+  product_view: "productpagina bekeken",
 };
 
 export async function GET(req: Request) {
@@ -68,6 +70,8 @@ export async function GET(req: Request) {
       await db.execute<{
         variant: string;
         bezoekers: number;
+        doorklikken: number;
+        productpaginas: number;
         winkelwagen: number;
         checkout: number;
         kopers: number;
@@ -85,18 +89,22 @@ export async function GET(req: Request) {
         ),
         stappen as (
           select x.variant,
+                 count(distinct e.session_id) filter (where e.type = 'product_click') as doorklikken,
+                 count(distinct e.session_id) filter (where e.type = 'product_view') as productpaginas,
                  count(distinct e.session_id) filter (where e.type = 'add_to_cart') as winkelwagen,
                  count(distinct e.session_id) filter (where e.type = 'checkout_start') as checkout,
                  count(distinct e.session_id) filter (where e.type = 'purchase') as kopers,
                  coalesce(sum(e.value_cents) filter (where e.type = 'purchase'), 0) as omzet_cents
           from ${events} e
           join exposed x on x.session_id = e.session_id
-          where e.type in ('add_to_cart', 'checkout_start', 'purchase')
+          where e.type in ('product_click', 'product_view', 'add_to_cart', 'checkout_start', 'purchase')
             and e.created_at >= ${vanaf}::timestamptz
           group by x.variant
         )
         select x.variant,
                count(*)::int as bezoekers,
+               coalesce(max(s.doorklikken), 0)::int as doorklikken,
+               coalesce(max(s.productpaginas), 0)::int as productpaginas,
                coalesce(max(s.winkelwagen), 0)::int as winkelwagen,
                coalesce(max(s.checkout), 0)::int as checkout,
                coalesce(max(s.kopers), 0)::int as kopers,
@@ -108,18 +116,30 @@ export async function GET(req: Request) {
       `)
     ).rows;
 
-    const doelVeld = doel === "purchase" ? "kopers" : doel === "add_to_cart" ? "winkelwagen" : "checkout";
-
     const varianten = rows.map((r) => {
       const bezoekers = Number(r.bezoekers) || 0;
+      const doorklikken = Number(r.doorklikken) || 0;
+      const productpaginas = Number(r.productpaginas) || 0;
       const winkelwagen = Number(r.winkelwagen) || 0;
       const checkout = Number(r.checkout) || 0;
       const kopers = Number(r.kopers) || 0;
       const omzetCents = Number(r.omzet_cents) || 0;
-      const doelN = doelVeld === "kopers" ? kopers : doelVeld === "winkelwagen" ? winkelwagen : checkout;
+      // Eén tabel: elk doel wijst naar zijn eigen kolom. product_click en
+      // product_view horen bij lijstpagina's — daar is "aankoop" zo ver weg
+      // dat je weken wacht op een uitslag die vooral over de PDP gaat.
+      const perDoel: Record<AbDoel, number> = {
+        purchase: kopers,
+        add_to_cart: winkelwagen,
+        checkout_start: checkout,
+        product_click: doorklikken,
+        product_view: productpaginas,
+      };
+      const doelN = perDoel[doel];
       return {
         variant: r.variant,
         bezoekers,
+        doorklikken,
+        productpaginas,
         winkelwagen,
         checkout,
         kopers,
@@ -191,6 +211,9 @@ export async function GET(req: Request) {
       id,
       doel,
       doelLabel: DOEL_LABEL[doel],
+      // Oppervlak mee terug: "3,1% doorklik" betekent iets anders op een
+      // lijstpagina dan site-breed, en de portal moet dat kunnen labelen.
+      oppervlak: exp?.oppervlak ?? "site",
       gestartOp: exp?.gestartOp ?? null,
       gestoptOp: exp?.gestoptOp ?? null,
       varianten,

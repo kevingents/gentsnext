@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { getContentDoc } from "@/lib/content-store";
-import { bucketVoor, variantVoorBucket, doetMee, schoonExperimentsDoc, slug } from "@/lib/ab-regels";
+import { bucketVoor, variantVoorBucket, doetMee, pastBijPagina, schoonExperimentsDoc, slug } from "@/lib/ab-regels";
 
 /**
  * A/B-testen, in eigen huis. Een experiment verdeelt bezoekers over varianten
@@ -58,6 +58,43 @@ export type AbOverrides = {
    * editor als de live indeling — geen tweede bewerkmodel.
    */
   eigenIndeling?: boolean;
+  /**
+   * Productpagina. Elk veld is optioneel; niet ingevuld = laten zoals het is,
+   * zodat de controle-variant letterlijk de huidige pagina blijft.
+   */
+  pdp?: {
+    /** Knoptekst in de koopkolom én in de mobiele balk (NL — zie taalregel). */
+    ctaLabel?: string;
+    /** Mobiele meelopende koopbalk. */
+    stickyKoopbalk?: "aan" | "uit";
+    /** "X mensen bekeken dit" onder de koopknop. */
+    socialProof?: "aan" | "uit";
+    /** Bezorgbelofte ("morgen in huis") bij de knop. */
+    levertijd?: "aan" | "uit";
+    /** Aanbevolen-producten onderaan. */
+    aanbevelingen?: "aan" | "uit";
+    /** Begint de galerij met de AI-modelfoto of met de packshot? */
+    galerijStart?: "model" | "packshot";
+    /** Materiaal/verzorging standaard uitgeklapt. */
+    accordionsOpen?: boolean;
+    /** Vervangt het vertrouwenslijstje onder de koopknop (max 5). */
+    usps?: string[];
+  };
+  /**
+   * Categorie- en collectiepagina. De sortering geldt alleen zolang de
+   * bezoeker zelf niets kiest — een ?sort= in de URL wint altijd.
+   */
+  plp?: {
+    sortering?: "aanbevolen" | "populair" | "nieuw" | "prijs-op" | "prijs-af" | "naam";
+    /** Tegels per rij op mobiel (1 of 2). */
+    kolommenMobiel?: 1 | 2;
+    /** Producten per pagina. */
+    perPagina?: number;
+    /** Welk beeld vooraan op de tegel staat (het andere blijft de hover). */
+    tegelBeeld?: "model" | "packshot";
+    /** Sale/nieuw/laatste-maten-badges op de tegel. */
+    tegelBadges?: "aan" | "uit";
+  };
 };
 
 export type AbVariant = {
@@ -67,7 +104,10 @@ export type AbVariant = {
   overrides?: AbOverrides;
 };
 
-export type AbDoel = "purchase" | "add_to_cart" | "checkout_start";
+export type AbDoel = "purchase" | "add_to_cart" | "checkout_start" | "product_click" | "product_view";
+
+/** Waar een experiment leeft — en dus wie er in de noemer hoort. */
+export type AbOppervlak = "site" | "pdp" | "plp";
 
 export type Experiment = {
   id: string;
@@ -76,6 +116,12 @@ export type Experiment = {
   status: "concept" | "actief" | "gestopt";
   /** Waarop de significantie gerekend wordt; aankoop is eerlijk maar traag. */
   doel: AbDoel;
+  /** site = overal; pdp = alleen productpagina's; plp = alleen lijstpagina's. */
+  oppervlak: AbOppervlak;
+  /** Apparaat-targeting; onbekend apparaat doet niet mee (zoals onbekend land). */
+  apparaat: "alle" | "mobiel" | "desktop";
+  /** Beperking binnen het oppervlak: categorieslugs en (op de PDP) artikelen. */
+  bereik?: { categorieen?: string[]; handles?: string[] };
   /** ISO-2-landcodes (NL, BE, DE). Leeg = alle landen. */
   landen?: string[];
   /** Regiocodes binnen het land (Vercel: NB, ZH, …). Leeg = alle regio's. */
@@ -108,15 +154,45 @@ export async function getExperiments(): Promise<ExperimentsDoc> {
 }
 
 /**
+ * Waar staan we? Zonder context is dat "site" — dan doen alleen site-brede
+ * experimenten mee, precies zoals vóór de PDP/PLP-uitbreiding.
+ */
+export type AbPaginaContext = {
+  oppervlak: AbOppervlak;
+  /** Producthandle (PDP) — voor bereik op losse artikelen. */
+  handle?: string;
+  /** Categorieslugs waar deze pagina onder valt (PDP: hoofdgroep; PLP: de lijst). */
+  categorieen?: string[];
+};
+
+/** Mobiel? Client-hint eerst, user-agent als terugval, anders onbekend. */
+function isMobiel(h: Headers): boolean | undefined {
+  const hint = h.get("sec-ch-ua-mobile");
+  if (hint === "?1") return true;
+  if (hint === "?0") return false;
+  const ua = h.get("user-agent") || "";
+  if (!ua) return undefined;
+  return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+}
+
+/**
  * De toewijzingen voor de huidige bezoeker, plus de samengevoegde overrides.
  * Draaien er twee actieve experimenten die hetzelfde onderdeel overschrijven,
  * dan wint de laatste in de lijst — de portal waarschuwt daarvoor, maar de
  * site mag er nooit op stuklopen.
+ *
+ * De context bepaalt wie er meedoet: een pdp-experiment wordt alleen op een
+ * productpagina toegewezen. Dat is geen kosmetische scheiding maar de
+ * meetkant ervan — de exposure die hier uit volgt is de noemer van de uitslag,
+ * en bezoekers die de variant nooit zagen horen daar niet in.
  */
-export async function resolveAb(): Promise<{ assignments: AbAssignment[]; overrides: AbOverrides }> {
+export async function resolveAb(
+  ctx?: AbPaginaContext,
+): Promise<{ assignments: AbAssignment[]; overrides: AbOverrides }> {
   try {
     const { experimenten } = await getExperiments();
-    const actief = experimenten.filter((e) => e.status === "actief");
+    const oppervlak: AbOppervlak = ctx?.oppervlak ?? "site";
+    const actief = experimenten.filter((e) => e.status === "actief" && (e.oppervlak || "site") === oppervlak);
     if (!actief.length) return { assignments: [], overrides: {} };
 
     const [c, h] = await Promise.all([cookies(), headers()]);
@@ -126,6 +202,12 @@ export async function resolveAb(): Promise<{ assignments: AbAssignment[]; overri
     if (!bezoeker) return { assignments: [], overrides: {} };
     const land = (h.get("x-vercel-ip-country") || "").toUpperCase();
     const regio = (h.get("x-vercel-ip-country-region") || "").toUpperCase();
+    const pagina = {
+      oppervlak,
+      handle: ctx?.handle ? slug(ctx.handle, 60) : "",
+      categorieen: (ctx?.categorieen || []).map((x) => slug(x, 60)).filter(Boolean),
+      mobiel: isMobiel(h),
+    };
 
     // Preview: ?ab=<experiment>:<variant> zet (via de middleware) een korte
     // force-cookie. Die wint van de bucket én van de targeting — je wil variant
@@ -139,7 +221,9 @@ export async function resolveAb(): Promise<{ assignments: AbAssignment[]; overri
     const overrides: AbOverrides = {};
     for (const exp of actief) {
       const geforceerd = exp.id === forceExp ? exp.varianten.find((v) => v.key === forceVariant) : undefined;
-      if (!geforceerd && !doetMee(exp, land, regio)) continue;
+      // Preview wint van geo, apparaat én bereik — maar niet van het oppervlak:
+      // een pdp-variant bestaat nu eenmaal niet op de homepage.
+      if (!geforceerd && (!doetMee(exp, land, regio) || !pastBijPagina(exp, pagina))) continue;
       const variant = geforceerd ?? (variantVoorBucket(exp, bucketVoor(bezoeker, exp.id)) as AbVariant);
       assignments.push({ id: exp.id, variant: variant.key, overrides: variant.overrides, forced: Boolean(geforceerd) });
       if (variant.overrides) Object.assign(overrides, variant.overrides);

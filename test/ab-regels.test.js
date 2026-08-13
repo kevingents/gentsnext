@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bucketVoor, variantVoorBucket, doetMee, schoonExperimentsDoc } from "../lib/ab-regels.js";
+import { bucketVoor, variantVoorBucket, doetMee, pastBijPagina, schoonExperimentsDoc } from "../lib/ab-regels.js";
 
 /* De toewijzing bepaalt wie welke variant ziet — fouten hier vertekenen elke
    testuitslag zonder dat iemand het merkt. Vandaar tests op de wiskunde. */
@@ -132,4 +132,136 @@ test("meetvenster: alleen echte datums overleven de sanering", () => {
   });
   assert.equal(experimenten[0].gestartOp, "2026-08-12T10:00:00.000Z");
   assert.equal(experimenten[0].gestoptOp, undefined);
+});
+
+/* ── Oppervlak, bereik en apparaat ────────────────────────────────────────
+   Deze regels bepalen wie er in de NOEMER van de uitslag komt. Een pdp-test
+   die op de homepage meetelt verdunt zichzelf tot onzichtbaar, dus dit hoort
+   net zo hard onder test als de bucket-wiskunde. */
+
+test("oppervlak: een pdp-experiment doet alleen op een productpagina mee", () => {
+  const exp = { status: "actief", oppervlak: "pdp", varianten: [] };
+  assert.equal(pastBijPagina(exp, { oppervlak: "pdp" }), true);
+  assert.equal(pastBijPagina(exp, { oppervlak: "plp" }), false);
+  assert.equal(pastBijPagina(exp, { oppervlak: "site" }), false);
+  assert.equal(pastBijPagina(exp, undefined), false); // geen context = site
+});
+
+test("oppervlak: zonder oppervlak blijft een experiment site-breed (oude documenten)", () => {
+  const exp = { status: "actief", varianten: [] };
+  assert.equal(pastBijPagina(exp, { oppervlak: "site" }), true);
+  assert.equal(pastBijPagina(exp, undefined), true);
+  assert.equal(pastBijPagina(exp, { oppervlak: "pdp" }), false);
+});
+
+test("bereik: categorie of losse handle, en beide samen is OF", () => {
+  const opCategorie = { status: "actief", oppervlak: "pdp", bereik: { categorieen: ["colberts"] }, varianten: [] };
+  assert.equal(pastBijPagina(opCategorie, { oppervlak: "pdp", categorieen: ["colberts"] }), true);
+  assert.equal(pastBijPagina(opCategorie, { oppervlak: "pdp", categorieen: ["schoenen"] }), false);
+  assert.equal(pastBijPagina(opCategorie, { oppervlak: "pdp", categorieen: [] }), false);
+
+  const opHandle = { status: "actief", oppervlak: "pdp", bereik: { handles: ["blauw-pak"] }, varianten: [] };
+  assert.equal(pastBijPagina(opHandle, { oppervlak: "pdp", handle: "blauw-pak" }), true);
+  assert.equal(pastBijPagina(opHandle, { oppervlak: "pdp", handle: "grijs-pak" }), false);
+
+  const beide = { status: "actief", oppervlak: "pdp", bereik: { categorieen: ["colberts"], handles: ["losse-das"] }, varianten: [] };
+  assert.equal(pastBijPagina(beide, { oppervlak: "pdp", categorieen: ["colberts"], handle: "x" }), true);
+  assert.equal(pastBijPagina(beide, { oppervlak: "pdp", categorieen: ["dassen"], handle: "losse-das" }), true);
+  assert.equal(pastBijPagina(beide, { oppervlak: "pdp", categorieen: ["dassen"], handle: "andere-das" }), false);
+});
+
+test("apparaat: onbekend apparaat doet niet mee aan een apparaat-gerichte test", () => {
+  const mobiel = { status: "actief", oppervlak: "pdp", apparaat: "mobiel", varianten: [] };
+  assert.equal(pastBijPagina(mobiel, { oppervlak: "pdp", mobiel: true }), true);
+  assert.equal(pastBijPagina(mobiel, { oppervlak: "pdp", mobiel: false }), false);
+  assert.equal(pastBijPagina(mobiel, { oppervlak: "pdp" }), false); // onbekend → buiten de test
+  const desktop = { status: "actief", oppervlak: "pdp", apparaat: "desktop", varianten: [] };
+  assert.equal(pastBijPagina(desktop, { oppervlak: "pdp", mobiel: false }), true);
+  assert.equal(pastBijPagina(desktop, { oppervlak: "pdp", mobiel: true }), false);
+  assert.equal(pastBijPagina(desktop, { oppervlak: "pdp" }), false);
+});
+
+test("sanering: oppervlak, apparaat en bereik", () => {
+  const { experimenten } = schoonExperimentsDoc({
+    experimenten: [
+      {
+        id: "pdp-test",
+        oppervlak: "pdp",
+        apparaat: "mobiel",
+        doel: "add_to_cart",
+        bereik: { categorieen: ["Colberts", "on-zin!!"], handles: ["Blauw Pak"] },
+        varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }],
+      },
+      {
+        // Bereik op site-niveau heeft geen betekenis → weg ermee, en handles
+        // bestaan alleen op de PDP.
+        id: "site-test",
+        oppervlak: "onzin",
+        apparaat: "tablet",
+        bereik: { categorieen: ["colberts"], handles: ["x"] },
+        varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }],
+      },
+      {
+        id: "plp-test",
+        oppervlak: "plp",
+        doel: "product_click",
+        bereik: { categorieen: ["overhemden"], handles: ["mag-niet"] },
+        varianten: [{ key: "A", gewicht: 1 }, { key: "B", gewicht: 1 }],
+      },
+    ],
+  });
+  const [pdp, site, plp] = experimenten;
+  assert.equal(pdp.oppervlak, "pdp");
+  assert.equal(pdp.apparaat, "mobiel");
+  assert.deepEqual(pdp.bereik.categorieen, ["colberts", "on-zin"]);
+  assert.deepEqual(pdp.bereik.handles, ["blauw-pak"]);
+
+  assert.equal(site.oppervlak, "site");
+  assert.equal(site.apparaat, "alle");
+  assert.equal(site.bereik, undefined);
+
+  assert.equal(plp.doel, "product_click");
+  assert.deepEqual(plp.bereik.categorieen, ["overhemden"]);
+  assert.equal(plp.bereik.handles, undefined); // alleen de PDP kent artikelen
+});
+
+test("sanering: pdp- en plp-knoppen laten alleen bekende waarden door", () => {
+  const { experimenten } = schoonExperimentsDoc({
+    experimenten: [
+      {
+        id: "knoppen",
+        oppervlak: "pdp",
+        varianten: [
+          { key: "A", gewicht: 1 },
+          {
+            key: "B",
+            gewicht: 1,
+            overrides: {
+              pdp: {
+                ctaLabel: "Nu bestellen",
+                stickyKoopbalk: "uit",
+                socialProof: "misschien",
+                galerijStart: "packshot",
+                accordionsOpen: true,
+                usps: ["Gratis verzending", "", "Altijd passend advies"],
+              },
+              plp: { sortering: "willekeurig", kolommenMobiel: 3, perPagina: 999, tegelBeeld: "model", tegelBadges: "uit" },
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const o = experimenten[0].varianten[1].overrides;
+  assert.equal(o.pdp.ctaLabel, "Nu bestellen");
+  assert.equal(o.pdp.stickyKoopbalk, "uit");
+  assert.equal(o.pdp.socialProof, undefined); // geen aan/uit → niets zeggen
+  assert.equal(o.pdp.galerijStart, "packshot");
+  assert.equal(o.pdp.accordionsOpen, true);
+  assert.deepEqual(o.pdp.usps, ["Gratis verzending", "Altijd passend advies"]);
+  assert.equal(o.plp.sortering, undefined); // onbekende sortering telt niet
+  assert.equal(o.plp.kolommenMobiel, undefined); // alleen 1 of 2
+  assert.equal(o.plp.perPagina, undefined); // buiten 8-48
+  assert.equal(o.plp.tegelBeeld, "model");
+  assert.equal(o.plp.tegelBadges, "uit");
 });

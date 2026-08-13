@@ -17,11 +17,21 @@ export function ProductCard({
   listId,
   sort,
   inMyStore,
+  beeld,
+  badges = true,
 }: {
   product: ProductCardData;
   priority?: boolean;
   /** Ligt dit artikel in (één van) de winkels van deze klant? Stad of "jouw winkel". */
   inMyStore?: string | null;
+  /**
+   * A/B: welk beeld vooraan staat. "model" wisselt de hoverfoto (het gedragen
+   * kledingstuk) naar voren; het andere beeld wordt dan de hover. Zonder
+   * hoverbeeld verandert er niets — dan is er niets om te wisselen.
+   */
+  beeld?: "model" | "packshot";
+  /** A/B: sale-/nieuw-/laatste-maten-badge op de tegel. */
+  badges?: boolean;
   /** 1-gebaseerde plek in de lijst — zonder positie beloont een populariteits-
    *  ranking alleen wat toevallig bovenaan stond (positie-bias). */
   position?: number;
@@ -31,6 +41,13 @@ export function ProductCard({
 }) {
   const t = useT();
   const contain = packshotContain(product.category || "");
+  // Beeldvolgorde: normaal packshot vóór, gedragen beeld op hover. Een variant
+  // mag dat omdraaien — maar alleen als er écht een tweede beeld is.
+  const wissel = beeld === "model" && Boolean(product.hoverImageUrl);
+  const voorgrond = wissel ? product.hoverImageUrl : product.imageUrl;
+  const achtergrond = wissel ? product.imageUrl : product.hoverImageUrl;
+  // Het gedragen beeld is een sfeerfoto (cover), de packshot kan contain zijn.
+  const voorgrondContain = wissel ? false : contain;
   return (
     <Link
       href={`/products/${product.handle}`}
@@ -42,7 +59,7 @@ export function ProductCard({
       }
       className="group relative flex flex-col gap-3"
     >
-      {product.hasSale ? (
+      {!badges ? null : product.hasSale ? (
         <ProductCardBadge label={t("plp.badge.sale")} tone="sale" />
       ) : product.lowStock ? (
         <ProductCardBadge label={t("plp.badge.lastItems")} tone="sale" />
@@ -52,16 +69,16 @@ export function ProductCard({
       <WishlistButton handle={product.handle} />
       {/* Accessoire-packshots staan op puur wit; met bg-surface eronder werden de
           contain-randen een zichtbare balk. Zie lib/packshot-weergave. */}
-      <div className={`relative aspect-[3/4] overflow-hidden rounded-card ${contain ? "bg-white" : "bg-surface"}`}>
-        {product.imageUrl ? (
+      <div className={`relative aspect-[3/4] overflow-hidden rounded-card ${voorgrondContain ? "bg-white" : "bg-surface"}`}>
+        {voorgrond ? (
           <Image
-            src={product.imageUrl}
+            src={voorgrond}
             alt={product.imageAlt}
             fill
             // Boven-de-vouw kaarten (eerste rij) niet lazy-loaden → sneller LCP op de PLP.
             priority={priority}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${contain ? "object-contain" : "object-cover"} ${product.hoverImageUrl ? "group-hover:opacity-0" : ""}`}
+            className={`transition duration-500 ease-brand group-hover:scale-[1.04] ${voorgrondContain ? "object-contain" : "object-cover"} ${achtergrond ? "group-hover:opacity-0" : ""}`}
           />
         ) : (
           <div className="flex h-full items-center justify-center font-sans text-xs text-muted">
@@ -72,10 +89,10 @@ export function ProductCard({
             Alleen op hover-capable devices renderen: op touch (het gros van het verkeer)
             is er geen hover, dus dat tweede beeld hoeft niet gedownload te worden. De
             display:none-wrapper houdt 'm buiten Next's lazy-loader (geen fetch). */}
-        {product.hoverImageUrl ? (
+        {achtergrond ? (
           <span aria-hidden className="absolute inset-0 hidden [@media(hover:hover)]:block">
             <Image
-              src={product.hoverImageUrl}
+              src={achtergrond}
               alt=""
               aria-hidden
               fill

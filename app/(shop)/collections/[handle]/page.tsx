@@ -20,6 +20,8 @@ import { resolveMySize, mySizeBuckets } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
 import { getActieveRegels } from "@/lib/merchandising-regels";
 import { plpStoreProps, storeFilterBranchIds } from "@/lib/plp-store";
+import { resolveAb } from "@/lib/experiments";
+import { TrackAb } from "@/components/analytics/track-ab";
 
 export const dynamic = "force-dynamic";
 
@@ -75,10 +77,17 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     storeBranchIds: storeFilterBranchIds(sel.stores),
   });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
-  const [sessionCustomer, facets] = await Promise.all([
+  const [sessionCustomer, facets, ab] = await Promise.all([
     getSessionCustomer(),
     getFacets({ collectionId: collection.id }).then((fc) => localizeFacets(locale, fc)),
+    // A/B: lijstpagina-experimenten mikken op de collectie-handle.
+    resolveAb({ oppervlak: "plp", categorieen: [collection.handle] }),
   ]);
+  const plpAb = ab.overrides.plp ?? {};
+  const plpAbExposure = ab.assignments.filter((a) => !a.forced).map(({ id, variant }) => ({ id, variant }));
+  // Variant-sortering wijkt alleen als de bezoeker zelf niets koos.
+  const sort = !sel.sortExpliciet && plpAb.sortering ? plpAb.sortering : sel.sort;
+  const perPagina = plpAb.perPagina ?? PER_PAGE;
   // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
   const storeProps = await plpStoreProps(sel.stores, sessionCustomer?.preferences, {
     collectionId: collection.id,
@@ -91,13 +100,13 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const mySize = my ? { row: my.row, raw: my.raw, facet: my.facet } : null;
   // Gemengde collectie → boost op álle bewaarde maten (een schoen matcht nooit een
   // colbert-bucket, dus dat is veilig). Smaak + pins alleen op de default.
-  const isDefault = sel.sort === "aanbevolen";
+  const isDefault = sort === "aanbevolen";
   const [tasteCats, pinnedHandles, regels] = await Promise.all([
     isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
     isDefault ? getMerchandisingPins("collection", handle) : Promise.resolve([]),
     isDefault ? getActieveRegels("collection", handle) : Promise.resolve([]),
   ]);
-  const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
+  const { items, total } = await getFilteredProducts(filters, sort, sel.page, perPagina, {
     mySizeRows: mySizeBuckets(sessionCustomer?.sizeProfile),
     tasteCats,
     pinnedHandles,
@@ -112,7 +121,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   // Eén winkel? Dan de stad ("In Utrecht"). Meerdere: geen stad noemen, want dan
   // zouden we moeten zeggen wélke — en dat weet dit label niet.
   const storeLabel = myBranches.length === 1 ? myBranches[0].city : t("plp.card.inMyStoreGeneric");
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(total / perPagina));
 
   function pageHref(p: number): string {
     const params = new URLSearchParams();
@@ -137,6 +146,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
       <JsonLd data={breadcrumbJsonLd} />
+      {plpAbExposure.length > 0 ? <TrackAb assignments={plpAbExposure} /> : null}
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
@@ -160,7 +170,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
         {/* Zie de categoriepagina: eigen schuifbalk, anders is het onderste deel
             van een lange filterlijst pas bereikbaar ná alle producten. */}
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} {...filterProps} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} {...filterProps} />
         </aside>
 
         {/* Grid */}
@@ -168,7 +178,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           {/* Mobiel geen losse sorteer-rij — sorteren zit in de filter-drawer. */}
           <div className="mb-6 hidden items-center justify-between lg:flex">
             <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
-            <SortSelect value={sel.sort} />
+            <SortSelect value={sort} />
           </div>
 
           {items.length === 0 ? (
@@ -179,10 +189,10 @@ export default async function CollectionPage({ params, searchParams }: Props) {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
+            <div className={`grid gap-x-4 gap-y-8 sm:grid-cols-3 ${plpAb.kolommenMobiel === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
               <TrackLijst producten={items} listId={`collection:${handle}`} listName={colTitle} />
               {items.map((product, i) => (
-                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * PER_PAGE + i + 1} listId={`collection:${handle}`} sort={sel.sort} inMyStore={inMyStore.has(product.handle) ? storeLabel : null} />
+                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * perPagina + i + 1} listId={`collection:${handle}`} sort={sort} inMyStore={inMyStore.has(product.handle) ? storeLabel : null} beeld={plpAb.tegelBeeld} badges={plpAb.tegelBadges !== "uit"} />
               ))}
             </div>
           )}

@@ -52,6 +52,8 @@ import { AiReviewSummary } from "@/components/reviews/ai-summary";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getProductContentOverride } from "@/lib/product-content";
 import { getBlogPostsForProduct } from "@/lib/blog";
+import { resolveAb } from "@/lib/experiments";
+import { TrackAb } from "@/components/analytics/track-ab";
 
 export const dynamic = "force-dynamic";
 
@@ -201,7 +203,7 @@ export default async function ProductPage({ params }: Props) {
   // van de productdata → mee in de parallelle batch i.p.v. twee losse round-trips.
   // Aanbevelingen ruim ophalen (8): na het resolven van de look filteren we de
   // look-items eruit zodat "Maak de look compleet" geen dubbelingen toont.
-  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStores] = await Promise.all([
+  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStores, ab] = await Promise.all([
     getRecommendations(hoofdgroep, product.id, 8, { subgroep: String(attrs.subgroep || ""), attrs }),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
@@ -215,7 +217,16 @@ export default async function ProductPage({ params }: Props) {
     getSessionCustomer(),
     getSettings(),
     getMyStores(),
+    // A/B: alleen experimenten met oppervlak "pdp" doen hier mee, eventueel
+    // beperkt tot een categorie of een handvol artikelen. Zowel de categorie-
+    // slug als de hoofdgroep gaan mee, zodat de portal op allebei kan mikken.
+    resolveAb({ oppervlak: "pdp", handle: product.handle, categorieen: [cat?.slug || "", hoofdgroep] }),
   ]);
+  // Wat de variant aan de productpagina verandert. Leeg = de huidige pagina.
+  const pdpAb = ab.overrides.pdp ?? {};
+  // Exposure alleen voor echte toewijzingen: een geforceerde preview (?ab=)
+  // mag de noemer niet vervuilen.
+  const pdpAbExposure = ab.assignments.filter((a) => !a.forced).map(({ id, variant }) => ({ id, variant }));
   // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
   const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
   // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde
@@ -483,6 +494,7 @@ export default async function ProductPage({ params }: Props) {
       <JsonLd data={productJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
       <JsonLd data={faqJsonLd} />
+      {pdpAbExposure.length > 0 ? <TrackAb assignments={pdpAbExposure} /> : null}
       <TrackRecent
         handle={product.handle}
         title={product.title}
@@ -516,14 +528,20 @@ export default async function ProductPage({ params }: Props) {
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-12 lg:gap-y-10">
         <div className="lg:col-start-1 lg:row-start-1">
           <Gallery
-            images={[
+            images={(() => {
               // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
               // → detailfoto, daarna de echte productfoto's.
-              ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
-              ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
-              ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
-              ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain, wit: fitContain })),
-            ]}
+              const aiBeelden = [
+                ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
+                ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
+                ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
+              ];
+              const packshots = images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain, wit: fitContain }));
+              // A/B: variant kan de packshot vooropzetten. Alleen de VOLGORDE
+              // wisselt — geen enkel beeld verdwijnt, zodat beide varianten
+              // dezelfde informatie tonen.
+              return pdpAb.galerijStart === "packshot" ? [...packshots, ...aiBeelden] : [...aiBeelden, ...packshots];
+            })()}
             title={product.title}
             sizeMedia={sizeMedia}
             video={product.modelVideoUrl || null}
@@ -552,22 +570,27 @@ export default async function ProductPage({ params }: Props) {
             referenceCents={referenceCents}
             hasStock={hasStock}
             colorSiblings={colorSiblings}
-            deliveryPromise={delivery?.promise ?? null}
-            deliveryNote={delivery?.note ?? null}
+            deliveryPromise={pdpAb.levertijd === "uit" ? null : delivery?.promise ?? null}
+            deliveryNote={pdpAb.levertijd === "uit" ? null : delivery?.note ?? null}
             mySize={mySize?.raw ?? null}
             fitNote={String(attrs.pasvorm ?? "").trim() || null}
             freeShipThresholdCents={settings.freeShippingCents}
+            ctaLabel={pdpAb.ctaLabel || null}
+            sticky={pdpAb.stickyKoopbalk !== "uit"}
           />
 
-          <SocialProof stats={viewStats} />
+          {pdpAb.socialProof === "uit" ? null : <SocialProof stats={viewStats} />}
 
           <ul className="mt-8 space-y-1.5">
-            {TRUST_KEYS.map((key) => (
-              <li key={key} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
+            {/* A/B: een variant mag dit vertrouwenslijstje vervangen (bv. een
+                merkbelofte in plaats van de retour-/vermaakregels). Losse
+                teksten, dus NL — zelfde taalregel als de aankondigingsbalk. */}
+            {(pdpAb.usps?.length ? pdpAb.usps : TRUST_KEYS.map((key) => t(key, returnVars))).map((regel) => (
+              <li key={regel} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
                 <svg aria-hidden className="h-4 w-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-                {t(key, returnVars)}
+                {regel}
               </li>
             ))}
           </ul>
@@ -579,7 +602,7 @@ export default async function ProductPage({ params }: Props) {
             galerij leeg bleef. Rechts blijft alleen wat bij de koopbeslissing
             hoort; delen hoort bij de details en verhuist mee. */}
         <div className="lg:col-start-1 lg:row-start-2">
-          <Accordion items={accordionItems} />
+          <Accordion items={accordionItems} altijdOpen={pdpAb.accordionsOpen === true} />
           <ShareRow title={product.title} />
         </div>
       </div>
@@ -628,7 +651,7 @@ export default async function ProductPage({ params }: Props) {
       ) : null}
 
       {/* Maak de look compleet — slimme bijverkoop */}
-      {recommendations.length > 0 ? (
+      {recommendations.length > 0 && pdpAb.aanbevelingen !== "uit" ? (
         <section className="mt-20">
           <p className="label-brand">{t("pdp.complementary.eyebrow")}</p>
           <h2 className="mt-2 text-display-md">{t("pdp.complementary.title")}</h2>

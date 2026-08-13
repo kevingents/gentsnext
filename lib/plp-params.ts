@@ -20,6 +20,12 @@ export type PlpSelection = {
    */
   stores: string[];
   sort: ProductSort;
+  /**
+   * Heeft de bezoeker de sortering zélf gekozen? Alleen dan mag een A/B-variant
+   * met een andere standaardsortering wijken — een sorteerknop die stil
+   * overruled wordt is erger dan geen experiment.
+   */
+  sortExpliciet: boolean;
   page: number;
 };
 
@@ -56,6 +62,7 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
     priceMax: Number.isFinite(pMax) && pMax > 0 ? pMax : undefined,
     stores: csv(get("winkel")).map((s) => s.toLowerCase()),
     sort: sortRaw && SORTS.includes(sortRaw) ? sortRaw : "aanbevolen",
+    sortExpliciet: Boolean(sortRaw && SORTS.includes(sortRaw)),
     page: Math.max(1, Math.floor(Number(get("page")) || 1)),
   };
 }
