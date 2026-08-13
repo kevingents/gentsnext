@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/heatmap-rollup",
       "schedule": "50 2 * * *"
+    },
+    {
+      "path": "/api/cron/beeldgeneratie",
+      "schedule": "30 3 * * *"
     }
   ],
   "regions": [
