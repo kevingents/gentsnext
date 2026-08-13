@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CLUB_NAME } from "@/lib/club";
+import { CLUB_NAME, CLUB_PATH } from "@/lib/club";
 import { formatEuro } from "@/lib/format";
 import { getLocale } from "@/lib/locale-server";
 import { getSessionCustomer } from "@/lib/account";
@@ -28,11 +28,11 @@ import { googleWalletConfigured } from "@/lib/google-wallet-config";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT(await getLocale());
   return {
-    title: `${CLUB_NAME} — spaarprogramma van GENTS`,
-    description:
-      "Word gratis lid van The Club of GENTS: spaar punten bij elke aankoop, online én in onze winkels, en verzilver ze voor GENTS-tegoed.",
-    alternates: await localeAlternates("/club"),
+    title: t("club.meta.title"),
+    description: t("club.meta.description"),
+    alternates: await localeAlternates(CLUB_PATH),
   };
 }
 

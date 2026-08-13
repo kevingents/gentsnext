@@ -178,6 +178,12 @@ const nl: Dict = {
      uit de tekst: draait Kevin aan de koers, dan verandert deze pagina mee. De
      merknaam "The Club of GENTS" blijft in élke taal staan; lib/translate houdt
      'm net als "GENTS" buiten de vertaalronde. */
+  /* Paginatitel + omschrijving voor Google. Wél via de vertaalrail: /club staat in
+     de sitemap met hreflang naar /en /de /fr /es, en een Nederlandse title in een
+     Duits zoekresultaat is precies de klik die je misloopt. */
+  "club.meta.title": "The Club of GENTS — het spaarprogramma van GENTS",
+  "club.meta.description":
+    "Word gratis lid van The Club of GENTS: spaar punten bij elke aankoop, online én in onze winkels, en verzilver ze voor GENTS-tegoed.",
   "club.eyebrow": "Ons spaarprogramma",
   "club.title": "The Club of GENTS",
   "club.intro":
