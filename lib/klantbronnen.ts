@@ -30,6 +30,36 @@ export function bronnenGeconfigureerd(): boolean {
   return Boolean(BASIS && TOKEN);
 }
 
+/**
+ * Ontdubbel op sleutel en houd de LAATSTE. Postgres weigert een INSERT ... ON
+ * CONFLICT DO UPDATE waarin dezelfde sleutel twee keer voorkomt ("cannot affect
+ * row a second time") — en dat is precies wat er gebeurt bij externe bronnen:
+ * Returnista levert een rij per geretourneerd ARTIKEL (dus meerdere per
+ * retouraanvraag) en Spotler kan hetzelfde adres in meerdere lijsten hebben.
+ * De hele batch klapt dan, niet alleen de dubbele rij.
+ */
+function ontdubbel<T>(rijen: T[], sleutel: (r: T) => string): T[] {
+  const perSleutel = new Map<string, T>();
+  for (const r of rijen) perSleutel.set(sleutel(r), r);
+  return [...perSleutel.values()];
+}
+
+/**
+ * In stukken wegschrijven. Eén statement met duizenden rijen loopt tegen de
+ * parameterlimiet van Postgres aan (65.535) en tegen de payloadgrens van de
+ * HTTP-driver; bij een eerste vulling van tienduizenden contacten is dat geen
+ * theorie.
+ */
+async function inStukken<T>(rijen: T[], grootte: number, doe: (deel: T[]) => Promise<unknown>): Promise<number> {
+  let n = 0;
+  for (let i = 0; i < rijen.length; i += grootte) {
+    const deel = rijen.slice(i, i + grootte);
+    await doe(deel);
+    n += deel.length;
+  }
+  return n;
+}
+
 async function haal<T>(actie: string, params: Record<string, string> = {}): Promise<T> {
   if (!bronnenGeconfigureerd()) {
     throw new Error("STOREGENTS_PORTAL_SECRET (of STORE_CORE_TOKEN) ontbreekt.");
@@ -121,34 +151,38 @@ export async function haalReturnistaRetouren(dagen = 180): Promise<{ opgehaald: 
     : { rows: [] as { id: string; email: string }[] };
   const klantPerMail = new Map(klantRijen.rows.map((r) => [r.email, r.id]));
 
-  const rijen = data.retouren.map((r) => ({
-    bron: "returnista",
-    externId: r.externId,
-    orderRef: r.orderRef.slice(0, 60),
-    email: r.email,
-    customerId: klantPerMail.get(r.email) ?? null,
-    status: r.status.slice(0, 40),
-    reden: r.reden.slice(0, 200),
-    bedragCents: Math.max(0, Math.round(r.bedragCents || 0)),
-    regels: [{ sku: r.sku, titel: r.titel, maat: r.maat, toelichting: r.toelichting }] as unknown as Record<string, unknown>[],
-    aangemeldOp: r.aangemeldOp ? new Date(r.aangemeldOp) : null,
-  }));
+  const rijen = ontdubbel(
+    data.retouren.map((r) => ({
+      bron: "returnista",
+      externId: r.externId,
+      orderRef: r.orderRef.slice(0, 60),
+      email: r.email,
+      customerId: klantPerMail.get(r.email) ?? null,
+      status: r.status.slice(0, 40),
+      reden: r.reden.slice(0, 200),
+      bedragCents: Math.max(0, Math.round(r.bedragCents || 0)),
+      regels: [{ sku: r.sku, titel: r.titel, maat: r.maat, toelichting: r.toelichting }] as unknown as Record<string, unknown>[],
+      aangemeldOp: r.aangemeldOp ? new Date(r.aangemeldOp) : null,
+    })),
+    (r) => r.externId,
+  );
 
-  const uit = await db
-    .insert(externeRetouren)
-    .values(rijen)
-    .onConflictDoUpdate({
-      target: [externeRetouren.bron, externeRetouren.externId],
-      set: {
-        status: sql`excluded.status`,
-        reden: sql`excluded.reden`,
-        customerId: sql`coalesce(${externeRetouren.customerId}, excluded.customer_id)`,
-        opgehaaldOp: sql`now()`,
-      },
-    })
-    .returning({ id: externeRetouren.id });
+  const nieuw = await inStukken(rijen, 500, (deel) =>
+    db
+      .insert(externeRetouren)
+      .values(deel)
+      .onConflictDoUpdate({
+        target: [externeRetouren.bron, externeRetouren.externId],
+        set: {
+          status: sql`excluded.status`,
+          reden: sql`excluded.reden`,
+          customerId: sql`coalesce(${externeRetouren.customerId}, excluded.customer_id)`,
+          opgehaaldOp: sql`now()`,
+        },
+      }),
+  );
 
-  return { opgehaald: data.retouren.length, nieuw: uit.length };
+  return { opgehaald: data.retouren.length, nieuw };
 }
 
 /* ────────────────────────────── Spotler ─────────────────────────────────── */
@@ -192,32 +226,37 @@ export async function haalSpotlerContacten(maxPaginas = 20): Promise<{
   }
   const db = getDb();
 
-  const rijen = data.contacten.map((c) => ({
-    email: c.email,
-    bron: "spotler",
-    verstuurd: Math.max(0, Math.round(c.verstuurd || 0)),
-    geopend: Math.max(0, Math.round(c.geopend || 0)),
-    geklikt: Math.max(0, Math.round(c.geklikt || 0)),
-    afgemeld: Boolean(c.afgemeld),
-    laatstGeopend: c.laatstGeopend ? new Date(c.laatstGeopend) : null,
-  }));
+  const rijen = ontdubbel(
+    data.contacten.map((c) => ({
+      email: c.email,
+      bron: "spotler",
+      verstuurd: Math.max(0, Math.round(c.verstuurd || 0)),
+      geopend: Math.max(0, Math.round(c.geopend || 0)),
+      geklikt: Math.max(0, Math.round(c.geklikt || 0)),
+      afgemeld: Boolean(c.afgemeld),
+      laatstGeopend: c.laatstGeopend ? new Date(c.laatstGeopend) : null,
+    })),
+    (r) => r.email,
+  );
 
-  await db
-    .insert(mailEngagement)
-    .values(rijen)
-    .onConflictDoUpdate({
-      target: mailEngagement.email,
-      set: {
-        verstuurd: sql`greatest(${mailEngagement.verstuurd}, excluded.verstuurd)`,
-        geopend: sql`greatest(${mailEngagement.geopend}, excluded.geopend)`,
-        geklikt: sql`greatest(${mailEngagement.geklikt}, excluded.geklikt)`,
-        // De afmelding is de enige waarde die MAG terugvallen naar false: een
-        // klant kan zich opnieuw inschrijven, en dan is de nieuwe stand leidend.
-        afgemeld: sql`excluded.afgemeld`,
-        laatstGeopend: sql`greatest(${mailEngagement.laatstGeopend}, excluded.laatst_geopend)`,
-        bijgewerktOp: sql`now()`,
-      },
-    });
+  await inStukken(rijen, 500, (deel) =>
+    db
+      .insert(mailEngagement)
+      .values(deel)
+      .onConflictDoUpdate({
+        target: mailEngagement.email,
+        set: {
+          verstuurd: sql`greatest(${mailEngagement.verstuurd}, excluded.verstuurd)`,
+          geopend: sql`greatest(${mailEngagement.geopend}, excluded.geopend)`,
+          geklikt: sql`greatest(${mailEngagement.geklikt}, excluded.geklikt)`,
+          // De afmelding is de enige waarde die MAG terugvallen naar false: een
+          // klant kan zich opnieuw inschrijven, en dan is de nieuwe stand leidend.
+          afgemeld: sql`excluded.afgemeld`,
+          laatstGeopend: sql`greatest(${mailEngagement.laatstGeopend}, excluded.laatst_geopend)`,
+          bijgewerktOp: sql`now()`,
+        },
+      }),
+  );
 
   // Klant-id's in één statement koppelen: per adres een losse query zou bij
   // tienduizenden contacten tienduizenden roundtrips kosten.
