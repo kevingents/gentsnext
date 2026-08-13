@@ -6,6 +6,7 @@ import { buildPlpQuery, type PlpSelection } from "@/lib/plp-params";
 import type { PlpStoreOption } from "@/lib/plp-store";
 import { useT } from "@/components/i18n/locale-provider";
 import { track } from "@/lib/track-client";
+import { StoreChooser } from "@/components/stores/store-chooser";
 
 /**
  * Actieve PERSOONLIJKE filters als chips, boven de resultaten.
@@ -26,20 +27,29 @@ import { track } from "@/lib/track-client";
  * bij het aantal resultaten en de sorteerkeuze, want dat is waar je kijkt als je
  * de lijst wilt bijsturen.
  *
- * De winkel KIEZEN blijft bewust in het filterpaneel staan: dat is een
- * instelling, geen actieve status. Alleen het gevolg komt hier als chip.
+ * Winkelvoorraad hoort in dezelfde rij (Kevin, 13 aug: "zelfde als 'alleen mijn
+ * maat', zo'n pil, en er ook naast"). Het stond nog als aanvinklijst in een
+ * kadertje in de filterkolom, terwijl het exact dezelfde soort keuze is: een
+ * persoonlijk filter met twee standen. Twee vormen voor één ding leest als twee
+ * verschillende dingen — dus staan de winkels hier nu ook als pil, in dezelfde
+ * volgorde als je ze koos, met de telling erbij zodat je ziet wat het oplevert.
+ * De KIEZER ("Winkels wijzigen") staat als tekstknopje achter de pillen: dat is
+ * een instelling, geen filter, en verdient dus geen pil.
  */
 export function PlpActiveChips({
   selection,
   mySize,
   mySizeCount,
   storeOptions = [],
+  myStoreTitles = [],
 }: {
   selection: PlpSelection;
   mySize?: { row: string; raw: string; facet: string } | null;
   /** Aantal artikelen in die maat — null als de maat niet in deze lijst voorkomt. */
   mySizeCount?: number | null;
   storeOptions?: PlpStoreOption[];
+  /** Winkelnamen van de klant — de kiezer werkt op naam. */
+  myStoreTitles?: string[];
 }) {
   const t = useT();
   const router = useRouter();
@@ -56,7 +66,16 @@ export function PlpActiveChips({
      maatfilter in het paneel het verhaal te vertellen. */
   const maatAan = Boolean(mySize && selection.sizes.length === 1 && selection.sizes[0] === mySize.facet);
   const maatAanbod = Boolean(mySize && !maatAan && (mySizeCount ?? 0) > 0);
-  const winkels = storeOptions.filter((s) => selection.stores.includes(s.pageHandle));
+  /* Eén rij winkels in de volgorde waarin de klant ze koos, met de stand per
+     winkel — niet eerst alle aanstaande en dan de rest. Anders springt een pil
+     naar voren op het moment dat je 'm aanzet, precies waar je muis nog staat.
+     Een winkel zonder voorraad in deze lijst bieden we niet aan (die pil levert
+     altijd nul op); staat 'ie wél aan, dan blijft 'ie staan — dan heeft de klant
+     'm zelf aangezet en hoort 'ie te zien waaróm de lijst leeg is. */
+  const winkels = storeOptions
+    .map((s) => ({ ...s, aan: selection.stores.includes(s.pageHandle) }))
+    .filter((s) => s.aan || (s.count ?? 0) > 0);
+  const erIsEenWinkelAan = winkels.some((s) => s.aan);
 
   if (!maatAan && !maatAanbod && !winkels.length) return null;
 
@@ -86,17 +105,40 @@ export function PlpActiveChips({
         />
       ) : null}
 
-      {winkels.map((s) => (
-        <Chip
-          key={s.pageHandle}
-          label={t("plp.chips.inStore", { city: s.city })}
-          onRemove={() => {
-            track("filter", { props: { facet: "winkel", value: s.pageHandle, on: false, bron: "chip" } });
-            apply({ stores: selection.stores.filter((h) => h !== s.pageHandle) });
-          }}
-          removeLabel={t("plp.chips.remove")}
-        />
-      ))}
+      {winkels.map((s) =>
+        s.aan ? (
+          <Chip
+            key={s.pageHandle}
+            label={t("plp.chips.inStore", { city: s.city })}
+            onRemove={() => {
+              track("filter", { props: { facet: "winkel", value: s.pageHandle, on: false, bron: "chip" } });
+              apply({ stores: selection.stores.filter((h) => h !== s.pageHandle) });
+            }}
+            removeLabel={t("plp.chips.remove")}
+          />
+        ) : (
+          <Chip
+            key={s.pageHandle}
+            variant="offer"
+            label={t("plp.chips.inStoreOffer", { city: s.city, count: s.count ?? 0 })}
+            onAdd={() => {
+              track("filter", { props: { facet: "winkel", value: s.pageHandle, on: true, bron: "chip" } });
+              apply({ stores: [...selection.stores, s.pageHandle] });
+            }}
+          />
+        ),
+      )}
+
+      {/* Kiezen is geen filter: een tekstknopje, geen pil. Staat achteraan zodat
+          de pillen (wat je nú ziet) vooraan blijven. */}
+      {storeOptions.length ? <StoreChooser myStores={myStoreTitles} variant="link" bron="plp" /> : null}
+
+      {/* Eerlijk over de bron zodra er op voorraad gefilterd wordt: de
+          winkeltelling loopt achter op wat er nú in het rek hangt. `basis-full`
+          zet 'm op een eigen regel onder de pillen, zonder tweede wikkel. */}
+      {erIsEenWinkelAan ? (
+        <p className="basis-full font-sans text-xs text-muted">{t("plp.filters.storeDisclaimer")}</p>
+      ) : null}
     </div>
   );
 }

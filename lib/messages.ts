@@ -109,8 +109,10 @@ const nl: Dict = {
   "plp.card.inMyStore": "Ligt in {store}",
   "plp.card.inMyStoreGeneric": "jouw winkel",
   "plp.filters.storeStock": "Winkelvoorraad",
-  "plp.filters.storeAll": "Alle winkels",
   "plp.filters.storeDisclaimer": "Op basis van de winkeltelling, een paar keer per dag ververst.",
+  // Winkelvoorraad als pil naast "Alleen mijn maat" — met de telling erbij, want
+  // een aanbod zonder getal zegt niet of het de moeite waard is.
+  "plp.chips.inStoreOffer": "Op voorraad in {city} ({count})",
   "checkout.country": "Land",
   "checkout.shipping_rate_free_from": "Verzendkosten {amount} — gratis vanaf {threshold}",
   "checkout.shipping_rate_flat": "Verzendkosten {amount}",
@@ -320,8 +322,8 @@ const en: Dict = {
   "plp.card.inMyStore": "In stock in {store}",
   "plp.card.inMyStoreGeneric": "your store",
   "plp.filters.storeStock": "Store stock",
-  "plp.filters.storeAll": "All stores",
   "plp.filters.storeDisclaimer": "Based on the store count, refreshed a few times a day.",
+  "plp.chips.inStoreOffer": "In stock in {city} ({count})",
   "checkout.country": "Country",
   "checkout.shipping_rate_free_from": "Shipping {amount} — free from {threshold}",
   "checkout.shipping_rate_flat": "Shipping {amount}",
