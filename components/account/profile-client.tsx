@@ -21,6 +21,7 @@ import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
 import { AppleWalletButton } from "@/components/account/apple-wallet-button";
+import { GoogleWalletButton } from "@/components/account/google-wallet-button";
 import { Bestellingen, type OrderRow, type StoreBuyRow } from "@/components/account/bestellingen";
 import type { ProductCardData } from "@/lib/catalog";
 
@@ -101,6 +102,7 @@ export function ProfileClient({
   customer,
   data,
   walletEnabled = false,
+  googleWalletEnabled = false,
   bonuses = [],
   redeem = REDEEM_FALLBACK,
   stores = [],
@@ -108,6 +110,7 @@ export function ProfileClient({
   customer: Customer;
   data: Data;
   walletEnabled?: boolean;
+  googleWalletEnabled?: boolean;
   bonuses?: BonusTask[];
   redeem?: RedeemConfig;
   stores?: StoreOption[];
@@ -165,7 +168,7 @@ export function ProfileClient({
         {tab === "overzicht" && <Overzicht customer={customer} data={data} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "bestellingen" && <BestellingenTab data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
-        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
+        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} googleWalletEnabled={googleWalletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
         {tab === "gegevens" && <Gegevens customer={customer} stores={stores} />}
@@ -570,7 +573,7 @@ function RedeemPoints({ available, koers }: { available: number; koers: RedeemCo
   );
 }
 
-function Punten({ data, walletEnabled, bonuses, redeem, onTab }: { data: Data; walletEnabled: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
+function Punten({ data, walletEnabled, googleWalletEnabled, bonuses, redeem, onTab }: { data: Data; walletEnabled: boolean; googleWalletEnabled?: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const walletBonus = bonuses.find((b) => b.kind === "wallet");
   /* Weg naar de eerste tegoedbon. Alleen zolang je er nog niet bent: kun je al
@@ -622,9 +625,14 @@ function Punten({ data, walletEnabled, bonuses, redeem, onTab }: { data: Data; w
           </div>
         )}
         <p className="mt-3 font-sans text-sm text-ink-soft">{t("account.points.explainer")}</p>
-        {walletEnabled && (
+        {(walletEnabled || googleWalletEnabled) && (
           <div className="mt-5">
-            <AppleWalletButton />
+            {/* Allebei tonen als ze aanstaan: welk toestel de klant heeft weten we
+                hier niet, en raden op de user-agent gaat op tablets/desktop mis. */}
+            <div className="flex flex-wrap gap-2">
+              {walletEnabled && <AppleWalletButton />}
+              {googleWalletEnabled && <GoogleWalletButton />}
+            </div>
             <p className="mt-2 font-sans text-xs text-muted">
               {t("account.points.walletHint")}
               {walletBonus && !walletBonus.done && walletBonus.points > 0
