@@ -206,6 +206,10 @@ export function isKnownMethod(m: string | undefined | null): boolean {
 export async function getMollieMethods(amountCents?: number): Promise<MollieMethod[]> {
   if (!mollieConfigured()) return [];
   const qs = new URLSearchParams();
+  /* Wallets laat Mollie WEG uit /v2/methods tenzij je er expliciet om vraagt.
+     Apple Pay en Google Pay stonden dus gewoon aan op het profiel, maar kwamen
+     hier nooit terug — en daarmee bestonden ze niet in de checkout. */
+  qs.set("includeWallets", "applepay,googlepay");
   if (amountCents && amountCents > 0) {
     qs.set("amount[value]", centsToValue(amountCents));
     qs.set("amount[currency]", "EUR");

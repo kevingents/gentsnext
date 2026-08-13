@@ -177,10 +177,26 @@ function CheckoutForm() {
     return () => { active = false; };
   }, [country]);
 
-  const methods = pay.methods;
+  /* Apple Pay werkt alleen op een Apple-apparaat met Safari. Op een Android-
+     telefoon zou de knop naar een betaalpagina leiden die niets kan — dus
+     verbergen we 'm daar. Na mount, want op de server bestaat `window` niet en
+     een verschil tussen server- en client-render geeft een hydratiefout.
+     Google Pay laten we staan: dat draait in vrijwel elke browser. */
+  const [applePayKan, setApplePayKan] = useState(true);
+  useEffect(() => {
+    const AP = (window as unknown as { ApplePaySession?: { canMakePayments?: () => boolean } }).ApplePaySession;
+    setApplePayKan(Boolean(AP?.canMakePayments?.()));
+  }, []);
+  const methods = useMemo(
+    () => (applePayKan ? pay.methods : pay.methods.filter((m) => m.id !== "applepay")),
+    [pay.methods, applePayKan],
+  );
+  /* Filteren gebeurt vóór het verdelen: staat Apple Pay in de kopgroep maar kan
+     dit apparaat het niet, dan schuift de volgende methode gewoon door in plaats
+     van dat er een gat valt. */
   const { visible: payVisible, rest: payRest } = useMemo(
-    () => splitMethods(pay.methods, pay.top, pay.maxVisible),
-    [pay],
+    () => splitMethods(methods, pay.top, pay.maxVisible),
+    [methods, pay.top, pay.maxVisible],
   );
 
   // Voorselectie = de eerste knop van de kopgroep, zolang de klant zelf nog niets
