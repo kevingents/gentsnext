@@ -9,6 +9,7 @@ import {
   HERO_THEMAS,
   listHeroBeelden,
   maakHeroBeeld,
+  maakHeroVanBeeld,
   maakHeroVanProduct,
   verwijderHeroBeeld,
 } from "@/lib/hero-media";
@@ -24,7 +25,10 @@ export const maxDuration = 300;
  *
  *   GET    → de bestaande banners (blob ai-hero/), de vaste thema's, en de
  *            video's die we hebben (voor het video-veld van de hero).
- *   POST   → maak een nieuwe banner met fal.ai (thema of vrije omschrijving).
+ *   POST   → maak een nieuwe banner. Drie bronnen: `sfeer` (fal.ai, alles
+ *            verzonnen), `product` (FASHN, met een echt artikel erop) en
+ *            `beeld` (fal.ai image-to-image op een beeld dat we al hebben, of
+ *            dat beeld ongewijzigd overnemen).
  *   DELETE → gooi een banner weg (?slug=).
  *
  * Auth: gentsnext-admin OF Bearer STUDIO_API_TOKEN (de portal-BFF).
@@ -98,7 +102,17 @@ export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { bron?: "sfeer" | "product"; handle?: string; thema?: string; prompt?: string; aspect?: string; naam?: string };
+  let body: {
+    bron?: "sfeer" | "product" | "beeld";
+    handle?: string;
+    beeldUrl?: string;
+    beeldLabel?: string;
+    hergebruik?: boolean;
+    thema?: string;
+    prompt?: string;
+    aspect?: string;
+    naam?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -106,6 +120,19 @@ export async function POST(req: Request) {
   }
 
   try {
+    /* Van een beeld dat we al hebben: een eerdere banner, een sfeerbeeld of een
+       modelfoto (de outfit). fal.ai herschildert de omgeving eromheen, of we
+       nemen 'm ongewijzigd over. Geen FASHN: het bronbeeld is meestal zélf al
+       een gegenereerde modelfoto, en die als garment-input gebruiken is
+       fictie-op-fictie (zie de AI-packshot-regel in lib/lifestyle.ts). */
+    if (body.bron === "beeld") {
+      const beeld = await maakHeroVanBeeld(
+        { url: String(body.beeldUrl || ""), label: String(body.beeldLabel || "") },
+        { thema: body.thema, prompt: body.prompt, naam: body.naam, hergebruik: Boolean(body.hergebruik) },
+      );
+      return NextResponse.json({ ok: true, beeld });
+    }
+
     /* Met een artikel erbij: FASHN zet ONS product op het model en bouwt de
        scène eromheen. Zonder artikel: fal.ai verzint alles, inclusief de
        kleding — prima voor pure sfeer, maar dan hangt er geen echt pak in. */
