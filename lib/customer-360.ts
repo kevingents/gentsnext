@@ -197,7 +197,11 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
              -- prikkel reageert. Sleutels gelijk aan REF_TYPE in lib/loyalty-bonus.
              coalesce(sum(points) filter (
                where ref_type in ('bonus_account','bonus_maatadvies','bonus_wallet','bonus_winkel','profile_completion')
-             ), 0)::int bonus
+             ), 0)::int bonus,
+             -- Welkomstbonus gehad? Nee = klant van vóór 13 aug 2026. Die groep is
+             -- als DOELGROEP interessant; met terugwerkende kracht uitbetalen is
+             -- een geldbesluit van ± € 120.000.
+             bool_or(ref_type = 'bonus_account') welkom
       from loyalty_events group by 1
     ),
     vouchers_agg as (
@@ -475,7 +479,7 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       eerste_aankoop, laatste_aankoop, dagen_sinds_aankoop, klantwaarde_cents,
       retouren, retour_cents, retourquote,
       punten, punten_beschikbaar, tegoed_cents, actieve_vouchers, wallet_pas,
-      bonus_punten, maatprofiel, profiel_compleet,
+      bonus_punten, maatprofiel, profiel_compleet, welkomstbonus,
       sessies_30d, productviews_30d, zoekopdrachten_30d, laatst_gezien, kar_verlaten_op, laatst_bekeken,
       tickets, afspraken, reviews,
       top_categorieen, top_merken, top_kleuren, maten, favoriete_winkel, kanaal,
@@ -521,7 +525,7 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
 
       coalesce(pt.totaal, 0), coalesce(pt.beschikbaar, 0), coalesce(tg.cents, 0),
       coalesce(v.n, 0), (wl.sn is not null),
-      coalesce(pt.bonus, 0), ${MAATPROFIEL}, ${PROFIEL_COMPLEET},
+      coalesce(pt.bonus, 0), ${MAATPROFIEL}, ${PROFIEL_COMPLEET}, coalesce(pt.welkom, false),
 
       coalesce(g.sessies, 0), coalesce(g.views, 0), coalesce(g.zoek, 0), g.laatst,
       case when g.laatste_kar > coalesce(g.laatste_koop, 'epoch'::timestamptz) then g.laatste_kar end,
@@ -609,6 +613,7 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       tegoed_cents = excluded.tegoed_cents, actieve_vouchers = excluded.actieve_vouchers,
       wallet_pas = excluded.wallet_pas, bonus_punten = excluded.bonus_punten,
       maatprofiel = excluded.maatprofiel, profiel_compleet = excluded.profiel_compleet,
+      welkomstbonus = excluded.welkomstbonus,
       sessies_30d = excluded.sessies_30d, productviews_30d = excluded.productviews_30d,
       zoekopdrachten_30d = excluded.zoekopdrachten_30d, laatst_gezien = excluded.laatst_gezien,
       kar_verlaten_op = excluded.kar_verlaten_op, laatst_bekeken = excluded.laatst_bekeken,

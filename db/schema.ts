@@ -1908,6 +1908,10 @@ export const customerProfiles = pgTable(
     maatprofiel: boolean("maatprofiel").notNull().default(false),
     /** Voldoet aan de profiel-checklist (lib/profiel-voorkeuren). */
     profielCompleet: boolean("profiel_compleet").notNull().default(false),
+    /** Heeft de welkomstbonus gehad. Nee = klant van vóór 13 aug 2026; dat zijn er
+     *  ruim 48.000 en met terugwerkende kracht uitbetalen is ± € 120.000. Als
+     *  doelgroep kun je ze in plaats daarvan een reden geven om iets te doen. */
+    welkomstbonus: boolean("welkomstbonus").notNull().default(false),
 
     sessies30d: integer("sessies_30d").notNull().default(0),
     productviews30d: integer("productviews_30d").notNull().default(0),
@@ -1997,6 +2001,7 @@ export const customerProfiles = pgTable(
     index("customer_profiles_rfm_idx").on(t.rfmR, t.rfmF, t.rfmM),
     index("customer_profiles_maatprofiel_idx").on(t.maatprofiel, t.marketingOptIn),
     index("customer_profiles_compleet_idx").on(t.profielCompleet, t.marketingOptIn),
+    index("customer_profiles_welkomstbonus_idx").on(t.welkomstbonus, t.marketingOptIn),
   ]
 );
 

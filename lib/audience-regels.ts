@@ -100,6 +100,10 @@ export const VELDEN: VeldDef[] = [
     uitleg: "Naam, telefoon, leeftijd, kleuren, vaste winkel en gelegenheden — de checklist waar de puntenbonus op staat.",
   },
   {
+    key: "welkomstbonus", label: "Welkomstpunten gehad", type: "jaNee", kolom: "welkomstbonus",
+    uitleg: "Nee = klant van vóór 13 aug 2026, toen de welkomstbonus inging. Die groep heeft 'm nooit gekregen.",
+  },
+  {
     key: "bonus_punten", label: "Punten uit bonusacties", type: "getal", kolom: "bonus_punten",
     uitleg: "Hoeveel van z'n punten uit de eenmalige acties komen. Hoog = reageert op een prikkel.",
   },
