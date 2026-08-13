@@ -16,6 +16,8 @@ import { koppelDevice } from "@/lib/identity";
 import { shippingCentsFor, DEFAULT_COUNTRY, isKnownCountry } from "@/lib/shipping-zones";
 import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
+import { smokingPakketKorting, niveauUitGroupId } from "@/lib/smoking-korting";
+import { getSmokingConfig } from "@/lib/smoking-pakket";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
 import { availableInStore } from "@/lib/store-core";
@@ -337,6 +339,26 @@ export async function createOrder(
   // Staffelkorting (instelbaar, default uit): vanaf N artikelen X% op 't subtotaal.
   const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
   discountCents = Math.min(subtotalCents, discountCents + tieredDiscountCents(itemCount, subtotalCents, settings.tieredDiscount));
+  // Smoking compleet: de vaste pakketprijs. Die is de klant op de samensteller
+  // beloofd, dus hij hoort HIER verrekend te worden — niet alleen in de weergave,
+  // anders rekent de kassa alsnog de losse som af. Alleen een complete groep
+  // (jas, broek, overhemd, strik) telt; haalt de klant er een onderdeel uit, dan
+  // vervalt de korting vanzelf. De prijzen komen uit het beheer, nooit uit de
+  // client — net als alle andere bedragen hier.
+  if (lines.some((l) => niveauUitGroupId(l.groupId))) {
+    const smokingNiveaus = (await getSmokingConfig()).niveaus;
+    const pakketPrijs = new Map(smokingNiveaus.map((n) => [n.id, Math.round(Number(n.prijs) * 100)]));
+    const smokingKorting = smokingPakketKorting(
+      lines.map((l) => ({
+        groupId: l.groupId,
+        roleLabel: l.roleLabel,
+        priceCents: l.unitPriceCents,
+        quantity: l.quantity,
+      })),
+      (niveauId) => pakketPrijs.get(niveauId) ?? null
+    );
+    discountCents = Math.min(subtotalCents, discountCents + smokingKorting);
+  }
   // Express kan alléén als de héle order rechtstreeks uit het magazijn leverbaar
   // is (snelle levering kan niet vanuit de winkels). Server-side borgen: bij een
   // split, winkel-bron of tekort zetten we stilletjes terug naar standaard —
