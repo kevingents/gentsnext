@@ -267,9 +267,13 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
       <ul className="mt-4 divide-y divide-line border-t border-line">
         {lijst.map((b) => {
           const copy = BONUS_COPY[b.kind];
+          /* GEEN flex-wrap op de regel: die met een knop is breder, wrapte
+             daardoor als enige, en het bedrag sprong dan naar het begín van de
+             nieuwe regel — precies de kolom die niet meer uitlijnde. De
+             linkerkant krimpt nu in plaats daarvan (min-w-0 + flex-1). */
           return (
-            <li key={b.kind} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div className="flex min-w-0 items-start gap-3">
+            <li key={b.kind} className="flex items-center justify-between gap-3 py-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <span
                   aria-hidden
                   className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
@@ -283,20 +287,36 @@ function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[
                   <p className="mt-0.5 font-sans text-xs text-ink-soft">{b.done ? t("account.bonus.done") : t(copy.body)}</p>
                 </div>
               </div>
+              {/* Twee kolommen met een VASTE breedte, niet twee elementen achter
+                  elkaar. Een afgevinkte regel heeft geen knop, dus zonder vaste
+                  breedte schoof "+50" daar naar rechts en op de regels eronder
+                  weer naar links — een rij bedragen die niet onder elkaar staat.
+                  De knoppen krijgen dezelfde breedte, zodat ze ook uitlijnen. */}
+              {/* De twee breedtes staan in de stijl en niet in een klasse: dít
+                  is wat de rij uitlijnt, en een utility die niet meekomt in de
+                  CSS-build laat de kolom stil weer verspringen. clamp geeft de
+                  knopkolom op een telefoon wat terug aan de tekst ernaast. */}
               <div className="flex shrink-0 items-center gap-3">
-                <span className={`font-sans text-sm ${b.done ? "text-muted" : "text-ink"}`}>+{b.points}</span>
-                {b.done ? null : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      track("bonus_click", { handle: b.kind, path: "/account" });
-                      onTab(copy.tab);
-                    }}
-                    className="btn-ghost !py-1.5 !text-xs"
-                  >
-                    {t(copy.cta)}
-                  </button>
-                )}
+                <span
+                  style={{ width: "3rem", textAlign: "right" }}
+                  className={`font-sans text-sm ${b.done ? "text-muted" : "text-ink"}`}
+                >
+                  +{b.points}
+                </span>
+                <span className="flex justify-end" style={{ width: "clamp(5rem, 22vw, 7rem)" }}>
+                  {b.done ? null : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        track("bonus_click", { handle: b.kind, path: "/account" });
+                        onTab(copy.tab);
+                      }}
+                      className="btn-ghost w-full !py-1.5 !text-xs"
+                    >
+                      {t(copy.cta)}
+                    </button>
+                  )}
+                </span>
               </div>
             </li>
           );
@@ -697,6 +717,11 @@ function Punten({ data, pass, walletEnabled, googleWalletEnabled, bonuses, redee
             walletBonusPoints={walletBonus && !walletBonus.done ? walletBonus.points : 0}
           />
         )}
+        {/* De rechterkolom is een stapel: eerst de balk naar je volgende
+            tegoedbon, daaronder wat je nog kunt verdienen. Die twee horen bij
+            elkaar — het is allebei "hoe kom ik verder" — en samen vullen ze de
+            hoogte van de pas ernaast. */}
+        <div className="space-y-6">
         <div className="border border-line p-6">
           {/* Zonder pas (theoretisch: prop niet meegegeven) valt het saldo hier
               terug, anders staat het nergens. */}
@@ -729,8 +754,9 @@ function Punten({ data, pass, walletEnabled, googleWalletEnabled, bonuses, redee
             </div>
           )}
         </div>
+          <PuntenActies bonuses={bonuses} onTab={onTab} />
+        </div>
       </div>
-      <PuntenActies bonuses={bonuses} onTab={onTab} />
       <RedeemPoints available={data.pointsAvailable} koers={redeem} />
       {data.loyalty.length ? (
         <ul className="divide-y divide-line border-y border-line">
