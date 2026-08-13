@@ -349,7 +349,7 @@ test("sanering: de nieuwe pdp- en plp-knoppen", () => {
             key: "B",
             gewicht: 1,
             overrides: {
-              pdp: { reviewsPositie: "boven", kortingLabel: "uit", galerijMax: 4 },
+              pdp: { reviewsPositie: "boven", kortingLabel: "uit", galerijMax: 4, video: "uit", betaaliconen: "aan" },
               plp: { filterPositie: "boven", snelToevoegen: "aan" },
             },
           },
@@ -366,6 +366,8 @@ test("sanering: de nieuwe pdp- en plp-knoppen", () => {
   assert.equal(b.overrides.pdp.reviewsPositie, "boven");
   assert.equal(b.overrides.pdp.kortingLabel, "uit");
   assert.equal(b.overrides.pdp.galerijMax, 4);
+  assert.equal(b.overrides.pdp.video, "uit");
+  assert.equal(b.overrides.pdp.betaaliconen, "aan");
   assert.equal(b.overrides.plp.filterPositie, "boven");
   assert.equal(b.overrides.plp.snelToevoegen, "aan");
   // Onbekende waarden vallen weg i.p.v. door te lekken naar de site.

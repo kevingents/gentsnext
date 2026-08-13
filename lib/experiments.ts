@@ -81,6 +81,10 @@ export type AbOverrides = {
     reviewsPositie?: "boven" | "onder";
     /** "-30%"-label naast de prijs bij een echte korting. */
     kortingLabel?: "aan" | "uit";
+    /** De (AI-)productvideo in de galerij. */
+    video?: "aan" | "uit";
+    /** Het rijtje betaalmerken onder de koopknop. */
+    betaaliconen?: "aan" | "uit";
     /** Materiaal/verzorging standaard uitgeklapt. */
     accordionsOpen?: boolean;
     /** Vervangt het vertrouwenslijstje onder de koopknop (max 5). */
