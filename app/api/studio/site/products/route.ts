@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { adminOrToken } from "@/lib/studio-token";
 import { getDb } from "@/db";
-import { compleetheidScoreSql, pimCheckLabels, PIM_CHECKS, PIM_VELDEN } from "@/lib/pim";
+import { compleetheidScoreSql, pimWhereSql, pimCheckLabels, PIM_VELDEN } from "@/lib/pim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,33 +46,18 @@ export async function GET(req: Request) {
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const pageSize = Math.min(200, Math.max(5, Number(sp.get("pageSize")) || 30));
 
-  const conds = [sql`1=1`];
-  if (search) {
-    const q = `%${search.toLowerCase()}%`;
-    conds.push(sql`(
-      lower(p.title) like ${q}
-      or lower(p.handle) like ${q}
-      or exists (select 1 from product_variants v2 where v2.product_id = p.id and lower(v2.sku) like ${q})
-    )`);
-  }
-  if (status) conds.push(sql`p.status = ${status}`);
-  if (merk) conds.push(sql`coalesce(nullif(p.vendor, ''), p.attributes ->> 'merk', '') = ${merk}`);
-  if (groep) conds.push(sql`coalesce(p.attributes ->> 'hoofdgroep_omschrijving', '') = ${groep}`);
-
   const score = compleetheidScoreSql();
-
-  /* Kwaliteitsfilter. 'mist:<check>' selecteert precies de artikelen waar één
-     check faalt — de werklijst achter een tegel op het kwaliteitsoverzicht. */
-  if (kwaliteit === "onvolledig") conds.push(sql`(${score}) < 100`);
-  else if (kwaliteit === "compleet") conds.push(sql`(${score}) = 100`);
-  else if (kwaliteit === "handmatig") conds.push(sql`jsonb_array_length(coalesce(p.handmatige_velden, '[]'::jsonb)) > 0`);
-  else if (kwaliteit.startsWith("mist:")) {
-    const check = PIM_CHECKS.find((c) => c.sleutel === kwaliteit.slice(5));
-    if (!check) return NextResponse.json({ ok: false, error: "Onbekend kwaliteitsfilter." }, { status: 400 });
-    conds.push(sql`not (${check.conditie})`);
-  }
-  const where = sql.join(conds, sql` and `);
   const order = SORTERINGEN[sort] || SORTERINGEN.nieuw;
+
+  /* Het filter staat in lib/pim.ts zodat de CSV-export exact hetzelfde selecteert
+     als dit scherm. 'mist:<check>' is de werklijst achter een tegel op het
+     kwaliteitsoverzicht. */
+  let where: SQL;
+  try {
+    where = pimWhereSql({ search, status, kwaliteit, merk, groep });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
+  }
 
   try {
     const db = getDb();

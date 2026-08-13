@@ -157,7 +157,133 @@ export function pimCheckLabels() {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   3. Opslaan
+   3. Het lijstfilter — één definitie voor lijst én export
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export type PimLijstFilters = {
+  search?: string;
+  status?: string;
+  /** '' | 'onvolledig' | 'compleet' | 'handmatig' | 'mist:<check>' */
+  kwaliteit?: string;
+  merk?: string;
+  groep?: string;
+};
+
+/**
+ * De WHERE-clausule van de productenlijst, over `products p`.
+ *
+ * Bewust één functie voor de lijst én de CSV-export: een export die net iets
+ * anders filtert dan het scherm waar je op stond is een fuik. Precies dat ging
+ * eerder mis bij de veiligheidsvoorraad, waar dezelfde filter op drie plekken
+ * stond en op twee ervan werd bijgewerkt.
+ *
+ * Gooit bij een onbekend kwaliteitsfilter — stil negeren zou een lijst opleveren
+ * die iets anders toont dan de gebruiker vroeg.
+ */
+export function pimWhereSql(f: PimLijstFilters): SQL {
+  const conds = [sql`1=1`];
+  const search = (f.search || "").trim();
+  if (search) {
+    const q = `%${search.toLowerCase()}%`;
+    conds.push(sql`(
+      lower(p.title) like ${q}
+      or lower(p.handle) like ${q}
+      or exists (select 1 from product_variants v2 where v2.product_id = p.id and lower(v2.sku) like ${q})
+    )`);
+  }
+  if (f.status) conds.push(sql`p.status = ${f.status}`);
+  if (f.merk) conds.push(sql`coalesce(nullif(p.vendor, ''), p.attributes ->> 'merk', '') = ${f.merk}`);
+  if (f.groep) conds.push(sql`coalesce(p.attributes ->> 'hoofdgroep_omschrijving', '') = ${f.groep}`);
+
+  const k = (f.kwaliteit || "").trim();
+  if (k === "onvolledig") conds.push(sql`(${compleetheidScoreSql()}) < 100`);
+  else if (k === "compleet") conds.push(sql`(${compleetheidScoreSql()}) = 100`);
+  else if (k === "handmatig") conds.push(sql`jsonb_array_length(coalesce(p.handmatige_velden, '[]'::jsonb)) > 0`);
+  else if (k.startsWith("mist:")) {
+    const check = PIM_CHECKS.find((c) => c.sleutel === k.slice(5));
+    if (!check) throw new Error("Onbekend kwaliteitsfilter.");
+    conds.push(sql`not (${check.conditie})`);
+  } else if (k) {
+    throw new Error("Onbekend kwaliteitsfilter.");
+  }
+  return sql.join(conds, sql` and `);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. Export
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Ruim boven de catalogus (~3.000 artikelen); een grens om een ongeluk te dempen. */
+const EXPORT_CAP = 50_000;
+
+function csvCel(v: string | number): string {
+  const s = String(v ?? "");
+  return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * De productenlijst als CSV, met dezelfde filters als het scherm.
+ *
+ * De kolom "Ontbreekt" is waar het om gaat: open het bestand, filter op de
+ * artikelen zonder pasvorm, vul de kolom in, en gebruik de bulkbalk om het
+ * terug te zetten. Puntkomma's en een BOM zodat Excel 'm in het Nederlands
+ * opent zonder importwizard — zelfde afspraak als de order-export.
+ */
+export async function exporteerProducten(f: PimLijstFilters): Promise<string> {
+  const db = getDb();
+  const where = pimWhereSql(f);
+  const rows = await db.execute<{
+    handle: string; title: string; vendor: string; product_type: string; status: string;
+    kleur: string; score: number; checks: Record<string, boolean>; stock_qty: number;
+    varianten: string; min_prijs: string | null; max_prijs: string | null;
+    hoofdgroep: string; materiaal: string; pasvorm: string; slot: string[] | null; created_at: string;
+  }>(sql`
+    select p.handle, p.title, p.vendor, p.product_type, p.status,
+           p.variant_color_label kleur,
+           ${compleetheidScoreSql()} score,
+           ${compleetheidChecksSql()} checks,
+           p.stock_qty,
+           coalesce(p.attributes ->> 'hoofdgroep_omschrijving', '') hoofdgroep,
+           coalesce(p.attributes ->> 'materiaal', p.attributes ->> 'samenstelling_materiaal', '') materiaal,
+           coalesce(p.attributes ->> 'pasvorm', '') pasvorm,
+           coalesce(p.handmatige_velden, '[]'::jsonb) slot,
+           to_char(p.created_at, 'YYYY-MM-DD') created_at,
+           (select count(*) from product_variants v where v.product_id = p.id) varianten,
+           (select min(v.price_cents) from product_variants v where v.product_id = p.id) min_prijs,
+           (select max(v.price_cents) from product_variants v where v.product_id = p.id) max_prijs
+    from products p where ${where}
+    order by ${compleetheidScoreSql()} asc, p.stock_qty desc
+    limit ${EXPORT_CAP}`);
+
+  const euro = (c: string | null) => ((Number(c) || 0) / 100).toFixed(2).replace(".", ",");
+  const kop = [
+    "Handle", "Titel", "Merk", "Producttype", "Status", "Kleurlabel", "Hoofdgroep", "Materiaal", "Pasvorm",
+    "Score", "Ontbreekt", "Vastgezette velden", "Voorraad", "Varianten", "Prijs vanaf", "Prijs tot", "Aangemaakt",
+  ];
+  const regels = rows.rows.map((x) => [
+    x.handle,
+    x.title,
+    x.vendor,
+    x.product_type,
+    x.status,
+    x.kleur,
+    x.hoofdgroep,
+    x.materiaal,
+    x.pasvorm,
+    Number(x.score) || 0,
+    PIM_CHECKS.filter((c) => !x.checks?.[c.sleutel]).map((c) => c.label).join(", "),
+    (Array.isArray(x.slot) ? x.slot : []).map((s) => veldLabel(String(s))).join(", "),
+    Number(x.stock_qty) || 0,
+    Number(x.varianten) || 0,
+    euro(x.min_prijs),
+    euro(x.max_prijs),
+    x.created_at,
+  ]);
+  return "﻿" + [kop, ...regels].map((r) => r.map(csvCel).join(";")).join("\r\n");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5. Opslaan
    ══════════════════════════════════════════════════════════════════════════ */
 
 export type PimPatch = {
@@ -314,7 +440,7 @@ export async function slaProductOp(handle: string, patch: PimPatch, actor: strin
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   4. Bulk
+   6. Bulk
    ══════════════════════════════════════════════════════════════════════════ */
 
 export type PimBulkActie =
@@ -369,7 +495,7 @@ export async function bulkBewerk(
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   5. Logboek
+   7. Logboek
    ══════════════════════════════════════════════════════════════════════════ */
 
 async function logWijzigingen(
