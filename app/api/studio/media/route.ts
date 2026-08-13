@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { getSessionCustomer } from "@/lib/account";
 import { getSiteUrl } from "@/lib/site-url";
 import { newCollectionCond } from "@/lib/new-collection";
+import { listHeroBeelden } from "@/lib/hero-media";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -30,7 +31,7 @@ export const maxDuration = 30;
  *   q           vrije zoekterm (titel / handle / hoofdgroep)
  */
 
-type AssetType = "packshot" | "ai-packshot" | "model" | "sfeer" | "detail" | "video";
+type AssetType = "packshot" | "ai-packshot" | "model" | "sfeer" | "detail" | "video" | "hero";
 const TYPE_LABEL: Record<AssetType, string> = {
   packshot: "Productfoto",
   "ai-packshot": "AI-packshot",
@@ -38,7 +39,11 @@ const TYPE_LABEL: Record<AssetType, string> = {
   sfeer: "Sfeerbeeld",
   detail: "Detailfoto",
   video: "Video",
+  hero: "Hero-banner",
 };
+
+/** Eigen "hoofdgroep" voor de merkbanners, zodat het chip-filter ze kan tonen. */
+const HERO_HOOFDGROEP = "Hero-banners";
 
 function tokenOk(req: Request): boolean {
   const want = (process.env.STUDIO_API_TOKEN || "").trim();
@@ -117,7 +122,7 @@ export async function GET(req: Request) {
   ).rows;
 
   const base = getSiteUrl();
-  const counts: Record<AssetType, number> = { packshot: 0, "ai-packshot": 0, model: 0, sfeer: 0, detail: 0, video: 0 };
+  const counts: Record<AssetType, number> = { packshot: 0, "ai-packshot": 0, model: 0, sfeer: 0, detail: 0, video: 0, hero: 0 };
   // Hoeveel van de getoonde producten staan wel/niet op de website.
   let opWebsiteWel = 0;
   let opWebsiteNiet = 0;
@@ -191,6 +196,40 @@ export async function GET(req: Request) {
       imagesCount: assets.filter((a) => a.type !== "video").length,
       videoCount: assets.filter((a) => a.type === "video").length,
     });
+  }
+
+  /* Hero-banners horen ook in de beeldbank. Ze hangen niet aan een product —
+     het zijn merkbeelden uit de blob (ai-hero/) — dus ze komen niet uit de query
+     hierboven. Zonder dit blok waren ze alleen te vinden door de blob-URL te
+     kennen. Ze krijgen een eigen hoofdgroep, zodat het chip-filter werkt.
+     Overslaan bij "nieuwe collectie" en bij "staat op de website": een banner
+     hoort bij geen van beide en zou daar als vreemde eend in de lijst staan. */
+  if ((!fType || fType === "hero") && !onlyNew && fWebsite !== "1" && (!fHg || fHg === HERO_HOOFDGROEP)) {
+    let banners: Awaited<ReturnType<typeof listHeroBeelden>> = [];
+    try {
+      banners = await listHeroBeelden();
+    } catch {
+      banners = [];
+    }
+    const passend = q ? banners.filter((b) => `${b.label} ${b.slug} ${b.thema}`.toLowerCase().includes(q)) : banners;
+    for (const b of passend) {
+      counts.hero++;
+      hgMap.set(HERO_HOOFDGROEP, (hgMap.get(HERO_HOOFDGROEP) || 0) + 1);
+      opWebsiteNiet++;
+      items.unshift({
+        productId: `hero:${b.slug}`,
+        handle: b.slug,
+        title: b.label,
+        hoofdgroep: HERO_HOOFDGROEP,
+        seizoen: "",
+        opWebsite: false,
+        url: b.url,
+        image: b.url,
+        assets: [{ type: "hero", url: b.url, label: b.aspect ? `Hero-banner ${b.aspect}` : "Hero-banner" }],
+        imagesCount: 1,
+        videoCount: 0,
+      });
+    }
   }
 
   const hoofdgroepen = [...hgMap.entries()]
