@@ -159,10 +159,21 @@ function tekenHeat(canvas: HTMLCanvasElement, cellen: Cel[], breedte: number, ho
 
 /* ──────────────────────────── Component ───────────────────────────────── */
 
-export function HeatmapViewer({ paginas }: { paginas: { key: string; titel: string }[] }) {
-  const [pagina, setPagina] = useState(paginas[0]?.key || "/");
-  const [apparaat, setApparaat] = useState<Apparaat>("mobiel");
-  const [dagen, setDagen] = useState(30);
+export function HeatmapViewer({
+  paginas,
+  startPagina,
+  startApparaat,
+  startDagen,
+}: {
+  paginas: { key: string; titel: string }[];
+  /** Beginstand uit de URL — zo kan de portal per rij naar de juiste kaart linken. */
+  startPagina?: string;
+  startApparaat?: Apparaat;
+  startDagen?: number;
+}) {
+  const [pagina, setPagina] = useState(startPagina || paginas[0]?.key || "/");
+  const [apparaat, setApparaat] = useState<Apparaat>(startApparaat || "mobiel");
+  const [dagen, setDagen] = useState(startDagen || 30);
   const [laag, setLaag] = useState<Laag>("kliks");
   const [dekking, setDekking] = useState(0.75);
   const [detail, setDetail] = useState<Detail | null>(null);
