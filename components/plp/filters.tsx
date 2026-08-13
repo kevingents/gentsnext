@@ -207,7 +207,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
           </>
         ) : (
           /* Nog geen winkel gekozen: hier hoort de uitnodiging, geen lege lijst. */
-          <StoreChooser bron="plp" />
+          <StoreChooser variant="card" bron="plp" />
         )}
       </div>
 
@@ -431,7 +431,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
         ? createPortal(
             <div className={`fixed inset-0 z-50 ${alleenMobiel}`} role="dialog" aria-modal="true" aria-label={t("plp.filters.mobileDrawerTitle")}>
               <div className="absolute inset-0 bg-ink/40" onClick={() => setOpenMobile(false)} />
-              <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
+              <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto scroll-gents bg-canvas p-5 shadow-drawer focus:outline-none">
                 <div className="mb-4 flex items-center justify-between">
                   <p className="label-brand">{t("plp.filters.mobileDrawerTitle")}</p>
                   <button type="button" onClick={() => setOpenMobile(false)} className="-mr-2 flex h-11 items-center px-2 font-sans text-sm underline">

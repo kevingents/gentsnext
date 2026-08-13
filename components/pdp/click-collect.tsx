@@ -148,7 +148,7 @@ export function ClickAndCollect({
                 </button>
               </div>
             ) : (
-              <ul className="flex-1 divide-y divide-line overflow-y-auto">
+              <ul className="flex-1 divide-y divide-line overflow-y-auto scroll-gents">
                 {sorted.map((b) => {
                   const inStock = b.qty > 0;
                   const selected = selStore === b.store;

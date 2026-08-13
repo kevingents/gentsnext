@@ -75,7 +75,7 @@ export function InstantSearch({ open, onClose }: { open: boolean; onClose: () =>
   const tree = (
     <div className="fixed inset-0 z-[70]" role="dialog" aria-label={t("search.label")} aria-modal="true">
       <div className="absolute inset-0 bg-ink/30" onClick={onClose} />
-      <div ref={panelRef} tabIndex={-1} className="absolute inset-x-0 top-0 max-h-[90vh] overflow-y-auto bg-canvas shadow-pop focus:outline-none">
+      <div ref={panelRef} tabIndex={-1} className="absolute inset-x-0 top-0 max-h-[90vh] overflow-y-auto scroll-gents bg-canvas shadow-pop focus:outline-none">
         <div className="mx-auto max-w-page px-gutter py-5">
           <form
             action="/zoeken"

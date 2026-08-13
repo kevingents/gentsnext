@@ -293,7 +293,7 @@ export function LookDetail({
       {sizeDrawer !== null && dh?.product && dData ? (
         <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={t("looks.detail.sizeDrawerTitle")}>
           <div className="absolute inset-0 bg-ink/40" onClick={() => setSizeDrawer(null)} />
-          <div ref={drawerPanelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
+          <div ref={drawerPanelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto scroll-gents bg-canvas p-5 shadow-drawer focus:outline-none">
             <div className="mb-4 flex items-center justify-between">
               <p className="label-brand">{t("looks.detail.sizeDrawerTitle")}</p>
               <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">{t("look.drawer.close")}</button>

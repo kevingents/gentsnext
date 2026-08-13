@@ -192,7 +192,7 @@ export function CartDrawer() {
             {/* Regels + suggesties (en de multi-maat-tip) samen in het scrollgebied:
                 alleen kop en voettekst blijven vast, zodat de artikelen op kleine
                 schermen ruimte houden. */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="flex-1 overflow-y-auto scroll-gents px-5 py-4">
               {multiSize ? (
                 <div className="mb-4 flex items-start gap-2 rounded-card border border-line bg-surface px-3 py-2.5">
                   <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" strokeLinecap="round" strokeLinejoin="round" /></svg>

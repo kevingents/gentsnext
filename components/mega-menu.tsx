@@ -233,7 +233,7 @@ function MobileDrawer({
         role="dialog"
         aria-modal="true"
         aria-label={t("nav.mainMenu")}
-        className="absolute inset-y-0 left-0 w-[88%] max-w-sm animate-[slideInLeft_.25s_ease-out] overflow-y-auto bg-canvas shadow-drawer"
+        className="absolute inset-y-0 left-0 w-[88%] max-w-sm animate-[slideInLeft_.25s_ease-out] overflow-y-auto scroll-gents bg-canvas shadow-drawer"
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <span className="label-brand">Menu</span>

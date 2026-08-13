@@ -35,8 +35,10 @@ export function StoreChooser({
 }: {
   /** Winkelnamen ("GENTS Utrecht") van de gekozen winkels. */
   myStores?: string[];
-  /** "row" = uitnodigende regel op de PDP, "link" = kaal tekstknopje. */
-  variant?: "row" | "link";
+  /** "row" = uitnodigende regel op de PDP, "link" = kaal tekstknopje,
+   *  "card" = gestapeld, voor een smalle kolom zoals de PLP-filters. Daar is
+   *  naast de tekst geen 200px over en brak "Kies je winkel(s)" middenin. */
+  variant?: "row" | "link" | "card";
   /** Waar stond de kiezer? (pdp/plp/winkels) — voor de meting. */
   bron?: string;
 }) {
@@ -108,7 +110,26 @@ export function StoreChooser({
     : "";
 
   const trigger =
-    variant === "link" ? (
+    variant === "card" ? (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 block w-full border border-line px-3 py-2.5 text-left transition-colors hover:border-ink"
+      >
+        <span className="flex items-center gap-2">
+          <StarIcon filled={gekozen.length > 0} className="h-4 w-4 shrink-0 text-ink" />
+          <span className="min-w-0 font-sans text-sm font-medium text-ink">
+            {gekozen.length ? `${t("myStore.badge")}: ${label}` : t("myStore.choose")}
+          </span>
+        </span>
+        <span className="mt-1 block font-sans text-xs leading-snug text-muted">
+          {gekozen.length ? t("myStore.explainShort") : t("myStore.explain")}
+        </span>
+        <span className="mt-1.5 block font-sans text-xs text-ink underline underline-offset-4">
+          {gekozen.length ? t("myStore.change") : t("myStore.chooseCta")}
+        </span>
+      </button>
+    ) : variant === "link" ? (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -164,7 +185,7 @@ export function StoreChooser({
                 {stores === null ? (
                   <p className="px-5 py-4 font-sans text-sm text-muted">…</p>
                 ) : (
-                  <ul className="flex-1 divide-y divide-line overflow-y-auto">
+                  <ul className="flex-1 divide-y divide-line overflow-y-auto scroll-gents">
                     {list.map((s) => {
                       const mine = gekozen.includes(s.name);
                       // Vol? Dan kun je alleen nog wegnemen, niet toevoegen —

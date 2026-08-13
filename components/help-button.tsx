@@ -53,7 +53,7 @@ export function HelpButton() {
   return (
     <div className={`fixed right-4 z-30 flex flex-col items-end lg:bottom-6 lg:right-6 ${onCheckout ? "bottom-4" : "bottom-20"}`}>
       {open ? (
-        <div className="mb-3 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto border border-line bg-canvas p-4 shadow-pop">
+        <div className="mb-3 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto scroll-gents border border-line bg-canvas p-4 shadow-pop">
           <p className="label-brand mb-2">{t("help.title")}</p>
           <form onSubmit={ask}>
             <textarea
