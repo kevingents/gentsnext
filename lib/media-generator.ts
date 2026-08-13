@@ -5,6 +5,7 @@ import { products } from "@/db/schema";
 import { buildPrompt, getMediaThemes, themeForProduct } from "@/lib/media-themes";
 import { modelRefFor } from "@/lib/brand-models";
 import { newCollectionCond } from "@/lib/new-collection";
+import { getVisualLearnings, learningsPromptBlock } from "@/lib/visual-learnings";
 
 /**
  * De AI-sfeerbeeld-generator, als gedeelde functie zodat zowel het CLI-script
@@ -148,6 +149,11 @@ export async function generateMedia(opts: GenerateOptions): Promise<GenerateResu
   const actieveStijlen = store.cameraStyles.filter((s) => s.enabled);
   if (!actieveStijlen.length) throw new Error("Geen actieve camerastijlen — zet er minstens één aan in de portal.");
 
+  // De geleerde stijlregels uit de sfeerbeeld-studio (afkeuren + reden). Die zaten
+  // eerder alléén in de studio-hergeneratie, dus het script en de cron leerden niets
+  // van wat het team had afgekeurd.
+  const learnings = learningsPromptBlock(await getVisualLearnings());
+
   const db = getDb();
   const rows = await db.execute<{
     id: string;
@@ -223,7 +229,7 @@ export async function generateMedia(opts: GenerateOptions): Promise<GenerateResu
     try {
       const inputs: Record<string, unknown> = {
         product_image: toFullRes(r.img),
-        prompt,
+        prompt: `${prompt}${learnings}`,
         aspect_ratio: "4:5",
         resolution: "2k",
         generation_mode: "quality",
