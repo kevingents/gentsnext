@@ -22,6 +22,13 @@
  * de dataLayer mag als de bezoeker marketing-cookies heeft geaccepteerd, omdat
  * het bedoeld is voor advertentieplatforms. Naar onze eigen Neon-tabel gaat het
  * al bij analytics-toestemming — dat is de eerste partij en een ander doel.
+ *
+ * WAT HIER BEWUST NIET IN STAAT: de klik-heatmap (lib/heatmap-client →
+ * /api/heatmap → heatmap_klikken). Die telt tientallen kliks per
+ * paginaweergave; door de wachtrij van deze catalogus geduwd zou hij de
+ * funnel-events verdringen. Eigen rail, eigen tabel, eigen bewaartermijn —
+ * maar dit staat hier zodat niemand hoeft te zoeken waar die kliks gebleven
+ * zijn.
  */
 
 export type EventGroep =

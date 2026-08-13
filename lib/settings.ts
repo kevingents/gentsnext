@@ -272,6 +272,23 @@ export type Settings = {
    * twee knoppen voor hetzelfde land.
    */
   shippingZones: ShippingZoneOverrides;
+  /**
+   * Klik- en scroll-heatmap (lib/heatmap).
+   *
+   * `aan` staat aan de SERVERKANT: uitzetten gooit binnenkomend materiaal weg
+   * in plaats van de meting in de browser te stoppen. Dat is met opzet — een
+   * knop die pas werkt nadat iedereen zijn pagina herladen heeft, is geen knop.
+   *
+   * `bewaardagen` geldt alleen voor het RUWE materiaal (heatmap_klikken,
+   * heatmap_scroll). De dagtotalen blijven staan: die bevatten geen sessie-id
+   * en zijn niet meer tot een bezoek te herleiden.
+   *
+   * `steekproefPct` = welk deel van de sessies wordt vastgelegd. De keuze valt
+   * per sessie, niet per klik: anders krijg je halve pagina's waarop de ene
+   * knop wél en de andere niet geteld is, en dan is de vergelijking tussen twee
+   * knoppen stuk. 100 = alles vastleggen.
+   */
+  heatmap: { aan: boolean; bewaardagen: number; steekproefPct: number };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -410,6 +427,9 @@ export const DEFAULT_SETTINGS: Settings = {
     .filter(Boolean),
   paymentTop: DEFAULT_PAYMENT_TOP,
   shippingZones: {},
+  // 45 dagen ruw is ruim genoeg om twee volle maandpatronen te zien en kort
+  // genoeg om niet zonder reden bezoekgedrag te bewaren.
+  heatmap: { aan: true, bewaardagen: 45, steekproefPct: 100 },
 };
 
 let _cache: Settings | null = null;
@@ -443,6 +463,7 @@ export async function getSettings(): Promise<Settings> {
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
+      heatmap: { ...DEFAULT_SETTINGS.heatmap, ...(stored.heatmap || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
       /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
          gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */

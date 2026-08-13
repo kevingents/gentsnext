@@ -4,10 +4,11 @@ import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { track, bindFlushHandlers, bindScrollDiepte, vangAttributieOp } from "@/lib/track-client";
+import { bindHeatmap } from "@/lib/heatmap-client";
 
 /**
- * Mount in de layout: pageviews, scrolldiepte, attributie-opvang en de
- * flush-handlers.
+ * Mount in de layout: pageviews, scrolldiepte, attributie-opvang, de
+ * klik-heatmap en de flush-handlers.
  *
  * `useSearchParams` zit in een Suspense-grens omdat het anders de hele
  * storefront naar client-side rendering trekt. We hebben de querystring nodig
@@ -28,6 +29,13 @@ function TrackerBinnen() {
   }, [pathname, params]);
 
   useEffect(() => bindScrollDiepte(pathname), [pathname]);
+
+  // Klik-heatmap. Per paginaweergave opnieuw gebonden, en de opruimfunctie
+  // schrijft de laatste kliks van díé pagina nog weg — bij client-side
+  // navigatie is er geen pagehide, dus zonder dat verdween alles wat er na de
+  // laatste flush nog gebeurde. Meet alleen de pagina's uit de allowlist in
+  // lib/heatmap-paginas; op de rest doet dit niets.
+  useEffect(() => bindHeatmap(pathname), [pathname]);
 
   return null;
 }
