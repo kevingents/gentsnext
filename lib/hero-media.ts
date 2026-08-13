@@ -4,7 +4,7 @@ import { list, put, del } from "@vercel/blob";
  * Hero-/bannerbeelden: de merkbeelden bovenaan de homepage en de
  * landingspagina's. Gemaakt met fal.ai (FLUX) — tekst-naar-beeld, vanaf nul.
  *
- * TWEE WEGEN, en de keuze zit in de vraag "hangt er een echt artikel in beeld?":
+ * DRIE WEGEN, en de eerste vraag is "hangt er een echt artikel in beeld?":
  *
  *  1. `maakHeroBeeld`  — fal.ai (FLUX), tekst-naar-beeld. Puur sfeer: de kleding
  *     is verzonnen. Voor een banner waar geen product in hoeft.
@@ -13,6 +13,11 @@ import { list, put, del } from "@vercel/blob";
  *     met dat artikel aan. Dit is de betere weg zodra de banner over een product
  *     gaat: wat je ziet is dan wat we verkopen, en dat is ook de huisregel
  *     (visuals = onze eigen producten, geen stock).
+ *  3. `maakHeroVanBeeld` — fal.ai image-to-image op een beeld dat we AL hebben:
+ *     een eerdere banner, een sfeerbeeld of een modelfoto (de outfit). Voor als
+ *     het beeld goed is maar de omgeving niet — of om het ongewijzigd in de
+ *     bannerbank te zetten. Bewust géén FASHN: zo'n bronbeeld is meestal zelf
+ *     al gegenereerd, en dat als garment-input gebruiken is fictie op fictie.
  *
  * FASHN heeft dus wél een prompt — alleen geen lege start: er moet een product
  * als anker in. Zonder artikel kan het niets, met artikel kan het een straat,
@@ -364,6 +369,105 @@ export async function maakHeroVanProduct(
     url,
     thema: opts.thema || "",
     aspect,
+    gemaaktOp: new Date().toISOString(),
+    bytes: 0,
+  };
+}
+
+/* ── Weg 3: hero VAN een bestaand beeld (fal.ai image-to-image) ──────────── */
+
+/**
+ * Zelfde endpoint als de staalfoto-modus van de packshot-tool (lib/packshot.ts),
+ * dus geen nieuwe dienst en geen nieuwe sleutel: `FAL_KEY` volstaat.
+ */
+export const HERO_IMG2IMG_MODEL = process.env.FAL_HERO_IMG2IMG_MODEL || "fal-ai/flux/dev/image-to-image";
+
+/**
+ * Hoeveel het bronbeeld mag veranderen (0 = niets, 1 = alles opnieuw). 0,45 laat
+ * de outfit en de houding herkenbaar en herschildert vooral de omgeving en het
+ * licht. Hoger dan ~0,7 en je bent het pak kwijt dat je juist wilde laten zien.
+ */
+const HERO_STERKTE = 0.45;
+
+/**
+ * Merkregels voor deze weg. Bewust kort én met een expliciete "verander de
+ * kleding niet"-zin: het bronbeeld is meestal al een modelfoto of sfeerbeeld
+ * met ons artikel erop, en dát moet blijven staan — anders verzint FLUX er een
+ * ander pak omheen en kijk je naar iets dat we niet verkopen.
+ */
+const HERO_STYLE_BEELD =
+  "Keep the person, the pose and above all the clothing exactly as in the source photo — do not restyle, recolour or replace any garment. Editorial menswear campaign photograph for an upscale men's formalwear brand, photorealistic and elegant, subtle film grain, generous negative space for a headline. No text, no logo, no watermark anywhere in the image.";
+
+async function falVanBeeld(imageUrl: string, prompt: string, sterkte: number): Promise<string | null> {
+  const key = process.env.FAL_KEY || process.env.FAL_API_KEY || "";
+  if (!key) throw new Error("FAL_KEY ontbreekt.");
+  const res = await fetch(`https://fal.run/${HERO_IMG2IMG_MODEL}`, {
+    method: "POST",
+    headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_url: imageUrl,
+      prompt: `${prompt} ${HERO_STYLE_BEELD}`,
+      strength: sterkte,
+      num_images: 1,
+      output_format: "jpeg",
+      enable_safety_checker: true,
+    }),
+  });
+  if (!res.ok) throw new Error(`fal ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const j = (await res.json()) as { images?: { url?: string }[] };
+  return j?.images?.[0]?.url || null;
+}
+
+export type HeroBeeldBron = { url: string; label: string };
+
+/**
+ * Maakt een banner VAN een beeld dat we al hebben: een eerder gemaakte banner,
+ * een sfeerbeeld, of een modelfoto (de outfit). Twee smaken:
+ *
+ *  - `hergebruik` — het beeld ongewijzigd in de bannerbank zetten. Kost niets
+ *    en verandert niets; voor als het beeld al goed is en je het alleen als
+ *    banner wilt kunnen kiezen.
+ *  - anders — fal.ai herschildert de omgeving rond het beeld met de gekozen
+ *    scène. Het bronbeeld blijft leidend (strength 0,45), dus de outfit die
+ *    erop staat blijft staan.
+ *
+ * Let op: image-to-image levert de verhouding van het BRONBEELD. Een 4:5
+ * modelfoto wordt dus geen 21:9 banner — daarvoor is de product-weg (FASHN,
+ * met aspect_ratio) of een nieuw sfeerbeeld de juiste keuze.
+ */
+export async function maakHeroVanBeeld(
+  bron: HeroBeeldBron,
+  opts: { thema?: string; prompt?: string; naam?: string; hergebruik?: boolean } = {},
+): Promise<HeroBeeld> {
+  const src = (bron.url || "").trim();
+  if (!/^https?:\/\//i.test(src)) throw new Error("Geen geldig bronbeeld opgegeven.");
+
+  const basis =
+    slugify(opts.naam || `${opts.thema || "hero"}-${bron.label || "beeld"}`) || "hero-uit-beeld";
+  const bestaand = new Set((await listHeroBeelden()).map((b) => b.slug));
+  let slug = basis;
+  for (let n = 2; bestaand.has(slug) && n < 100; n++) slug = `${basis}-${n}`;
+
+  let out = volleResolutie(src);
+  if (!opts.hergebruik) {
+    const scene = (opts.prompt || "").trim() || HERO_SCENES[opts.thema || ""] || "";
+    if (!scene) throw new Error("Geen thema of scène-omschrijving opgegeven.");
+    const gemaakt = await falVanBeeld(out, scene, HERO_STERKTE);
+    if (!gemaakt) throw new Error("fal.ai gaf geen beeld terug.");
+    out = gemaakt;
+  }
+  const url = await bewaarHeroBeeld(out, slug);
+
+  return {
+    slug,
+    label: opts.hergebruik
+      ? `${bron.label || "Uit de beeldbank"} — overgenomen`
+      : `${bron.label || "Uit de beeldbank"} — ${HERO_THEMAS.find((h) => h.slug === opts.thema)?.label || "eigen scène"}`,
+    url,
+    thema: opts.thema || "",
+    /* De verhouding komt uit het bronbeeld en die kennen we hier niet; leeg
+       laten is eerlijker dan een aspect verzinnen dat de kiezer dan toont. */
+    aspect: "",
     gemaaktOp: new Date().toISOString(),
     bytes: 0,
   };
