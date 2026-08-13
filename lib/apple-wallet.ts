@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
 import { b64Pem, walletConfigured, walletWebServiceUrl, passAuthToken } from "@/lib/apple-wallet-config";
-import { CLUB_LOGO_LIGHT, CLUB_NAME, CLUB_PASS_NAME } from "@/lib/club";
+import { CLUB_LOGO_LIGHT, CLUB_NAME, CLUB_PASS_NAME, clubMemberCode } from "@/lib/club";
 
 // Her-export zodat bestaande imports `from "@/lib/apple-wallet"` blijven werken.
 export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
@@ -87,7 +87,7 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   const vestLabel = vestDatum && !isNaN(vestDatum.getTime())
     ? vestDatum.toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })
     : null;
-  const memberCode = "GENTS " + input.customerId.replace(/-/g, "").slice(0, 8).toUpperCase();
+  const memberCode = clubMemberCode(input.customerId);
   const sinceYear = input.memberSince ? new Date(input.memberSince).getFullYear() : null;
 
   const pass = new PKPass(

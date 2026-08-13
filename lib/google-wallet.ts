@@ -1,4 +1,4 @@
-import { CLUB_LOGO_LIGHT, CLUB_NAME } from "@/lib/club";
+import { CLUB_LOGO_LIGHT, CLUB_NAME, clubMemberCode } from "@/lib/club";
 import { getSiteUrl } from "@/lib/site-url";
 import {
   googleWalletConfigured,
@@ -51,11 +51,6 @@ export type GoogleLoyaltyInput = {
   vouchers?: { code: string; label: string; valueCents?: number }[];
 };
 
-/** "GENTS 1A2B3C4D" — dezelfde leesbare code als op de Apple-pas. */
-function memberCode(customerId: string): string {
-  return "GENTS " + customerId.replace(/-/g, "").slice(0, 8).toUpperCase();
-}
-
 /**
  * De kaart zelf. `loyaltyPoints` is het veld dat Google groot toont; de rest
  * komt eronder te staan. Wat er niet is, laten we weg — een leeg veld toont
@@ -94,7 +89,7 @@ function loyaltyObject(input: GoogleLoyaltyInput) {
       type: "QR_CODE",
       // Kaal klant-id: identiek aan de Apple-pas, zodat de kassa één scan-tak heeft.
       value: input.customerId,
-      alternateText: memberCode(input.customerId),
+      alternateText: clubMemberCode(input.customerId),
     },
     ...(extra.length ? { textModulesData: extra } : {}),
     linksModuleData: {

@@ -23,6 +23,8 @@ import {
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
+import { ClubPassCard, ClubPassButton } from "@/components/account/club-pass";
+import type { ClubPassData } from "@/lib/club-pass";
 import { AppleWalletButton } from "@/components/account/apple-wallet-button";
 import { GoogleWalletButton } from "@/components/account/google-wallet-button";
 import { Bestellingen, type OrderRow, type StoreBuyRow } from "@/components/account/bestellingen";
@@ -104,6 +106,7 @@ const REDEEM_FALLBACK: RedeemConfig = { minPoints: 500, stepPoints: 500, centsPe
 export function ProfileClient({
   customer,
   data,
+  pass = null,
   walletEnabled = false,
   googleWalletEnabled = false,
   bonuses = [],
@@ -112,6 +115,8 @@ export function ProfileClient({
 }: {
   customer: Customer;
   data: Data;
+  /** De scanbare clubpas; de server bouwt de QR (lib/club-pass). */
+  pass?: ClubPassData | null;
   walletEnabled?: boolean;
   googleWalletEnabled?: boolean;
   bonuses?: BonusTask[];
@@ -168,10 +173,10 @@ export function ProfileClient({
       </nav>
 
       <div className="mt-8">
-        {tab === "overzicht" && <Overzicht customer={customer} data={data} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
+        {tab === "overzicht" && <Overzicht customer={customer} data={data} pass={pass} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "bestellingen" && <BestellingenTab data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
-        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} googleWalletEnabled={googleWalletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
+        {tab === "punten" && <Punten data={data} pass={pass} walletEnabled={walletEnabled} googleWalletEnabled={googleWalletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
         {tab === "gegevens" && <Gegevens customer={customer} stores={stores} />}
@@ -387,7 +392,7 @@ function PuntenVoortgang({
 }
 
 /* ── Overzicht ────────────────────────────────────────────────────────────── */
-function Overzicht({ customer, data, bonuses, redeem, onTab }: { customer: Customer; data: Data; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
+function Overzicht({ customer, data, pass, bonuses, redeem, onTab }: { customer: Customer; data: Data; pass?: ClubPassData | null; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const totalOrders = data.onlineOrders.length + data.storeBuys.length;
   const toNext = Math.max(0, redeem.minPoints - data.pointsAvailable);
@@ -407,6 +412,16 @@ function Overzicht({ customer, data, bonuses, redeem, onTab }: { customer: Custo
         redeem={redeem}
         onInwisselen={() => onTab("punten")}
       />
+
+      {/* Eén tik van binnenkomen naar een scanbare code. Wie in de winkel staat
+          heeft geen zin om eerst een tabblad te zoeken; de kaart zelf staat op
+          het clubtabblad, hier hangt alleen de snelle ingang. */}
+      {pass && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-line p-5">
+          <ClubPassButton pass={pass} />
+          <p className="font-sans text-sm text-ink-soft">{t("account.pass.scanHint")}</p>
+        </div>
+      )}
 
       <PuntenActies bonuses={bonuses} onTab={onTab} compact />
 
@@ -659,21 +674,16 @@ function RedeemPoints({ available, koers }: { available: number; koers: RedeemCo
   );
 }
 
-function Punten({ data, walletEnabled, googleWalletEnabled, bonuses, redeem, onTab }: { data: Data; walletEnabled: boolean; googleWalletEnabled?: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
+function Punten({ data, pass, walletEnabled, googleWalletEnabled, bonuses, redeem, onTab }: { data: Data; pass?: ClubPassData | null; walletEnabled: boolean; googleWalletEnabled?: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const walletBonus = bonuses.find((b) => b.kind === "wallet");
   return (
     <div className="space-y-6">
+      {/* De pas staat bovenaan, niet onderaan: dit is het enige op deze pagina
+          dat je stáánd aan een kassa nodig hebt. Het merkteken zit erop, dus de
+          saldokaart eronder heeft 'm niet nog een keer nodig. */}
+      {pass && <ClubPassCard pass={pass} />}
       <div className="border border-line p-6">
-        {/* Het merkteken boven het saldo: het tabblad heet naar het programma,
-            dus hoort het merk hier te staan en niet alleen als tabtekst. */}
-        <Image
-          src={CLUB_LOGO_DARK}
-          alt={CLUB_NAME}
-          width={CLUB_LOGO_SIZE.width}
-          height={CLUB_LOGO_SIZE.height}
-          className="mb-5 h-auto w-full max-w-[14rem]"
-        />
         <p className="label-brand">{t("account.points.balanceTitle")}</p>
         <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
         {data.pointsPending > 0 && (

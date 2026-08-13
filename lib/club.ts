@@ -40,3 +40,20 @@ export const CLUB_PASS_NAME = "GENTS Clubpas";
 export const CLUB_LOGO_DARK = "/brand/club-of-gents-zwart.png";
 export const CLUB_LOGO_LIGHT = "/brand/club-of-gents-wit.png";
 export const CLUB_LOGO_SIZE = { width: 1200, height: 389 } as const;
+
+/**
+ * De leesbare lidcode ("GENTS 1A2B3C4D"): de eerste 8 tekens van het klant-id
+ * zonder streepjes. Staat onder de QR op élke verschijningsvorm van de pas —
+ * Apple, Google en het scherm in het account — zodat een kassa die alleen een
+ * invoerveld heeft er ook mee vooruit kan.
+ *
+ * Eén functie omdat dit een AFSPRAAK MET DE KASSA is, geen opmaak: /api/core/
+ * customer-search snijdt aan de andere kant precies dezelfde 8 tekens af en
+ * weigert een code die op twee klanten matcht. Wie hier het aantal tekens
+ * verandert, moet daar mee.
+ *
+ * De regel zelf staat in lib/club-pas-regels.js zodat `node --test` 'm kan
+ * vastleggen zonder de hele TypeScript-keten (zelfde patroon als
+ * lib/punten-acties-regels.js).
+ */
+export { lidcode as clubMemberCode } from "@/lib/club-pas-regels";

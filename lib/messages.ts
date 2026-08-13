@@ -148,6 +148,15 @@ const nl: Dict = {
   "account.bonus.profile.title": "Maak je profiel compleet",
   "account.bonus.profile.body": "Leeftijd, favoriete kleuren, je vaste winkel en waarvoor je bij ons shopt.",
   "account.bonus.profile.cta": "Aanvullen",
+  /* De clubpas op het scherm — het is een kassa-schermpje, dus de teksten zijn
+     instructies en geen marketing. "Lidnummer" en niet "klantnummer": dat is
+     wat er op de wallet-pas ook staat. */
+  "account.pass.member": "Lidnummer",
+  "account.pass.scanHint": "Laat deze code scannen aan de kassa — je punten van die aankoop staan er meteen op, en inwisselen kan er ook mee.",
+  "account.pass.showBig": "Groter tonen",
+  "account.pass.open": "Toon clubpas",
+  "account.pass.close": "Sluiten",
+  "account.pass.brightness": "Lukt het scannen niet meteen? Zet je scherm even op vol licht.",
   // Voorkeuren-formulier op /account → tabblad Gegevens.
   "account.prefs.title": "Voorkeuren",
   "account.prefs.intro": "Hoe beter dit staat, hoe gerichter we laten zien wat er in jouw maat, kleur en winkel ligt.",
