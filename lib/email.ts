@@ -485,7 +485,32 @@ export async function sendProfileCompletionIncentiveEmail(email: string, firstNa
   return sendEmail(email, "Rond je GENTS-profiel af — 50 punten cadeau", shell(inner));
 }
 
-/** Reservering-bevestiging: "we houden 'm 7 dagen voor je vast" + afreken-link
+/**
+ * "vandaag tot 16:45" / "morgen tot 10:00" / "14 augustus tot 10:00".
+ *
+ * De reserveringsmails toonden alleen een DATUM ("tot en met 12 augustus"). Dat
+ * kon bij een hold van 7 dagen, maar de hold is 2 uur — dan moet er een tijd bij,
+ * anders weet de klant niet of 'ie nog kan komen.
+ *
+ * Altijd expliciet Europe/Amsterdam: zonder timeZone pakt toLocale* de zone van
+ * de SERVER (UTC op Vercel). Dan staat er 's avonds de verkeerde tijd en bij een
+ * late reservering zelfs de verkeerde dag — dezelfde val als op de kassabonnen.
+ */
+function reserveringTot(when: Date | string | null | undefined): string {
+  if (!when) return "";
+  const d = new Date(when);
+  if (isNaN(d.getTime())) return "";
+  const ZONE = "Europe/Amsterdam";
+  const tijd = d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: ZONE });
+  const dag = (x: Date) => x.toLocaleDateString("nl-NL", { day: "numeric", month: "numeric", year: "numeric", timeZone: ZONE });
+  const nu = new Date();
+  const morgen = new Date(nu.getTime() + 86400000);
+  if (dag(d) === dag(nu)) return `vandaag tot ${tijd}`;
+  if (dag(d) === dag(morgen)) return `morgen tot ${tijd}`;
+  return `${d.toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: ZONE })} tot ${tijd}`;
+}
+
+/** Reservering-bevestiging: "we houden 'm vandaag tot 16:45 voor je vast" + afreken-link
  *  (online afrekenen → onbeperkt vasthouden). */
 export async function sendReserveringEmail(input: {
   to: string; name?: string; store: string; validUntil?: Date | string | null;
@@ -494,7 +519,7 @@ export async function sendReserveringEmail(input: {
   // Naam escapen: sinds reserveer-om-te-passen is dit veld publiek beïnvloedbaar
   // (HTML-injectie in een gebrande mail = phishing-kanaal).
   const hi = input.name ? `Hoi ${String(input.name).replace(/</g, "&lt;")},` : "Hoi,";
-  const tot = input.validUntil ? new Date(input.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const tot = reserveringTot(input.validUntil);
   const itemsHtml = (input.lines || []).map((l) => `
     <tr><td style="padding:10px 0;border-bottom:1px solid #EAEAEA">
       <div style="font:700 14px Arial,sans-serif;color:#0A0A0A">${(l.title || l.sku || "Artikel").replace(/</g, "&lt;")}</div>
@@ -509,7 +534,7 @@ export async function sendReserveringEmail(input: {
   const inner = `
     <tr><td style="padding:24px 28px 4px">
       <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">We houden 'm voor je apart</h1>
-      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} je reservering staat klaar in <strong>${input.store.replace(/</g, "&lt;")}</strong>${tot ? ` — we houden 'm tot en met <strong>${tot}</strong> voor je vast` : ""}.</p>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} je reservering staat klaar in <strong>${input.store.replace(/</g, "&lt;")}</strong>${tot ? ` — we houden 'm <strong>${tot}</strong> voor je vast` : ""}.</p>
     </td></tr>
     <tr><td style="padding:8px 28px 8px">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${itemsHtml}</table>
@@ -525,7 +550,7 @@ export async function sendReservationStoreNotify(n: {
   title: string; size: string; color: string; validUntil: Date | string | null;
 }): Promise<boolean> {
   if (!emailConfigured() || !n.to) return false;
-  const tot = n.validUntil ? new Date(n.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long" }) : "";
+  const tot = reserveringTot(n.validUntil);
   const lines = [
     `Nieuwe pas-reservering via gents.nl voor ${n.store}:`,
     "",
