@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { DEFAULT_SYNONYMS } from "@/lib/search-helpers";
 import { DEFAULT_PAYMENT_TOP, type PaymentTopConfig } from "@/lib/payment-methods";
+import type { ShippingZoneOverrides } from "@/lib/shipping-zones";
 
 /**
  * Centrale, in de backend instelbare configuratie. Eén bron van waarheid
@@ -263,6 +264,14 @@ export type Settings = {
    * via de experimenten-rail (lib/experiments, override `betaalmethoden`).
    */
   paymentTop: PaymentTopConfig;
+  /**
+   * Bezorglanden: per landcode aan/uit, tarief, gratis-vanaf en hoeveel
+   * werkdagen er bovenop de binnenlandse transittijd komen. Leeg = de tabel
+   * in lib/shipping-zones geldt. Voor NEDERLAND blijven `shippingCents` en
+   * `freeShippingCents` hierboven de baas over het tarief — anders zijn er
+   * twee knoppen voor hetzelfde land.
+   */
+  shippingZones: ShippingZoneOverrides;
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -400,6 +409,7 @@ export const DEFAULT_SETTINGS: Settings = {
     .map((a) => a.trim())
     .filter(Boolean),
   paymentTop: DEFAULT_PAYMENT_TOP,
+  shippingZones: {},
 };
 
 let _cache: Settings | null = null;
@@ -442,6 +452,9 @@ export async function getSettings(): Promise<Settings> {
          en mag dus niet stil terugvallen op de env-default; alleen als het veld
          nooit gezet is telt die default nog. */
       alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
+      /* Vervanging, geen samenvoeging: een land dat je in de tool uitzet moet
+         uit blijven en niet via de code-default terugkomen. */
+      shippingZones: stored.shippingZones ?? DEFAULT_SETTINGS.shippingZones,
       paymentTop: {
         ...DEFAULT_SETTINGS.paymentTop,
         ...(stored.paymentTop || {}),

@@ -26,7 +26,7 @@
  */
 export const MOLLIE_METHOD_IDS = [
   "ideal", "creditcard", "paypal", "bancontact", "banktransfer", "kbc", "belfius",
-  "eps", "przelewy24", "applepay", "giftcard", "in3", "klarna", "billie",
+  "eps", "przelewy24", "applepay", "googlepay", "giftcard", "in3", "klarna", "billie",
   "klarnapaylater", "klarnasliceit", "paysafecard", "sofort", "trustly",
 ] as const;
 

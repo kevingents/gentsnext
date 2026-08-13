@@ -12,7 +12,7 @@ import { track } from "@/lib/track-client";
 import { huidigeAttributie } from "@/lib/attributie-client";
 import { TrackAb } from "@/components/analytics/track-ab";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
-import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
+import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor, type ShippingZoneOverrides } from "@/lib/shipping-zones";
 import { splitMethods, type PaymentChoice } from "@/lib/payment-methods";
 
 type Field = {
@@ -96,8 +96,25 @@ function CheckoutForm() {
   // Bezorgland: bepaalt tarief, gratis-drempel én postcode-formaat. Stond vast
   // op NL terwijl de bezorgpagina BE/DE/EU belooft (UX-audit).
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
-  const zone = zoneFor(country);
-  const countries = enabledZones();
+  /* Welke landen aanstaan en wat ze kosten is een knop in de tool; de tabel in
+     de code is alleen de startwaarde (en het vangnet als het ophalen faalt).
+     Landnaam en postcode-patroon komen wél uit die tabel — dat is techniek. */
+  const [zoneCfg, setZoneCfg] = useState<ShippingZoneOverrides>({});
+  useEffect(() => {
+    let active = true;
+    fetch("/api/verzendlanden")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!active || !Array.isArray(d?.zones)) return;
+        const map: ShippingZoneOverrides = {};
+        for (const z of d.zones) map[String(z.code)] = z;
+        setZoneCfg(map);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+  const zone = zoneFor(country, zoneCfg);
+  const countries = enabledZones(zoneCfg);
   const [business, setBusiness] = useState(false);
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
@@ -825,6 +842,7 @@ function CheckoutForm() {
             <div className="mt-5 border-t border-line pt-4 empty:hidden lg:hidden">
               <DeliveryOptions
                 items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                country={country}
                 value={delivery}
                 onChange={(m, s) => {
                   setDelivery(m);
@@ -858,7 +876,7 @@ function CheckoutForm() {
                   niet gezien en hoort niet in de noemer van de conversie. */}
               {pay.ab.length ? <TrackAb assignments={pay.ab} /> : null}
               <p className="label-brand mt-4">{t("checkout.payment_method")}</p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 {payVisible.map((m) => (
                   <button
                     key={m.id}
@@ -882,11 +900,6 @@ function CheckoutForm() {
                   aria-pressed={payMethod === ""}
                   className={`mt-2 flex w-full items-center gap-2.5 rounded-card border px-3 py-2.5 text-left font-sans text-sm transition-colors ${payMethod === "" ? "border-ink bg-surface" : "border-line hover:border-ink"}`}
                 >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-                    <circle cx="5" cy="12" r="1.6" />
-                    <circle cx="12" cy="12" r="1.6" />
-                    <circle cx="19" cy="12" r="1.6" />
-                  </svg>
                   <span className="min-w-0 flex-1">
                     <span className="block">{t("checkout.payment_other")}</span>
                     {/* Afbreken over twee regels, NIET truncate. `truncate` zet
@@ -1074,6 +1087,7 @@ function CheckoutForm() {
                 ) : (
                   <DeliveryOptions
                     items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                    country={country}
                     value={delivery}
                     onChange={(m, s) => {
                       setDelivery(m);

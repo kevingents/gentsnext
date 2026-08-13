@@ -5,6 +5,7 @@ import { getSettings, updateSettings, type Settings } from "@/lib/settings";
 import { getSiteSettings, updateSiteSettings, type SiteSettingsPatch } from "@/lib/site-settings";
 import { isFulfillable } from "@/lib/fulfillment-config";
 import { MOLLIE_METHOD_IDS } from "@/lib/payment-methods";
+import { SHIPPING_ZONES, DEFAULT_COUNTRY } from "@/lib/shipping-zones";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,6 +69,38 @@ function sanitizeOperational(input: unknown, huidig: Settings): Partial<Settings
         maxVisible: Math.max(1, Math.min(6, Math.round(Number(pt.maxVisible) || huidig.paymentTop.maxVisible))),
       };
     }
+  }
+  /* Bezorglanden: per landcode aan/uit, tarief, gratis-vanaf en extra dagen.
+     Alleen landen die de code kent — een verzonnen code zou een order aannemen
+     die we niet kunnen verzenden. Voor Nederland nemen we tarief en drempel
+     NIET over: die staan hierboven al als losse knop, en twee bronnen voor
+     hetzelfde land is vragen om een verschil tussen wat de checkout toont en
+     wat de server rekent. Aan/uit en extra dagen mogen voor NL wel. */
+  if (b.shippingZones && typeof b.shippingZones === "object") {
+    const bekend = new Set(SHIPPING_ZONES.map((z) => z.code));
+    const uit: Record<string, { enabled: boolean; rateCents: number; freeFromCents: number | null; extraDays: number }> = {};
+    for (const [land, v] of Object.entries(b.shippingZones as Record<string, unknown>)) {
+      const code = String(land).trim().toUpperCase();
+      if (!bekend.has(code) || !v || typeof v !== "object") continue;
+      const z = v as Record<string, unknown>;
+      const basis = SHIPPING_ZONES.find((x) => x.code === code)!;
+      const vrij = z.freeFromCents;
+      uit[code] = {
+        enabled: z.enabled === true,
+        rateCents:
+          code === DEFAULT_COUNTRY
+            ? basis.rateCents
+            : Math.max(0, Math.round(Number(z.rateCents) || 0)),
+        freeFromCents:
+          code === DEFAULT_COUNTRY
+            ? basis.freeFromCents
+            : vrij === null || vrij === "" || vrij === undefined
+              ? null
+              : Math.max(0, Math.round(Number(vrij) || 0)),
+        extraDays: Math.max(0, Math.min(30, Math.round(Number(z.extraDays) || 0))),
+      };
+    }
+    out.shippingZones = uit;
   }
   if (b.dispatchOnSunday !== undefined) out.dispatchOnSunday = Boolean(b.dispatchOnSunday);
   if (b.dispatchOnSaturdayStores !== undefined) out.dispatchOnSaturdayStores = Boolean(b.dispatchOnSaturdayStores);
