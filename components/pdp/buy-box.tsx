@@ -220,6 +220,10 @@ export function BuyBox({
   // zet.
   const winkelBlok = (
     <>
+      {/* Nog geen winkel gekozen? Dan hoort hier de uitnodiging in plaats van de
+          afhaal-regel — allebei beantwoorden ze "kan ik 'm ergens passen?", en
+          die vraag komt ná de bestelknop, niet naast de maatkiezer. */}
+      {myStores.length === 0 && storeCount > 0 ? <StoreChooser bron="pdp" /> : null}
       {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
         <ClickAndCollect
           // key per sku: maatwissel = verse component-staat (geen oude
@@ -322,6 +326,14 @@ export function BuyBox({
         </p>
       ) : null}
 
+      {/* Pasvorm boven de maatkiezer: het is de vraag die je jezelf stelt vóór je
+          een maat aanwijst ("valt dit klein?"), niet erna. */}
+      {fitNote ? (
+        <p className="mt-6 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
+          <span className="font-medium text-ink">{t("pdp.fit.prefix")} {fitNote}.</span> {t("pdp.fit.tip")}
+        </p>
+      ) : null}
+
       {/* Maat — verborgen bij one-size (niets te kiezen). */}
       <div className="mt-6">
         {!oneSize ? (
@@ -405,24 +417,17 @@ export function BuyBox({
         {/* Nog géén winkel gekozen? Dan stond er tot nu toe niets — de hele
             functie bestond alleen voor wie 'm al gevonden had. Deze regel vraagt
             het gewoon, op de plek waar de vraag speelt (onder je maat). */}
-        {myStores.length === 0 && storeCount > 0 ? <StoreChooser bron="pdp" /> : null}
-        {hasStock && selectedSize ? (
+        {/* Alleen melden wat de klant moet wéten. Een groene "Op voorraad" bij
+            elke gekozen maat is ruis: dat je kunt bestellen blijkt al uit de
+            bestelknop. Bijna-op en uitverkocht blijven — dat zijn de twee
+            gevallen waarin de stand z'n keuze verandert. */}
+        {hasStock && selectedSize && (selectedSize.qty <= 0 || selectedSize.qty <= 5) ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
-              selectedSize.qty <= 5 ? (
-                <span className="inline-flex items-center gap-1.5 text-danger"><Dot />{t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-success"><Dot />{t("pdp.stock.inStock")}</span>
-              )
+              <span className="inline-flex items-center gap-1.5 text-danger"><Dot />{t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
             ) : (
               <span className="text-muted">{t("pdp.stock.sizeSoldOut", { size: selectedSize.size })}</span>
             )}
-          </p>
-        ) : null}
-        {/* Pasvorm-noot — pal onder de maatkiezer, op het beslismoment. */}
-        {fitNote ? (
-          <p className="mt-2 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
-            <span className="font-medium text-ink">{t("pdp.fit.prefix")} {fitNote}.</span> {t("pdp.fit.tip")}
           </p>
         ) : null}
         {/* Mail-me zodra een uitverkochte maat is gekozen — ook als het hele
@@ -435,26 +440,9 @@ export function BuyBox({
             size={selectedSize?.size}
             color={active?.color}
             variant="compact"
-            /* Niets meer te kopen? Dan is dit formulier de enige actie die er nog
-               is — niet dichtklappen tot een linkje. */
-            startOpen={allSoldOut}
           />
         ) : null}
       </div>
-
-      {!allSoldOut ? (
-        <DeliveryPromise
-          promise={deliveryPromise}
-          note={deliveryNote}
-          extra={
-            freeShipThresholdCents
-              ? priceCents >= freeShipThresholdCents
-                ? t("pdp.freeShip.now")
-                : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })
-              : null
-          }
-        />
-      ) : null}
 
       {/* Bestelknop + bewaren — of, als alles uitverkocht is, de mail-me-blok. */}
       {allSoldOut ? (
@@ -507,6 +495,19 @@ export function BuyBox({
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
+          {/* Bezorgbelofte hoort bij "wat gebeurt er als ik nu bestel", en dus
+              onder de knop — niet ertussen. */}
+          <DeliveryPromise
+            promise={deliveryPromise}
+            note={deliveryNote}
+            extra={
+              freeShipThresholdCents
+                ? priceCents >= freeShipThresholdCents
+                  ? t("pdp.freeShip.now")
+                  : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })
+                : null
+            }
+          />
           {winkelBlok}
           <div className={`mt-3 flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted ${betaaliconen ? "flex" : "hidden"}`}>
             <span>{t("pdp.payment.label")}</span>

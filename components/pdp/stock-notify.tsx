@@ -12,22 +12,21 @@ type Props = {
   color?: string;
   /** "compact" onder een uitverkochte maat, "block" als hele product op is. */
   variant?: "compact" | "block";
-  /**
-   * Compacte variant tóch meteen open. Voor een product waarvan ALLES op is: daar
-   * klapte 'ie dicht zodra de klant een maat aantikte, en bleef er een onderstreept
-   * linkje over. Dat leest niet als "hier laat je je adres achter" — de klant denkt
-   * dat er niets gebeurt en vertrekt (Kevin, 13 aug). Is er nog wél iets te kopen in
-   * een andere maat, dan blijft 'ie bewust dicht: dan is de koopknop de hoofdzaak.
-   */
-  startOpen?: boolean;
 };
 
 type Channel = "email" | "whatsapp";
 
-/** "Mail me / WhatsApp me als het er weer is" — terug-op-voorraad-notificatie. */
-export function StockNotify({ productHandle, productTitle, sku, size, color, variant = "compact", startOpen = false }: Props) {
+/**
+ * "Mail me / WhatsApp me als het er weer is" — terug-op-voorraad-notificatie.
+ *
+ * Altijd meteen het formulier. Het zat eerst achter een onderstreept regeltje
+ * "Houd me op de hoogte", en dat leest niet als "hier laat je je adres achter":
+ * de klant denkt dat er niets gebeurt en vertrekt (Kevin, 13 aug). Een uitverkochte
+ * maat is precies het moment om dat veld te tonen, niet om er nog een klik voor te
+ * vragen.
+ */
+export function StockNotify({ productHandle, productTitle, sku, size, color, variant = "compact" }: Props) {
   const t = useT();
-  const [open, setOpen] = useState(variant === "block" || startOpen);
   const [channel, setChannel] = useState<Channel>("email");
   const [value, setValue] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
@@ -79,21 +78,6 @@ export function StockNotify({ productHandle, productTitle, sku, size, color, var
     );
   }
 
-  if (variant === "compact" && !open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-3 inline-flex items-center gap-2 font-sans text-sm text-ink underline underline-offset-4"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-          <path d="M4 4h16v12H5.2L4 17.5V4z" strokeLinejoin="round" />
-          <path d="M8 9h8M8 12h5" strokeLinecap="round" />
-        </svg>
-        Houd me op de hoogte {size ? `(maat ${size})` : ""}
-      </button>
-    );
-  }
 
   return (
     <form onSubmit={submit} className={variant === "block" ? "mt-4 border border-line p-4" : "mt-3"}>
