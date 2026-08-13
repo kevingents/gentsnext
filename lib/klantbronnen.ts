@@ -15,7 +15,15 @@ import { koppelIdentiteit } from "@/lib/identity";
  * lijst is hier het gevaarlijkst: dan lijkt het alsof er geen retouren zijn.
  */
 
-const BASIS = (process.env.STOREGENTS_API_URL || "").replace(/\/+$/, "");
+/* Zelfde default als de helpdesk-brug in lib/helpdesk: de URL is geen geheim en
+   verandert niet, dus die hoeft niemand te plakken. Alleen het TOKEN is een
+   secret. Zonder die default zou een ontbrekende URL eruitzien als een
+   ontbrekend secret, en ging Kevin op zoek naar een waarde die niet bestaat. */
+const BASIS = (process.env.STOREGENTS_API_URL || "https://storegents.vercel.app").replace(/\/+$/, "");
+/* STOREGENTS_PORTAL_SECRET is hetzelfde geheim als CUSTOMER_PORTAL_SECRET aan
+   de storegents-kant. STORE_CORE_TOKEN werkt óók: dat is de gedeelde
+   core-sleutel die beide kanten al hebben (storegents gebruikt 'm om ons te
+   bellen, wij mogen 'm terug gebruiken). Scheelt een extra variabele. */
 const TOKEN = process.env.STOREGENTS_PORTAL_SECRET || process.env.STORE_CORE_TOKEN || "";
 
 export function bronnenGeconfigureerd(): boolean {
@@ -24,7 +32,7 @@ export function bronnenGeconfigureerd(): boolean {
 
 async function haal<T>(actie: string, params: Record<string, string> = {}): Promise<T> {
   if (!bronnenGeconfigureerd()) {
-    throw new Error("STOREGENTS_API_URL + STOREGENTS_PORTAL_SECRET ontbreken.");
+    throw new Error("STOREGENTS_PORTAL_SECRET (of STORE_CORE_TOKEN) ontbreekt.");
   }
   const qs = new URLSearchParams({ actie, ...params });
   const res = await fetch(`${BASIS}/api/klantdata?${qs}`, {
