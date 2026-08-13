@@ -10,7 +10,8 @@ export const runtime = "nodejs";
  * Publieke retour-API. Gate = bestelnummer + e-mailadres (moeten matchen).
  *   POST { action:"lookup", orderNumber, email }
  *        → { ok, orderNumber, withinWindow, lines:[…], policy:{ windowDays, dhlReturnCostCents, freeOnCredit } }
- *   POST { action:"create", orderNumber, email, items:[{orderLineId,qty}], method, refundType, pickupStore?, reason? }
+ *   POST { action:"create", orderNumber, email, items:[{orderLineId,qty}], method, refundType, pickupStore?, reasonCode, reasonNote? }
+ *        (reasonCode is VERPLICHT — zie lib/retour-redenen; `reason` blijft als legacy-veld werken)
  *        → { ok, id, status, itemsCents, shippingCostCents, refundType, method, label, labelPending }
  *   POST { action:"status", orderNumber, email }
  *        → { ok, orderNumber, returns:[{ status, method, refundType, refundedCents, lines, … }] }
@@ -52,6 +53,8 @@ export async function POST(req: Request) {
       method: (body.method === "store" ? "store" : "dhl") as ReturnMethod,
       refundType: (body.refundType === "credit" ? "credit" : "money") as RefundType,
       pickupStore: String(body.pickupStore || ""),
+      reasonCode: String(body.reasonCode || ""),
+      reasonNote: String(body.reasonNote || ""),
       reason: String(body.reason || ""),
     });
     return NextResponse.json(res, { status: res.ok ? 200 : 400 });

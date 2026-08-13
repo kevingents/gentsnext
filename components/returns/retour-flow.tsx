@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatEuro } from "@/lib/format";
 import { useT } from "@/components/i18n/locale-provider";
+import { RETURN_REASONS, returnReason } from "@/lib/retour-redenen";
+import { track } from "@/lib/track-client";
 
 type Line = { orderLineId: string; sku: string; title: string; size: string; color: string; unitPriceCents: number; orderedQty: number; returnableQty: number };
 type Policy = { windowDays: number; dhlReturnCostCents: number; freeOnCredit: boolean };
@@ -45,8 +47,25 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
   const [method, setMethod] = useState<"dhl" | "store">("dhl");
   const [pickupStore, setPickupStore] = useState("");
   const [refundType, setRefundType] = useState<"money" | "credit">("credit");
-  const [reason, setReason] = useState("");
+  const [reasonCode, setReasonCode] = useState("");
+  const [reasonNote, setReasonNote] = useState("");
   const [result, setResult] = useState<Created | null>(null);
+
+  const chosenReason = returnReason(reasonCode);
+  const noteRequired = Boolean(chosenReason?.needsNote);
+  const reasonComplete = Boolean(chosenReason) && (!noteRequired || reasonNote.trim().length > 0);
+  const showAlteration = Boolean(chosenReason?.alteration);
+
+  /* Meten of de vermaak-hint iets uithaalt: hoe vaak zag een klant 'm (per reden)
+     en hoe vaak klikte hij door naar een pasafspraak. Zonder het toon-event weet
+     je alleen hoeveel afspraken er kwamen, niet hoeveel kansen er waren. Eén keer
+     per reden per sessie — anders telt heen-en-weer klikken als losse kansen. */
+  const hintSeen = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!showAlteration || hintSeen.current.has(reasonCode)) return;
+    hintSeen.current.add(reasonCode);
+    track("retour_vermaak_getoond", { handle: reasonCode, path: "/retourneren" });
+  }, [showAlteration, reasonCode]);
 
   async function lookup() {
     setErr(""); setBusy(true);
@@ -70,12 +89,16 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
   async function submit() {
     setErr("");
     if (method === "store" && stores.length && !pickupStore) { setErr(t("retourneren.flow.error.chooseStore")); return; }
+    if (!chosenReason) { setErr(t("retourneren.flow.error.chooseReason")); return; }
+    if (noteRequired && !reasonNote.trim()) { setErr(t("retourneren.flow.error.needNote")); return; }
     setBusy(true);
     try {
       const items = selected.map((l) => ({ orderLineId: l.orderLineId, qty: qty[l.orderLineId] }));
-      const r = await fetch("/api/returns", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", orderNumber, email, items, method, refundType, reason, pickupStore: method === "store" ? pickupStore : "" }) });
+      const r = await fetch("/api/returns", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", orderNumber, email, items, method, refundType, reasonCode, reasonNote, pickupStore: method === "store" ? pickupStore : "" }) });
       const d = (await r.json()) as Created;
       if (!r.ok || !d.ok) throw new Error(d.error || t("retourneren.flow.error.createFailed"));
+      // De noemer onder de vermaak-hint: hoeveel retouren gingen er tóch door?
+      track("retour_aangemeld", { handle: reasonCode, valueCents: itemsCents, path: "/retourneren" });
       setResult(d); setStep("done");
     } catch (e) { setErr(e instanceof Error ? e.message : t("retourneren.flow.error.generic")); } finally { setBusy(false); }
   }
@@ -156,6 +179,62 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
           </div>
         </section>
 
+        {/* Reden staat bewust VÓÓR de methode-keuze: pas als iemand "te groot" of
+            "mouwlengte" aantikt kunnen we vermaken aanbieden, en dat aanbod komt
+            te laat als hij dan al een retourlabel heeft gekozen. Verplicht, want
+            optioneel bleef het leeg — en daarmee bleef ook het pasvorm-signaal in
+            het dashboard leeg. */}
+        <section>
+          <p className="label-brand mb-1">{t("retourneren.flow.whyReturn")}</p>
+          <p className="mb-2 font-sans text-xs text-ink-soft">{t("retourneren.flow.whySub")}</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {RETURN_REASONS.map((r) => (
+              <button
+                key={r.code}
+                type="button"
+                aria-pressed={reasonCode === r.code}
+                onClick={() => setReasonCode(r.code)}
+                className={`rounded-card border px-4 py-3 text-left text-sm text-ink ${reasonCode === r.code ? "border-ink bg-ink/5 font-semibold" : "border-line"}`}
+              >
+                {t(r.key)}
+              </button>
+            ))}
+          </div>
+
+          {/* Vermaken is een BETAALDE service — nooit als gratis presenteren. */}
+          {showAlteration && (
+            <div className="mt-2 rounded-card border border-line bg-surface px-4 py-3">
+              <p className="text-sm font-semibold text-ink">{t("retourneren.flow.alterationTitle")}</p>
+              <p className="mt-1 font-sans text-sm text-ink-soft">{t("retourneren.flow.alterationBody")}</p>
+              {/* Nieuw tabblad: wie het aanbod gaat bekijken is z'n retour nog niet
+                  kwijt. Weggenavigeer je hem, dan is de hele artikelkeuze weg en
+                  begint hij straks opnieuw — of hij haakt af. */}
+              <a
+                href="/afspraak"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => track("retour_vermaak_klik", { handle: reasonCode, path: "/retourneren" })}
+                className="mt-2 inline-block text-sm font-medium text-ink underline underline-offset-4"
+              >
+                {t("retourneren.flow.alterationCta")}
+              </a>
+            </div>
+          )}
+
+          <label className="mt-2 block">
+            <span className="font-sans text-xs text-ink-soft">
+              {noteRequired ? t("retourneren.flow.noteRequired") : t("retourneren.flow.noteOptional")}
+            </span>
+            <textarea
+              className={`${inputCls} mt-1`}
+              rows={2}
+              placeholder={noteRequired ? t("retourneren.flow.notePlaceholderRequired") : t("retourneren.flow.notePlaceholder")}
+              value={reasonNote}
+              onChange={(e) => setReasonNote(e.target.value)}
+            />
+          </label>
+        </section>
+
         <section>
           <p className="label-brand mb-2">{t("retourneren.flow.howReturn")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -193,8 +272,6 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
           </div>
         </section>
 
-        <textarea className={inputCls} rows={2} placeholder={t("retourneren.flow.reasonPlaceholder")} value={reason} onChange={(e) => setReason(e.target.value)} />
-
         <div className="rounded-card border border-line bg-surface px-4 py-3 text-sm">
           <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.itemsValue")}</span><span>{euro(itemsCents)}</span></div>
           <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.returnCost")}</span><span>{shipCost === 0 ? t("retourneren.flow.free") : `− ${euro(shipCost)}`}</span></div>
@@ -208,7 +285,7 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
           ) : (
             <button onClick={() => setStep("lookup")} className="btn-ghost">{t("retourneren.flow.back")}</button>
           )}
-          <button onClick={submit} disabled={busy || !selected.length} className="btn-primary disabled:opacity-50">{busy ? t("retourneren.flow.busy") : t("retourneren.flow.confirm")}</button>
+          <button onClick={submit} disabled={busy || !selected.length || !reasonComplete} className="btn-primary disabled:opacity-50">{busy ? t("retourneren.flow.busy") : t("retourneren.flow.confirm")}</button>
         </div>
       </div>
     );
@@ -239,7 +316,7 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
         <p className="text-sm text-ink-soft">{t("retourneren.flow.storeInstruction1")} <strong className="text-ink">{pickupStore || t("retourneren.flow.anyStore")}</strong>. {t("retourneren.flow.storeInstruction2")}</p>
       )}
 
-      <button onClick={() => { setStep("lookup"); setResult(null); setOrderNumber(""); setEmail(""); }} className="btn-ghost">{t("account.returns.new")}</button>
+      <button onClick={() => { setStep("lookup"); setResult(null); setOrderNumber(""); setEmail(""); setReasonCode(""); setReasonNote(""); }} className="btn-ghost">{t("account.returns.new")}</button>
     </div>
   );
 }
