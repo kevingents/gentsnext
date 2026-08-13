@@ -11,6 +11,7 @@ import {
   effectiveCutoffHour,
 } from "@/lib/fulfillment-config";
 import { getSettings, type Settings } from "@/lib/settings";
+import { zoneFor, DEFAULT_COUNTRY } from "@/lib/shipping-zones";
 import { type Locale } from "@/lib/i18n";
 
 /**
@@ -572,13 +573,18 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
   const hasStoreSource = plan.shipments.some((s) => !s.isWarehouse);
   const fromWarehouseOnly = !isSplit && !hasStoreSource;
 
+  /* Buitenland kost extra werkdagen onderweg (instelbaar per land). Zonder dit
+     beloofde de checkout een Spaanse klant dezelfde datum als een Nederlandse —
+     de bezorgbelofte kende simpelweg geen landen. */
+  const landExtra = zoneFor(opts.country || DEFAULT_COUNTRY, settings.shippingZones).extraDays;
+
   // Standaard transit: magazijn = snel (warehouseTransitDays); winkel/split = +extra.
-  const stdTransit = settings.warehouseTransitDays + (fromWarehouseOnly ? 0 : settings.storeExtraDays);
+  const stdTransit = settings.warehouseTransitDays + (fromWarehouseOnly ? 0 : settings.storeExtraDays) + landExtra;
   const stdMinK = addDeliveryDays(n, maxDispatch, stdTransit, settings.extraClosureDates);
   const stdMaxK = addDeliveryDays(n, maxDispatch, stdTransit + 1, settings.extraClosureDates);
 
   // Express: snelste werkdag na verzending.
-  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays, settings.extraClosureDates);
+  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays + landExtra, settings.extraClosureDates);
   const stdShownK = fromWarehouseOnly ? stdMinK : stdMaxK;
 
   const standard: DeliveryOption = {
