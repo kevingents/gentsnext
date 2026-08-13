@@ -7,6 +7,7 @@ import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl"
 import { refundMolliePayment } from "@/lib/mollie";
 import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
 import { sendReturnRegistered, sendReturnRefunded } from "@/lib/email";
+import { canonicalReturnReason, REASON_NOTE_SEP } from "@/lib/retour-redenen";
 
 /**
  * Retouren — klant start vanuit z'n bestelling. Methode: DHL-retourlabel of in de
@@ -242,6 +243,11 @@ export type CreateReturnInput = {
   method: ReturnMethod;
   refundType: RefundType;
   pickupStore?: string;
+  /** Code uit RETURN_REASONS — verplicht voor nieuwe aanroepers. */
+  reasonCode?: string;
+  /** Vrije toelichting bij die code (verplicht bij `beschadigd` en `anders`). */
+  reasonNote?: string;
+  /** Legacy: kant-en-klare reden-regel. Alleen nog als er geen code meekomt. */
   reason?: string;
 };
 
@@ -272,6 +278,14 @@ export async function createReturn(input: CreateReturnInput): Promise<
   }
   if (!picked.length) return { ok: false, error: "Selecteer minimaal één artikel om te retourneren." };
 
+  // Reden is verplicht en de server is de baas: het formulier kan de keuze
+  // afdwingen, maar wie de API rechtstreeks aanroept komt er anders alsnog
+  // langs — en dan staat de retour zonder reden in de statistieken.
+  const reason = input.reasonCode
+    ? canonicalReturnReason(input.reasonCode, input.reasonNote || "")
+    : (input.reason || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (!reason) return { ok: false, error: "Kies een reden voor je retour — bij 'beschadigd of verkeerd geleverd' en 'andere reden' ook een korte toelichting." };
+
   const method: ReturnMethod = input.method === "store" ? "store" : "dhl";
   const refundType: RefundType = input.refundType === "credit" ? "credit" : "money";
 
@@ -301,7 +315,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
       method,
       refundType,
       pickupStore: method === "store" ? (input.pickupStore || "").trim() : "",
-      reason: (input.reason || "").trim().slice(0, 500),
+      reason: reason.slice(0, 500),
       itemsCents,
       shippingCostCents,
     })
@@ -317,7 +331,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
       color: p.line.color,
       qty: p.qty,
       unitPriceCents: p.line.unitPriceCents,
-      reason: (input.reason || "").trim().slice(0, 200),
+      reason: reason.slice(0, 200),
     })),
   );
 
@@ -676,8 +690,13 @@ export async function getReturnStats(days = 90): Promise<ReturnStats> {
 
   const byStatus = (await db.execute<{ status: string; n: number }>(sql`
     select status, count(*)::int n from returns where created_at >= ${since} group by status order by n desc`)).rows;
+  // Groeperen op het VASTE deel van de reden: alles ná het scheidingsteken is de
+  // vrije toelichting van de klant, en die maakt van elke retour weer z'n eigen
+  // balkje. Oude retouren (vrij tekstveld, geen scheidingsteken) blijven gewoon
+  // heel — split_part geeft dan de hele regel terug.
   const topReasons = (await db.execute<{ reason: string; n: number }>(sql`
-    select reason, count(*)::int n from returns where created_at >= ${since} and status<>'cancelled' and reason <> '' group by reason order by n desc limit 6`)).rows;
+    select split_part(reason, ${REASON_NOTE_SEP}, 1) reason, count(*)::int n from returns
+    where created_at >= ${since} and status<>'cancelled' and reason <> '' group by 1 order by n desc limit 6`)).rows;
   const topProducts = (await db.execute<{ title: string; qty: number }>(sql`
     select rl.title, sum(rl.qty)::int qty from return_lines rl join returns r on r.id = rl.return_id
     where r.created_at >= ${since} and r.status <> 'cancelled' group by rl.title order by qty desc limit 6`)).rows;
