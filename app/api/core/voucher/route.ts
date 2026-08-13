@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
 import { validateVoucher, redeemVoucherForRef, releaseVoucherForRef, activeVouchersForCustomer } from "@/lib/vouchers";
+import { redeemableBalance, pendingBalance, redeemPointsForVoucher } from "@/lib/loyalty-claim";
+import { getDb } from "@/db";
+import { loyaltyEvents } from "@/db/schema";
+import { and, eq, gt, min, sql } from "drizzle-orm";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +33,16 @@ export const runtime = "nodejs";
  *     Draait een verzilvering terug die DEZELFDE ref maakte — voor een verkoop
  *     die na het verzilveren alsnog strandt. Een andere ref raakt niets aan.
  *
+ *   punten-opties { customerId }                → { ok, besteedbaar, minPoints, stepPoints, centsPerPoint, opties:[{points,valueCents}] }
+ *     Wat kan deze klant NU inwisselen. De kassa toont dat zodra de klant aan de
+ *     bon hangt, zodat de kassier het aanbiedt in plaats van dat de klant thuis
+ *     eerst zelf een code moet aanmaken.
+ *
+ *   punten-inwisselen { customerId, points }    → { ok, code, valueCents, points, error? }
+ *     Boekt de punten af en maakt er een tegoedbon van. De kassa zet die code
+ *     daarna in het gewone voucher-slot van de bon, dus verzilveren loopt via
+ *     precies dezelfde weg als een code die de klant meebrengt.
+ *
  * Verzilveren en pas dán afrekenen — niet andersom. Een code die wél van de prijs
  * ging maar niet verzilverd raakte, is gratis geld dat oneindig herbruikbaar is.
  */
@@ -46,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Te veel verzoeken — even wachten." }, { status: 429, headers: { "retry-after": String(rl.retryAfterSec) } });
   }
 
-  let b: { action?: string; code?: string; ref?: string; subtotalCents?: number; customerId?: string; email?: string };
+  let b: { action?: string; code?: string; ref?: string; subtotalCents?: number; customerId?: string; email?: string; points?: number };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -61,6 +76,56 @@ export async function POST(req: Request) {
       case "redeem": {
         const r = await redeemVoucherForRef(String(b.code || ""), String(b.ref || ""));
         return NextResponse.json(r, { status: r.ok ? 200 : 409 });
+      }
+      case "punten-opties": {
+        const klant = String(b.customerId || "");
+        if (!klant) return NextResponse.json({ ok: false, error: "customerId vereist." }, { status: 400 });
+        const lc = (await getSettings()).loyaltyConfig;
+        const centsPerPoint = Number(lc?.redeemCentsPerPoint) > 0 ? Number(lc.redeemCentsPerPoint) : 5;
+        const minPoints = Number(lc?.redeemMinPoints) > 0 ? Number(lc.redeemMinPoints) : 500;
+        const stepPoints = lc?.redeemStepPoints == null ? 500 : Math.max(0, Number(lc.redeemStepPoints));
+        /* Besteedbaar EN in behandeling. Zonder dat tweede getal ziet de kassier
+           "507 spaarpunten" (het totaal, uit api/store/loyalty) maar verschijnt er
+           geen inwissel-knop, omdat er maar 303 gevest zijn — en dan lijkt het kapot.
+           Met de vestdatum erbij kan 'ie het gewoon uitleggen aan de klant. */
+        const [besteedbaar, inBehandeling, [vest]] = await Promise.all([
+          redeemableBalance(klant).then((n) => Math.max(0, n)),
+          pendingBalance(klant).then((n) => Math.max(0, n)),
+          getDb()
+            .select({ eerst: min(loyaltyEvents.vestsAt) })
+            .from(loyaltyEvents)
+            .where(and(eq(loyaltyEvents.customerId, klant), gt(loyaltyEvents.vestsAt, sql`now()`))),
+        ]);
+        /* Alleen hele stappen die de klant ECHT heeft. Zelfde regels als de
+           webshop-inwissel; de server rekent, de kassa toont alleen. Bewust
+           afgekapt op 5 keuzes: een kassascherm is geen keuzemenu. */
+        const opties: { points: number; valueCents: number }[] = [];
+        if (besteedbaar >= minPoints) {
+          const stap = stepPoints > 0 ? stepPoints : minPoints;
+          for (let p = minPoints; p <= besteedbaar && opties.length < 5; p += stap) {
+            opties.push({ points: p, valueCents: p * centsPerPoint });
+          }
+          opties.reverse(); // hoogste eerst: dat is wat de klant meestal wil
+        }
+        return NextResponse.json({
+          ok: true,
+          besteedbaar,
+          inBehandeling,
+          besteedbaarVanaf: vest?.eerst ? new Date(vest.eerst as unknown as string).toISOString() : null,
+          minPoints,
+          stepPoints,
+          centsPerPoint,
+          opties,
+        });
+      }
+      case "punten-inwisselen": {
+        const klant = String(b.customerId || "");
+        if (!klant) return NextResponse.json({ ok: false, error: "customerId vereist." }, { status: 400 });
+        /* redeemPointsForVoucher is de ENIGE plek waar punten in een bon veranderen
+           (ook voor de webshop): atomaire afboeking op het geveste saldo, en bij een
+           fout draait 'ie de afboeking én het grootboek-event terug. Niet nabouwen. */
+        const r = await redeemPointsForVoucher(klant, Number(b.points));
+        return NextResponse.json(r, { status: r.ok ? 200 : 400 });
       }
       case "release":
         return NextResponse.json(await releaseVoucherForRef(String(b.code || ""), String(b.ref || "")));
