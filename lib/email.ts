@@ -667,6 +667,54 @@ export async function sendConceptOrderMail(c: ConceptOrderEmail): Promise<boolea
   return sendEmail(c.email, `Je GENTS-selectie van ${c.store} — rond af wanneer je wilt`, shell(inner));
 }
 
+/* ── Betaallink (back-office) ── */
+
+type BetaallinkEmail = {
+  email: string;
+  firstName: string;
+  orderNumber: string;
+  checkoutUrl: string;
+  totalCents: number;
+  /** true = de eerste betaling mislukte/verliep; false = nieuwe handmatige bestelling. */
+  opnieuw: boolean;
+  items: { title: string; size: string; color: string; qty: number; unitPriceCents: number }[];
+};
+
+/**
+ * Betaallink vanuit het back-office (Site → Bestellingen). Twee situaties, één
+ * mail: een handmatig aangemaakte bestelling die nog betaald moet worden, en
+ * een bestelling waarvan de betaling mislukte of verliep.
+ *
+ * Bewust ZONDER verwijt of urgentie ("laatste kans", "anders vervalt je
+ * bestelling"): een mislukte iDEAL-betaling is meestal een afgebroken app, geen
+ * onwil. De toon is dezelfde als de conceptmail van de kassa.
+ */
+export async function sendPaymentLinkMail(c: BetaallinkEmail): Promise<boolean> {
+  const hi = c.firstName ? `Hoi ${c.firstName},` : "Hoi,";
+  const rows = c.items
+    .map(
+      (l) => `<tr><td style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">
+        ${l.title}<div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && `maat ${l.size}`, `${l.qty}×`].filter(Boolean).join(" · ")}</div></td>
+        <td align="right" style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${euro(l.unitPriceCents * l.qty)}</td></tr>`,
+    )
+    .join("");
+  const intro = c.opnieuw
+    ? `${hi} de betaling van je bestelling <strong>${c.orderNumber}</strong> is niet afgerond — dat gebeurt zo nu en dan, bijvoorbeeld als de bank-app tussendoor sluit. Je bestelling staat nog voor je klaar; met de knop hieronder rond je 'm alsnog af.`
+    : `${hi} we hebben je bestelling <strong>${c.orderNumber}</strong> voor je klaargezet. Met de knop hieronder reken je 'm af.`;
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${c.opnieuw ? "Je bestelling staat nog klaar" : "Je bestelling staat klaar"}</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${intro}</p>
+    </td></tr>
+    ${rows ? `<tr><td style="padding:8px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td></tr>` : ""}
+    <tr><td style="padding:8px 28px 0;font:14px Arial,sans-serif;color:#0A0A0A"><strong>Te betalen: ${euro(c.totalCents)}</strong></td></tr>
+    <tr><td style="padding:18px 28px 28px">
+      <a href="${c.checkoutUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Betalen</a>
+      <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:14px">Klopt er iets niet, of wil je liever iets wijzigen? Antwoord gerust op deze mail — dan regelen we het.</p>
+    </td></tr>`;
+  return sendEmail(c.email, `Je GENTS-bestelling ${c.orderNumber} — betaallink`, shell(inner));
+}
+
 /* ── Retouren ── */
 
 type ReturnRegisteredEmail = {

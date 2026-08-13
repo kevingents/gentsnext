@@ -2315,3 +2315,37 @@ export const heatmapScrollDag = pgTable(
     index("heatmap_scroll_dag_dag_idx").on(t.dag),
   ]
 );
+
+/**
+ * Logboek van handmatige order-acties uit de portal (Site → Bestellingen):
+ * nieuwe betaallink, terugbetaling, annulering, handmatig aangemaakte order.
+ *
+ * Alleen invoegen, nooit bijwerken — dit is een audit-spoor. Bij een
+ * terugbetaling is "wie deed dit, wanneer, voor hoeveel" de eerste vraag; dat
+ * antwoord hoort niet in een serverlog dat na dertig dagen weg is.
+ *
+ * INTERN. `notitie` is wat een medewerker typt en is NOOIT klantzichtbaar
+ * (zelfde les als loyalty_events.reason, dat wél in het klantprofiel opdook).
+ */
+export const orderLogboek = pgTable(
+  "order_logboek",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Nummer is leidend voor het lezen; het id koppelt aan de order zelf. */
+    orderId: uuid("order_id"),
+    orderNumber: text("order_number").notNull(),
+    /** 'aangemaakt' | 'betaallink' | 'terugbetaald' | 'betaalstatus' | 'geannuleerd' | 'bevestiging' | 'status' */
+    actie: text("actie").notNull(),
+    /** Portal-gebruiker (naam of e-mail); leeg = via de API/token. */
+    actor: text("actor").notNull().default(""),
+    notitie: text("notitie").notNull().default(""),
+    /** Bedrag waar de actie over ging (terugbetaling, ordertotaal). 0 = n.v.t. */
+    bedragCents: integer("bedrag_cents").notNull().default(0),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("order_logboek_order_idx").on(t.orderNumber, t.createdAt),
+    index("order_logboek_tijd_idx").on(t.createdAt),
+  ]
+);

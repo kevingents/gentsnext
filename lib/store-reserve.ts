@@ -173,3 +173,25 @@ export async function renewOrderHolds(orderId: string, ttlMin = DEFAULT_TTL_MIN)
     // Best-effort.
   }
 }
+
+/**
+ * Heeft deze order nog LOPENDE voorraad-holds? Nodig voor de back-office-actie
+ * "stuur een nieuwe betaallink": bij een mislukte betaling zijn de holds
+ * vrijgegeven en moet er opnieuw geclaimd worden, maar bij een order die nog
+ * gewoon openstaat mag dat juist NIET — reserveOrderStock is niet idempotent en
+ * zou de order een tweede keer van de teller aftrekken. Verlopen holds tellen
+ * niet mee (die zijn de facto al weg; de sweep ruimt ze op).
+ */
+export async function countOrderHolds(orderId: string): Promise<number> {
+  const db = getDb();
+  try {
+    const r = await db.execute<{ n: string }>(sql`
+      select count(*) n from web_stock_holds where order_id = ${orderId} and expires_at > now()
+    `);
+    return Number(r.rows?.[0]?.n) || 0;
+  } catch {
+    // Kunnen we het niet vaststellen, dan doen we alsóf er holds zijn: liever
+    // geen tweede claim dan een dubbele afboeking van de teller.
+    return 1;
+  }
+}

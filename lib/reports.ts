@@ -129,6 +129,14 @@ export type OrderListOpts = {
   to?: Date;
   page?: number;
   pageSize?: number;
+  /**
+   * "openstaand" = besteld maar (nog) niet betaald: alles wat wacht of stukliep.
+   * Bewust één filter en niet vijf losse betaalstatussen — de vraag die iemand
+   * in het back-office stelt is "welke bestellingen wachten nog op geld", niet
+   * "welke staan er op expired". Losse Mollie-statussen kunnen ook: dan filtert
+   * 'ie op payment_status.
+   */
+  betaling?: "openstaand" | "mislukt" | "betaald" | string;
 };
 
 export async function listOrders(opts: OrderListOpts) {
@@ -143,6 +151,10 @@ export async function listOrders(opts: OrderListOpts) {
   if (opts.status) conds.push(sql`status = ${opts.status}`);
   if (opts.channel === "online") conds.push(sql`mollie_payment_id is not null and fulfillment_status <> 'imported'`);
   if (opts.channel === "import") conds.push(sql`fulfillment_status = 'imported'`);
+  // Winkelbestelling = door een filiaal aangeslagen (endless aisle / bestel voor
+  // klant). Het filter stond wel in het type maar deed niets.
+  if (opts.channel === "store") conds.push(sql`sold_by_store <> ''`);
+  if (opts.betaling) conds.push(betaalFilter(opts.betaling));
   if (opts.from) conds.push(sql`created_at >= ${opts.from}`);
   if (opts.to) conds.push(sql`created_at <= ${opts.to}`);
   const where = sql.join(conds, sql` and `);
@@ -151,10 +163,12 @@ export async function listOrders(opts: OrderListOpts) {
   const rows = await db.execute<{
     order_number: string; status: string; email: string; name: string; city: string;
     total_cents: number; created_at: string; fulfillment_status: string; channel: string;
+    payment_status: string | null; sold_by_store: string; heeft_betaling: boolean;
   }>(sql`
     select order_number, status, email, (first_name||' '||last_name) name, city, total_cents,
            to_char(created_at,'YYYY-MM-DD') created_at, fulfillment_status,
-           case when fulfillment_status='imported' then 'import' when mollie_payment_id is not null then 'online' else 'online' end channel
+           payment_status, sold_by_store, (mollie_payment_id is not null) heeft_betaling,
+           case when fulfillment_status='imported' then 'import' when sold_by_store <> '' then 'winkel' else 'online' end channel
     from orders where ${where}
     order by created_at desc limit ${pageSize} offset ${(page - 1) * pageSize}`);
   return {
@@ -165,7 +179,74 @@ export async function listOrders(opts: OrderListOpts) {
       orderNumber: x.order_number, status: x.status, email: x.email, name: (x.name || "").trim(),
       city: x.city, totalCents: Number(x.total_cents) || 0, createdAt: x.created_at,
       fulfillmentStatus: x.fulfillment_status, channel: x.channel,
+      paymentStatus: x.payment_status || "", soldByStore: x.sold_by_store || "", heeftBetaling: Boolean(x.heeft_betaling),
     })),
+  };
+}
+
+/**
+ * Betaalfilter voor de orderlijst. 'openstaand' pakt álles wat nog geld moet
+ * opleveren (nooit betaald én niet geannuleerd), 'mislukt' alleen de pogingen
+ * die stukliepen. Een andere waarde wordt als letterlijke Mollie-status gelezen.
+ *
+ * Geïmporteerde historie blijft er bewust buiten: die orders hebben geen
+ * betaalstatus in ons systeem en zouden de lijst vullen met 30.000 "openstaande"
+ * bestellingen uit het Shopify-tijdperk.
+ */
+function betaalFilter(keuze: string) {
+  if (keuze === "openstaand") {
+    return sql`status in ('open','failed','expired') and fulfillment_status <> 'imported'`;
+  }
+  if (keuze === "mislukt") {
+    return sql`status in ('failed','expired') and fulfillment_status <> 'imported'`;
+  }
+  if (keuze === "betaald") {
+    return sql`status in ('paid','shipped','ready_pickup','delivered')`;
+  }
+  return sql`payment_status = ${keuze}`;
+}
+
+export type BetaalSignalen = {
+  /** Nooit betaalde bestellingen (excl. geannuleerd + geïmporteerde historie). */
+  openOrders: number;
+  openCents: number;
+  /** Daarvan: de betaling liep écht stuk (failed/expired) — die vragen actie. */
+  misluktOrders: number;
+  misluktCents: number;
+  /** Openstaand van vandaag — vers genoeg om nog gewoon af te wachten. */
+  vandaagOrders: number;
+};
+
+/**
+ * Signalen voor de kop van het bestellingen-overzicht: hoeveel geld blijft er
+ * liggen doordat een betaling niet is afgerond?
+ *
+ * Waarom dit een eigen telling is en geen KPI-kaart uit getKpis: die kijkt naar
+ * betaalde omzet in een periode. Dit is precies het tegenovergestelde — wat er
+ * NIET binnenkwam, ongeacht wanneer besteld is. Venster van 90 dagen: ouder dan
+ * dat rondt niemand nog af, en dan wordt het getal alleen maar decoratie.
+ */
+export async function betaalSignalen(dagen = 90): Promise<BetaalSignalen> {
+  const db = getDb();
+  const venster = Math.max(1, Math.min(365, Math.round(dagen)));
+  const [r] = (
+    await db.execute<{ open_n: string; open_rev: string; mislukt_n: string; mislukt_rev: string; vandaag_n: string }>(sql`
+      select
+        count(*) filter (where status in ('open','failed','expired')) open_n,
+        coalesce(sum(total_cents) filter (where status in ('open','failed','expired')),0) open_rev,
+        count(*) filter (where status in ('failed','expired')) mislukt_n,
+        coalesce(sum(total_cents) filter (where status in ('failed','expired')),0) mislukt_rev,
+        count(*) filter (where status in ('open','failed','expired') and created_at >= now() - interval '1 day') vandaag_n
+      from orders
+      where fulfillment_status <> 'imported'
+        and created_at >= now() - make_interval(days => ${venster})`)
+  ).rows;
+  return {
+    openOrders: Number(r?.open_n) || 0,
+    openCents: Number(r?.open_rev) || 0,
+    misluktOrders: Number(r?.mislukt_n) || 0,
+    misluktCents: Number(r?.mislukt_rev) || 0,
+    vandaagOrders: Number(r?.vandaag_n) || 0,
   };
 }
 

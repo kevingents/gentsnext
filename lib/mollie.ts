@@ -135,7 +135,29 @@ export type MolliePayment = {
   amount: { currency: string; value: string };
   metadata?: Record<string, unknown> | null;
   checkoutUrl: string | null;
+  /** Gekozen betaalmethode (ideal, creditcard, …) — pas bekend ná de keuze. */
+  method: string | null;
+  /** Bedrag in centen, uit `amount.value`. */
+  amountCents: number;
+  /** Al terugbetaald (centen). Mollie's eigen administratie, niet de onze. */
+  refundedCents: number;
+  /**
+   * Wat er NU nog terugbetaald kan worden (centen). `null` = Mollie noemt het
+   * veld niet (oudere betaling of een methode zonder refunds) — de aanroeper
+   * rekent dan zelf `amountCents − refundedCents`. Bewust niet stil op 0 of op
+   * het volle bedrag zetten: allebei zijn een verkeerd antwoord op een
+   * terugbetaalknop.
+   */
+  remainingCents: number | null;
+  createdAt: string | null;
+  paidAt: string | null;
 };
+
+/** "12.90" → 1290. Mollie stuurt bedragen als string met 2 decimalen. */
+function valueToCents(v: unknown): number {
+  const n = Math.round(Number(v) * 100);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function parsePayment(json: any): MolliePayment {
   return {
@@ -144,6 +166,12 @@ function parsePayment(json: any): MolliePayment {
     amount: json.amount,
     metadata: json.metadata ?? null,
     checkoutUrl: json?._links?.checkout?.href ?? null,
+    method: json?.method ?? null,
+    amountCents: valueToCents(json?.amount?.value),
+    refundedCents: json?.amountRefunded?.value ? valueToCents(json.amountRefunded.value) : 0,
+    remainingCents: json?.amountRemaining?.value ? valueToCents(json.amountRemaining.value) : null,
+    createdAt: json?.createdAt ?? null,
+    paidAt: json?.paidAt ?? null,
   };
 }
 
