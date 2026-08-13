@@ -12,14 +12,22 @@ type Props = {
   color?: string;
   /** "compact" onder een uitverkochte maat, "block" als hele product op is. */
   variant?: "compact" | "block";
+  /**
+   * Compacte variant tóch meteen open. Voor een product waarvan ALLES op is: daar
+   * klapte 'ie dicht zodra de klant een maat aantikte, en bleef er een onderstreept
+   * linkje over. Dat leest niet als "hier laat je je adres achter" — de klant denkt
+   * dat er niets gebeurt en vertrekt (Kevin, 13 aug). Is er nog wél iets te kopen in
+   * een andere maat, dan blijft 'ie bewust dicht: dan is de koopknop de hoofdzaak.
+   */
+  startOpen?: boolean;
 };
 
 type Channel = "email" | "whatsapp";
 
 /** "Mail me / WhatsApp me als het er weer is" — terug-op-voorraad-notificatie. */
-export function StockNotify({ productHandle, productTitle, sku, size, color, variant = "compact" }: Props) {
+export function StockNotify({ productHandle, productTitle, sku, size, color, variant = "compact", startOpen = false }: Props) {
   const t = useT();
-  const [open, setOpen] = useState(variant === "block");
+  const [open, setOpen] = useState(variant === "block" || startOpen);
   const [channel, setChannel] = useState<Channel>("email");
   const [value, setValue] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "done" | "fail">("idle");
