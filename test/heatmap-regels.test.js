@@ -63,6 +63,20 @@ test("een subpad van een gemeten pagina glipt er niet in", () => {
   assert.equal(sjabloonVoorKaalPad("/account/bestellingen"), "");
 });
 
+test("een sjabloonstring wordt niet als echt pad geaccepteerd", () => {
+  // Dit ging op productie mis. De server leidde het sjabloon af uit het pad,
+  // maar viel bij géén match terug op wat de CLIENT als pagina beweerde — en
+  // '/products/[handle]' matcht zélf op /products/[^/]+. Een verzoek met pad
+  // '/bestelling/GN-99999' plus die bewering werd zo gewoon opgeslagen, mét
+  // ordernummer. Zonder deze regel is de hele allowlist een suggestie.
+  assert.equal(sjabloonVoorKaalPad("/products/[handle]"), "");
+  assert.equal(sjabloonVoorKaalPad("/categorie/[slug]"), "");
+  assert.equal(sjabloonVoorKaalPad("/collections/[handle]"), "");
+  // Sjablonen zonder parameter zijn wél gewoon echte URL's en blijven werken.
+  assert.equal(sjabloonVoorKaalPad("/winkelwagen"), "/winkelwagen");
+  assert.equal(sjabloonVoorKaalPad("/"), "/");
+});
+
 test("querystring en hash horen niet in de sleutel", () => {
   // ?q= draagt de zoekterm mee en ?utm_ de campagne; die mogen niet als
   // onderdeel van een paginasleutel in een aggregatietabel belanden.

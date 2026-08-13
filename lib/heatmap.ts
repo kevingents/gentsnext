@@ -93,10 +93,18 @@ export async function bewaarHeatmap(binnen: HeatBinnen): Promise<{ klikken: numb
   const { heatmap } = await getSettings();
   if (!heatmap.aan) return { klikken: 0, scroll: 0, reden: "uit" };
 
-  // Sjabloon opnieuw afleiden uit het ECHTE pad. Wat de client als `pagina`
-  // meestuurt is een bewering; met een aangepaste client zou je daarmee kliks
-  // onder een pagina kunnen schuiven die helemaal niet gemeten wordt.
-  const paginaKey = paginaSjabloon(binnen.pad || "") || paginaSjabloon(binnen.pagina || "");
+  // Sjabloon UITSLUITEND uit het echte pad afleiden. Wat de client als `pagina`
+  // meestuurt is een bewering en wordt hier genegeerd.
+  //
+  // Hier stond eerst `paginaSjabloon(pad) || paginaSjabloon(pagina)` als
+  // "fallback". Dat gat is echt gebruikt in een rooktest op productie: een
+  // verzoek met pad `/bestelling/GN-99999` (nooit meten) en pagina
+  // `/products/[handle]` werd gewoon opgeslagen — de sjabloonstring matcht
+  // namelijk zélf op /products/[^/]+, dus de allowlist ging akkoord en het
+  // ordernummer belandde in de kolom `pad`. Eén `||` maakte de hele allowlist
+  // waardeloos. Geen fallback meer: matcht het echte pad niet, dan slaan we
+  // niets op.
+  const paginaKey = paginaSjabloon(binnen.pad || "");
   if (!paginaKey) return { klikken: 0, scroll: 0, reden: "pagina-niet-gemeten" };
 
   const sessie = String(binnen.sessie || "").slice(0, 64);
