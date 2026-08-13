@@ -79,6 +79,14 @@ export type ProductCardData = {
   imageAlt: string;
   /** AI-modelfoto (of sfeerbeeld als terugval) — getoond bij hover over de kaart. */
   hoverImageUrl?: string;
+  /**
+   * Staat de MODELFOTO vooraan (en de packshot op hover), of andersom? Dat
+   * verschilt per categorie (kleding leidt met het model, accessoires met de
+   * packshot), en zonder deze vlag kan een A/B-variant niet vragen om "overal
+   * de packshot vooraan" — dan zou hij de twee beelden alleen omdraaien en dus
+   * per categorie iets ánders testen.
+   */
+  leidtMetModel?: boolean;
   minPriceCents: number;
   hasPriceRange: boolean;
   isNew?: boolean;
@@ -309,6 +317,7 @@ async function buildProductCards(
       imageUrl: leadModel ? model : pack,
       imageAlt: leadModel ? `${displayTitle} — op model` : cleanAlt,
       hoverImageUrl: leadModel ? pack : hoverById.get(p.id) || "",
+      leidtMetModel: leadModel,
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,

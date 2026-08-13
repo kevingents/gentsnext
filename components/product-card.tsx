@@ -25,9 +25,10 @@ export function ProductCard({
   /** Ligt dit artikel in (één van) de winkels van deze klant? Stad of "jouw winkel". */
   inMyStore?: string | null;
   /**
-   * A/B: welk beeld vooraan staat. "model" wisselt de hoverfoto (het gedragen
-   * kledingstuk) naar voren; het andere beeld wordt dan de hover. Zonder
-   * hoverbeeld verandert er niets — dan is er niets om te wisselen.
+   * A/B: welk SOORT beeld vooraan hoort te staan. Staat dat er al (kleding
+   * leidt standaard met het model, accessoires met de packshot), dan verandert
+   * er niets; anders wisselen voorgrond en hover van plek. Zonder tweede beeld
+   * gebeurt er sowieso niets — dan is er niets om te wisselen.
    */
   beeld?: "model" | "packshot";
   /** A/B: sale-/nieuw-/laatste-maten-badge op de tegel. */
@@ -41,13 +42,18 @@ export function ProductCard({
 }) {
   const t = useT();
   const contain = packshotContain(product.category || "");
-  // Beeldvolgorde: normaal packshot vóór, gedragen beeld op hover. Een variant
-  // mag dat omdraaien — maar alleen als er écht een tweede beeld is.
-  const wissel = beeld === "model" && Boolean(product.hoverImageUrl);
+  /* Welk beeld vooraan staat verschilt per categorie: kleding leidt met de
+     AI-modelfoto, accessoires met de packshot (zie lib/catalog). Een A/B-variant
+     vraagt om een SOORT beeld, niet om "draai ze om" — anders test dezelfde
+     variant op overhemden iets anders dan op dassen. Klopt de wens al met wat
+     er staat, dan verandert er niets. */
+  const wissel =
+    Boolean(beeld) && Boolean(product.hoverImageUrl) && (beeld === "model") !== Boolean(product.leidtMetModel);
   const voorgrond = wissel ? product.hoverImageUrl : product.imageUrl;
   const achtergrond = wissel ? product.imageUrl : product.hoverImageUrl;
-  // Het gedragen beeld is een sfeerfoto (cover), de packshot kan contain zijn.
-  const voorgrondContain = wissel ? false : contain;
+  // Een gedragen beeld is een sfeerfoto (cover); alleen een packshot kan contain zijn.
+  const voorgrondIsModel = Boolean(product.leidtMetModel) !== wissel;
+  const voorgrondContain = voorgrondIsModel ? false : contain;
   return (
     <Link
       href={`/products/${product.handle}`}
