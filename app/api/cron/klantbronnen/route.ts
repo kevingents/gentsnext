@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   }
   if (!bronnenGeconfigureerd()) {
     return NextResponse.json(
-      { ok: false, error: "STOREGENTS_API_URL + STOREGENTS_PORTAL_SECRET ontbreken — bronnen staan uit." },
+      { ok: false, error: "STOREGENTS_PORTAL_SECRET (of STORE_CORE_TOKEN) ontbreekt op gentsnext — externe bronnen staan uit." },
       { status: 412 },
     );
   }
