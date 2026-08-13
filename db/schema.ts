@@ -1991,6 +1991,18 @@ export const customerProfiles = pgTable(
     geboortemaand: integer("geboortemaand"),
     geslacht: text("geslacht").notNull().default(""),
 
+    /** Wat de klant ZELF opgaf op /account bij Voorkeuren. Stond alleen in
+     *  `customers.preferences` en werd uitsluitend gebruikt voor het vinkje
+     *  "profiel compleet" — terwijl datzelfde scherm belooft dat we de weergave
+     *  erop afstemmen. Nu als velden, zodat er doelgroepen op te bouwen zijn. */
+    leeftijdsgroep: text("leeftijdsgroep").notNull().default(""),
+    favorieteKleuren: jsonb("favoriete_kleuren").notNull().default([]),
+    gelegenheden: jsonb("gelegenheden").notNull().default([]),
+    vasteWinkel: text("vaste_winkel").notNull().default(""),
+    /* profielCompleet staat hierboven al — die wordt door lib/profiel-voorkeuren
+       gevuld en blijft daar. Twee schrijvers op één kolom is vragen om een
+       verschil dat niemand kan verklaren. */
+
     attributie: jsonb("attributie").notNull().default({}),
     berekendOp: timestamp("berekend_op", { withTimezone: true }).notNull().defaultNow(),
   },

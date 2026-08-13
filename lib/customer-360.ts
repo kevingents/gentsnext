@@ -114,6 +114,23 @@ const PROFIEL_COMPLEET = sql`(
   and ${lijstLengte("occasions")} > 0
 )`;
 
+/**
+ * Geboortedatum zoals de klant hem zelf opgaf, gevalideerd.
+ *
+ * Alleen jjjj-mm-dd, niet in de toekomst en niet vóór 1900. De regex staat vóór
+ * de cast in een CASE en niet in een WHERE: een WHERE-filter mag Postgres
+ * verplaatsen, waarna de query klapt op de eerste onzinwaarde. Een typefout zou
+ * anders een felicitatie op de verkeerde dag opleveren, en dat is erger dan
+ * geen felicitatie.
+ */
+const GEBOORTEDATUM = sql`
+  case
+    when c.preferences->>'birthDate' ~ '^\\d{4}-\\d{2}-\\d{2}$'
+     and (c.preferences->>'birthDate')::date <= current_date
+     and (c.preferences->>'birthDate')::date >= '1900-01-01'::date
+    then (c.preferences->>'birthDate')::date
+  end`;
+
 export type HerbouwResultaat = { profielen: number; rfm: number; ms: number };
 
 /**
@@ -330,6 +347,18 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
     ),
     wallet as (select distinct serial_number sn from wallet_apple_registrations),
 
+    /* ── Wat de klant ZELF opgaf ──────────────────────────────────────────
+     * Geboortedatum, leeftijdsgroep, favoriete kleuren, vaste winkel en
+     * gelegenheden staan in customers.preferences en werden tot nu toe alléén
+     * gebruikt voor het vinkje "profiel compleet". Verder ging er niets mee,
+     * terwijl het scherm belooft dat we er de weergave op afstemmen.
+     *
+     * De datum wordt hier gevalideerd, niet later: alleen jjjj-mm-dd, niet in de
+     * toekomst en niet vóór 1900. Een typefout leidt anders tot een felicitatie
+     * op de verkeerde dag, en dat is erger dan geen felicitatie. De regex staat
+     * vóór de cast in een CASE — een WHERE-filter mag Postgres verplaatsen,
+     * waarna de query klapt op de eerste onzinwaarde.
+     */
     /* ── Ordergedrag: hoe koopt deze klant, niet alleen hoeveel ───────────
      * mode() geeft de meest gekozen waarde. Taal, betaalmethode en
      * bezorgvoorkeur zijn geen optelsommen maar voorkeuren — een gemiddelde
@@ -489,7 +518,8 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       zakelijk, cadeaukoper, taal, betaalmethode, bezorgvoorkeur, aankoopmaanden,
       mail_verstuurd, mail_geopend, mail_geklikt, mail_openratio, mail_laatst_geopend,
       orders_bol, besteed_bol_cents, orders_shopify, besteed_shopify_cents, retour_redenen,
-      verjaardag, geboortemaand, geslacht
+      verjaardag, geboortemaand, geslacht,
+      leeftijdsgroep, favoriete_kleuren, gelegenheden, vaste_winkel
     )
     select
       c.id,
@@ -569,11 +599,24 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       coalesce(og.shopify_n, 0), coalesce(og.shopify_bedrag, 0),
       coalesce(rr.lijst, '[]'::jsonb),
 
-      ml.verjaardag,
+      /* De KLANT is de betere bron dan Spotler: hij vult het zelf in op
+         /account en houdt het bij. Spotler is de terugval voor wie het daar wél
+         heeft staan en bij ons niet. Een datum in de toekomst of vóór 1900 is
+         een typefout en gooien we weg — een felicitatie op de verkeerde dag is
+         erger dan geen felicitatie. */
+      coalesce(${GEBOORTEDATUM}, ml.verjaardag),
       -- Apart van de datum: een doelgroep "jarig deze maand" filtert op maand,
       -- niet op jaar, en dat moet indexeerbaar zijn.
-      case when ml.verjaardag is not null then extract(month from ml.verjaardag)::int end,
-      coalesce(ml.geslacht, '')
+      case when coalesce(${GEBOORTEDATUM}, ml.verjaardag) is not null
+           then extract(month from coalesce(${GEBOORTEDATUM}, ml.verjaardag))::int end,
+      coalesce(ml.geslacht, ''),
+
+      coalesce(nullif(trim(c.preferences->>'ageRange'), ''), ''),
+      case when jsonb_typeof(c.preferences->'favoriteColors') = 'array'
+           then c.preferences->'favoriteColors' else '[]'::jsonb end,
+      case when jsonb_typeof(c.preferences->'occasions') = 'array'
+           then c.preferences->'occasions' else '[]'::jsonb end,
+      coalesce(nullif(trim(c.preferences->>'favoriteStore'), ''), '')
     from customers c
     left join web            w   on w.cid   = c.id
     left join winkel_agg     k   on k.cid   = c.id
@@ -647,6 +690,11 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       verjaardag = coalesce(excluded.verjaardag, customer_profiles.verjaardag),
       geboortemaand = coalesce(excluded.geboortemaand, customer_profiles.geboortemaand),
       geslacht = coalesce(nullif(excluded.geslacht, ''), customer_profiles.geslacht),
+      leeftijdsgroep = excluded.leeftijdsgroep,
+      favoriete_kleuren = excluded.favoriete_kleuren,
+      gelegenheden = excluded.gelegenheden,
+      vaste_winkel = excluded.vaste_winkel,
+
       berekend_op = now()
   `);
 

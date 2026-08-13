@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionCustomer } from "@/lib/account";
 import { cronSecretOk } from "@/lib/cron-auth";
-import { syncShopifyOrders, shopifyGeconfigureerd } from "@/lib/shopify-sync";
+import { syncShopifyOrders, syncShopifySrsNummers, shopifyGeconfigureerd } from "@/lib/shopify-sync";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,7 +34,17 @@ export async function GET(req: Request) {
 
   try {
     const r = await syncShopifyOrders({ sindsUren: uren, maxOrders: 1500 });
-    return NextResponse.json({ ok: true, ...r });
+
+    /* Het SRS-klantnummer zit als metaveld op de Shopify-klant en is de brug
+       tussen web en winkel. Ik zocht die eerst via de SRS-SOAP-API; hij ligt
+       gewoon hier, bij 79% van de recente klanten. Alleen recent gewijzigde
+       klanten, want dit is een doorlopende sync — de eerste volledige vulling
+       draai je met ?srsDagen=3650. */
+    const srsDagen = Number(url.searchParams.get("srsDagen")) || 7;
+    const srs = await syncShopifySrsNummers({ sindsDagen: srsDagen, maxKlanten: 3000 }).catch((e) => ({
+      fout: (e as Error).message,
+    }));
+    return NextResponse.json({ ok: true, ...r, srs });
   } catch (e) {
     console.error("[cron/shopify-sync]", e);
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
