@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { adminOrToken } from "@/lib/studio-token";
-import { PIM_CHECKS, PIM_MAX_SCORE, compleetheidScoreSql } from "@/lib/pim";
+import { PIM_CHECKS, PIM_MAX_SCORE, compleetheidScoreSql, miniatuurSql } from "@/lib/pim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,7 +103,7 @@ export async function GET(req: Request) {
                  and ev.created_at > now() - interval '30 days') bekeken
       from (
         select p.handle, p.title, p.status, p.stock_qty, ${score} score,
-               split_part(p.model_image_url, '?', 1) image
+               ${miniatuurSql()} image
         from products p where ${where}
       ) k
       where k.score < 100

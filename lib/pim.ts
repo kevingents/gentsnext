@@ -151,6 +151,27 @@ export function compleetheidChecksSql(): SQL {
   return sql`jsonb_build_object(${sql.join(paren, sql`, `)})`;
 }
 
+/**
+ * De miniatuur van een product, over `products p`.
+ *
+ * Eerst de AI-modelfoto (die leidt ook de galerij op de productpagina), anders de
+ * eerste catalogusfoto. Die terugval is niet optioneel: **949 van de levende
+ * artikelen hebben wél catalogusfoto's maar géén modelfoto**. Zonder terugval
+ * toont de PIM-lijst daar een leeg camera-icoontje — je leest dan "geen foto"
+ * bij een artikel met elf foto's, terwijl de compleetheidsscore in dezelfde rij
+ * zegt dat de foto in orde is. Twee dingen op één regel die elkaar tegenspreken.
+ *
+ * De ?v= gaat eraf: die parameter verandert bij elke Shopify-herverwerking en
+ * hoort niet in een cache-sleutel van de beeldoptimalisatie.
+ */
+export function miniatuurSql(): SQL {
+  return sql`coalesce(
+    nullif(split_part(p.model_image_url, '?', 1), ''),
+    (select split_part(pi.url, '?', 1) from product_images pi where pi.product_id = p.id order by pi.position asc limit 1),
+    ''
+  )`;
+}
+
 /** De checks zonder SQL — voor de portal, die alleen labels en gewichten nodig heeft. */
 export function pimCheckLabels() {
   return PIM_CHECKS.map(({ sleutel, label, gewicht, uitleg }) => ({ sleutel, label, gewicht, uitleg }));
