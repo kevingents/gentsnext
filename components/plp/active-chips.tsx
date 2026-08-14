@@ -33,8 +33,12 @@ import { StoreChooser } from "@/components/stores/store-chooser";
  * persoonlijk filter met twee standen. Twee vormen voor één ding leest als twee
  * verschillende dingen — dus staan de winkels hier nu ook als pil, in dezelfde
  * volgorde als je ze koos, met de telling erbij zodat je ziet wat het oplevert.
- * De KIEZER ("Winkels wijzigen") staat als tekstknopje achter de pillen: dat is
- * een instelling, geen filter, en verdient dus geen pil.
+ * De KIEZER staat achter de pillen: als tekstknopje ("Winkels wijzigen") zodra
+ * er winkels zijn, en als pil ("Kies je winkel(s)") zolang die er niet zijn. Die
+ * uitnodiging stond nog als kadertje in de filterkolom, en daarmee stond
+ * winkelvoorraad er voor een nieuwe bezoeker nog steeds links (Kevin, 13 aug).
+ * Alles wat met winkels te maken heeft hoort in deze rij; de filterkolom is voor
+ * de gewone facetten.
  */
 export function PlpActiveChips({
   selection,
@@ -76,8 +80,11 @@ export function PlpActiveChips({
     .map((s) => ({ ...s, aan: selection.stores.includes(s.pageHandle) }))
     .filter((s) => s.aan || (s.count ?? 0) > 0);
   const erIsEenWinkelAan = winkels.some((s) => s.aan);
+  /* Zonder gekozen winkel valt er niets aan te bieden — dan is de kiezer zélf de
+     pil, want anders verdwijnt "kijk of het in je winkel ligt" van de lijst. */
+  const kiezerAlsPil = storeOptions.length === 0;
 
-  if (!maatAan && !maatAanbod && !winkels.length) return null;
+  if (!maatAan && !maatAanbod && !winkels.length && !kiezerAlsPil) return null;
 
   return (
     /* flex-wrap, geen horizontale scroll: bij scrollen verdwijnt juist uit beeld
@@ -129,9 +136,10 @@ export function PlpActiveChips({
         ),
       )}
 
-      {/* Kiezen is geen filter: een tekstknopje, geen pil. Staat achteraan zodat
-          de pillen (wat je nú ziet) vooraan blijven. */}
-      {storeOptions.length ? <StoreChooser myStores={myStoreTitles} variant="link" bron="plp" /> : null}
+      {/* Achteraan, zodat de pillen (wat je nú ziet) vooraan blijven. Heb je al
+          winkels, dan is wijzigen een instelling → tekstknopje. Heb je er nog
+          geen, dan is dit het enige winkel-aanbod op de pagina → pil. */}
+      <StoreChooser myStores={myStoreTitles} variant={kiezerAlsPil ? "pill" : "link"} bron="plp" />
 
       {/* Eerlijk over de bron zodra er op voorraad gefilterd wordt: de
           winkeltelling loopt achter op wat er nú in het rek hangt. `basis-full`
