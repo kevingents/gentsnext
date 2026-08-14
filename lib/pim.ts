@@ -269,10 +269,25 @@ export async function pimFacetten(f: PimLijstFilters): Promise<PimFacet[]> {
   const uit = await Promise.all(
     PIM_FACETTEN.map(async (facet) => {
       const where = pimWhereSql({ ...f, [facet.sleutel]: undefined });
+      /**
+       * Groeperen in een subquery, sorteren op het resultaat.
+       *
+       * Dit stond eerst als één query met de coalesce-expressie twee keer: in de
+       * SELECT en in de ORDER BY (om "(leeg)" onderaan te krijgen). Met LITERALEN
+       * werkt dat — postgres ziet dan dat het dezelfde expressie is en accepteert
+       * 'm naast `group by 1`. Maar drizzle stuurt de attribuutnaam als PARAMETER,
+       * dus werden het `$1` en `$3`: twee expressies die postgres niet aan elkaar
+       * kan knopen, en dan volgt "column p.attributes must appear in the GROUP BY
+       * clause". Precies de fout die je niet ziet als je de SQL met de hand met
+       * ingevulde waarden test — dan werkt hij.
+       */
       const rows = await db.execute<{ waarde: string; n: string }>(sql`
-        select coalesce(nullif(p.attributes ->> ${facet.attribuut}, ''), ${LEEG}) waarde, count(*)::int n
-        from products p where ${where}
-        group by 1 order by (coalesce(nullif(p.attributes ->> ${facet.attribuut}, ''), ${LEEG}) = ${LEEG}), 1`);
+        select waarde, n from (
+          select coalesce(nullif(p.attributes ->> ${facet.attribuut}, ''), ${LEEG}) waarde, count(*)::int n
+          from products p where ${where}
+          group by 1
+        ) t
+        order by (t.waarde = ${LEEG}), t.waarde`);
       return {
         sleutel: facet.sleutel as string,
         label: facet.label as string,
