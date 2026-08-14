@@ -15,6 +15,7 @@
     "migrate:possales": "tsx scripts/migrate-pos-sales-to-neon.ts",
     "seed:redirects": "tsx scripts/seed-redirects.ts",
     "koppel:srs": "tsx scripts/koppel-srs.ts",
+    "media:sync": "tsx scripts/media-sync.ts",
     "import:cache": "tsx scripts/import-from-cache.ts",
     "import:shopify": "tsx scripts/import-shopify-bulk.ts",
     "cache:publish": "tsx scripts/publish-cache.ts",
