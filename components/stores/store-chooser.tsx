@@ -37,8 +37,10 @@ export function StoreChooser({
   myStores?: string[];
   /** "row" = uitnodigende regel op de PDP, "link" = kaal tekstknopje,
    *  "card" = gestapeld, voor een smalle kolom zoals de PLP-filters. Daar is
-   *  naast de tekst geen 200px over en brak "Kies je winkel(s)" middenin. */
-  variant?: "row" | "link" | "card";
+   *  naast de tekst geen 200px over en brak "Kies je winkel(s)" middenin.
+   *  "pill" = zelfde vorm als de filter-pillen boven de resultaten: daar staat
+   *  de winkelvoorraad, dus daar hoort ook de uitnodiging om er een te kiezen. */
+  variant?: "row" | "link" | "card" | "pill";
   /** Waar stond de kiezer? (pdp/plp/winkels) — voor de meting. */
   bron?: string;
 }) {
@@ -128,6 +130,19 @@ export function StoreChooser({
         <span className="mt-1.5 block font-sans text-xs text-ink underline underline-offset-4">
           {gekozen.length ? t("myStore.change") : t("myStore.chooseCta")}
         </span>
+      </button>
+    ) : variant === "pill" ? (
+      /* Zelfde maat en vorm als de aanbod-chip in PlpActiveChips (omlijnd, rond,
+         min-h-9): het is ook precies dat — een filter dat je aan kunt zetten,
+         alleen moet je eerst zeggen wélke winkel. De ster verwijst naar de
+         "mijn winkels"-taal die de PDP en het account al gebruiken. */
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-sans text-sm text-ink transition-colors hover:border-ink"
+      >
+        <StarIcon filled={gekozen.length > 0} className="h-3.5 w-3.5 shrink-0" />
+        {gekozen.length ? t("myStore.change") : t("myStore.choose")}
       </button>
     ) : variant === "link" ? (
       <button

@@ -162,7 +162,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             onderaan buiten beeld hangen: je kon er pas bij nadat je langs álle
             producten had gescrold. */}
         <aside className={bovenFilters ? "" : "lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"}>
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} positie={plpAb.filterPositie} storeOptions={filterProps.storeOptions} />
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} positie={plpAb.filterPositie} />
         </aside>
 
         <div>
