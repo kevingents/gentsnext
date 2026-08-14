@@ -85,8 +85,18 @@ async function loadProduct(handle: string): Promise<ProdRow | null> {
   return rows.rows[0] || null;
 }
 
-/** Genereer één sfeerbeeld-slot (1|2|3) opnieuw, met de geleerde stijl-regels. */
-export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+/**
+ * Genereer één sfeerbeeld-slot (1|2|3) opnieuw, met de geleerde stijl-regels.
+ *
+ * `opties` laat je thema en camerastijl expliciet kiezen. Zonder keuze blijft het
+ * oude gedrag: thema volgt de hoofdgroep, camerastijl is willekeurig. Dat is wat
+ * de cron en de scripts doen — die moeten juist géén mening hebben.
+ */
+export async function regenerateLifestyleSlot(
+  handle: string,
+  slot: 1 | 2 | 3,
+  opties: { themaId?: string; camerastijlId?: string } = {},
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const key = process.env.FASHN_API_KEY || "";
   const token = blobToken();
   if (!key) return { ok: false, error: "FASHN_API_KEY ontbreekt." };
@@ -101,12 +111,33 @@ export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): 
   // De kleding-uitzonderingen (rok/jacquet = white-tie, smoking = black-tie) zitten
   // in buildPrompt, zodat script en cron dezelfde blinde vlek niet meer hebben.
   const store = await getMediaThemes();
-  const theme = themeForProduct(store, { hoofdgroep: r.hg, handle: r.handle, title: r.title });
-  if (!theme) return { ok: false, error: `Geen actief beeldthema voor hoofdgroep "${r.hg || "?"}".` };
+
+  /* Een expliciet gekozen thema wint van de hoofdgroep-regel. Bewust ZONDER de
+     enabled-check: een thema dat je met de hand aanwijst wil je ook kunnen
+     gebruiken als het niet in de automatische rotatie zit — anders moet je het
+     eerst aanzetten voor de hele catalogus om één beeld te maken. */
+  const theme = opties.themaId
+    ? store.themes.find((t) => t.id === opties.themaId)
+    : themeForProduct(store, { hoofdgroep: r.hg, handle: r.handle, title: r.title });
+  if (!theme) {
+    return {
+      ok: false,
+      error: opties.themaId
+        ? `Onbekend beeldthema: "${opties.themaId}".`
+        : `Geen actief beeldthema voor hoofdgroep "${r.hg || "?"}".`,
+    };
+  }
+
   const stijlen = store.cameraStyles.filter((s) => s.enabled);
-  if (!stijlen.length) return { ok: false, error: "Geen actieve camerastijl — zet er één aan bij Beeldthema's." };
-  // Willekeurige camerastijl: "opnieuw proberen" moet iets ánders opleveren.
-  const camera = stijlen[Math.floor(Math.random() * stijlen.length)];
+  let camera;
+  if (opties.camerastijlId) {
+    camera = store.cameraStyles.find((s) => s.id === opties.camerastijlId);
+    if (!camera) return { ok: false, error: `Onbekende camerastijl: "${opties.camerastijlId}".` };
+  } else {
+    if (!stijlen.length) return { ok: false, error: "Geen actieve camerastijl — zet er één aan bij Beeldthema's." };
+    // Willekeurige camerastijl: "opnieuw proberen" moet iets ánders opleveren.
+    camera = stijlen[Math.floor(Math.random() * stijlen.length)];
+  }
 
   const basis = buildPrompt(
     { hoofdgroep: r.hg, color: r.vcl ?? "", title: r.title, handle: r.handle },

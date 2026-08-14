@@ -4,6 +4,7 @@ import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { modelStylePrompt, garmentSentence, frameFor } from "@/lib/model-styling";
 import { getModelLearnings, modelPromptBlocks } from "@/lib/model-learnings";
+import { modelRefById } from "@/lib/brand-models";
 
 /**
  * Eén modelfoto (her)genereren via FASHN product-to-model, MÉT de geleerde
@@ -51,7 +52,20 @@ async function runProductToModel(productImage: string, prompt: string, apiKey: s
   return null;
 }
 
-export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolean; url?: string; error?: string }> {
+/**
+ * Wie er op de foto staat.
+ *  - "zelfde"  (standaard) — de man van de huidige foto vasthouden, mits er geen
+ *               correctie openstaat. Dit was het enige gedrag.
+ *  - "fashn"   — geen face_reference; FASHN verzint een gezicht. Kost 3 credits
+ *               minder, maar je krijgt elke keer iemand anders.
+ *  - een id uit BRAND_MODELS ("a".."e") — dít merkmodel.
+ */
+export type ModelKeuze = "zelfde" | "fashn" | string;
+
+export async function regenerateModelPhoto(
+  handle: string,
+  opties: { model?: ModelKeuze } = {},
+): Promise<{ ok: boolean; url?: string; error?: string }> {
   const apiKey = process.env.FASHN_API_KEY;
   const token = process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
   if (!apiKey) return { ok: false, error: "FASHN_API_KEY ontbreekt." };
@@ -84,12 +98,26 @@ export async function regenerateModelPhoto(handle: string): Promise<{ ok: boolea
   const pose = POSES[frameFor(p.hg)];
   const prompt = `${learn.lead}${kledingZin}${learn.garment} ${pose} ${STUDIO}${learn.model}${learn.fix}`;
 
-  // face_reference houdt dezelfde man vast — prettig als je niets aan te merken
-  // hebt en gewoon een andere take wilt. Maar het referentiebeeld is de foto die
-  // NET is afgekeurd, en die als "hier moet het op lijken" meegeven werkt tegen
-  // elke correctie in. Dus alleen vasthouden als er niets openstaat.
-  const zelfdeMan = !learn.fixTopics.garment && !learn.fixTopics.model ? p.huidig || "" : "";
-  const out = await runProductToModel(p.img, prompt, apiKey, zelfdeMan);
+  /* Welk gezicht als face_reference meegaat.
+     - Kiest de gebruiker expliciet een merkmodel, dan is dát het antwoord: hij
+       heeft gezien wat er staat en wil dít gezicht. Dan geldt het voorbehoud
+       hieronder niet, want de referentie is niet meer de afgekeurde foto.
+     - "fashn" = geen referentie, FASHN verzint iemand.
+     - "zelfde" (standaard) houdt de man van de huidige foto vast — prettig als
+       je niets aan te merken hebt en gewoon een andere take wilt. Maar dan is het
+       referentiebeeld de foto die NET is afgekeurd, en die als "hier moet het op
+       lijken" meegeven werkt tegen elke correctie in. Dus alleen vasthouden als
+       er niets openstaat. */
+  const keuze = String(opties.model || "zelfde");
+  let faceRef: string;
+  if (keuze === "fashn") faceRef = "";
+  else if (keuze !== "zelfde") {
+    faceRef = modelRefById(keuze);
+    if (!faceRef) return { ok: false, error: `Onbekend model: "${keuze}".` };
+  } else {
+    faceRef = !learn.fixTopics.garment && !learn.fixTopics.model ? p.huidig || "" : "";
+  }
+  const out = await runProductToModel(p.img, prompt, apiKey, faceRef);
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
   try {
     const buf = Buffer.from(await (await fetch(out)).arrayBuffer());
