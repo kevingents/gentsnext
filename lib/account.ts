@@ -13,6 +13,7 @@ import {
   orders,
   orderLines,
   newsletterSubscribers,
+  maatadviesLog,
   returns,
   returnLines,
 } from "@/db/schema";
@@ -678,4 +679,9 @@ export async function deleteAccount(customerId: string, email: string): Promise<
   await db.delete(customerAddresses).where(eq(customerAddresses.customerId, customerId));
   await db.delete(customerSessions).where(eq(customerSessions.customerId, customerId));
   if (email) await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.email, email.trim().toLowerCase()));
+  /* Maatadviezen ontkoppelen in plaats van verwijderen: lengte en gewicht zijn
+     persoonsgegevens zolang ze aan iemand hangen, maar de meting "hoe vaak klopt
+     ons advies" heeft die persoon niet nodig. Zonder klant_id is de rij niet
+     meer herleidbaar en blijft de kwaliteitsmeting overeind. */
+  await db.update(maatadviesLog).set({ klantId: null }).where(eq(maatadviesLog.klantId, customerId));
 }

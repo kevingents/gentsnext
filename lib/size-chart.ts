@@ -149,8 +149,24 @@ export const CHART_CATEGORIES = [
   "Truien",
 ] as const;
 
-export function rowsForCategory(category: ChartCategory): ChartRow[] {
-  return SIZE_CHART.filter((r) => r.category === category);
+/**
+ * Een complete maattabel: de categorierijen plus de boordmaten, met het
+ * versienummer erbij (0 = de ingebakken tabel hieronder).
+ *
+ * Sinds de tabel geüpload kan worden (drizzle/0059) is deze module niet meer de
+ * enige bron, maar wél de FALLBACK: elke functie hier neemt de tabel als laatste
+ * argument en valt terug op de ingebakken waarden. Zo blijft dit een pure module
+ * zonder server-imports — de PDP-maattabel en het maatadvies draaien in de
+ * browser en kunnen hier niet naar de database reiken.
+ */
+export type SizeChart = { rows: ChartRow[]; boord: BoordRow[]; versie: number };
+
+export function builtInChart(): SizeChart {
+  return { rows: SIZE_CHART, boord: BOORD_CHART, versie: 0 };
+}
+
+export function rowsForCategory(category: ChartCategory, chart?: SizeChart): ChartRow[] {
+  return (chart?.rows ?? SIZE_CHART).filter((r) => r.category === category);
 }
 
 /** Welke lichaamsmaat is leidend voor het matchen binnen een categorie. */
@@ -181,19 +197,19 @@ function pickByRange(
 }
 
 /** GENTS-maat voor een borstomvang (cm) binnen een chest-categorie (colbert/pak/polo/trui/overhemd). */
-export function sizeByChest(category: ChartCategory, chestCm: number): MatchResult | null {
-  return pickByRange(rowsForCategory(category), chestCm, (r) => r.chestMin, (r) => r.chestMax);
+export function sizeByChest(category: ChartCategory, chestCm: number, chart?: SizeChart): MatchResult | null {
+  return pickByRange(rowsForCategory(category, chart), chestCm, (r) => r.chestMin, (r) => r.chestMax);
 }
 
 /** GENTS-maat voor een tailleomvang (cm) binnen een pantalon-categorie. */
-export function sizeByWaist(category: ChartCategory, waistCm: number): MatchResult | null {
-  return pickByRange(rowsForCategory(category), waistCm, (r) => r.waistMin, (r) => r.waistMax);
+export function sizeByWaist(category: ChartCategory, waistCm: number, chart?: SizeChart): MatchResult | null {
+  return pickByRange(rowsForCategory(category, chart), waistCm, (r) => r.waistMin, (r) => r.waistMax);
 }
 
 /** Overhemd-boordmaat (confectie + boord-cm) voor een borstomvang (cm). */
-export function boordByChest(chestCm: number): BoordRow | null {
+export function boordByChest(chestCm: number, chart?: SizeChart): BoordRow | null {
   let best: { row: BoordRow; dist: number } | null = null;
-  for (const r of BOORD_CHART) {
+  for (const r of chart?.boord ?? BOORD_CHART) {
     const dist = chestCm < r.chestMin ? r.chestMin - chestCm : chestCm > r.chestMax ? chestCm - r.chestMax : 0;
     if (!best || dist < best.dist) best = { row: r, dist };
   }
@@ -201,9 +217,9 @@ export function boordByChest(chestCm: number): BoordRow | null {
 }
 
 /** Overhemd-confectie voor een gemeten halsomvang/boordmaat (cm). */
-export function boordByCollar(collarCm: number): BoordRow | null {
+export function boordByCollar(collarCm: number, chart?: SizeChart): BoordRow | null {
   let best: { row: BoordRow; dist: number } | null = null;
-  for (const r of BOORD_CHART) {
+  for (const r of chart?.boord ?? BOORD_CHART) {
     const [lo, hi] = r.boordCm.split("-").map(Number);
     const dist = collarCm < lo ? lo - collarCm : collarCm > hi ? collarCm - hi : 0;
     if (!best || dist < best.dist) best = { row: r, dist };

@@ -7,10 +7,10 @@ import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import {
   rowsForCategory,
   cmText,
-  BOORD_CHART,
   type ChartCategory,
 } from "@/lib/size-chart";
 import { hubSlugForHoofdgroep } from "@/lib/size-chart-hub";
+import { useSizeChart } from "@/components/maatadvies/size-chart-provider";
 import { useT } from "@/components/i18n/locale-provider";
 
 /** Catalogus-hoofdgroep → tabel: een chest/waist-categorie of de boord-tabel. */
@@ -83,7 +83,8 @@ function Td({ children }: { children: React.ReactNode }) {
 }
 
 function CategoryTable({ category }: { category: ChartCategory }) {
-  const rows = rowsForCategory(category);
+  // De geüploade maattabel (Site → Maten), met de tabel in code als fallback.
+  const rows = rowsForCategory(category, useSizeChart());
   const hasChest = rows.some((r) => r.chestMin != null);
   const hasWaist = rows.some((r) => r.waistMin != null);
   const hasInner = rows.some((r) => r.innerLegMin != null);
@@ -112,6 +113,7 @@ function CategoryTable({ category }: { category: ChartCategory }) {
 }
 
 function BoordTable() {
+  const boord = useSizeChart().boord;
   return (
     <>
       <table className="w-full border-collapse">
@@ -124,7 +126,7 @@ function BoordTable() {
           </tr>
         </thead>
         <tbody>
-          {BOORD_CHART.map((r) => (
+          {boord.map((r) => (
             <tr key={r.confectie}>
               <Td>{r.confectie}</Td>
               <Td>{r.boordCm} cm</Td>
