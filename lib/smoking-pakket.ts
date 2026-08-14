@@ -6,6 +6,7 @@ import { sortSizes } from "@/lib/sizing";
 import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { pickupInfoByCity } from "@/lib/stores";
 import { SMOKING_ROLES, SMOKING_ROLE_LABEL, type SmokingRole } from "@/lib/smoking-korting";
+import { getBundelDoc, bundelCompleet } from "@/lib/smoking-bundles";
 
 /**
  * "Smoking compleet" — de klant stelt zelf jas, pantalon, overhemd en strik
@@ -268,8 +269,38 @@ function heeftVoorraad(optie: SmokingOptie): boolean {
 }
 
 /** Volledig smoking-pakket (config + producten + maten + voorraad) voor de samensteller. */
+/**
+ * Bron van waarheid: het bundel-beheer in /site. Staat daar nog niets, dan valt
+ * hij terug op de portal-config, zodat de pagina blijft werken tot iemand de
+ * bundels een keer in /site opslaat. Vanaf dat moment wint /site.
+ */
+export async function getSmokingSamenstelling(): Promise<SmokingConfig> {
+  const doc = await getBundelDoc().catch(() => null);
+  if (doc?.bundels?.length) {
+    const bruikbaar = doc.bundels.filter(bundelCompleet);
+    if (bruikbaar.length) {
+      return {
+        enabled: true,
+        heading: doc.heading || "Stel je smoking samen",
+        intro: doc.intro,
+        knoptekst: doc.knoptekst,
+        extras: doc.extras,
+        niveaus: bruikbaar.map((b) => ({
+          id: b.id,
+          naam: b.naam,
+          subtitel: b.subtitel,
+          badge: b.badge,
+          prijs: b.prijs,
+          rollen: b.rollen.map((r) => ({ rol: r.rol, label: SMOKING_ROLE_LABEL[r.rol], handles: r.handles })),
+        })),
+      };
+    }
+  }
+  return getSmokingConfig();
+}
+
 export async function getSmokingPakket(): Promise<SmokingPakket | null> {
-  const config = await getSmokingConfig();
+  const config = await getSmokingSamenstelling();
   if (!config.enabled || !config.niveaus.length) return null;
 
   const alleHandles = [
