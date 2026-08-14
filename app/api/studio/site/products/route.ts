@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { adminOrToken } from "@/lib/studio-token";
 import { getDb } from "@/db";
-import { compleetheidScoreSql, pimWhereSql, pimFacetten, pimCheckLabels, PIM_VELDEN } from "@/lib/pim";
+import { compleetheidScoreSql, pimWhereSql, pimFacetten, pimCheckLabels, miniatuurSql, PIM_VELDEN } from "@/lib/pim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
              coalesce(p.attributes ->> 'subgroep', '') subgroep,
              coalesce(p.attributes ->> 'jaar', '') jaar,
              coalesce(p.attributes ->> 'seizoen', '') seizoen,
-             split_part(p.model_image_url,'?',1) image,
+             ${miniatuurSql()} image,
              to_char(p.created_at,'YYYY-MM-DD') created_at,
              ${score} score,
              coalesce(p.handmatige_velden, '[]'::jsonb) handmatig,
