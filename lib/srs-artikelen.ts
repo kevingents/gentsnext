@@ -42,7 +42,7 @@
 
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { leesArtikelen, meestVoorkomend } from "@/lib/srs-artikelen-regels";
+import { leesArtikelen, meestVoorkomend, normaliseerArtikelNummer } from "@/lib/srs-artikelen-regels";
 
 /* ══════════════════════════════════════════════════════════════════════════
    1. De si_webshop-client
@@ -100,7 +100,16 @@ export async function haalSrsArtikelen(
   if (!user || !password) {
     return { ok: false, error: "SRS_API_USER en/of SRS_API_PASSWORD ontbreken (si_webshop)." };
   }
-  const base = (process.env.SRS_WEBSERVICES_BASE_URL || process.env.SRS_BASE_URL || DEFAULT_BASE).replace(/\/$/, "");
+  /* SRS_API_BASE_URL staat eerst: zo heet de variabele in de Vercel-omgeving.
+     De andere twee namen komen uit oudere storegents-code en blijven staan als
+     wisselgeld — een koppeling die stilvalt omdat de variabele net anders heet
+     is een uur zoeken naar niets. */
+  const base = (
+    process.env.SRS_API_BASE_URL ||
+    process.env.SRS_WEBSERVICES_BASE_URL ||
+    process.env.SRS_BASE_URL ||
+    DEFAULT_BASE
+  ).replace(/\/$/, "");
   const url = `${base}${PRODUCT_INFO_PATH}?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}${delta ? "&delta=true" : ""}`;
 
   const controller = new AbortController();
@@ -159,27 +168,42 @@ export async function koppelUitAttributen(droogdraaien = false): Promise<KoppelR
       where coalesce(attributes ->> 'artikel_nummer', '') <> '' and status <> 'archived'`)
   ).rows;
 
+  /* Normaliseren naar de SRS-vorm (8 cijfers met voorloopnullen). Onze
+     brondata heeft ze kaal; sla je dát op, dan matcht een latere vergelijking
+     met SRS op niets. */
   const perNummer = new Map<string, { id: string; handle: string; huidig: string }[]>();
   for (const r of rijen) {
-    const lijst = perNummer.get(r.nr) ?? [];
+    const nr = normaliseerArtikelNummer(r.nr);
+    const lijst = perNummer.get(nr) ?? [];
     lijst.push({ id: r.id, handle: r.handle, huidig: r.huidig });
-    perNummer.set(r.nr, lijst);
+    perNummer.set(nr, lijst);
   }
 
   const botsingen: KoppelResultaat["botsingen"] = [];
   const teZetten: { id: string; nr: string }[] = [];
+  /* Bij een botsing weten we níet welk van de twee producten dit SRS-artikel is.
+     Staat er dan toch nog een nummer (bijvoorbeeld uit een eerdere run, of in de
+     oude ongepadde vorm), dan halen we het weg. De invariant blijft zo simpel:
+     srs_artikel_nummer is leeg óf de canonieke SRS-vorm, en nooit dubbelzinnig.
+     Een half-waar nummer laten staan betekent dat een latere koppeling stil het
+     verkeerde product pakt. */
+  const teWissen: string[] = [];
   let ongewijzigd = 0;
 
   for (const [nr, lijst] of perNummer) {
     if (lijst.length > 1) {
       botsingen.push({ artikelNummer: nr, handles: lijst.map((x) => x.handle) });
+      for (const p of lijst) if (p.huidig) teWissen.push(p.id);
       continue;
     }
     if (lijst[0].huidig === nr) ongewijzigd += 1;
     else teZetten.push({ id: lijst[0].id, nr });
   }
 
-  if (!droogdraaien) await schrijfNummers(teZetten);
+  if (!droogdraaien) {
+    await schrijfNummers(teZetten);
+    await wisNummers(teWissen);
+  }
 
   return { bekeken: rijen.length, gekoppeld: teZetten.length, ongewijzigd, zonderMatch: 0, botsingen, bron: "attributen" };
 }
@@ -204,7 +228,11 @@ export async function koppelUitSrs(
      niet voorkomt is precies hoe je het een keer meemaakt.) */
   const opBarcode = new Map<string, { nr: string; kleur: string }>();
   for (const r of feed.rijen) {
-    if (r.barcode && r.artikelNummer) opBarcode.set(r.barcode, { nr: r.artikelNummer, kleur: r.kleurId });
+    /* SRS levert 'm al gepad; normaliseren houdt beide wegen gelijk als dat
+       ooit verandert. */
+    if (r.barcode && r.artikelNummer) {
+      opBarcode.set(r.barcode, { nr: normaliseerArtikelNummer(r.artikelNummer), kleur: r.kleurId });
+    }
   }
 
   const db = getDb();
@@ -261,6 +289,18 @@ async function schrijfNummers(rijen: { id: string; nr: string; kleur?: string }[
         updated_at = now()
       from (values ${sql.join(waarden, sql`, `)}) as b(id, nr, kleur)
       where p.id = b.id`);
+  }
+}
+
+/** Haalt het artikelnummer weg bij producten waar het dubbelzinnig is. */
+async function wisNummers(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const db = getDb();
+  for (let i = 0; i < ids.length; i += 500) {
+    const blok = ids.slice(i, i + 500).map((id) => sql`${id}::uuid`);
+    await db.execute(sql`
+      update products set srs_artikel_nummer = '', srs_kleur_id = '', updated_at = now()
+      where id in (${sql.join(blok, sql`, `)})`);
   }
 }
 

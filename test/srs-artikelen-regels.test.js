@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCsv, leesArtikelen, centen, meestVoorkomend } from "../lib/srs-artikelen-regels.js";
+import { parseCsv, leesArtikelen, centen, meestVoorkomend, normaliseerArtikelNummer } from "../lib/srs-artikelen-regels.js";
 
 /* Het SRS-productenbestand is CSV met vrije tekst erin. Eén komma in "Colbert,
    blauw" schuift bij een naïeve parser élke volgende kolom op — en dan koppel je
@@ -78,6 +78,24 @@ test("meestVoorkomend is stabiel bij gelijkspel en leeg bij niets", () => {
   assert.deepEqual(a, b, "dezelfde invoer moet hetzelfde antwoord geven");
   assert.equal(meestVoorkomend([]), null);
   assert.equal(meestVoorkomend(null), null);
+});
+
+test("het artikelnummer krijgt de SRS-vorm: acht cijfers met voorloopnullen", () => {
+  /* Gemeten op de echte feed: alle 2.286 nummers staan zo. Onze brondata heeft
+     ze kaal, en van 131 gecontroleerde koppelingen kwam er letterlijk géén
+     overeen — allemaal pas ná normaliseren. */
+  assert.equal(normaliseerArtikelNummer("3556"), "00003556");
+  assert.equal(normaliseerArtikelNummer("00003556"), "00003556", "al gepad blijft gelijk");
+  assert.equal(normaliseerArtikelNummer(" 2002 "), "00002002");
+  assert.equal(normaliseerArtikelNummer("123456789"), "123456789", "langer dan 8 niet afkappen");
+});
+
+test("een artikelnummer met een letter wordt NIET gepad", () => {
+  /* Nullen voor een code als 'HB198-2' plakken maakt er een ander nummer van. */
+  assert.equal(normaliseerArtikelNummer("HB198-2"), "HB198-2");
+  assert.equal(normaliseerArtikelNummer("COL-SW091"), "COL-SW091");
+  assert.equal(normaliseerArtikelNummer(""), "");
+  assert.equal(normaliseerArtikelNummer(null), "");
 });
 
 test("een ontbrekende kolom maakt het veld leeg in plaats van undefined", () => {
