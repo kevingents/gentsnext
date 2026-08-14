@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -45,7 +44,7 @@ type Resultaat = {
   resterendVandaag: number;
 };
 
-export function SmokingLook({ smokingNaam }: { smokingNaam?: string }) {
+export function SmokingLook({ smokingNaam, kledingUrl }: { smokingNaam?: string; kledingUrl?: string }) {
   const [config, setConfig] = useState<Config | null>(null);
   const [look, setLook] = useState<string>("");
   const [foto, setFoto] = useState<string | null>(null);
@@ -93,7 +92,9 @@ export function SmokingLook({ smokingNaam }: { smokingNaam?: string }) {
       const res = await fetch(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ look, foto, akkoord: true }),
+        /* De foto van de gekozen jas gaat mee: FASHN trekt DAT kledingstuk aan,
+           zodat de klant zichzelf in ons artikel ziet en niet in een verzinsel. */
+        body: JSON.stringify({ look, foto, akkoord: true, kledingUrl }),
       });
       const d = await res.json();
       if (!res.ok || !d.success) throw new Error(d.message || "Het maken van de look lukte niet.");
@@ -115,37 +116,15 @@ export function SmokingLook({ smokingNaam }: { smokingNaam?: string }) {
           <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">{config.heading}</h2>
           <p className="mt-3 max-w-md font-sans text-sm leading-relaxed text-canvas/70">
             {config.intro}
-            {smokingNaam ? ` Je ziet jezelf in de ${smokingNaam.toLowerCase()} die je hierboven koos.` : ""}
+            {smokingNaam ? ` Je ziet jezelf in de ${smokingNaam} die je hierboven koos — het echte artikel.` : ""}
           </p>
 
           {!resultaat && (
             <>
-              <p className="mt-8 font-sans text-xs font-semibold uppercase tracking-wider text-canvas/50">
-                Kies je moment
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {config.looks.map((l) => (
-                  <button
-                    key={l.id}
-                    type="button"
-                    onClick={() => setLook(l.id)}
-                    aria-pressed={l.id === look}
-                    title={l.omschrijving}
-                    className={`rounded-full border px-4 py-2 font-sans text-sm transition ${
-                      l.id === look
-                        ? "border-canvas bg-canvas text-ink"
-                        : "border-canvas/25 text-canvas/80 hover:border-canvas/60"
-                    }`}
-                  >
-                    {l.label}
-                  </button>
-                ))}
-              </div>
-
               <button
                 type="button"
                 onClick={() => bestandRef.current?.click()}
-                className="mt-6 flex w-full max-w-md items-center gap-4 rounded-lg border border-dashed border-canvas/30 p-4 text-left transition hover:border-canvas/60"
+                className="mt-8 flex w-full max-w-md items-center gap-4 rounded-lg border border-dashed border-canvas/30 p-4 text-left transition hover:border-canvas/60"
               >
                 {foto ? (
                   // eslint-disable-next-line @next/next/no-img-element
