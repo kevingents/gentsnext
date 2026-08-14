@@ -17,7 +17,7 @@ import { shippingCentsFor, DEFAULT_COUNTRY, isKnownCountry } from "@/lib/shippin
 import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
 import { smokingPakketKorting, niveauUitGroupId } from "@/lib/smoking-korting";
-import { getSmokingConfig } from "@/lib/smoking-pakket";
+import { getSmokingSamenstelling } from "@/lib/smoking-pakket";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
 import { availableInStore } from "@/lib/store-core";
@@ -346,7 +346,11 @@ export async function createOrder(
   // vervalt de korting vanzelf. De prijzen komen uit het beheer, nooit uit de
   // client — net als alle andere bedragen hier.
   if (lines.some((l) => niveauUitGroupId(l.groupId))) {
-    const smokingNiveaus = (await getSmokingConfig()).niveaus;
+    /* Zelfde bron als de samensteller (/site, met de portal als terugval).
+       Zou de kassa een andere bron lezen, dan toont de pagina de nieuwe prijs
+       terwijl de klant de oude betaalt -- of erger: het niveau bestaat daar
+       niet en de korting valt stil weg. */
+    const smokingNiveaus = (await getSmokingSamenstelling()).niveaus;
     const pakketPrijs = new Map(smokingNiveaus.map((n) => [n.id, Math.round(Number(n.prijs) * 100)]));
     const smokingKorting = smokingPakketKorting(
       lines.map((l) => ({
