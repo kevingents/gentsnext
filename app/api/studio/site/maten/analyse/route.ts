@@ -15,6 +15,9 @@ export const runtime = "nodejs";
  *
  * ?hoofdgroep — één categorie eruit.
  * ?minimum — onder dit aantal verkocht laten we een maat weg (standaard 5).
+ * ?deel=maten|advies — alleen die helft berekenen. De verkoopkant is een
+ *   aggregatie over alle orderregels van een half jaar; die hoeft niet mee te
+ *   draaien als je alleen het advieskwaliteit-scherm opent.
  *
  * Auth: gentsnext-admin OF STUDIO_API_TOKEN.
  */
@@ -27,6 +30,9 @@ export async function GET(req: Request) {
     const { from, to } = rangeFromQuery(url, 180);
     const hoofdgroep = (url.searchParams.get("hoofdgroep") || "").trim();
     const minimum = Number(url.searchParams.get("minimum") || 5);
+    const deel = (url.searchParams.get("deel") || "").trim();
+    const wilMaten = deel !== "advies";
+    const wilAdvies = deel !== "maten";
 
     // De retourtermijn staat in de tool (Instellingen → Retouren); die bepaalt
     // vanaf wanneer een periode "af" is en dus eerlijk te vergelijken.
@@ -39,14 +45,16 @@ export async function GET(req: Request) {
        niet op de database staat bestaat maatadvies_log niet, en dan hoort het
        verkoop/retouren-overzicht het gewoon te doen. */
     const [matenUitkomst, adviesUitkomst] = await Promise.allSettled([
-      verkoopEnRetourenPerMaat({
-        van: from,
-        tot: to,
-        hoofdgroep: hoofdgroep || undefined,
-        minimumVerkocht: Number.isFinite(minimum) ? minimum : 5,
-        retourtermijnDagen: termijn,
-      }),
-      adviesKwaliteit({ van: from, tot: to }),
+      wilMaten
+        ? verkoopEnRetourenPerMaat({
+            van: from,
+            tot: to,
+            hoofdgroep: hoofdgroep || undefined,
+            minimumVerkocht: Number.isFinite(minimum) ? minimum : 5,
+            retourtermijnDagen: termijn,
+          })
+        : Promise.resolve(null),
+      wilAdvies ? adviesKwaliteit({ van: from, tot: to }) : Promise.resolve(null),
     ]);
 
     if (matenUitkomst.status === "rejected") {
