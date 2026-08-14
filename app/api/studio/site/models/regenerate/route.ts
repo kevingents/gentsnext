@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { handle?: unknown };
+  let body: { handle?: unknown; model?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -24,7 +24,10 @@ export async function POST(req: Request) {
   const handle = String(body.handle || "").trim();
   if (!handle) return NextResponse.json({ ok: false, error: "handle vereist." }, { status: 400 });
 
-  const res = await regenerateModelPhoto(handle);
+  /* `model` is optioneel: "zelfde" (standaard), "fashn", of een merkmodel-id.
+     Weglaten houdt het gedrag van de modellen-studio precies zoals het was. */
+  const model = body.model === undefined ? undefined : String(body.model).trim();
+  const res = await regenerateModelPhoto(handle, { model });
   if (!res.ok) return NextResponse.json({ ok: false, error: res.error || "Mislukt." }, { status: 422 });
   return NextResponse.json({ ok: true, url: res.url });
 }

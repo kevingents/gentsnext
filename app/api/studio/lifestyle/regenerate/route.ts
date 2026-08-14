@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { handle?: unknown; slot?: unknown };
+  let body: { handle?: unknown; slot?: unknown; thema?: unknown; camerastijl?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -27,6 +27,11 @@ export async function POST(req: Request) {
   if (!handle || ![1, 2, 3].includes(slot)) {
     return NextResponse.json({ ok: false, error: "Handle of slot ontbreekt." }, { status: 400 });
   }
-  const r = await regenerateLifestyleSlot(handle, slot as 1 | 2 | 3);
+  /* Thema en camerastijl zijn optioneel — zonder keuze blijft het gedrag van de
+     sfeerbeeld-studio en de cron ongewijzigd. */
+  const r = await regenerateLifestyleSlot(handle, slot as 1 | 2 | 3, {
+    themaId: body.thema === undefined ? undefined : String(body.thema).trim() || undefined,
+    camerastijlId: body.camerastijl === undefined ? undefined : String(body.camerastijl).trim() || undefined,
+  });
   return NextResponse.json(r, { status: r.ok ? 200 : 400 });
 }
