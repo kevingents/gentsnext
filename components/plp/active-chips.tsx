@@ -27,15 +27,17 @@ import { StoreChooser } from "@/components/stores/store-chooser";
  * bij het aantal resultaten en de sorteerkeuze, want dat is waar je kijkt als je
  * de lijst wilt bijsturen.
  *
- * Winkelvoorraad hoort in dezelfde rij (Kevin, 13 aug: "zelfde als 'alleen mijn
- * maat', zo'n pil, en er ook naast"). Het stond nog als aanvinklijst in een
- * kadertje in de filterkolom, terwijl het exact dezelfde soort keuze is: een
- * persoonlijk filter met twee standen. Twee vormen voor één ding leest als twee
- * verschillende dingen — dus staan de winkels hier nu ook als pil, in dezelfde
- * volgorde als je ze koos, met de telling erbij zodat je ziet wat het oplevert.
- * De KIEZER staat achter de pillen: als tekstknopje ("Winkels wijzigen") zodra
- * er winkels zijn, en als pil ("Kies je winkel(s)") zolang die er niet zijn. Die
- * uitnodiging stond nog als kadertje in de filterkolom, en daarmee stond
+ * Winkelvoorraad staat in dezelfde rij (Kevin, 13 aug), maar als ÉÉN keuzelijst
+ * en niet als pil per winkel: "moet een dropdown zijn dat je winkel kan kiezen,
+ * niet elke winkel een aparte pill". Met vier winkels waren het vier pillen over
+ * twee regels, en die duwden de eerste producten van het scherm — terwijl het om
+ * één vraag gaat ("in welke winkel?") met één antwoord. Een keuzelijst zegt dat
+ * ook: één regel, de gekozen winkel staat er als waarde in, en de tellingen
+ * staan bij de opties zodat je ziet wat elke winkel oplevert. Zelfde patroon als
+ * "Sorteer" rechts van deze rij.
+ * De KIEZER staat erachter: als tekstknopje ("Winkels wijzigen") zodra er
+ * winkels zijn, en als pil ("Kies je winkel(s)") zolang die er niet zijn — die
+ * uitnodiging stond eerst als kadertje in de filterkolom, en daarmee stond
  * winkelvoorraad er voor een nieuwe bezoeker nog steeds links (Kevin, 13 aug).
  * Alles wat met winkels te maken heeft hoort in deze rij; de filterkolom is voor
  * de gewone facetten.
@@ -70,17 +72,12 @@ export function PlpActiveChips({
      maatfilter in het paneel het verhaal te vertellen. */
   const maatAan = Boolean(mySize && selection.sizes.length === 1 && selection.sizes[0] === mySize.facet);
   const maatAanbod = Boolean(mySize && !maatAan && (mySizeCount ?? 0) > 0);
-  /* Eén rij winkels in de volgorde waarin de klant ze koos, met de stand per
-     winkel — niet eerst alle aanstaande en dan de rest. Anders springt een pil
-     naar voren op het moment dat je 'm aanzet, precies waar je muis nog staat.
-     Een winkel zonder voorraad in deze lijst bieden we niet aan (die pil levert
-     altijd nul op); staat 'ie wél aan, dan blijft 'ie staan — dan heeft de klant
-     'm zelf aangezet en hoort 'ie te zien waaróm de lijst leeg is. */
-  const winkels = storeOptions
-    .map((s) => ({ ...s, aan: selection.stores.includes(s.pageHandle) }))
-    .filter((s) => s.aan || (s.count ?? 0) > 0);
-  const erIsEenWinkelAan = winkels.some((s) => s.aan);
-  /* Zonder gekozen winkel valt er niets aan te bieden — dan is de kiezer zélf de
+  /* De winkels in de volgorde waarin de klant ze koos. Een winkel zonder
+     voorraad in deze lijst laten we staan mét zijn nul: in een keuzelijst is dat
+     één regel die iets vertelt ("hier ligt niets"), geen pil die ruimte kost. */
+  const winkels = storeOptions.map((s) => ({ ...s, aan: selection.stores.includes(s.pageHandle) }));
+  const gekozen = winkels.filter((s) => s.aan);
+  /* Zonder gekozen winkel valt er niets te kiezen — dan is de kiezer zélf de
      pil, want anders verdwijnt "kijk of het in je winkel ligt" van de lijst. */
   const kiezerAlsPil = storeOptions.length === 0;
 
@@ -112,39 +109,46 @@ export function PlpActiveChips({
         />
       ) : null}
 
-      {winkels.map((s) =>
-        s.aan ? (
-          <Chip
-            key={s.pageHandle}
-            label={t("plp.chips.inStore", { city: s.city })}
-            onRemove={() => {
-              track("filter", { props: { facet: "winkel", value: s.pageHandle, on: false, bron: "chip" } });
-              apply({ stores: selection.stores.filter((h) => h !== s.pageHandle) });
+      {winkels.length ? (
+        <label className="inline-flex min-h-9 items-center gap-2 font-sans text-sm">
+          <span className="text-muted">{t("plp.filters.storeStock")}</span>
+          <select
+            /* Meer dan één winkel in de URL kan alleen via een gedeelde link; dan
+               staat er een eigen (uitgezette) regel bovenin, zodat de lijst niet
+               liegt over wat er gefilterd wordt. Kiezen vervángt de selectie. */
+            value={gekozen.length > 1 ? "meerdere" : (gekozen[0]?.pageHandle ?? "")}
+            onChange={(e) => {
+              const handle = e.target.value;
+              track("filter", { props: { facet: "winkel", value: handle || "alle", on: Boolean(handle), bron: "keuzelijst" } });
+              apply({ stores: handle ? [handle] : [] });
             }}
-            removeLabel={t("plp.chips.remove")}
-          />
-        ) : (
-          <Chip
-            key={s.pageHandle}
-            variant="offer"
-            label={t("plp.chips.inStoreOffer", { city: s.city, count: s.count ?? 0 })}
-            onAdd={() => {
-              track("filter", { props: { facet: "winkel", value: s.pageHandle, on: true, bron: "chip" } });
-              apply({ stores: [...selection.stores, s.pageHandle] });
-            }}
-          />
-        ),
-      )}
+            aria-label={t("plp.filters.storeStock")}
+            className="max-w-[13rem] rounded-full border border-line bg-canvas px-3 py-1.5 font-sans text-sm focus:border-ink focus:outline-none"
+          >
+            <option value="">{t("plp.filters.storeAll")}</option>
+            {gekozen.length > 1 ? (
+              <option value="meerdere" disabled>
+                {t("plp.filters.storeMultiple", { count: gekozen.length })}
+              </option>
+            ) : null}
+            {winkels.map((s) => (
+              <option key={s.pageHandle} value={s.pageHandle}>
+                {typeof s.count === "number" ? `${s.city} (${s.count})` : s.city}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
-      {/* Achteraan, zodat de pillen (wat je nú ziet) vooraan blijven. Heb je al
-          winkels, dan is wijzigen een instelling → tekstknopje. Heb je er nog
-          geen, dan is dit het enige winkel-aanbod op de pagina → pil. */}
+      {/* Achteraan, zodat wat je nú ziet vooraan blijft. Heb je al winkels, dan
+          is wijzigen een instelling → tekstknopje. Heb je er nog geen, dan is dit
+          het enige winkel-aanbod op de pagina → pil. */}
       <StoreChooser myStores={myStoreTitles} variant={kiezerAlsPil ? "pill" : "link"} bron="plp" />
 
       {/* Eerlijk over de bron zodra er op voorraad gefilterd wordt: de
           winkeltelling loopt achter op wat er nú in het rek hangt. `basis-full`
-          zet 'm op een eigen regel onder de pillen, zonder tweede wikkel. */}
-      {erIsEenWinkelAan ? (
+          zet 'm op een eigen regel eronder, zonder tweede wikkel. */}
+      {gekozen.length ? (
         <p className="basis-full font-sans text-xs text-muted">{t("plp.filters.storeDisclaimer")}</p>
       ) : null}
     </div>
