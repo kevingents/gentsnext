@@ -100,6 +100,11 @@ export type SmokingOptie = {
   handle: string;
   title: string;
   image: string;
+  /** FASHN-modelfoto (product-to-model) — ONS artikel op een model, al gemaakt
+      door de Modellen-studio. Daardoor kan de samensteller een echt beeld tonen
+      dat meeverandert met de keuze, zonder er iets voor te genereren. */
+  modelImage: string;
+  modelAlt: string;
   /** Kleur waarop we vastpinnen als het artikel er meerdere heeft (bv. schoenen). */
   kleur: string;
   sizes: {
@@ -130,7 +135,7 @@ export type SmokingPakket = {
   extras: (SmokingOptie & { label: string; omschrijving: string })[];
 };
 
-type RawProduct = { id: string; handle: string; title: string; image: string };
+type RawProduct = { id: string; handle: string; title: string; image: string; modelImage: string; modelAlt: string };
 
 /** Producten + hun varianten/voorraad ophalen voor een set handles. */
 async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>> {
@@ -138,8 +143,11 @@ async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>>
   if (!uniek.length) return new Map();
 
   const db = getDb();
-  const rows = await db.execute<RawProduct & { image: string | null }>(sql`
-    select p.id, p.handle, p.title,
+  const rows = await db.execute<{
+    id: string; handle: string; title: string;
+    image: string | null; model_image_url: string | null; model_image_alt: string | null;
+  }>(sql`
+    select p.id, p.handle, p.title, p.model_image_url, p.model_image_alt,
            (select url from ${productImages} pi where pi.product_id = p.id order by position limit 1) as image
     from ${products} p
     where p.status = 'active' and lower(p.handle) in ${uniek}
@@ -150,6 +158,8 @@ async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>>
     handle: r.handle,
     title: r.title,
     image: r.image || "",
+    modelImage: r.model_image_url || "",
+    modelAlt: r.model_image_alt || "",
   }));
   if (!gevonden.length) return new Map();
 
@@ -190,6 +200,8 @@ async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>>
       handle: p.handle,
       title: p.title,
       image: p.image,
+      modelImage: p.modelImage,
+      modelAlt: p.modelAlt,
       kleur: "",
       sizes: sortSizes(
         alle.map((v) => {

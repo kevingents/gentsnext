@@ -322,6 +322,33 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
 
       {/* Samenvatting */}
       <aside className="rounded-lg border border-line p-5 lg:sticky lg:top-6">
+        {/* Het modelbeeld van de gekozen jas. Deze foto's staan al in de
+            catalogus (FASHN product-to-model via de Modellen-studio), dus we
+            tonen ONS artikel op een model in plaats van er iets voor te
+            genereren: geen wachttijd, geen credits, en wat de klant ziet is
+            ook echt wat hij bestelt. Wisselt mee zodra hij van revers wisselt. */}
+        {(() => {
+          const jas = optieVan("jas");
+          const beeld = jas?.modelImage || jas?.image;
+          if (!beeld) return null;
+          return (
+            <figure className="mb-4 overflow-hidden rounded-lg bg-surface">
+              <Image
+                src={beeld}
+                alt={jas?.modelAlt || `${jas?.title ?? "Smoking"} — op model`}
+                width={420}
+                height={525}
+                className="aspect-[4/5] w-full object-cover"
+                priority
+              />
+              <figcaption className="px-3 py-2 font-sans text-[11px] text-muted">
+                {jas?.title}
+                {jas?.modelImage ? "" : " — productfoto"}
+              </figcaption>
+            </figure>
+          );
+        })()}
+
         <h2 className="font-sans text-base font-semibold">Jouw smoking</h2>
         <ul className="mt-3 flex flex-col divide-y divide-line">
           {SMOKING_ROLES.map((rol) => {
