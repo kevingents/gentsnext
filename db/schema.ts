@@ -2444,6 +2444,11 @@ export const emailFlows = pgTable(
     slug: text("slug").notNull(),
     naam: text("naam").notNull(),
     omschrijving: text("omschrijving").notNull().default(""),
+    /** Categorie op DOEL, niet op onderwerp. "Winkelwagen" en "Retour" zijn
+     *  onderwerpen; die groeien mee met elk idee en leveren over een jaar
+     *  vijftien categorieën met één flow. Op doel blijven het er vijf, en het
+     *  dwingt de vraag die telt: wat moet deze flow bereiken? */
+    categorie: text("categorie").notNull().default("overig"),
     /** 'doelgroep' (wie erin valt) of 'gebeurtenis' (op het moment zelf). */
     triggerSoort: text("trigger_soort").notNull(),
     triggerDoelgroepId: uuid("trigger_doelgroep_id"),
