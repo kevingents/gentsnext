@@ -166,9 +166,67 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
     setBezig(false);
   }
 
+  /* Op mobiel staat de samenvatting ná alle stappen — gemeten: de knop begint
+     op 3482px, ruim vier schermen naar beneden. Je zag dus nooit wat je smoking
+     kost terwijl je 'm samenstelde. Deze balk plakt onderaan en toont prijs,
+     besparing en wat er nog ontbreekt; op desktop blijft de kolom rechts staan
+     en is de balk overbodig. pb-28 houdt de laatste sectie vrij van de balk. */
+  const mobieleBalk = (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 backdrop-blur lg:hidden">
+      <div className="mx-auto flex max-w-page items-center gap-3 px-gutter py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="min-w-0 flex-1">
+          <p className="font-sans text-base font-semibold leading-none tabular-nums">
+            {formatEuro(niveau.prijsCents + extrasCents)}
+          </p>
+          <p className="mt-1 truncate font-sans text-xs text-muted" aria-live="polite">
+            {kanToevoegen
+              ? besparing > 0
+                ? `Je bespaart ${formatEuro(besparing)}`
+                : niveau.naam
+              : nogTeKiezen.length
+                ? `Nog kiezen: ${nogTeKiezen.join(", ")}`
+                : "Kies je onderdelen"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={voegToe}
+          disabled={!kanToevoegen}
+          className="h-12 shrink-0 rounded-lg bg-ink px-5 font-sans text-sm font-semibold text-canvas disabled:opacity-40"
+        >
+          In de wagen
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
+    <div className="grid gap-8 pb-28 lg:grid-cols-[1fr_340px] lg:items-start lg:pb-0">
       <div className="flex flex-col gap-6">
+        {/* Op mobiel staat de samenvatting (met het modelbeeld) helemaal onderaan.
+            Daarom hier een compacte versie bovenin, zodat je meteen ziet wat je
+            aan het samenstellen bent. Op desktop overbodig — daar staat de kolom
+            rechts al in beeld. */}
+        {(() => {
+          const jas = optieVan("jas");
+          const beeld = jas?.modelImage || jas?.image;
+          if (!beeld) return null;
+          return (
+            <figure className="flex items-center gap-3 rounded-lg bg-surface p-3 lg:hidden">
+              <Image
+                src={beeld}
+                alt={jas?.modelAlt || `${jas?.title ?? "Smoking"} — op model`}
+                width={72}
+                height={90}
+                className="h-[90px] w-[72px] shrink-0 rounded object-cover"
+              />
+              <figcaption className="min-w-0 font-sans text-xs text-muted">
+                <span className="block truncate font-medium text-ink">{jas?.title}</span>
+                <span className="block">{niveau.naam} · {formatEuro(niveau.prijsCents)}</span>
+              </figcaption>
+            </figure>
+          );
+        })()}
         {/* Stof / niveau */}
         <section>
           <h2 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted">
@@ -434,6 +492,8 @@ export function SmokingBuilder({ pakket }: { pakket: SmokingPakket }) {
               : "Kies per onderdeel een model en een maat."}
         </p>
       </aside>
+
+      {mobieleBalk}
     </div>
   );
 }
