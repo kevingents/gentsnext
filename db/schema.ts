@@ -2557,3 +2557,127 @@ export const emailFlowStappen = pgTable(
     index("email_flow_stappen_klant_idx").on(t.customerId, t.uitgevoerdOp),
   ]
 );
+
+/* ── Maattabel en maatadvies ─────────────────────────────────────────────
+   Deze drie tabellen raakten kwijt bij de squash-merge van #277: het werk
+   landde wél in lib/maattabel.ts en lib/maat-analyse.ts, maar hun definities
+   niet, waardoor main sinds die merge niet meer typecheckt. Teruggehaald uit
+   commit 4a530b7 — ongewijzigd. ─────────────────────────────────────────── */
+/**
+ * De GENTS-maattabel als DATA i.p.v. code.
+ *
+ * Stond hardgecodeerd in lib/size-chart.ts (export uit Faslet, juni 2026): een
+ * nieuwe maatvoering betekende een codewijziging en een deploy. Nu upload je het
+ * Excel-blad in de portal. Elke upload is een nieuwe VERSIE; precies één versie
+ * staat op actief. Dat maakt terugdraaien een knop in plaats van een revert —
+ * en deze tabel bepaalt wat het maatadvies adviseert, dus dat wil je hebben.
+ *
+ * lib/size-chart.ts blijft bestaan als fallback: is er niets geüpload (of ligt
+ * de DB eruit), dan draait de site op de ingebakken tabel en niet op niets.
+ */
+export const maattabelVersies = pgTable(
+  "maattabel_versies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Oplopend, 1-gebaseerd — het nummer dat de portal toont. */
+    versie: integer("versie").notNull(),
+    bestandsnaam: text("bestandsnaam").notNull().default(""),
+    /** Portal-gebruiker; leeg = via de API/token. INTERN, nooit klantzichtbaar. */
+    actor: text("actor").notNull().default(""),
+    aantalRijen: integer("aantal_rijen").notNull().default(0),
+    /**
+     * Eén versie staat actief. Bewust ZONDER unieke index: activeren gebeurt in
+     * één atomair `SET actief = (id = $1)`, en dat kan niet met zo'n index —
+     * dan moet het in twee statements en is er even géén actieve tabel (deze DB
+     * praat via neon-http, zonder transacties). Zie drizzle/0059.
+     */
+    actief: boolean("actief").notNull().default(false),
+    notitie: text("notitie").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("maattabel_versies_nr_idx").on(t.versie),
+    index("maattabel_versies_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/**
+ * Eén rij = één maat binnen één categorie, met de lichaamsmaten in cm.
+ *
+ * Zelfde vorm als ChartRow in lib/size-chart.ts, plus `boordCm`: de
+ * overhemdenrijen dragen daar hun halsomvang ("39-40"). In de code waren dat
+ * twee losse tabellen (SIZE_CHART + BOORD_CHART) met dezelfde borst/taille-
+ * ranges eronder — dat is één tabel met een extra kolom, niet twee.
+ *
+ * Puntwaarde = min en max gelijk (zo staat colbert/pak in de bron); een range
+ * is min < max. Null = de bron geeft deze maat niet voor deze categorie.
+ */
+export const maattabelRijen = pgTable(
+  "maattabel_rijen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versieId: uuid("versie_id").notNull(),
+    /** 'TOP' | 'BOTTOM' | 'FULL_BODY' */
+    productType: text("product_type").notNull().default("TOP"),
+    categorie: text("categorie").notNull(),
+    maat: text("maat").notNull(),
+    /** Alleen bij Overhemden (Boordmaat): "39-40". Leeg bij de rest. */
+    boordCm: text("boord_cm").notNull().default(""),
+    borstMin: integer("borst_min"),
+    borstMax: integer("borst_max"),
+    tailleMin: integer("taille_min"),
+    tailleMax: integer("taille_max"),
+    binnenbeenMin: integer("binnenbeen_min"),
+    binnenbeenMax: integer("binnenbeen_max"),
+    /** Rijvolgorde uit het blad — maten sorteren niet alfabetisch (S/M/L, 44/46). */
+    sortering: integer("sortering").notNull().default(0),
+  },
+  (t) => [
+    index("maattabel_rijen_versie_idx").on(t.versieId, t.sortering),
+    index("maattabel_rijen_cat_idx").on(t.versieId, t.categorie),
+  ]
+);
+
+/**
+ * Elk uitgebracht maatadvies, om te kunnen meten of het advies deugt.
+ *
+ * De vraag die dit beantwoordt: adviseren we maat 44 aan iemand die uiteindelijk
+ * 54 koopt en houdt? Zonder log is dat onbeantwoordbaar — we kenden alleen de
+ * uitkomst van de formule, nooit of hij klopte.
+ *
+ * AVG: lengte en gewicht zijn persoonsgegevens zódra ze aan iemand hangen.
+ * `klantId` staat er dus alleen als de bezoeker was ingelogd (die gaf voor
+ * precies dit doel toestemming bij Mijn maten); anonieme bezoekers leveren een
+ * rij zonder enige identificatie — geen sessie-id, geen fingerprint. Bij
+ * accountverwijdering wordt `klant_id` op null gezet: de meting blijft, de
+ * persoon verdwijnt.
+ */
+export const maatadviesLog = pgTable(
+  "maatadvies_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    klantId: uuid("klant_id"),
+    lengteCm: integer("lengte_cm").notNull().default(0),
+    gewichtKg: integer("gewicht_kg").notNull().default(0),
+    /** 'slim' | 'regular' | 'comfort' */
+    pasvorm: text("pasvorm").notNull().default("regular"),
+    /** Borstomvang waar het advies op grondde — gemeten of geschat. */
+    borstCm: integer("borst_cm").notNull().default(0),
+    /** True als de klant zijn eigen lichaamsmaten invulde i.p.v. lengte/gewicht. */
+    gemeten: boolean("gemeten").notNull().default(false),
+    adviesColbert: text("advies_colbert").notNull().default(""),
+    adviesBoord: text("advies_boord").notNull().default(""),
+    adviesLengtemaat: text("advies_lengtemaat").notNull().default(""),
+    /** 'hoog' | 'gemiddeld' | 'laag' — de eigen zekerheid van het advies. */
+    zekerheid: text("zekerheid").notNull().default("gemiddeld"),
+    /** Waar het advies vandaan kwam: 'maatadvies' | 'pdp' | 'account'. */
+    bron: text("bron").notNull().default("maatadvies"),
+    /** Versie van de maattabel waarop dit advies grondde (0 = de fallback in code). */
+    tabelVersie: integer("tabel_versie").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("maatadvies_log_klant_idx").on(t.klantId, t.createdAt),
+    index("maatadvies_log_tijd_idx").on(t.createdAt),
+  ]
+);
