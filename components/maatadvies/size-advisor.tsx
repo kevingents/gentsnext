@@ -100,6 +100,10 @@ export function SizeAdvisor({
   onApply?: (sizes: AdviceSizes) => void;
 } = {}) {
   const t = useT();
+  /* De actieve maattabel uit de portal, met de ingebakken tabel als terugval.
+     Deze regel raakte kwijt bij de squash-merge van #277 terwijl de import en
+     alle drie de gebruiken bleven staan — vandaar dat main niet meer bouwde. */
+  const chart = useSizeChart();
   const drawer = variant !== "page";
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
