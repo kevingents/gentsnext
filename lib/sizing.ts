@@ -20,7 +20,7 @@
  * (lib/size-chart, bron Faslet) i.p.v. de vuistregel borst/2 — GENTS valt anders
  * (maat 50 = 107 cm borst). De tabel is leidend; de formule is enkel fallback.
  */
-import { sizeByChest, boordByChest } from "@/lib/size-chart";
+import { sizeByChest, boordByChest, type SizeChart } from "@/lib/size-chart";
 
 export type SizeSystem =
   | "jacket" // 44–60 even (colbert/pak)
@@ -140,7 +140,13 @@ function collarLabel(neckCm: number): string {
   return `${lo}/${even}`;
 }
 
-export function recommendSizes(input: SizeAdviceInput): SizeAdvice {
+/**
+ * `chart` = de actieve, geüploade maattabel (drizzle/0059). Weggelaten? Dan
+ * rekent hij op de ingebakken tabel in lib/size-chart — zo blijft deze functie
+ * puur en bruikbaar in de browser, en blijft de site adviseren als de DB eruit
+ * ligt. Een advies van vorige maand is beter dan geen advies.
+ */
+export function recommendSizes(input: SizeAdviceInput, chart?: SizeChart): SizeAdvice {
   const fit: FitPreference = input.fit || "regular";
   const measuredChest = Boolean(input.chestCm && input.chestCm > 60);
   const chest = estimateChest(input);
@@ -148,7 +154,7 @@ export function recommendSizes(input: SizeAdviceInput): SizeAdvice {
   const tall = input.heightCm >= 188;
 
   // Colbert/pak: grond op de GENTS-maattabel (autoritair), niet op borst/2.
-  const cb = sizeByChest("Colberts (Standaard)", chest);
+  const cb = sizeByChest("Colberts (Standaard)", chest, chart);
   const jacket = cb ? Number(cb.size) : clampEven(chest / 2, 42, 64);
 
   // Confidence: hoog alleen bij een gemeten borst die netjes in een maat valt.
@@ -169,7 +175,7 @@ export function recommendSizes(input: SizeAdviceInput): SizeAdvice {
         : undefined;
 
   // Overhemd-boordmaat uit de tabel (borst → boord), niet uit een formule.
-  const bd = boordByChest(chest);
+  const bd = boordByChest(chest, chart);
   const shirtSize = bd ? bd.boordCm.replace("-", "/") : collarLabel(neck);
 
   const advice: SizeAdvice = {

@@ -14,15 +14,23 @@ import { WelcomePopup } from "@/components/welcome-popup";
 import { Tracker } from "@/components/analytics/tracker";
 import { GoogleTagManager, GoogleTagManagerNoscript } from "@/components/analytics/gtm";
 import { LocaleProvider } from "@/components/i18n/locale-provider";
+import { SizeChartProvider } from "@/components/maatadvies/size-chart-provider";
 import { getLocale } from "@/lib/locale-server";
 import { getUiMessages } from "@/lib/translate";
+import { getActieveTabel } from "@/lib/maattabel";
 
 /** Winkel-layout: header, footer en winkelwagen rond alle storefront-pagina's. */
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
-  const messages = await getUiMessages(locale).catch(() => undefined);
+  const [messages, sizeChart] = await Promise.all([
+    getUiMessages(locale).catch(() => undefined),
+    // De geüploade maattabel (Site → Maten). Faalt dit, dan rekent de site op de
+    // ingebakken tabel — getActieveTabel vangt dat zelf al af.
+    getActieveTabel().catch(() => undefined),
+  ]);
   return (
     <LocaleProvider locale={locale} messages={messages}>
+    <SizeChartProvider chart={sizeChart}>
     <CartProvider>
       <WishlistProvider>
         <div className="flex min-h-screen flex-col">
@@ -47,6 +55,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         </div>
       </WishlistProvider>
     </CartProvider>
+    </SizeChartProvider>
     </LocaleProvider>
   );
 }

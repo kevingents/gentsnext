@@ -1,9 +1,13 @@
-import { rowsForCategory, cmText, BOORD_CHART, type ChartCategory } from "@/lib/size-chart";
+import { rowsForCategory, cmText, BOORD_CHART, type ChartCategory, type SizeChart } from "@/lib/size-chart";
 import type { SizeChartSpec } from "@/lib/size-chart-hub";
 
 /**
- * Server-gerenderde, semantische maattabel uit de échte GENTS-data (lib/size-chart).
+ * Server-gerenderde, semantische maattabel uit de échte GENTS-data.
  * Geen client-JS nodig: de tabel staat in de HTML en is dus indexeerbaar voor Google.
+ *
+ * `chart` = de actieve, geüploade maattabel. Als server component kan dit niet via
+ * de SizeChartProvider (die is voor de client), dus de pagina geeft hem mee. Laat
+ * je hem weg, dan rendert de ingebakken tabel uit lib/size-chart.
  */
 function Th({ children }: { children: React.ReactNode }) {
   return <th scope="col" className="border-b border-line px-3 py-2.5 text-left font-sans text-xs font-medium uppercase tracking-wide text-ink">{children}</th>;
@@ -14,8 +18,8 @@ function Td({ children, head }: { children: React.ReactNode; head?: boolean }) {
     : <td className="border-b border-line/60 px-3 py-2.5 font-sans text-sm tabular-nums text-ink-soft">{children}</td>;
 }
 
-function CategoryTable({ category, caption }: { category: ChartCategory; caption: string }) {
-  const rows = rowsForCategory(category);
+function CategoryTable({ category, caption, chart }: { category: ChartCategory; caption: string; chart?: SizeChart }) {
+  const rows = rowsForCategory(category, chart);
   const hasChest = rows.some((r) => r.chestMin != null);
   const hasWaist = rows.some((r) => r.waistMin != null);
   const hasInner = rows.some((r) => r.innerLegMin != null);
@@ -46,7 +50,8 @@ function CategoryTable({ category, caption }: { category: ChartCategory; caption
   );
 }
 
-function BoordTable({ caption }: { caption: string }) {
+function BoordTable({ caption, chart }: { caption: string; chart?: SizeChart }) {
+  const boord = chart?.boord ?? BOORD_CHART;
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
       <table className="w-full border-collapse">
@@ -60,7 +65,7 @@ function BoordTable({ caption }: { caption: string }) {
           </tr>
         </thead>
         <tbody>
-          {BOORD_CHART.map((r) => (
+          {boord.map((r) => (
             <tr key={r.confectie}>
               <Td head>{r.confectie}</Td>
               <Td>{r.boordCm}</Td>
@@ -74,11 +79,11 @@ function BoordTable({ caption }: { caption: string }) {
   );
 }
 
-export function SizeTable({ spec }: { spec: SizeChartSpec }) {
+export function SizeTable({ spec, chart }: { spec: SizeChartSpec; chart?: SizeChart }) {
   return (
     <figure className="m-0">
       <figcaption className="mb-2 font-sans text-sm font-medium text-ink">{spec.caption}</figcaption>
-      {spec.boord ? <BoordTable caption={spec.caption} /> : spec.category ? <CategoryTable category={spec.category} caption={spec.caption} /> : null}
+      {spec.boord ? <BoordTable caption={spec.caption} chart={chart} /> : spec.category ? <CategoryTable category={spec.category} caption={spec.caption} chart={chart} /> : null}
     </figure>
   );
 }

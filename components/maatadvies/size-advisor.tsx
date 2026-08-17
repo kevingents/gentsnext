@@ -16,6 +16,7 @@ import {
   type ReferenceBrand,
   type ReferenceLetter,
 } from "@/lib/size-reference";
+import { useSizeChart } from "@/components/maatadvies/size-chart-provider";
 
 const FITS: { key: FitPreference; labelKey: string; hintKey: string }[] = [
   { key: "slim", labelKey: "sizeAdvisor.fit.slim", hintKey: "sizeAdvisor.fit.slimHint" },
@@ -120,7 +121,7 @@ export function SizeAdvisor({
   const [showRef, setShowRef] = useState(false);
   const [refBrand, setRefBrand] = useState<ReferenceBrand | "">("");
   const [refLetter, setRefLetter] = useState<ReferenceLetter | "">("");
-  const refResult = refBrand && refLetter ? referenceAdvice(refBrand, refLetter, fit) : null;
+  const refResult = refBrand && refLetter ? referenceAdvice(refBrand, refLetter, fit, chart) : null;
 
   function adviceSizes(a: SizeAdvice): AdviceSizes {
     return {
@@ -173,16 +174,42 @@ export function SizeAdvisor({
     }
     setError("");
     setSaveState("idle");
-    setAdvice(
-      recommendSizes({
+    const gemeten = showMeasured ? num(chest) : undefined;
+    const uitkomst = recommendSizes(
+      {
         heightCm,
         weightKg,
         fit,
-        chestCm: showMeasured ? num(chest) : undefined,
+        chestCm: gemeten,
         waistCm: showMeasured ? num(waist) : undefined,
         neckCm: showMeasured ? num(neck) : undefined,
-      })
+      },
+      chart,
     );
+    setAdvice(uitkomst);
+
+    /* Het advies wegschrijven om later te kunnen meten of het deugde (Site →
+       Maten → Advieskwaliteit). Bewust fire-and-forget: een meting mag nooit
+       tussen de klant en zijn maatadvies gaan staan. Zonder catch zou een
+       netwerkfout hier een onopgevangen promise-rejectie in de console geven. */
+    void fetch("/api/maatadvies/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lengteCm: heightCm,
+        gewichtKg: weightKg,
+        pasvorm: fit,
+        borstCm: uitkomst.estimatedChestCm,
+        gemeten: Boolean(gemeten),
+        adviesColbert: uitkomst.jacket.size,
+        adviesBoord: uitkomst.shirt.size,
+        adviesLengtemaat: uitkomst.trouserLength?.size ?? "",
+        zekerheid: uitkomst.jacket.confidence,
+        bron: variant === "page" ? "maatadvies" : variant === "drawer" ? "pdp" : "account",
+        tabelVersie: chart.versie,
+      }),
+      keepalive: true,
+    }).catch(() => {});
   }
 
   return (
