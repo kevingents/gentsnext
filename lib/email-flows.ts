@@ -423,7 +423,15 @@ export async function loopFlows(maxLeden = 500): Promise<FlowResultaat> {
         continue;
       }
 
-      const ok = await sendFlowEmail(stap.sjabloon, lid.email, lid.voornaam || "", lid.customer_id).catch(() => false);
+      /* Deze labels gaan mee naar Resend en komen terug in de webhook. Zonder
+         hen is een "geopend"-melding een los feit: je weet dát er iets geopend
+         is, niet welke stap van welke flow het deed. */
+      const ok = await sendFlowEmail(stap.sjabloon, lid.email, lid.voornaam || "", lid.customer_id, {
+        flow: String(lid.flow_id),
+        flow_lid: String(lid.id),
+        flow_stap: String(lid.stap),
+        klant: String(lid.customer_id),
+      }).catch(() => false);
       if (!ok) {
         // Mislukt: claim terugdraaien en het over een uur opnieuw proberen. Een
         // tijdelijke storing mag geen stap kosten.
