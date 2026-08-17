@@ -2557,3 +2557,91 @@ export const emailFlowStappen = pgTable(
     index("email_flow_stappen_klant_idx").on(t.customerId, t.uitgevoerdOp),
   ]
 );
+
+/* ── Maattabel + maatadvies ────────────────────────────────────────────────
+   Hoort bij drizzle/0059_maattabel.sql (14 aug 2026). Die migratie én de code
+   die deze tabellen gebruikt stonden al op main, maar de drizzle-definities
+   erbij niet — daardoor faalde élke productie-build op "has no exported member
+   'maatadviesLog'". Deze definities volgen de DDL letterlijk; de toelichting bij
+   de keuzes (waarom géén unieke index op `actief`, waarom de maten nullable
+   zijn) staat in dat SQL-bestand. */
+
+export const maattabelVersies = pgTable(
+  "maattabel_versies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Oplopend nummer dat de portal toont — "versie 3" is een gesprek, een uuid niet. */
+    versie: integer("versie").notNull(),
+    bestandsnaam: text("bestandsnaam").notNull().default(""),
+    /** INTERN: medewerkersnaam, nooit klantzichtbaar. */
+    actor: text("actor").notNull().default(""),
+    aantalRijen: integer("aantal_rijen").notNull().default(0),
+    actief: boolean("actief").notNull().default(false),
+    notitie: text("notitie").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    nrIdx: uniqueIndex("maattabel_versies_nr_idx").on(t.versie),
+    tijdIdx: index("maattabel_versies_tijd_idx").on(t.createdAt),
+  })
+);
+
+export const maattabelRijen = pgTable(
+  "maattabel_rijen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versieId: uuid("versie_id")
+      .notNull()
+      .references(() => maattabelVersies.id, { onDelete: "cascade" }),
+    /** 'TOP' | 'BOTTOM' | 'FULL_BODY' */
+    productType: text("product_type").notNull().default("TOP"),
+    categorie: text("categorie").notNull(),
+    maat: text("maat").notNull(),
+    /** Alleen bij Overhemden (Boordmaat): de halsomvang, "39-40". */
+    boordCm: text("boord_cm").notNull().default(""),
+    /* Nullable en niet 0: "0 cm borst" is een meetwaarde, "onbekend" niet. */
+    borstMin: integer("borst_min"),
+    borstMax: integer("borst_max"),
+    tailleMin: integer("taille_min"),
+    tailleMax: integer("taille_max"),
+    binnenbeenMin: integer("binnenbeen_min"),
+    binnenbeenMax: integer("binnenbeen_max"),
+    /** Rijvolgorde uit het blad — maten sorteren niet alfabetisch of numeriek. */
+    sortering: integer("sortering").notNull().default(0),
+  },
+  (t) => ({
+    versieIdx: index("maattabel_rijen_versie_idx").on(t.versieId, t.sortering),
+    catIdx: index("maattabel_rijen_cat_idx").on(t.versieId, t.categorie),
+  })
+);
+
+export const maatadviesLog = pgTable(
+  "maatadvies_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /* Alleen bij een INGELOGDE bezoeker; een anonieme rij draagt geen enkele
+       identificatie. Bij accountverwijdering wordt dit null. */
+    klantId: uuid("klant_id"),
+    lengteCm: integer("lengte_cm").notNull().default(0),
+    gewichtKg: integer("gewicht_kg").notNull().default(0),
+    /** 'slim' | 'regular' | 'comfort' */
+    pasvorm: text("pasvorm").notNull().default("regular"),
+    borstCm: integer("borst_cm").notNull().default(0),
+    /** True als de klant zijn eigen lichaamsmaten invulde. */
+    gemeten: boolean("gemeten").notNull().default(false),
+    adviesColbert: text("advies_colbert").notNull().default(""),
+    adviesBoord: text("advies_boord").notNull().default(""),
+    adviesLengtemaat: text("advies_lengtemaat").notNull().default(""),
+    /** 'hoog' | 'gemiddeld' | 'laag' */
+    zekerheid: text("zekerheid").notNull().default("gemiddeld"),
+    /** 'maatadvies' | 'pdp' | 'account' */
+    bron: text("bron").notNull().default("maatadvies"),
+    /** Maattabel-versie waarop dit advies grondde. 0 = de fallback in code. */
+    tabelVersie: integer("tabel_versie").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    klantIdx: index("maatadvies_log_klant_idx").on(t.klantId, t.createdAt),
+    tijdIdx: index("maatadvies_log_tijd_idx").on(t.createdAt),
+  })
+);
