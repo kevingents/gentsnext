@@ -165,3 +165,56 @@ export async function sendFlowEmail(
       return false;
   }
 }
+
+/**
+ * Wat de portal moet weten om een sjabloon te kunnen kiezen.
+ *
+ * De omschrijving is bindend: hij staat in de flowbouwer en is waar iemand zijn
+ * keuze op baseert. Verander je wat de mail zegt, verander deze tekst mee — een
+ * sjabloon dat stiekem iets anders stuurt dan zijn omschrijving belooft is
+ * erger dan geen omschrijving.
+ */
+export const SJABLOON_INFO: { sjabloon: FlowSjabloon; naam: string; onderwerp: string; uitleg: string }[] = [
+  {
+    sjabloon: "kar-herinnering",
+    naam: "Winkelwagen — herinnering",
+    onderwerp: "Je hebt nog iets klaarstaan",
+    uitleg: "Vriendelijke herinnering, noemt de eigen winkel als die bekend is. Geen korting.",
+  },
+  {
+    sjabloon: "kar-laatste-kans",
+    naam: "Winkelwagen — laatste",
+    onderwerp: "Nog steeds interesse?",
+    uitleg: "Tweede en laatste. Biedt maatadvies aan in plaats van korting: wie leert dat wachten korting oplevert, wacht voortaan altijd.",
+  },
+  {
+    sjabloon: "eerste-aankoop-bedankt",
+    naam: "Bedankt voor je eerste bestelling",
+    onderwerp: "Bedankt voor je eerste bestelling",
+    uitleg: "Bedankje plus de vraag om maten door te geven — de goedkoopste retour-ingreep die er is.",
+  },
+  {
+    sjabloon: "tweede-aankoop-advies",
+    naam: "Past hier goed bij",
+    onderwerp: "Past hier goed bij",
+    uitleg: "Combinatie-advies na een aankoop. De tweede aankoop is het scharnierpunt.",
+  },
+  {
+    sjabloon: "maatprofiel-uitnodiging",
+    naam: "Maten opvragen",
+    onderwerp: "Zo weten we wat jou past",
+    uitleg: "Vraagt om het maatprofiel en noemt de punten die eraan hangen.",
+  },
+  {
+    sjabloon: "terugwin",
+    naam: "Terugwinnen",
+    onderwerp: "We hebben je een tijdje niet gezien",
+    uitleg: "Noemt tegoed of punten alleen als die er écht staan; anders alleen de nieuwe collectie.",
+  },
+  {
+    sjabloon: "punten-herinnering",
+    naam: "Punten herinneren",
+    onderwerp: "Je spaarpunten staan klaar",
+    uitleg: "Herinnert aan het puntensaldo. Kost geen marge — die punten zijn al verdiend.",
+  },
+];
