@@ -2503,6 +2503,37 @@ export const emailFlowLeden = pgTable(
  * idempotentie (uniek op lid+stap, dus een herstart stuurt niets dubbel) en het
  * frequentieplafond (één flow-mail per klant per etmaal, over álle flows heen).
  */
+/**
+ * Wat er met onze eigen mails gebeurt: bezorgd, geopend, geklikt, gebounced.
+ *
+ * `webhook_id` is uniek omdat Svix een melding opnieuw stuurt als hij geen 2xx
+ * kreeg. Zonder die index telt een trage response dezelfde opening drie keer.
+ */
+export const mailGebeurtenissen = pgTable(
+  "mail_gebeurtenissen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    webhookId: text("webhook_id").notNull(),
+    berichtId: text("bericht_id").notNull().default(""),
+    /** 'bezorgd' | 'geopend' | 'geklikt' | 'gebounced' | 'spam' | 'uitgeschreven'. */
+    soort: text("soort").notNull(),
+    lidId: uuid("lid_id").references(() => emailFlowLeden.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id").references(() => emailFlows.id, { onDelete: "cascade" }),
+    stap: integer("stap"),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    email: text("email").notNull().default(""),
+    /** Bij een klik: waar hij heen ging — zo zie je wélke link werkt. */
+    url: text("url").notNull().default(""),
+    gebeurdOp: timestamp("gebeurd_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("mail_gebeurtenissen_webhook_uniek").on(t.webhookId),
+    index("mail_gebeurtenissen_flow_idx").on(t.flowId, t.stap, t.soort),
+    index("mail_gebeurtenissen_klant_idx").on(t.customerId, t.gebeurdOp),
+    index("mail_gebeurtenissen_lid_idx").on(t.lidId, t.soort),
+  ]
+);
+
 export const emailFlowStappen = pgTable(
   "email_flow_stappen",
   {

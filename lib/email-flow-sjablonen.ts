@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customerProfiles } from "@/db/schema";
-import { brandedEmailHtml, sendEmail } from "@/lib/email";
+import { brandedEmailHtml, sendEmail, type MailLabels } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
 import { formatEuro } from "@/lib/format";
 
@@ -54,6 +54,9 @@ export async function sendFlowEmail(
   email: string,
   voornaam: string,
   customerId: string,
+  /** Gaat mee naar Resend en komt terug in de webhook — zo weten we straks van
+   *  een "geopend"-melding bij welke flow en welke stap hij hoorde. */
+  labels?: MailLabels,
 ): Promise<boolean> {
   const site = getSiteUrl();
   const p = await profiel(customerId);
@@ -70,6 +73,7 @@ export async function sendFlowEmail(
             ${p?.favoriete_winkel ? `<p>Liever even passen? Het ligt mogelijk ook in ${p.favoriete_winkel}.</p>` : ""}`,
           cta: { label: "Verder winkelen", href: `${site}/winkelwagen` },
         }),
+        labels,
       );
 
     case "kar-laatste-kans":
@@ -85,6 +89,7 @@ export async function sendFlowEmail(
           cta: { label: "Bekijk je winkelwagen", href: `${site}/winkelwagen` },
           footnote: "Liever niet meer? Onderaan elke mail staat een afmeldlink.",
         }),
+        labels,
       );
 
     case "eerste-aankoop-bedankt":
@@ -98,6 +103,7 @@ export async function sendFlowEmail(
             meteen wat er in jouw maat ligt, en vullen we ze bij een volgende bestelling vast in.</p>`,
           cta: { label: "Maten doorgeven", href: `${site}/account` },
         }),
+        labels,
       );
 
     case "tweede-aankoop-advies":
@@ -111,6 +117,7 @@ export async function sendFlowEmail(
             <p>We hebben een paar combinaties klaargezet die passen bij wat je hebt.</p>`,
           cta: { label: "Bekijk de combinaties", href: `${site}/looks` },
         }),
+        labels,
       );
 
     case "maatprofiel-uitnodiging":
@@ -124,6 +131,7 @@ export async function sendFlowEmail(
             <p>Het invullen kost een minuut en levert je spaarpunten op.</p>`,
           cta: { label: "Maten invullen", href: `${site}/account` },
         }),
+        labels,
       );
 
     case "terugwin": {
@@ -145,6 +153,7 @@ export async function sendFlowEmail(
             ${p?.favoriete_winkel ? `<p>Je bent altijd welkom in ${p.favoriete_winkel} voor persoonlijk advies.</p>` : ""}`,
           cta: { label: "Bekijk de nieuwe collectie", href: `${site}/collections/nieuwe-collectie-gents` },
         }),
+        labels,
       );
     }
 
@@ -159,6 +168,7 @@ export async function sendFlowEmail(
             zolang je ze niet gebruikt.</p>`,
           cta: { label: "Bekijk je punten", href: `${site}/account` },
         }),
+        labels,
       );
 
     default:

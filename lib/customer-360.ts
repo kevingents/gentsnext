@@ -422,7 +422,10 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
 
     mail as (
       select lower(email) k, verstuurd, geopend, geklikt, laatst_geopend,
-             verjaardag, geslacht, mobiel
+             verjaardag, geslacht, mobiel,
+             -- Nieuwsbriefstand uit Spotler: telt sinds 17 aug mee als
+             -- toestemming, en afgemeld als weigering (zie hieronder).
+             afgemeld, spotler_nieuwsbrief
       from mail_engagement
     ),
 
@@ -583,7 +586,24 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
            else 'geen' end,
 
       c.marketing_opt_in,
-      coalesce(nb.mail_status, 'geen'),
+      /* Nieuwsbriefstatus uit TWEE administraties, in deze volgorde:
+         eigen afmelding → Spotler-afmelding → eigen inschrijving → Spotler-ja.
+
+         Waarom Spotler meetelt (besluit Kevin, 17 aug): onze eigen tabel heeft
+         VIER rijen. De 18.177 mensen die in Spotler op ja staan hebben zich
+         daar echt ingeschreven — Spotler wás het mailkanaal. Zonder deze regel
+         zijn 2.090 van hen bij ons onbereikbaar terwijl ze om post vroegen.
+
+         Afmeldingen komen ALTIJD mee en staan bovenaan, ook al vroeg niemand
+         daarom: iemand die zich ergens afmeldde alsnog mailen is de fout die
+         je niet wilt maken, en die kant op kan het nooit verkeerd zijn. */
+      case
+        when nb.mail_status = 'unsubscribed' then 'unsubscribed'
+        when ml.afgemeld then 'unsubscribed'
+        when nb.mail_status is not null then nb.mail_status
+        when lower(coalesce(ml.spotler_nieuwsbrief, '')) = 'yes' then 'subscribed'
+        else 'geen'
+      end,
       coalesce(nb.wa, false),
       coalesce(at.obj, '{}'::jsonb),
       now(),

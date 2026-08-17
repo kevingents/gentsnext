@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { emailFlowLeden, emailFlowStappen, orders } from "@/db/schema";
+import { emailFlowLeden, emailFlowStappen, mailGebeurtenissen, orders } from "@/db/schema";
 
 /**
  * Meten wat een flow oplevert.
@@ -157,16 +157,37 @@ export async function meetFlow(flowId: string, vensterDagen = VENSTER_DAGEN): Pr
   };
 }
 
-/** Per stap: hoeveel mails eruit gingen en hoeveel er daarna besteld werd. */
+/**
+ * Per stap: verstuurd, geopend, geklikt, en wat er daarna besteld werd.
+ *
+ * Opens en kliks komen uit `mail_gebeurtenissen` — de Resend-webhook. Ze staan
+ * BEWUST naast de bestellingen en niet in de plaats ervan: een openratio meet
+ * of je onderwerpregel werkt, niet of de mail iets opleverde. De cijfers uit
+ * het 360-profiel (`mail_engagement`) helpen hier niet, want die komen uit de
+ * Spotler-export en gaan per e-mailadres over de hele historie.
+ *
+ * Opens zijn een ONDERGRENS, geen waarheid: Apple Mail Privacy Protection en
+ * elke andere beeldblokkade laten een echte opening ontbreken. Kliks zijn
+ * betrouwbaarder, en daarom staan die er ook bij.
+ */
 export async function meetPerStap(
   flowId: string,
   vensterDagen = VENSTER_DAGEN
-): Promise<{ stap: number; verstuurd: number; besteld: number; omzetCents: number }[]> {
+): Promise<
+  { stap: number; verstuurd: number; geopend: number; geklikt: number; besteld: number; omzetCents: number }[]
+> {
   const db = getDb();
   const dagen = Math.max(1, Math.round(vensterDagen));
-  const r = await db.execute<{ stap: number; verstuurd: number; besteld: number; omzet: number }>(sql`
+  const r = await db.execute<{
+    stap: number;
+    verstuurd: number;
+    geopend: number;
+    geklikt: number;
+    besteld: number;
+    omzet: number;
+  }>(sql`
     with per_persoon as (
-      select s.stap, s.id,
+      select s.stap, s.id, s.lid_id,
         coalesce(sum(o.total_cents), 0)::int omzet,
         count(o.id) > 0 kocht
       from ${emailFlowStappen} s
@@ -176,17 +197,33 @@ export async function meetPerStap(
        and coalesce(o.paid_at, o.created_at) >= s.uitgevoerd_op
        and coalesce(o.paid_at, o.created_at) < s.uitgevoerd_op + make_interval(days => ${dagen}::int)
       where s.flow_id = ${flowId}::uuid and s.soort = 'mail' and s.gelukt
+      group by 1, 2, 3
+    ),
+    -- Eén regel per persoon per stap: iemand die de mail vijf keer opende is
+    -- één opening, anders meet je hoe vaak iemand zijn postvak ververst.
+    betrokken as (
+      select lid_id, stap,
+        bool_or(soort = 'geopend') geopend,
+        bool_or(soort = 'geklikt') geklikt
+      from ${mailGebeurtenissen}
+      where flow_id = ${flowId}::uuid and lid_id is not null
       group by 1, 2
     )
-    select stap,
+    select p.stap,
       count(*)::int verstuurd,
-      count(*) filter (where kocht)::int besteld,
-      coalesce(sum(omzet), 0)::int omzet
-    from per_persoon group by 1 order by 1
+      count(*) filter (where b.geopend)::int geopend,
+      count(*) filter (where b.geklikt)::int geklikt,
+      count(*) filter (where p.kocht)::int besteld,
+      coalesce(sum(p.omzet), 0)::int omzet
+    from per_persoon p
+    left join betrokken b on b.lid_id = p.lid_id and b.stap = p.stap
+    group by 1 order by 1
   `);
   return r.rows.map((x) => ({
     stap: Number(x.stap),
     verstuurd: Number(x.verstuurd),
+    geopend: Number(x.geopend),
+    geklikt: Number(x.geklikt),
     besteld: Number(x.besteld),
     omzetCents: Number(x.omzet),
   }));

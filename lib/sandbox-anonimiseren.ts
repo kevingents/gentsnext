@@ -272,6 +272,22 @@ export const ANONIMISEER_STAPPEN: Stap[] = [
     `,
   },
   {
+    /* Wat Resend terugmeldde over onze mails. Het mailadres staat er ook in —
+       dubbelop met email_flow_leden, maar hier los bruikbaar omdat ook
+       transactionele mails hierdoorheen komen.
+
+       Ook de URL gaat leeg: een kliklink kan een token dragen (bevestiging,
+       retourportaal, magic link) en dat is in een sandbox een sleutel die je
+       niet wilt uitdelen. */
+    naam: "Mailgebeurtenissen ontdoen van adressen en kliklinks",
+    sql: `
+      UPDATE mail_gebeurtenissen SET
+        email = CASE WHEN customer_id IS NULL THEN '' ELSE 'klant-' || left(customer_id::text, 8) || '@sandbox.invalid' END,
+        url = '',
+        bericht_id = '';
+    `,
+  },
+  {
     /* mail_engagement is het buitenbeentje: het MAILADRES is de primaire sleutel
        én de manier waarop customer-360 deze cijfers aan een profiel hangt. Puur
        overschrijven zou dus twee dingen slopen — de unieke sleutel en de join.
