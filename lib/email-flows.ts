@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { customers, emailFlowLeden, emailFlowStappen, emailFlows, customerProfiles } from "@/db/schema";
-import { definitieNaarSql, type RegelGroep } from "@/lib/audience-regels";
+import { audienceMembers, customers, emailFlowLeden, emailFlowStappen, emailFlows, customerProfiles, loyaltyEvents } from "@/db/schema";
+import { definitieNaarSql, VELDEN, type RegelGroep } from "@/lib/audience-regels";
 import { sendFlowEmail, type FlowSjabloon } from "@/lib/email-flow-sjablonen";
 
 /**
@@ -31,7 +31,50 @@ export type Stap =
   | { soort: "wacht"; uren: number }
   | { soort: "mail"; sjabloon: FlowSjabloon; onderwerp?: string }
   /** Klopt de regel? Dan door naar `danNaarStap`, anders gewoon de volgende. */
-  | { soort: "voorwaarde"; regel: RegelGroep; danNaarStap: number };
+  | { soort: "voorwaarde"; regel: RegelGroep; danNaarStap: number }
+  /**
+   * Punten toekennen. Dit maakt van een mailreeks een programma: "een half jaar
+   * niet geweest → 100 punten → mail die dat vertelt" is iets anders dan alleen
+   * die mail. De reden staat in het puntenoverzicht van de klant, dus die is
+   * klantzichtbaar en hoort in gewoon Nederlands.
+   */
+  | { soort: "punten"; punten: number; reden: string }
+  /**
+   * Lidmaatschap van een STATISCHE doelgroep aan- of uitzetten, en daarmee van
+   * de Meta- en Google-doelgroepen die daaraan hangen. Zo stopt de advertentie
+   * op de dag dat iemand koopt, in plaats van na de volgende sync-ronde.
+   *
+   * Bewust alleen statische doelgroepen: een dynamische wordt periodiek
+   * herbouwd uit zijn regel, dus alles wat een flow erin zet is bij de eerste
+   * herbouw weer weg. Dat zou stil misgaan, en dat is de ergste soort.
+   */
+  | { soort: "doelgroep"; doelgroepId: string; actie: "toevoegen" | "verwijderen" }
+  /**
+   * Wachten TOT een datum, in plaats van wachten ná een stap.
+   *
+   * "Wacht 72 uur" rekent vanaf het moment dat iemand instapte; daarmee kun je
+   * geen enkel moment raken dat in de agenda van de klant staat. Veertien dagen
+   * vóór zijn verjaardag een cadeaubon sturen is iets anders dan veertien dagen
+   * nadat hij toevallig in een doelgroep viel.
+   *
+   * `jaarlijks` is voor datums die terugkomen (de verjaardag): dan pakken we de
+   * eerstvolgende keer. Zonder dat is een datum die al voorbij is geen wachten
+   * meer — dan gaat de klant meteen door naar de volgende stap, want blijven
+   * staan tot volgend jaar is nooit wat iemand bedoelt.
+   */
+  | { soort: "wacht_tot"; veld: string; dagenVoor: number; jaarlijks: boolean };
+
+/**
+ * Naar de volgende stap, meteen. Stappen die niets naar de klant sturen mogen
+ * elkaar in dezelfde ronde opvolgen — "geef punten, wacht een uur, mail" moet
+ * je kunnen schrijven zonder dat het punten geven zelf een uur kost.
+ */
+async function schuifDoor(db: ReturnType<typeof getDb>, lidId: string, stap: number) {
+  await db
+    .update(emailFlowLeden)
+    .set({ stap: stap + 1, volgendeStapOp: sql`now()` })
+    .where(eq(emailFlowLeden.id, lidId));
+}
 
 export type FlowResultaat = {
   ingestapt: number;
@@ -40,6 +83,8 @@ export type FlowResultaat = {
   uitgestapt: number;
   klaar: number;
   uitgesteld: number;
+  /** Toegekende punten deze ronde — één getal, over alle flows heen. */
+  punten: number;
 };
 
 /* ─────────────────────────────── Instappen ──────────────────────────────── */
@@ -135,7 +180,7 @@ export async function startFlowVoorKlant(slug: string, customerId: string): Prom
  */
 export async function loopFlows(maxLeden = 500): Promise<FlowResultaat> {
   const db = getDb();
-  const uit: FlowResultaat = { ingestapt: 0, stappen: 0, mails: 0, uitgestapt: 0, klaar: 0, uitgesteld: 0 };
+  const uit: FlowResultaat = { ingestapt: 0, stappen: 0, mails: 0, uitgestapt: 0, klaar: 0, uitgesteld: 0, punten: 0 };
 
   const leden = await db.execute<{
     id: string; flow_id: string; customer_id: string; stap: number;
@@ -203,6 +248,116 @@ export async function loopFlows(maxLeden = 500): Promise<FlowResultaat> {
         .update(emailFlowLeden)
         .set({ stap: naar, volgendeStapOp: sql`now()` })
         .where(eq(emailFlowLeden.id, lid.id));
+      uit.stappen++;
+      continue;
+    }
+
+    if (stap.soort === "wacht_tot") {
+      /* Alleen datumvelden uit de vaste veldenlijst — dezelfde deur als bij de
+         doelgroepregels, zodat hier geen eigen kolomnaam naar binnen kan. */
+      const veld = VELDEN.find((v) => v.key === stap.veld && v.type === "datum");
+      if (!veld) {
+        await schuifDoor(db, lid.id, lid.stap);
+        uit.stappen++;
+        continue;
+      }
+      const dagen = Math.max(0, Math.round(Number(stap.dagenVoor) || 0));
+      const kolom = sql.raw(`p.${veld.kolom}`);
+      /* De eerstvolgende keer dat die datum langskomt, min de dagen ervoor.
+         Bij een jaarlijkse datum rolt hij door naar volgend jaar zodra het
+         moment van dit jaar al geweest is. */
+      const doel = await db.execute<{ moment: string | null }>(sql`
+        select case
+          when ${kolom} is null then null
+          when ${stap.jaarlijks}::boolean then (
+            case
+              when make_date(extract(year from now())::int, extract(month from ${kolom})::int, extract(day from ${kolom})::int)
+                   - ${dagen}::int >= current_date
+              then make_date(extract(year from now())::int, extract(month from ${kolom})::int, extract(day from ${kolom})::int)
+              else make_date(extract(year from now())::int + 1, extract(month from ${kolom})::int, extract(day from ${kolom})::int)
+            end
+          )::timestamptz
+          else ${kolom}::timestamptz
+        end - make_interval(days => ${dagen}::int) moment
+        from ${customerProfiles} p where p.customer_id = ${lid.customer_id}::uuid
+      `);
+      const moment = doel.rows[0]?.moment ?? null;
+      if (!moment || new Date(moment) <= new Date()) {
+        // Geen datum bekend, of hij is al geweest: niet blijven staan.
+        await schuifDoor(db, lid.id, lid.stap);
+      } else {
+        await db
+          .update(emailFlowLeden)
+          .set({ stap: lid.stap + 1, volgendeStapOp: sql`${moment}::timestamptz` })
+          .where(eq(emailFlowLeden.id, lid.id));
+      }
+      uit.stappen++;
+      continue;
+    }
+
+    /* Punten en doelgroepen vallen bewust BUITEN het frequentieplafond: dat
+       plafond bestaat om postbussen te beschermen, en hier gaat er niets naar
+       de klant. Punten die een dag blijven liggen omdat een andere flow toevallig
+       gemaild heeft, is precies het soort stille vertraging dat niemand later
+       nog kan verklaren. */
+    if (stap.soort === "punten") {
+      const n = Math.round(Number(stap.punten) || 0);
+      if (!n) {
+        await schuifDoor(db, lid.id, lid.stap);
+        continue;
+      }
+      /* Idempotent via de bestaande unieke index op (ref_type, ref_id): één
+         puntenmutatie per lid per stap. Herstart je de loper halverwege, dan
+         boekt dezelfde stap niet nog eens. */
+      const geboekt = await db
+        .insert(loyaltyEvents)
+        .values({
+          customerId: lid.customer_id as string,
+          points: n,
+          // Klantzichtbaar — dit staat straks in zijn puntenoverzicht.
+          reason: String(stap.reden || "Bonuspunten").slice(0, 200),
+          refType: "flow_stap",
+          refId: `${lid.id}:${lid.stap}`,
+        })
+        .onConflictDoNothing()
+        .returning({ id: loyaltyEvents.id });
+      if (geboekt.length) {
+        await db
+          .update(customers)
+          .set({ loyaltyPoints: sql`coalesce(${customers.loyaltyPoints}, 0) + ${n}` })
+          .where(eq(customers.id, lid.customer_id as string));
+        await db
+          .insert(emailFlowStappen)
+          .values({ lidId: lid.id, flowId: lid.flow_id, customerId: lid.customer_id, stap: lid.stap, soort: "punten" })
+          .onConflictDoNothing();
+        uit.punten += n;
+      }
+      await schuifDoor(db, lid.id, lid.stap);
+      uit.stappen++;
+      continue;
+    }
+
+    if (stap.soort === "doelgroep") {
+      if (stap.actie === "toevoegen") {
+        await db
+          .insert(audienceMembers)
+          .values({ audienceId: stap.doelgroepId, customerId: lid.customer_id as string })
+          .onConflictDoNothing();
+      } else {
+        await db
+          .delete(audienceMembers)
+          .where(
+            and(
+              eq(audienceMembers.audienceId, stap.doelgroepId),
+              eq(audienceMembers.customerId, lid.customer_id as string)
+            )
+          );
+      }
+      await db
+        .insert(emailFlowStappen)
+        .values({ lidId: lid.id, flowId: lid.flow_id, customerId: lid.customer_id, stap: lid.stap, soort: "doelgroep" })
+        .onConflictDoNothing();
+      await schuifDoor(db, lid.id, lid.stap);
       uit.stappen++;
       continue;
     }

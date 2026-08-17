@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { audiences, emailFlowLeden, emailFlowStappen, emailFlows } from "@/db/schema";
 import { coreAuth } from "@/lib/store-core-token";
@@ -45,7 +45,10 @@ export async function POST(req: Request) {
   try {
     switch (actie) {
       case "opties": {
-        const dg = await db.select({ id: audiences.id, slug: audiences.slug, naam: audiences.naam, aantalBereikbaar: audiences.aantalBereikbaar }).from(audiences).where(eq(audiences.actief, true));
+        const dg = await db
+          .select({ id: audiences.id, slug: audiences.slug, naam: audiences.naam, soort: audiences.soort, aantalBereikbaar: audiences.aantalBereikbaar })
+          .from(audiences)
+          .where(eq(audiences.actief, true));
         return NextResponse.json({ ok: true, sjablonen: SJABLOON_INFO, doelgroepen: dg, velden: VELDEN, operatoren: OPERATOREN, categorieen: FLOW_CATEGORIEEN });
       }
 
@@ -99,6 +102,38 @@ export async function POST(req: Request) {
         // Een mailstap zonder sjabloon zou stil niets doen; dat mag niet door.
         const kaal = stappen.findIndex((s) => s.soort === "mail" && !s.sjabloon);
         if (kaal >= 0) return NextResponse.json({ ok: false, error: `Stap ${kaal + 1} is een mail zonder sjabloon.` }, { status: 400 });
+
+        const leeg = stappen.findIndex((s) => s.soort === "punten" && !Math.round(Number(s.punten) || 0));
+        if (leeg >= 0) return NextResponse.json({ ok: false, error: `Stap ${leeg + 1} kent 0 punten toe.` }, { status: 400 });
+
+        // Een wacht-tot op een veld dat niet bestaat zou de stap stil overslaan.
+        const geenDatum = stappen.findIndex(
+          (s) => s.soort === "wacht_tot" && !VELDEN.some((v) => v.key === s.veld && v.type === "datum")
+        );
+        if (geenDatum >= 0)
+          return NextResponse.json({ ok: false, error: `Stap ${geenDatum + 1} wacht op een veld dat geen datum is.` }, { status: 400 });
+
+        /* Een doelgroepstap die naar een DYNAMISCHE doelgroep wijst, faalt stil:
+           het lidmaatschap wordt bij de eerstvolgende herbouw uit de regel
+           weggegooid. Dat merk je pas als een advertentiecampagne scheef loopt,
+           dus dat weigeren we hier in plaats van het te laten gebeuren. */
+        const dgStappen = stappen.filter((s) => s.soort === "doelgroep");
+        if (dgStappen.length) {
+          const ids = [...new Set(dgStappen.map((s) => String(s.doelgroepId || "")))].filter(Boolean);
+          const gevonden = ids.length
+            ? await db.select({ id: audiences.id, soort: audiences.soort, naam: audiences.naam }).from(audiences).where(inArray(audiences.id, ids))
+            : [];
+          for (const [i, s] of stappen.entries()) {
+            if (s.soort !== "doelgroep") continue;
+            const dg = gevonden.find((g) => g.id === s.doelgroepId);
+            if (!dg) return NextResponse.json({ ok: false, error: `Stap ${i + 1} wijst naar een doelgroep die niet bestaat.` }, { status: 400 });
+            if (dg.soort !== "statisch")
+              return NextResponse.json(
+                { ok: false, error: `Stap ${i + 1}: "${dg.naam}" is een dynamische doelgroep. Die wordt uit zijn eigen regel herbouwd, dus wat een flow erin zet verdwijnt weer. Maak er een statische doelgroep voor aan.` },
+                { status: 400 }
+              );
+          }
+        }
 
         const waarden = {
           slug: String(b.slug || "").trim() || String(b.naam || "flow").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60),
