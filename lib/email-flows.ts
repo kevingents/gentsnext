@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { audienceMembers, customers, emailFlowLeden, emailFlowStappen, emailFlows, customerProfiles, loyaltyEvents } from "@/db/schema";
-import { definitieNaarSql, type RegelGroep } from "@/lib/audience-regels";
+import { definitieNaarSql, VELDEN, type RegelGroep } from "@/lib/audience-regels";
 import { sendFlowEmail, type FlowSjabloon } from "@/lib/email-flow-sjablonen";
 
 /**
@@ -48,7 +48,21 @@ export type Stap =
    * herbouwd uit zijn regel, dus alles wat een flow erin zet is bij de eerste
    * herbouw weer weg. Dat zou stil misgaan, en dat is de ergste soort.
    */
-  | { soort: "doelgroep"; doelgroepId: string; actie: "toevoegen" | "verwijderen" };
+  | { soort: "doelgroep"; doelgroepId: string; actie: "toevoegen" | "verwijderen" }
+  /**
+   * Wachten TOT een datum, in plaats van wachten ná een stap.
+   *
+   * "Wacht 72 uur" rekent vanaf het moment dat iemand instapte; daarmee kun je
+   * geen enkel moment raken dat in de agenda van de klant staat. Veertien dagen
+   * vóór zijn verjaardag een cadeaubon sturen is iets anders dan veertien dagen
+   * nadat hij toevallig in een doelgroep viel.
+   *
+   * `jaarlijks` is voor datums die terugkomen (de verjaardag): dan pakken we de
+   * eerstvolgende keer. Zonder dat is een datum die al voorbij is geen wachten
+   * meer — dan gaat de klant meteen door naar de volgende stap, want blijven
+   * staan tot volgend jaar is nooit wat iemand bedoelt.
+   */
+  | { soort: "wacht_tot"; veld: string; dagenVoor: number; jaarlijks: boolean };
 
 /**
  * Naar de volgende stap, meteen. Stappen die niets naar de klant sturen mogen
@@ -234,6 +248,49 @@ export async function loopFlows(maxLeden = 500): Promise<FlowResultaat> {
         .update(emailFlowLeden)
         .set({ stap: naar, volgendeStapOp: sql`now()` })
         .where(eq(emailFlowLeden.id, lid.id));
+      uit.stappen++;
+      continue;
+    }
+
+    if (stap.soort === "wacht_tot") {
+      /* Alleen datumvelden uit de vaste veldenlijst — dezelfde deur als bij de
+         doelgroepregels, zodat hier geen eigen kolomnaam naar binnen kan. */
+      const veld = VELDEN.find((v) => v.key === stap.veld && v.type === "datum");
+      if (!veld) {
+        await schuifDoor(db, lid.id, lid.stap);
+        uit.stappen++;
+        continue;
+      }
+      const dagen = Math.max(0, Math.round(Number(stap.dagenVoor) || 0));
+      const kolom = sql.raw(`p.${veld.kolom}`);
+      /* De eerstvolgende keer dat die datum langskomt, min de dagen ervoor.
+         Bij een jaarlijkse datum rolt hij door naar volgend jaar zodra het
+         moment van dit jaar al geweest is. */
+      const doel = await db.execute<{ moment: string | null }>(sql`
+        select case
+          when ${kolom} is null then null
+          when ${stap.jaarlijks}::boolean then (
+            case
+              when make_date(extract(year from now())::int, extract(month from ${kolom})::int, extract(day from ${kolom})::int)
+                   - ${dagen}::int >= current_date
+              then make_date(extract(year from now())::int, extract(month from ${kolom})::int, extract(day from ${kolom})::int)
+              else make_date(extract(year from now())::int + 1, extract(month from ${kolom})::int, extract(day from ${kolom})::int)
+            end
+          )::timestamptz
+          else ${kolom}::timestamptz
+        end - make_interval(days => ${dagen}::int) moment
+        from ${customerProfiles} p where p.customer_id = ${lid.customer_id}::uuid
+      `);
+      const moment = doel.rows[0]?.moment ?? null;
+      if (!moment || new Date(moment) <= new Date()) {
+        // Geen datum bekend, of hij is al geweest: niet blijven staan.
+        await schuifDoor(db, lid.id, lid.stap);
+      } else {
+        await db
+          .update(emailFlowLeden)
+          .set({ stap: lid.stap + 1, volgendeStapOp: sql`${moment}::timestamptz` })
+          .where(eq(emailFlowLeden.id, lid.id));
+      }
       uit.stappen++;
       continue;
     }

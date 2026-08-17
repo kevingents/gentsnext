@@ -106,6 +106,13 @@ export async function POST(req: Request) {
         const leeg = stappen.findIndex((s) => s.soort === "punten" && !Math.round(Number(s.punten) || 0));
         if (leeg >= 0) return NextResponse.json({ ok: false, error: `Stap ${leeg + 1} kent 0 punten toe.` }, { status: 400 });
 
+        // Een wacht-tot op een veld dat niet bestaat zou de stap stil overslaan.
+        const geenDatum = stappen.findIndex(
+          (s) => s.soort === "wacht_tot" && !VELDEN.some((v) => v.key === s.veld && v.type === "datum")
+        );
+        if (geenDatum >= 0)
+          return NextResponse.json({ ok: false, error: `Stap ${geenDatum + 1} wacht op een veld dat geen datum is.` }, { status: 400 });
+
         /* Een doelgroepstap die naar een DYNAMISCHE doelgroep wijst, faalt stil:
            het lidmaatschap wordt bij de eerstvolgende herbouw uit de regel
            weggegooid. Dat merk je pas als een advertentiecampagne scheef loopt,
