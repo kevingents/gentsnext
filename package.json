@@ -31,7 +31,8 @@
     "verify:possales": "tsx scripts/verify-pos-sales.ts",
     "backfill:punten": "tsx scripts/backfill-loyalty.ts",
     "db:migratie": "tsx scripts/migratie-uitvoeren.ts",
-    "profielen:herbouw": "tsx scripts/herbouw-profielen.ts"
+    "profielen:herbouw": "tsx scripts/herbouw-profielen.ts",
+    "import:spotler": "tsx scripts/import-spotler-export.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

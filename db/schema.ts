@@ -2181,6 +2181,17 @@ export const mailEngagement = pgTable(
     /** Wanneer we Spotler het laatst over dit adres bevraagd hebben — stuurt de
      *  rollende verrijking (oudste eerst). */
     gezochtOp: timestamp("gezocht_op", { withTimezone: true }),
+    /** Uit de Spotler-export. Postcode vult ons beeld aan waar de order er geen
+     *  had; de fase en doelgroepnamen bewaren we als BRON, niet als waarheid —
+     *  ons eigen segment rekent op onze data en heeft voorrang. */
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    /** Rauwe nieuwsbriefstand uit Spotler: 'yes' of 'no'. Bewust NIET vertaald
+     *  naar een afmelding — 96% van de export staat op 'no', en dat is "nooit
+     *  ingeschreven", niet "uitgeschreven". Alleen 'yes' is harde toestemming. */
+    spotlerNieuwsbrief: text("spotler_nieuwsbrief").notNull().default(""),
+    spotlerFase: text("spotler_fase").notNull().default(""),
+    spotlerDoelgroepen: text("spotler_doelgroepen").notNull().default(""),
     bijgewerktOp: timestamp("bijgewerkt_op", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("mail_engagement_klant_idx").on(t.customerId)]

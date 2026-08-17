@@ -63,7 +63,7 @@ const UUID_PATROON = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
    de orders komen er 12.771 bij. Een nummer is een tweede matchsleutel bij Meta
    en Google Ads naast e-mail, en het is wat een winkel nodig heeft om te bellen
    over een afhaalorder. */
-const TELEFOON_BRON = sql`coalesce(nullif(c.phone, ''), a.order_phone, '')`;
+const TELEFOON_BRON = sql`coalesce(nullif(c.phone, ''), nullif(a.order_phone, ''), ml.mobiel, '')`;
 
 const TELEFOON_E164 = sql`
   case
@@ -422,7 +422,7 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
 
     mail as (
       select lower(email) k, verstuurd, geopend, geklikt, laatst_geopend,
-             verjaardag, geslacht
+             verjaardag, geslacht, mobiel
       from mail_engagement
     ),
 
@@ -475,15 +475,25 @@ export async function herbouwProfielen(alleenKlanten?: string[]): Promise<Herbou
       where customer_id is not null and (postal_code <> '' or phone <> '')
       order by customer_id, created_at desc
     ),
+    /* Derde bron: de Spotler-export. Die brengt 36.772 postcodes mee, waarvan
+       een groot deel bij klanten die nooit online bestelden en dus ook geen
+       bezorgadres hebben. Volgorde blijft: eigen adresboek, dan de laatste
+       order, dan Spotler — van meest naar minst door de klant zelf onderhouden. */
+    adres_spotler as (
+      select customer_id cid, postcode, plaats
+      from mail_engagement
+      where customer_id is not null and (postcode <> '' or plaats <> '')
+    ),
     adres as (
       select
-        coalesce(b.cid, o.cid) cid,
-        coalesce(nullif(b.postal_code, ''), o.postal_code, '') postal_code,
-        coalesce(nullif(b.city, ''), o.city, '') city,
+        coalesce(b.cid, o.cid, s.cid) cid,
+        coalesce(nullif(b.postal_code, ''), nullif(o.postal_code, ''), s.postcode, '') postal_code,
+        coalesce(nullif(b.city, ''), nullif(o.city, ''), s.plaats, '') city,
         coalesce(nullif(b.country, ''), o.country, 'NL') country,
         coalesce(o.phone, '') order_phone
       from adres_boek b
       full outer join adres_order o on o.cid = b.cid
+      full outer join adres_spotler s on s.cid = coalesce(b.cid, o.cid)
     ),
     -- Attributie van de devices van deze klant: de eerste aanraking die we van
     -- hem kennen. Zo weet je bij een VIP-klant nog steeds welke campagne hem
