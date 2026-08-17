@@ -6,6 +6,7 @@ import { coreAuth } from "@/lib/store-core-token";
 import { OPERATOREN, VELDEN, omschrijfDefinitie, valideerDefinitie, type RegelGroep } from "@/lib/audience-regels";
 import { loopFlows, vulFlow, type Stap } from "@/lib/email-flows";
 import { SJABLOON_INFO } from "@/lib/email-flow-sjablonen";
+import { FLOW_CATEGORIEEN } from "@/lib/email-flow-categorieen";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
     switch (actie) {
       case "opties": {
         const dg = await db.select({ id: audiences.id, slug: audiences.slug, naam: audiences.naam, aantalBereikbaar: audiences.aantalBereikbaar }).from(audiences).where(eq(audiences.actief, true));
-        return NextResponse.json({ ok: true, sjablonen: SJABLOON_INFO, doelgroepen: dg, velden: VELDEN, operatoren: OPERATOREN });
+        return NextResponse.json({ ok: true, sjablonen: SJABLOON_INFO, doelgroepen: dg, velden: VELDEN, operatoren: OPERATOREN, categorieen: FLOW_CATEGORIEEN });
       }
 
       case "lijst": {
@@ -106,6 +107,7 @@ export async function POST(req: Request) {
           triggerSoort: String(b.triggerSoort || "doelgroep"),
           triggerDoelgroepId: (b.triggerDoelgroepId as string) || null,
           triggerEvent: String(b.triggerEvent || ""),
+          categorie: FLOW_CATEGORIEEN.some((c) => c.key === b.categorie) ? String(b.categorie) : "overig",
           stappen: stappen as unknown as Record<string, unknown>[],
           uitstap: uitstap as unknown as Record<string, unknown>,
           herhaalbaar: Boolean(b.herhaalbaar),
