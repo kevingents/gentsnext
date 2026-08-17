@@ -271,6 +271,12 @@ export async function getSettings(): Promise<Settings> {
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
+      // Ook deze geneste objecten per-veld mergen (niet onder de top-level ...stored
+      // laten vallen): anders vervangt een blob die vóór een nieuwe veld-toevoeging is
+      // opgeslagen het defaults-object volledig en komt dat nieuwe veld als undefined.
+      loyaltyConfig: { ...DEFAULT_SETTINGS.loyaltyConfig, ...(stored.loyaltyConfig || {}) },
+      pakbon: { ...DEFAULT_SETTINGS.pakbon, ...(stored.pakbon || {}) },
+      merchandisingPins: { ...DEFAULT_SETTINGS.merchandisingPins, ...(stored.merchandisingPins || {}) },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

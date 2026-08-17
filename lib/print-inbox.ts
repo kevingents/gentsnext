@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { storePrintJobs } from "@/db/schema";
 
@@ -111,9 +111,12 @@ export async function pendingPrintJobs(store: string, limit = 20): Promise<Print
     .select()
     .from(storePrintJobs)
     .where(and(eq(storePrintJobs.store, s), eq(storePrintJobs.status, "pending")))
-    .orderBy(desc(storePrintJobs.createdAt))
+    // Oudste eerst = printvolgorde. Eerder: desc(createdAt) + rows.reverse() — dat
+    // pakte juist de NIEUWSTE `lim` opdrachten en zette die oplopend, waardoor bij een
+    // backlog > lim de oudste bonnen achteraan de wachtrij bleven staan.
+    .orderBy(asc(storePrintJobs.createdAt))
     .limit(lim);
-  return rows.reverse().map(toJob); // oudste eerst
+  return rows.map(toJob);
 }
 
 /**

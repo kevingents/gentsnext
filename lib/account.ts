@@ -145,13 +145,22 @@ export async function redeemProfileCompletionBonus(
     return { ok: true, alreadyClaimed: true, customerId: c.id };
   }
 
-  await db.insert(loyaltyEvents).values({ customerId: c.id, points: PROFILE_BONUS_POINTS, reason: "Profiel afgerond", refType: "profile_completion" });
-  await db.update(customers).set({
+  // Atomaire claim (CAS): zet de bonus-vlag alleen als hij nog niet gezet was en
+  // boek de punten in DEZELFDE update. Twee gelijktijdige POST's met hetzelfde token
+  // lezen hierboven beide claimed=false; zonder deze guard zou elk +50 boeken. De
+  // loyalty-event schrijven we PAS als deze update een rij raakte (de winnaar).
+  const claim = await db.update(customers).set({
     ...patch,
-    loyaltyPoints: sql`${customers.loyaltyPoints} + ${PROFILE_BONUS_POINTS}`, // atomair (geen lost-update bij gelijktijdige claim)
+    loyaltyPoints: sql`${customers.loyaltyPoints} + ${PROFILE_BONUS_POINTS}`,
     profileCompletionBonusClaimed: true,
     profileCompletionTokenHash: null,
-  }).where(eq(customers.id, c.id));
+  }).where(and(eq(customers.id, c.id), eq(customers.profileCompletionBonusClaimed, false))).returning({ id: customers.id });
+  if (!claim.length) {
+    // Een parallelle claim won net → alleen het profiel bijwerken, geen dubbele bonus.
+    await db.update(customers).set(patch).where(eq(customers.id, c.id));
+    return { ok: true, alreadyClaimed: true, customerId: c.id };
+  }
+  await db.insert(loyaltyEvents).values({ customerId: c.id, points: PROFILE_BONUS_POINTS, reason: "Profiel afgerond", refType: "profile_completion" });
   // Apple-Wallet pas verversen (best-effort). Dynamische import zodat de
   // passkit-afhankelijkheid niet in de graph van deze brede kernmodule belandt.
   try { await (await import("@/lib/apple-wallet-push")).pushPassUpdate(c.id); } catch { /* best-effort */ }
@@ -206,7 +215,16 @@ export async function consumeMagicToken(rawToken: string): Promise<boolean> {
   const magic = rows[0];
   if (!magic || magic.expiresAt.getTime() < Date.now()) return false;
 
-  await db.update(customerSessions).set({ consumedAt: sql`now()` }).where(eq(customerSessions.id, magic.id));
+  // Atomair verzilveren (CAS op consumedAt): alleen doorgaan als DEZE update de rij
+  // van null→now() zette. Zonder de guard passeren twee gelijktijdige GET's (of een
+  // link-prefetcher + de echte klik) beide de isNull-check hierboven en maken beide
+  // een sessie; nu wint er precies één en faalt de ander netjes.
+  const consumed = await db
+    .update(customerSessions)
+    .set({ consumedAt: sql`now()` })
+    .where(and(eq(customerSessions.id, magic.id), isNull(customerSessions.consumedAt)))
+    .returning({ id: customerSessions.id });
+  if (!consumed.length) return false;
   await createSession(magic.customerId);
 
   // Bestaande gast-orders met dit e-mailadres aan het account koppelen.

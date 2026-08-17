@@ -49,7 +49,20 @@ export async function POST(req: Request) {
     if (payment.metadata && (payment.metadata as Record<string, unknown>).kind === "reservation") {
       if (payment.status === "paid" || payment.status === "authorized") {
         const reservationId = String((payment.metadata as Record<string, unknown>).reservationId || "");
-        if (reservationId) await convertReservationToOrder(reservationId);
+        if (reservationId) {
+          const res = await convertReservationToOrder(reservationId);
+          // Mislukte conversie → de klant is WÉL betaald, maar er is geen order en de
+          // reservering staat weer op 'open'. Een 200 laat Mollie stoppen met retryen;
+          // geef 500 zodat Mollie het opnieuw aanbiedt en een volgende poging de order
+          // alsnog maakt (convertReservationToOrder is idempotent). Zonder dit riskeer
+          // je "betaald, geen order" + een tweede betaling via de betaal-token-pagina.
+          if (!res.ok) {
+            return NextResponse.json(
+              { ok: false, error: res.error || "reservering-conversie mislukt" },
+              { status: 500 }
+            );
+          }
+        }
       }
       return NextResponse.json({ ok: true });
     }

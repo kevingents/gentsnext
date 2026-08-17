@@ -8,13 +8,15 @@ const LETTER_SIZES = new Set([
   "xxs", "xs", "s", "m", "l", "xl", "xxl", "xxxl", "3xl", "4xl", "5xl", "6xl", "ml", "s/m", "m/l", "l/xl",
 ]);
 
-/** Is dit token een maat? (lettermaat, EU-maat 28-64, of lengtemaat 88-130). */
+/** Is dit token een maat? (lettermaat, EU-maat 28-64, of lengtemaat 80-130). */
 export function isSizeToken(tok: string): boolean {
   const t = tok.toLowerCase().trim();
   if (LETTER_SIZES.has(t)) return true;
   if (/^\d{2,3}$/.test(t)) {
     const n = Number(t);
-    return (n >= 28 && n <= 64) || (n >= 80 && n <= 130) || (n >= 36 && n <= 50);
+    // 28-64 = EU-confectiemaat, 80-130 = lengtemaat. (De losse 36-50-check was dood:
+    // dat bereik ligt volledig binnen 28-64.)
+    return (n >= 28 && n <= 64) || (n >= 80 && n <= 130);
   }
   if (/^\d{2}\/\d{2}$/.test(t)) return true;
   return false;

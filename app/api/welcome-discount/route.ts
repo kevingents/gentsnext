@@ -87,7 +87,10 @@ export async function POST(req: Request) {
       await fetch(`https://api.resend.com/audiences/${audience}/contacts`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ email, unsubscribed: false }),
+        // GEEN unsubscribed:false forceren: dat zou een eerder afgemeld contact via
+        // Resend's upsert weer op de verzendlijst zetten zonder nieuwe opt-in (AVG).
+        // Een nieuw contact maakt Resend standaard al als ingeschreven aan.
+        body: JSON.stringify({ email }),
       });
     } catch {
       /* niet kritisch */

@@ -79,7 +79,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   function pageHref(p: number): string {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) {
-      if (typeof v === "string" && k !== "page") params.set(k, v);
+      if (k === "page") continue;
+      // Ook array-waardige params (herhaalde keys) meenemen — anders verliest een
+      // gedeelde/handmatige URL met bv. ?maat=L&maat=XL zijn filter op pagina 2.
+      if (typeof v === "string") params.set(k, v);
+      else if (Array.isArray(v)) for (const one of v) if (typeof one === "string") params.append(k, one);
     }
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();

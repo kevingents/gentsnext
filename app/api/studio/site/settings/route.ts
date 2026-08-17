@@ -83,6 +83,14 @@ function sanitizeOperational(input: unknown): Partial<Settings> {
   return out;
 }
 
+/** Alleen veilige link-schemes toestaan (stored-XSS-preventie op de publieke
+ *  homepage; hero-CTA en announcement worden als <a href>/<Link> gerenderd).
+ *  Zelfde whitelist als /api/studio/site/menu — die divergentie was de bug. */
+const safeHref = (v: unknown, n: number) => {
+  const h = String(v ?? "").trim().slice(0, n);
+  return /^(\/|https:\/\/|mailto:|tel:|#)/i.test(h) ? h : "#";
+};
+
 /** Homepage-content: announcement, hero, usps, deliveryCutoffHour. */
 function sanitizeContent(input: unknown): SiteSettingsPatch {
   const b = (input || {}) as Record<string, unknown>;
@@ -92,7 +100,7 @@ function sanitizeContent(input: unknown): SiteSettingsPatch {
     out.announcement = {
       text: String(a.text || "").slice(0, 240),
       linkLabel: a.linkLabel ? String(a.linkLabel).slice(0, 60) : undefined,
-      linkHref: a.linkHref ? String(a.linkHref).slice(0, 200) : undefined,
+      linkHref: a.linkHref ? safeHref(a.linkHref, 200) : undefined,
     };
   }
   if (b.hero && typeof b.hero === "object") {
@@ -106,12 +114,12 @@ function sanitizeContent(input: unknown): SiteSettingsPatch {
       posterUrl: String(h.posterUrl || "").slice(0, 400),
       primary: {
         label: String((h.primary as Record<string, unknown>)?.label || "").slice(0, 40),
-        href: String((h.primary as Record<string, unknown>)?.href || "").slice(0, 200),
+        href: safeHref((h.primary as Record<string, unknown>)?.href, 200),
       },
       secondary: (h.secondary as Record<string, unknown>)?.label
         ? {
             label: String((h.secondary as Record<string, unknown>).label).slice(0, 40),
-            href: String((h.secondary as Record<string, unknown>).href || "").slice(0, 200),
+            href: safeHref((h.secondary as Record<string, unknown>).href, 200),
           }
         : undefined,
     };
