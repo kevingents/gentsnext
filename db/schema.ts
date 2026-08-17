@@ -2461,6 +2461,8 @@ export const emailFlows = pgTable(
     uitstap: jsonb("uitstap").notNull().default({}),
     herhaalbaar: boolean("herhaalbaar").notNull().default(false),
     herhaalNaDagen: integer("herhaal_na_dagen").notNull().default(90),
+    /** Percentage instappers dat bewust NIETS krijgt, als controlegroep. 0 = uit. */
+    holdoutProcent: integer("holdout_procent").notNull().default(0),
     actief: boolean("actief").notNull().default(false),
     aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
