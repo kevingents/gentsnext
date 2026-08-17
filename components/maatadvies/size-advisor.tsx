@@ -16,12 +16,22 @@ import {
   type ReferenceBrand,
   type ReferenceLetter,
 } from "@/lib/size-reference";
+import { useSizeChart } from "@/components/maatadvies/size-chart-provider";
 
 const FITS: { key: FitPreference; labelKey: string; hintKey: string }[] = [
   { key: "slim", labelKey: "sizeAdvisor.fit.slim", hintKey: "sizeAdvisor.fit.slimHint" },
   { key: "regular", labelKey: "sizeAdvisor.fit.modern", hintKey: "sizeAdvisor.fit.modernHint" },
   { key: "comfort", labelKey: "sizeAdvisor.fit.comfort", hintKey: "sizeAdvisor.fit.comfortHint" },
 ];
+
+/** De velden die een advies invult in het maatprofiel. */
+export type AdviceSizes = {
+  colbert: string;
+  overhemd: string;
+  pasvorm: string;
+  lengte: string;
+  gewicht: string;
+};
 
 const CONFIDENCE_LABEL_KEY: Record<CategoryAdvice["confidence"], string> = {
   hoog: "sizeAdvisor.confidence.high",
@@ -58,8 +68,43 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
   );
 }
 
-export function SizeAdvisor() {
+/**
+ * `bonusPoints` = wat het bewaren van je maten eenmalig oplevert (instelbaar in
+ * de tool). Optioneel, want op de PDP zit de adviseur in een client-modal en is
+ * er geen server-component om de instelling door te geven; daar noemen we het
+ * bedrag pas ná het opslaan — de server stuurt het dan mee.
+ *
+ * `variant`:
+ *  - "page"   → twee kolommen naast elkaar op groot scherm (/maatadvies).
+ *  - "drawer" → één kolom. In de PDP-overlay geldt de lg-breakpoint van het
+ *    VENSTER, niet van de smalle drawer: het formulier werd daar in twee
+ *    kolommen van ~230px geperst en brak per twee woorden af. In de drawer
+ *    tonen we ook geen lege placeholder — het advies verschijnt gewoon
+ *    onder het formulier zodra het berekend is.
+ *  - "panel"  → als "drawer", maar bedoeld als kolom naast een formulier.
+ *
+ * `onApply`: staat de adviseur naast een maatformulier (Mijn GENTS → Mijn
+ * maten), dan slaat hij zelf niets op — hij vult dat formulier en de klant
+ * bevestigt met de opslag-knop die er al staat. Twee knoppen die allebei
+ * "opslaan" heten naast elkaar is een uitnodiging om de helft van je maten
+ * kwijt te raken; bovendien zou de eerste knop de punten opstrijken en het
+ * formulier met verouderde waarden laten staan.
+ */
+export function SizeAdvisor({
+  bonusPoints = 0,
+  variant = "page",
+  onApply,
+}: {
+  bonusPoints?: number;
+  variant?: "page" | "drawer" | "panel";
+  onApply?: (sizes: AdviceSizes) => void;
+} = {}) {
   const t = useT();
+  /* De actieve maattabel uit de portal, met de ingebakken tabel als terugval.
+     Deze regel raakte kwijt bij de squash-merge van #277 terwijl de import en
+     alle drie de gebruiken bleven staan — vandaar dat main niet meer bouwde. */
+  const chart = useSizeChart();
+  const drawer = variant !== "page";
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [fit, setFit] = useState<FitPreference>("regular");
@@ -70,6 +115,7 @@ export function SizeAdvisor() {
   const [advice, setAdvice] = useState<SizeAdvice | null>(null);
   const [error, setError] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "login" | "error">("idle");
+  const [earned, setEarned] = useState(0);
 
   const heightCm = num(height);
   const weightKg = num(weight);
@@ -79,30 +125,41 @@ export function SizeAdvisor() {
   const [showRef, setShowRef] = useState(false);
   const [refBrand, setRefBrand] = useState<ReferenceBrand | "">("");
   const [refLetter, setRefLetter] = useState<ReferenceLetter | "">("");
-  const refResult = refBrand && refLetter ? referenceAdvice(refBrand, refLetter, fit) : null;
+  const refResult = refBrand && refLetter ? referenceAdvice(refBrand, refLetter, fit, chart) : null;
+
+  function adviceSizes(a: SizeAdvice): AdviceSizes {
+    return {
+      colbert: a.jacket.size,
+      overhemd: a.shirt.size,
+      pasvorm: fit === "regular" ? "modern" : fit,
+      lengte: heightCm ? String(heightCm) : "",
+      gewicht: weightKg ? String(weightKg) : "",
+    };
+  }
 
   async function saveToProfile() {
     if (!advice) return;
+    // Naast een maatformulier: invullen i.p.v. opslaan (zie onApply hierboven).
+    if (onApply) {
+      onApply(adviceSizes(advice));
+      setSaveState("saved");
+      return;
+    }
     setSaveState("saving");
     try {
       const res = await fetch("/api/account/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          section: "size",
-          merge: true,
-          sizeProfile: {
-            colbert: advice.jacket.size,
-            overhemd: advice.shirt.size,
-            pasvorm: fit === "regular" ? "modern" : fit,
-            lengte: heightCm ? String(heightCm) : "",
-            gewicht: weightKg ? String(weightKg) : "",
-          },
-        }),
+        body: JSON.stringify({ section: "size", merge: true, sizeProfile: adviceSizes(advice) }),
       });
       if (res.status === 401) {
         setSaveState("login");
         return;
+      }
+      if (res.ok) {
+        // De server bepaalt of hier punten bij horen (eenmalig per klant).
+        const d = (await res.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
+        setEarned((d.bonuses ?? []).reduce((n, b) => n + (Number(b?.points) || 0), 0));
       }
       setSaveState(res.ok ? "saved" : "error");
     } catch {
@@ -121,20 +178,46 @@ export function SizeAdvisor() {
     }
     setError("");
     setSaveState("idle");
-    setAdvice(
-      recommendSizes({
+    const gemeten = showMeasured ? num(chest) : undefined;
+    const uitkomst = recommendSizes(
+      {
         heightCm,
         weightKg,
         fit,
-        chestCm: showMeasured ? num(chest) : undefined,
+        chestCm: gemeten,
         waistCm: showMeasured ? num(waist) : undefined,
         neckCm: showMeasured ? num(neck) : undefined,
-      })
+      },
+      chart,
     );
+    setAdvice(uitkomst);
+
+    /* Het advies wegschrijven om later te kunnen meten of het deugde (Site →
+       Maten → Advieskwaliteit). Bewust fire-and-forget: een meting mag nooit
+       tussen de klant en zijn maatadvies gaan staan. Zonder catch zou een
+       netwerkfout hier een onopgevangen promise-rejectie in de console geven. */
+    void fetch("/api/maatadvies/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lengteCm: heightCm,
+        gewichtKg: weightKg,
+        pasvorm: fit,
+        borstCm: uitkomst.estimatedChestCm,
+        gemeten: Boolean(gemeten),
+        adviesColbert: uitkomst.jacket.size,
+        adviesBoord: uitkomst.shirt.size,
+        adviesLengtemaat: uitkomst.trouserLength?.size ?? "",
+        zekerheid: uitkomst.jacket.confidence,
+        bron: variant === "page" ? "maatadvies" : variant === "drawer" ? "pdp" : "account",
+        tabelVersie: chart.versie,
+      }),
+      keepalive: true,
+    }).catch(() => {});
   }
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className={drawer ? "space-y-8" : "grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"}>
       {/* ── Formulier ──────────────────────────────────────────────── */}
       <form
         onSubmit={(e) => {
@@ -241,7 +324,7 @@ export function SizeAdvisor() {
                 type="button"
                 onClick={() => setFit(f.key)}
                 aria-pressed={fit === f.key}
-                className={`border px-3 py-3 text-left transition-colors ${
+                className={`border px-2 py-3 text-left transition-colors sm:px-3 ${
                   fit === f.key ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"
                 }`}
               >
@@ -302,7 +385,8 @@ export function SizeAdvisor() {
       </form>
 
       {/* ── Resultaat ──────────────────────────────────────────────── */}
-      <div className="lg:border-l lg:border-line lg:pl-10">
+      {drawer && !advice ? null : (
+      <div className={drawer ? undefined : "lg:border-l lg:border-line lg:pl-10"}>
         {advice ? (
           <div className="space-y-4">
             <div>
@@ -324,11 +408,16 @@ export function SizeAdvisor() {
                 <div className="flex items-start gap-3">
                   <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
                   <div>
-                    <p className="font-sans text-sm font-medium text-ink">{t("sizeAdvisor.savedToProfile")}</p>
-                    <p className="mt-1 font-sans text-xs text-ink-soft">
-                      {t("sizeAdvisor.savedMessage")}
+                    <p className="font-sans text-sm font-medium text-ink">
+                      {t(onApply ? "sizeAdvisor.applied" : "sizeAdvisor.savedToProfile")}
+                      {earned > 0 ? <span className="ml-2 text-success">{t("sizeAdvisor.savedBonus", { n: earned })}</span> : null}
                     </p>
-                    <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.viewMySizes")}</Link>
+                    <p className="mt-1 font-sans text-xs text-ink-soft">
+                      {t(onApply ? "sizeAdvisor.appliedMessage" : "sizeAdvisor.savedMessage")}
+                    </p>
+                    {onApply ? null : (
+                      <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.viewMySizes")}</Link>
+                    )}
                   </div>
                 </div>
               ) : saveState === "login" ? (
@@ -343,7 +432,8 @@ export function SizeAdvisor() {
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-sans text-sm text-ink-soft">
-                    <span className="font-medium text-ink">{t("sizeAdvisor.saveSizeLabel")}</span> — {t("sizeAdvisor.saveSizeHint")}
+                    <span className="font-medium text-ink">{t(onApply ? "sizeAdvisor.applyLabel" : "sizeAdvisor.saveSizeLabel")}</span> — {t(onApply ? "sizeAdvisor.applyHint" : "sizeAdvisor.saveSizeHint")}
+                    {bonusPoints > 0 ? <span className="mt-1 block text-ink">{t("sizeAdvisor.saveBonusHint", { n: bonusPoints })}</span> : null}
                   </p>
                   <button
                     type="button"
@@ -351,7 +441,7 @@ export function SizeAdvisor() {
                     disabled={saveState === "saving"}
                     className="btn-ghost shrink-0 !py-2"
                   >
-                    {saveState === "saving" ? t("sizeAdvisor.saving") : t("sizeAdvisor.saveButton")}
+                    {saveState === "saving" ? t("sizeAdvisor.saving") : t(onApply ? "sizeAdvisor.applyButton" : "sizeAdvisor.saveButton")}
                   </button>
                 </div>
               )}
@@ -369,6 +459,7 @@ export function SizeAdvisor() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

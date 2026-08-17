@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
-import { getMenu } from "@/lib/menu-server";
+import { getMenu, getServiceLinks } from "@/lib/menu-server";
 import { setContentDoc } from "@/lib/content-store";
-import type { MenuItem } from "@/lib/main-menu";
+import { docVersion, CONFLICT_MESSAGE } from "@/lib/content-version";
+import type { MenuItem, MenuLink } from "@/lib/main-menu";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,10 +51,22 @@ function sanitize(input: unknown): MenuItem[] {
     .filter((i) => i.label);
 }
 
+/** Servicelinks onderin de mobiele drawer — platte lijst, zelfde href-regels. */
+function sanitizeServiceLinks(input: unknown): MenuLink[] {
+  return (Array.isArray(input) ? input : [])
+    .map((l) => {
+      const lk = (l || {}) as Record<string, unknown>;
+      return { label: s(lk.label, 60), href: safeHref(lk.href, 200) };
+    })
+    .filter((l) => l.label && l.href)
+    .slice(0, 12);
+}
+
 export async function GET(req: Request) {
   if (!(await adminOrToken(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   try {
-    return NextResponse.json({ ok: true, items: await getMenu() });
+    const [items, serviceLinks] = await Promise.all([getMenu(), getServiceLinks()]);
+    return NextResponse.json({ ok: true, items, serviceLinks, version: docVersion(items) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
@@ -61,17 +74,40 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!(await adminOrToken(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
-  let body: { items?: unknown };
+  let body: { items?: unknown; serviceLinks?: unknown; version?: unknown };
   try {
-    body = (await req.json()) as { items?: unknown };
+    body = (await req.json()) as { items?: unknown; serviceLinks?: unknown; version?: unknown };
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige aanvraag." }, { status: 400 });
   }
   const items = sanitize(body?.items);
   if (!items.length) return NextResponse.json({ ok: false, error: "Het menu mag niet leeg zijn." }, { status: 400 });
   try {
+    // Botsingscontrole: stuurt de client de stempel mee die hij bij het openen
+    // kreeg, dan moet die nog kloppen met wat er nu staat. Zo niet, dan heeft
+    // iemand anders intussen opgeslagen en zou dit zijn werk wissen.
+    // Ontbreekt de stempel, dan slaan we gewoon op — anders zou een oudere
+    // client tijdens een uitrol geen enkele wijziging meer kwijt kunnen.
+    if (typeof body.version === "string" && body.version) {
+      const huidig = docVersion(await getMenu());
+      if (body.version !== huidig) {
+        return NextResponse.json({ ok: false, error: CONFLICT_MESSAGE, conflict: true }, { status: 409 });
+      }
+    }
     await setContentDoc("menu", { items });
-    return NextResponse.json({ ok: true, items });
+    // Apart document (content:menu-service): het menu-document draagt alleen
+    // `items`, dus een extra veld daarin zou bij de volgende opslag verdwijnen.
+    // Valt daarmee ook buiten de botsingscontrole hierboven, die op het menu
+    // zelf slaat.
+    let serviceLinks = await getServiceLinks();
+    if (body.serviceLinks !== undefined) {
+      serviceLinks = sanitizeServiceLinks(body.serviceLinks);
+      await setContentDoc("menu-service", { links: serviceLinks });
+    }
+    // Verse stempel uit de leeslaag, niet uit wat we net instuurden: getMenu()
+    // mag normaliseren, en dan zou de client een stempel bewaren die bij zijn
+    // volgende opslag al niet meer klopt — een botsing die er geen is.
+    return NextResponse.json({ ok: true, items, serviceLinks, version: docVersion(await getMenu()) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

@@ -25,6 +25,11 @@ type Props = {
   /** Actieve sortering — de sticky pil belooft "Filter & sorteer", dus de mobiele
       drawer moet óók een sorteer-keuze bevatten. */
   sort?: ProductSort;
+  /**
+   * A/B: vaste zijkolom (standaard) of een knop met lade bovenaan, ook op
+   * desktop. Mobiel verandert er niets — daar was het altijd al een lade.
+   */
+  positie?: "zijkant" | "boven";
 };
 
 function priceBrackets(
@@ -47,7 +52,13 @@ function trackFilter(facet: string, value: string, on: boolean) {
   track("filter", { props: { facet, value, on } });
 }
 
-export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
+export function PlpFilters({ facets, selection, total, mySize, sort, positie = "zijkant" }: Props) {
+  /* "boven" laat de vaste zijkolom vallen en geeft ook desktop de knop-plus-lade
+     die mobiel al had. Dat is de klassieke merchandising-afweging: filters altijd
+     in beeld (meer verfijnen) versus een breder productraster (meer producten per
+     scherm). Één schakelaar, dezelfde lade — geen tweede filterimplementatie. */
+  const bovenaan = positie === "boven";
+  const alleenMobiel = bovenaan ? "" : "lg:hidden";
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -73,7 +84,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
   // naar desktop terwijl de drawer open staat, dan lijkt de pagina bevroren (onzichtbare
   // modal houdt #main inert). Sluit 'm dus zodra de viewport ≥ lg wordt.
   useEffect(() => {
-    if (!openMobile) return;
+    if (!openMobile || bovenaan) return; // bovenaan is de lade óók op desktop de bediening
     const mq = window.matchMedia("(min-width: 1024px)");
     const onChange = () => { if (mq.matches) setOpenMobile(false); };
     onChange();
@@ -113,35 +124,21 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
     selection.colors.length +
     selection.sizes.length +
     selection.fits.length +
-    (selection.priceMin || selection.priceMax ? 1 : 0);
+    (selection.priceMin || selection.priceMax ? 1 : 0) +
+    selection.stores.length;
 
   const body = (
     <div className={pending ? "opacity-60 transition-opacity" : ""}>
-      {/* Shop in jouw maat — één klik naar alleen je eigen maat */}
-      {myFacet && mySize ? (
-        <button
-          type="button"
-          onClick={() => apply({ sizes: myActive ? [] : [mySize.facet] })}
-          aria-pressed={myActive}
-          className={`mb-4 flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors ${
-            myActive ? "border-ink bg-ink text-canvas" : "border-ink bg-canvas hover:bg-surface"
-          }`}
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M3 8h18v8H3zM7 8v3M11 8v5M15 8v3M19 8v5" />
-          </svg>
-          <span className="min-w-0 flex-1 font-sans text-sm leading-tight">
-            <span className="block font-medium">{myActive ? t("plp.filters.viewingMySize") : t("plp.filters.shopMySize")}</span>
-            <span className={`block text-xs ${myActive ? "text-canvas/70" : "text-muted"}`}>
-              {t("plp.filters.mySizePrefix")} {mySize.raw} · {myFacet.count} {myFacet.count === 1 ? t("plp.filters.itemSingular") : t("plp.filters.itemPlural")}
-            </span>
-          </span>
-          <span className={`shrink-0 font-sans text-xs underline underline-offset-2 ${myActive ? "text-canvas/80" : "text-ink"}`}>
-            {myActive ? t("plp.filters.clear") : t("plp.filters.show")}
-          </span>
-        </button>
-      ) : null}
-
+      {/* "Shop in jouw maat" stond hier als zwart blok bovenaan. Dat las als een
+          waarschuwing terwijl het een service is, en het dubbelde met het
+          maatfilter eronder. Het staat nu als chip bij de resultaten
+          (components/plp/active-chips): aan = gevuld met een kruisje, uit = een
+          omlijnd aanbod. Zie PlpActiveChips voor de afweging. */}
+      {/* Winkelvoorraad staat hier niet meer — niet als aanvinklijst en ook niet
+          als uitnodiging in een kadertje (Kevin, 13 aug: "staat nog steeds aan de
+          linkerkant"). Alles wat met winkels te maken heeft staat bij de
+          resultaten: de winkels als pil, en de kiezer als pil ervoor zolang er
+          nog geen winkel gekozen is. Zie components/plp/active-chips. */}
       {/* Maat staat bewust bovenaan en open: is het er niet in jouw maat, dan
           doet de rest er niet toe. Binnen de groep staan de maten per
           matensysteem (kleding · boordmaat · schoen · riem · …), want die
@@ -323,7 +320,9 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
       {activeCount > 0 ? (
         <button
           type="button"
-          onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined })}
+          // Wist het winkel-FILTER, niet je winkelkeuze zelf: die blijft in de
+          // keuzelijst staan (en in de cookie) zodat één klik 'm terugzet.
+          onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined, stores: [] })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
           {t("plp.filters.clearAllPrefix")} ({activeCount})
@@ -336,7 +335,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
     <>
       {/* Mobiel: filterknop bovenaan; de zwevende pil verschijnt pas zodra deze
           balk uit beeld scrolt (anders twee bedieningslagen tegelijk). */}
-      <div ref={topBarRef} className="mb-4 flex items-center justify-between lg:hidden">
+      <div ref={topBarRef} className={`mb-4 flex items-center justify-between ${alleenMobiel}`}>
         <button
           type="button"
           onClick={() => setOpenMobile(true)}
@@ -350,7 +349,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
         <button
           type="button"
           onClick={() => setOpenMobile(true)}
-          className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop lg:hidden"
+          className={`fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-ink bg-canvas px-5 py-2.5 font-sans text-sm font-medium shadow-pop ${alleenMobiel}`}
         >
           {t("plp.filters.filterAndSortMobileSticky")} {activeCount > 0 ? `· ${activeCount}` : ""}
         </button>
@@ -358,9 +357,9 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
 
       {openMobile && typeof document !== "undefined"
         ? createPortal(
-            <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t("plp.filters.mobileDrawerTitle")}>
+            <div className={`fixed inset-0 z-50 ${alleenMobiel}`} role="dialog" aria-modal="true" aria-label={t("plp.filters.mobileDrawerTitle")}>
               <div className="absolute inset-0 bg-ink/40" onClick={() => setOpenMobile(false)} />
-              <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
+              <div ref={drawerRef} tabIndex={-1} className="absolute inset-y-0 right-0 w-[88%] max-w-sm overflow-y-auto scroll-gents bg-canvas p-5 shadow-drawer focus:outline-none">
                 <div className="mb-4 flex items-center justify-between">
                   <p className="label-brand">{t("plp.filters.mobileDrawerTitle")}</p>
                   <button type="button" onClick={() => setOpenMobile(false)} className="-mr-2 flex h-11 items-center px-2 font-sans text-sm underline">
@@ -388,8 +387,8 @@ export function PlpFilters({ facets, selection, total, mySize, sort }: Props) {
           )
         : null}
 
-      {/* Desktop: sidebar */}
-      <div className="hidden lg:block">{body}</div>
+      {/* Desktop: vaste zijkolom — tenzij de variant de filters bovenaan wil. */}
+      {bovenaan ? null : <div className="hidden lg:block">{body}</div>}
     </>
   );
 }

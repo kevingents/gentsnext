@@ -1,7 +1,7 @@
 import { sendAppointmentConfirmation, sendAppointmentStoreNotify, emailConfigured } from "@/lib/email";
 import { getT } from "@/lib/t-server";
-import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
-import { storeNotifyEmail, type AppointmentType, type Dagdeel } from "@/lib/appointments";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n";
+import { storeNotifyEmail, type AppointmentType, type Dagdeel, type UpdatedAppointment } from "@/lib/appointments";
 
 /**
  * lib/afspraak-mail.ts — de bevestigingsmail bij een afspraak, één keer.
@@ -116,4 +116,48 @@ export async function stuurAfspraakMails(a: AfspraakMailInput): Promise<{ klantM
   }
 
   return { klantMail };
+}
+
+/**
+ * De DEFINITIEVE bevestiging: de winkel heeft het tijdstip vastgelegd, de
+ * afspraak staat. Dit is een andere mail dan de ontvangstbevestiging hierboven
+ * ("we nemen contact op") — die belooft juist dat deze mail nog komt. Zonder
+ * tijdstip (bevestigd zonder tijd) valt de tekst terug op datum + dagdeel.
+ * Fail-soft, zelfde afspraak als hierboven: de status stáát al in de database.
+ */
+export async function stuurAfspraakBevestigdMail(a: UpdatedAppointment): Promise<{ klantMail: boolean }> {
+  const locale: Locale = isLocale(a.locale) ? a.locale : DEFAULT_LOCALE;
+  const email = String(a.email || "").trim();
+  if (!/.+@.+\..+/.test(email)) return { klantMail: false };
+
+  try {
+    const t = await getT(locale);
+    const typeLabel = t(TYPE_KEY[a.type as AppointmentType] ?? TYPE_KEY.pasafspraak);
+    const datum = fmtAfspraakDatum(a.preferredDate, locale);
+    const rows = [
+      { label: t("afspraak.mail.row.type"), value: typeLabel },
+      { label: t("afspraak.mail.row.store"), value: a.store },
+      { label: t("afspraak.mail.bevestigd.row.date"), value: datum },
+      ...(a.tijd
+        ? [{ label: t("afspraak.mail.row.tijd"), value: a.tijd }]
+        : [{ label: t("afspraak.mail.row.dagdeel"), value: t(DAGDEEL_KEY[a.dagdeel as Dagdeel] ?? DAGDEEL_KEY["geen-voorkeur"]) }]),
+    ];
+    const klantMail = await sendAppointmentConfirmation({
+      to: email,
+      subject: t("afspraak.mail.bevestigd.subject", { store: a.store }),
+      heading: t("afspraak.mail.bevestigd.heading", { name: a.name }),
+      body: a.tijd
+        ? t("afspraak.mail.bevestigd.body", { type: typeLabel, store: a.store, date: datum, time: a.tijd })
+        : t("afspraak.mail.bevestigd.bodyZonderTijd", { type: typeLabel, store: a.store, date: datum }),
+      rows,
+      outro: t("afspraak.mail.outro"),
+    });
+    if (!klantMail && !emailConfigured()) {
+      console.log(`[afspraak] (stub mail) definitieve bevestiging naar ${email} voor ${a.store}`);
+    }
+    return { klantMail };
+  } catch (e) {
+    console.error("[afspraak] bevestigingsmail-fout:", e);
+    return { klantMail: false };
+  }
 }

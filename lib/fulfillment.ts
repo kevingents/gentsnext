@@ -1,16 +1,17 @@
 import { stockForSkus } from "@/lib/stock";
+import { safetyAllocationFor, safetyKey } from "@/lib/safety-stock";
 import { getStores, DAYS } from "@/lib/stores";
 import {
   isFulfillable,
   isWarehouse,
   branchPriority,
   branchCountry,
-  safetyStockFor,
-  cutoffHourFor,
   isHoliday,
-  BRANCH_CITY,
+  isDispatchDay,
+  effectiveCutoffHour,
 } from "@/lib/fulfillment-config";
 import { getSettings, type Settings } from "@/lib/settings";
+import { zoneFor, DEFAULT_COUNTRY } from "@/lib/shipping-zones";
 import { type Locale } from "@/lib/i18n";
 
 /**
@@ -27,7 +28,14 @@ import { type Locale } from "@/lib/i18n";
  */
 
 export type OrderLineInput = { sku: string; qty: number; title?: string; groupId?: string };
-export type AllocateOptions = { country?: string; postalCode?: string; excludeBranchIds?: string[] };
+export type AllocateOptions = {
+  country?: string;
+  postalCode?: string;
+  excludeBranchIds?: string[];
+  /** Intern (tweede ronde): voor deze sku's mag óók uit een onderbevoorrade winkel
+   *  geput worden. Zie het laatste-redmiddel-blok onderaan allocateOrder. */
+  ontgrendelBeschermd?: Set<string>;
+};
 
 export type ShipmentLine = { sku: string; qty: number; title?: string };
 export type Shipment = {
@@ -95,34 +103,36 @@ function isoAtOffset(base: { y: number; m: number; d: number }, k: number): stri
   return `${dt.getUTCFullYear()}-${mm}-${dd}`;
 }
 
-function openOn(branchId: string, dayName: string, isoDate: string, hoursByCity: Map<string, Record<string, string>>): boolean {
-  if (isHoliday(branchId, isoDate)) return false;
-  if (isWarehouse(branchId)) return dayName !== "zaterdag" && dayName !== "zondag";
-  const city = BRANCH_CITY[branchId];
-  const hours = city ? hoursByCity.get(city.toLowerCase()) : undefined;
-  if (!hours) return dayName !== "zaterdag" && dayName !== "zondag";
-  return Boolean((hours[dayName] || "").trim());
-}
+/** "Geen verzenddag gevonden binnen de horizon" — een vlag, geen aantal dagen. */
+export const DISPATCH_UNKNOWN = 99;
 
-function dispatchInfo(branchId: string, hoursByCity: Map<string, Record<string, string>>, settings: Settings) {
+function dispatchInfo(branchId: string, settings: Settings) {
   const n = nowNL();
-  // Cutoff van vandaag (per-weekdag, bv. magazijn vrijdag 16:00).
-  const cutoff = cutoffHourFor(branchId, settings, DAYS[n.dayIndex]);
   for (let k = 0; k < 9; k++) {
     const day = DAYS[(n.dayIndex + k) % 7];
     const iso = isoAtOffset(n, k);
-    if (!openOn(branchId, day, iso, hoursByCity)) continue;
-    if (k === 0 && n.minutes >= cutoff * 60) continue;
+    // isDispatchDay + effectiveCutoffHour zijn gedeeld met de pick-deadline die
+    // de winkel ziet — één waarheid, anders wijkt de belofte af van de werklijst.
+    if (!isDispatchDay(branchId, day, iso, settings)) continue;
+    if (k === 0 && n.minutes >= effectiveCutoffHour(branchId, day, settings) * 60) continue;
     return { canDispatchToday: k === 0, dispatchLabel: k === 0 ? "vandaag" : k === 1 ? "morgen" : day, dispatchInDays: k };
   }
-  return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: 9 };
+  /* Sentinel: binnen 9 dagen geen verzenddag gevonden (lange sluiting, feestdagen-
+     cluster). DISPATCH_UNKNOWN is GEEN echte 9 dagen — estimateDelivery mag er
+     dus nooit een harde leverdatum uit rekenen. */
+  return { canDispatchToday: false, dispatchLabel: "z.s.m.", dispatchInDays: DISPATCH_UNKNOWN };
 }
 
 /* ── Kandidaat-filialen ──────────────────────────────────────────────────── */
-async function buildBranches(skus: string[], settings: Settings): Promise<Branch[]> {
-  const stock = await stockForSkus(skus);
+async function buildBranches(skus: string[], settings: Settings, ontgrendel = new Set<string>()): Promise<Branch[]> {
+  const [stock, safety] = await Promise.all([stockForSkus(skus), safetyAllocationFor(skus)]);
   const hoursByCity = new Map<string, Record<string, string>>();
   for (const s of getStores()) hoursByCity.set(s.city.toLowerCase(), s.hours);
+
+  /* Tijdelijk gepauzeerde filialen (verbouwing, vakantiesluiting, onderbezetting)
+     krijgen géén orders. Zonder deze knop bleef de instroom doorlopen tot iemand
+     elke order handmatig als niet-leverbaar meldde. */
+  const gepauzeerd = new Set((settings.pausedBranchIds || []).map(String));
 
   const byBranch = new Map<string, { store: string; avail: Map<string, number>; surplus: number }>();
   for (const sku of skus) {
@@ -130,9 +140,19 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
     if (!entry) continue;
     for (const b of entry.byBranch) {
       if (!isFulfillable(b.branchId)) continue;
-      // Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
-      if (settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0) continue;
-      const net = b.qty - safetyStockFor(b.branchId, settings);
+      if (gepauzeerd.has(String(b.branchId))) continue;
+      /* Onderbevoorrade winkel beschermen: die voorraad heeft de winkel zelf nodig.
+         Bewust een VOORKEUR en geen verbod (Kevin, 12 aug: "laatste redmiddel").
+         Als een harde uitsluiting bleef er voorraad over die de PDP wél verkocht
+         maar de allocatie nooit pakte — 44 varianten die na betaling op 'review'
+         belandden. De tweede ronde ontgrendelt deze winkels alleen voor de sku's
+         die anders tekort blijven; zie onderaan allocateOrder. */
+      const beschermd =
+        settings.protectUnderstockedRetail && !isWarehouse(b.branchId) && b.tekort > 0;
+      if (beschermd && !ontgrendel.has(sku)) continue;
+      // Zelfde vastgelegde stuks als de PDP ziet (budget per artikel, niet per
+      // maat) — anders belooft de site voorraad die de allocatie niet mag pakken.
+      const net = b.qty - (safety.get(safetyKey(b.branchId, sku)) || 0);
       if (net <= 0) continue;
       let rec = byBranch.get(b.branchId);
       if (!rec) {
@@ -149,7 +169,7 @@ async function buildBranches(skus: string[], settings: Settings): Promise<Branch
 
   const branches: Branch[] = [];
   for (const [branchId, rec] of byBranch) {
-    const d = dispatchInfo(branchId, hoursByCity, settings);
+    const d = dispatchInfo(branchId, settings);
     branches.push({
       branchId,
       store: rec.store,
@@ -183,6 +203,10 @@ function makeComparator(country: string, settings: Settings) {
   const minSurplus = Math.max(1, settings.routeOverstockFirst?.minSurplus ?? 3);
   return (a: Branch, b: Branch): number => {
     if (a.canDispatchToday !== b.canDispatchToday) return a.canDispatchToday ? -1 : 1;
+    /* Niet alleen "vandaag ja/nee": sinds gesloten dagen echt meetellen kunnen
+       twee kandidaten 1, 2 of zelfs 9 dagen uit elkaar liggen. Zonder deze regel
+       won puur het filiaalnummer en beloofde de site onnodig een latere levering. */
+    if (a.dispatchInDays !== b.dispatchInDays) return a.dispatchInDays - b.dispatchInDays;
     const aSame = a.country === cc, bSame = b.country === cc;
     if (aSame !== bSame) return aSame ? -1 : 1;
     // Doorloop leegruimen: een winkel die ruim boven ideaal zit (≥ minSurplus) eerst
@@ -223,7 +247,7 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
   }
 
   const settings = await getSettings();
-  let branches = await buildBranches(skus, settings);
+  let branches = await buildBranches(skus, settings, opts.ontgrendelBeschermd);
   // Her-allocatie na 'niet leverbaar': de meldende winkel(s) overslaan zodat de
   // order niet terugkaatst naar dezelfde locatie.
   if (opts.excludeBranchIds?.length) {
@@ -359,7 +383,7 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
     .filter(([, q]) => q > 0)
     .map(([sku, q]) => ({ sku, qtyShort: q, title: titleBySku.get(sku) }));
 
-  return {
+  const plan: FulfillmentPlan = {
     shipments,
     splitCount: shipments.length,
     fullyAllocated: shortages.length === 0,
@@ -367,6 +391,26 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
     strategy: shortages.length && !shipments.length ? "unfulfillable" : "least-split",
     computedAt,
   };
+
+  /* LAATSTE REDMIDDEL. Blijft er iets tekort en is dat alleen omdat we
+     onderbevoorrade winkels overslaan? Dan opnieuw, met die winkels ontgrendeld
+     voor uitsluitend de sku's die tekort bleven. De bescherming blijft daarmee een
+     voorkeur (gezonde winkels en het magazijn gaan altijd eerst) zonder dat we een
+     klant laten betalen voor iets wat we wél in huis hebben.
+
+     Eén ronde diep: de tweede aanroep heeft ontgrendelBeschermd gezet en komt hier
+     dus niet nog eens binnen. We nemen het nieuwe plan alleen als het écht minder
+     tekort heeft — nooit een slechtere uitkomst terug.
+
+     Kanttekening: in ronde twee mag de greedy een ontgrendelde regel ook uit die
+     winkel vullen waar ronde één 'm deels uit een gezonde winkel haalde. Dat scheelt
+     een split; het kost de beschermde winkel hooguit de stuks van die ene regel. */
+  if (!plan.fullyAllocated && !opts.ontgrendelBeschermd && settings.protectUnderstockedRetail) {
+    const kort = new Set(plan.shortages.map((s) => s.sku));
+    const tweede = await allocateOrder(lines, { ...opts, ontgrendelBeschermd: kort });
+    if (tweede.shortages.length < plan.shortages.length) return tweede;
+  }
+  return plan;
 }
 
 function toShipment(b: Branch, lines: ShipmentLine[]): Shipment {
@@ -404,18 +448,32 @@ export type DeliveryEstimate = {
   standard: DeliveryOption;
   /** Express alleen aanwezig als het écht eerder is dan standaard. */
   express: DeliveryOption | null;
+  /**
+   * Bezorgdag per sku, ALLEEN gevuld als niet alles op dezelfde dag aankomt.
+   * Een gesplitste order komt in meerdere zendingen; de winkelwagen kan er dan
+   * per artikel bij zetten wanneer dát deel er is, in plaats van één datum te
+   * tonen die voor de helft van de artikelen niet klopt.
+   */
+  perSku?: { sku: string; dateLabel: string }[];
 };
 
 /** Volgende bezorgdag-offset (kalenderdagen) na 'startK', n leverdagen verder (ma–za, geen feestdag NL). */
-function addDeliveryDays(base: { dayIndex: number; y: number; m: number; d: number }, startK: number, n: number): number {
+function addDeliveryDays(
+  base: { dayIndex: number; y: number; m: number; d: number },
+  startK: number,
+  n: number,
+  extraClosures?: readonly string[],
+): number {
   let k = startK;
   let added = 0;
-  while (added < n) {
+  // Harde bovengrens: zonder deze zou een (foutieve) eindeloze reeks vrije dagen
+  // de lus laten vastlopen in een request.
+  while (added < n && k < startK + 60) {
     k++;
     const day = DAYS[(base.dayIndex + k) % 7];
     const iso = isoAtOffset(base, k);
     if (day === "zondag") continue; // bezorgers leveren ma–za
-    if (isHoliday("99", iso)) continue; // NL-feestdag
+    if (isHoliday("99", iso, extraClosures)) continue; // NL-feestdag of bedrijfssluiting
     added++;
   }
   return k;
@@ -512,17 +570,26 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
 
   const n = nowNL();
   const maxDispatch = Math.max(...plan.shipments.map((s) => s.dispatchInDays));
+  /* Geen verzenddag binnen de horizon (lange bedrijfssluiting, feestdagencluster):
+     dan is er geen eerlijke datum te noemen. Liever géén belofte dan een
+     verzonnen datum ~2 weken vooruit die als hard toegezegd oogt. */
+  if (maxDispatch >= DISPATCH_UNKNOWN) return null;
   const isSplit = plan.splitCount > 1;
   const hasStoreSource = plan.shipments.some((s) => !s.isWarehouse);
   const fromWarehouseOnly = !isSplit && !hasStoreSource;
 
+  /* Buitenland kost extra werkdagen onderweg (instelbaar per land). Zonder dit
+     beloofde de checkout een Spaanse klant dezelfde datum als een Nederlandse —
+     de bezorgbelofte kende simpelweg geen landen. */
+  const landExtra = zoneFor(opts.country || DEFAULT_COUNTRY, settings.shippingZones).extraDays;
+
   // Standaard transit: magazijn = snel (warehouseTransitDays); winkel/split = +extra.
-  const stdTransit = settings.warehouseTransitDays + (fromWarehouseOnly ? 0 : settings.storeExtraDays);
-  const stdMinK = addDeliveryDays(n, maxDispatch, stdTransit);
-  const stdMaxK = addDeliveryDays(n, maxDispatch, stdTransit + 1);
+  const stdTransit = settings.warehouseTransitDays + (fromWarehouseOnly ? 0 : settings.storeExtraDays) + landExtra;
+  const stdMinK = addDeliveryDays(n, maxDispatch, stdTransit, settings.extraClosureDates);
+  const stdMaxK = addDeliveryDays(n, maxDispatch, stdTransit + 1, settings.extraClosureDates);
 
   // Express: snelste werkdag na verzending.
-  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays);
+  const expK = addDeliveryDays(n, maxDispatch, settings.expressTransitDays + landExtra, settings.extraClosureDates);
   const stdShownK = fromWarehouseOnly ? stdMinK : stdMaxK;
 
   const standard: DeliveryOption = {
@@ -543,17 +610,44 @@ export async function estimateDelivery(lines: OrderLineInput[], opts: AllocateOp
 
   const note = isSplit ? S.noteSplit : hasStoreSource ? S.noteStore : null;
 
-  // Cutoff van vandaag, per-weekdag, van het filiaal/de filialen die vandaag
-  // verzenden (bv. magazijn vrijdag 16:00) — niet langer het basisuur.
+  // Cutoff van vandaag van het filiaal/de filialen die vandaag verzenden. Via
+  // dezelfde effectieve berekening als de allocatie (dus nooit later dan de
+  // sluitingstijd van die winkel), anders telt de PDP af naar 23:00 terwijl de
+  // deur om 17:30 dichtgaat.
   const today = DAYS[n.dayIndex];
   const todayShips = plan.shipments.filter((s) => s.dispatchInDays === 0);
   const cutoffHour = todayShips.length
-    ? Math.min(...todayShips.map((s) => cutoffHourFor(s.branchId, settings, today)))
-    : cutoffHourFor("99", settings, today);
+    ? Math.min(...todayShips.map((s) => effectiveCutoffHour(s.branchId, today, settings)))
+    : effectiveCutoffHour("99", today, settings);
   const beforeCutoff = maxDispatch === 0;
   const promise = beforeCutoff
     ? S.promiseBeforeCutoff(cutoffHour, standard.dateLabel)
     : S.promiseAfter(standard.dateLabel);
 
-  return { inStock: plan.fullyAllocated, fromWarehouseOnly, isSplit, hasStoreSource, promise, cutoffHour, note, standard, express };
+  /* Per zending de eigen bezorgdag. Bij een split komt het magazijn-deel vaak
+     eerder dan het winkel-deel; dan is één datum voor de hele order misleidend.
+     Alleen meesturen als de dagen echt verschillen — anders is het ruis. */
+  const perSku: { sku: string; dateLabel: string }[] = [];
+  if (plan.shipments.length > 1) {
+    for (const s of plan.shipments) {
+      const transit = settings.warehouseTransitDays + (s.isWarehouse ? 0 : settings.storeExtraDays);
+      const k = addDeliveryDays(n, s.dispatchInDays, transit + (s.isWarehouse ? 0 : 1), settings.extraClosureDates);
+      const label = dayLabel(n, k, S);
+      for (const l of s.lines) if (l.sku) perSku.push({ sku: l.sku, dateLabel: label });
+    }
+  }
+  const verschillendeDagen = new Set(perSku.map((p) => p.dateLabel)).size > 1;
+
+  return {
+    inStock: plan.fullyAllocated,
+    fromWarehouseOnly,
+    isSplit,
+    hasStoreSource,
+    promise,
+    cutoffHour,
+    note,
+    standard,
+    express,
+    perSku: verschillendeDagen ? perSku : undefined,
+  };
 }

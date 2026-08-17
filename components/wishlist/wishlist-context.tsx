@@ -44,13 +44,18 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const toggle = useCallback((h: string) => {
     setHandles((prev) => {
       const had = prev.includes(h);
-      // Alleen het TOEVOEGEN meten: bewaren is een sterkere koopintentie dan
-      // kijken en telt daarom mee in de populariteitsranking.
-      if (!had) track("wishlist_add", { handle: h });
+      // Toevoegen is een sterkere koopintentie dan kijken en telt daarom mee in
+      // de populariteitsranking. Het weghalen meten we óók, maar apart: dat mag
+      // de ranking juist NIET beïnvloeden (anders straft een klant die opruimt
+      // een product af), het is een signaal over prijs of beschikbaarheid.
+      track(had ? "wishlist_remove" : "wishlist_add", { handle: h });
       return had ? prev.filter((x) => x !== h) : [h, ...prev].slice(0, 200);
     });
   }, []);
-  const remove = useCallback((h: string) => setHandles((prev) => prev.filter((x) => x !== h)), []);
+  const remove = useCallback((h: string) => {
+    track("wishlist_remove", { handle: h });
+    setHandles((prev) => prev.filter((x) => x !== h));
+  }, []);
   const clear = useCallback(() => setHandles([]), []);
 
   const value = useMemo(

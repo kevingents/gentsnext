@@ -10,6 +10,7 @@ import { categoryBySlug } from "@/lib/categories";
 import { SIZE_GUIDES, guideBySlug, MEASURE_INFO } from "@/lib/size-chart-hub";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { getActieveTabel } from "@/lib/maattabel";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,8 @@ export default async function MaattabelPage({ params }: Props) {
 
   const locale = await getLocale();
   const t = await getT(locale);
+  // De actieve, geüploade maattabel (Site → Maten); valt terug op de tabel in code.
+  const chart = await getActieveTabel();
 
   const siteUrl = getSiteUrl();
   const cat = guide.categorySlug ? categoryBySlug(guide.categorySlug) : null;
@@ -84,7 +87,7 @@ export default async function MaattabelPage({ params }: Props) {
       {/* tabellen */}
       <div className="mt-8 space-y-8">
         {guide.charts.map((spec, i) => (
-          <SizeTable key={i} spec={spec} />
+          <SizeTable key={i} spec={spec} chart={chart} />
         ))}
       </div>
 

@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { after } from "next/server";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, orderLines, products, productVariants } from "@/db/schema";
@@ -10,6 +11,8 @@ import { creditOrderLoyalty } from "@/lib/loyalty-claim";
 import { allocateOrder } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
 import { recordEvents } from "@/lib/analytics";
+import { ververProfiel } from "@/lib/customer-360";
+import { koppelDevice } from "@/lib/identity";
 import { shippingCentsFor, DEFAULT_COUNTRY, isKnownCountry } from "@/lib/shipping-zones";
 import { validateVoucher, redeemVoucher, releaseVoucher } from "@/lib/vouchers";
 import { tieredDiscountCents } from "@/lib/pricing";
@@ -105,7 +108,7 @@ const orderColumns = {
   updatedAt: orders.updatedAt,
 } as const;
 
-/** Alles wat de bevestigingsmail + de puntenbijschrijving nodig hebben — niet meer. */
+/** Alles wat de bevestigingsmail nodig heeft — niet meer. */
 const orderMailColumns = {
   id: orders.id,
   orderNumber: orders.orderNumber,
@@ -279,7 +282,18 @@ export async function createOrder(
      onderling verkeer. De bezorg-tak deelt de online-pool met de webshop —
      zou de kassa daar zonder marge claimen, dan kan een echte webklant een
      "niet meer op voorraad" krijgen terwijl de PDP nog voorraad toont. */
-  opts: { channel?: StockChannel; voorverkoop?: boolean } = {}
+  /* `sessionId` + `attributie`: het device waarop besteld is en de campagne die
+     de klant bracht. Vastgevroren op DIT moment — een verwijzing naar de
+     bezoeker-attributie zou meebewegen met zijn volgende bezoek, terwijl een
+     order toegerekend moet blijven aan de klik die hem opleverde. Dit is ook
+     wat een server-side conversie naar Google/Meta straks nodig heeft; zonder
+     klik-id komt die aan als "direct" en lijkt betaalde reclame gratis. */
+  opts: {
+    channel?: StockChannel;
+    voorverkoop?: boolean;
+    sessionId?: string;
+    attributie?: Record<string, unknown>;
+  } = {}
 ): Promise<CreatedOrder> {
   const db = getDb();
   const settings = await getSettings();
@@ -303,7 +317,7 @@ export async function createOrder(
 
   // Onbekend land zou stil het NL-tarief krijgen — liever weigeren dan een
   // order aannemen die we niet tegen het juiste tarief kunnen verzenden.
-  if (deliveryMethod !== "pickup" && contact.country && !isKnownCountry(contact.country)) {
+  if (deliveryMethod !== "pickup" && contact.country && !isKnownCountry(contact.country, settings.shippingZones)) {
     throw new CheckoutError("We bezorgen (nog) niet in dit land. Kies een ander land of haal je bestelling op in de winkel.");
   }
 
@@ -393,10 +407,12 @@ export async function createOrder(
   // instelbare settings lopen zodat één knop de baas is over het thuisland.
   const baseShipping = isPickup
     ? 0
-    : shippingCentsFor(contact.country || DEFAULT_COUNTRY, subtotalCents, {
-        rateCents: settings.shippingCents,
-        freeFromCents: settings.freeShippingCents,
-      });
+    : shippingCentsFor(
+        contact.country || DEFAULT_COUNTRY,
+        subtotalCents,
+        { rateCents: settings.shippingCents, freeFromCents: settings.freeShippingCents },
+        settings.shippingZones,
+      );
   const surcharge = method === "express" ? settings.expressSurchargeCents : 0;
   const shippingCents = baseShipping + surcharge;
   const totalBeforeGiftcard = Math.max(0, subtotalCents - discountCents) + shippingCents;
@@ -427,14 +443,31 @@ export async function createOrder(
       accessToken,
       status: "open",
       customerId: customerId ?? null,
+      sessionId: String(opts.sessionId || "").slice(0, 64),
+      attributie: (opts.attributie ?? {}) as Record<string, unknown>,
       email: contact.email.trim().toLowerCase(),
       firstName: contact.firstName.trim(),
       lastName: contact.lastName.trim(),
       phone: (contact.phone || "").trim(),
-      street: contact.street.trim(),
-      houseNumber: contact.houseNumber.trim(),
-      postalCode: contact.postalCode.trim(),
-      city: contact.city.trim(),
+      /* ADRESVELDEN OPTIONEEL BIJ AFHALEN (12 aug 2026). Deze vier stonden als
+         enige zónder `|| ""` — alle buurvelden hebben 'm wel. Op de webcheckout
+         valt dat niet op: daar zijn ze verplicht en dus altijd gevuld. Maar bij een
+         AFHAALORDER slaat de kassa-route de adresvalidatie bewust over (geen
+         bezorging, geen adres nodig) en stuurt de kassa alleen naam, e-mail en
+         telefoon mee. Dan is contact.street undefined en klapt het hier op
+         "Cannot read properties of undefined (reading 'trim')".
+
+         Gevonden toen Kevin een VOORVERKOOP in de Showroom testte: die is per
+         definitie een afhaalorder, dus die liep hier altijd stuk — de bestelling
+         werd nooit aangemaakt en de kassa toonde de kale JS-fout. Er ging geen geld
+         verloren (dit is de eerste stap, vóór het afrekenen), maar voorverkoop via
+         de afrekentegel kan hier nooit doorheen gekomen zijn.
+
+         Leeg opslaan is hier het juiste: een afhaalorder hééft geen bezorgadres. */
+      street: (contact.street || "").trim(),
+      houseNumber: (contact.houseNumber || "").trim(),
+      postalCode: (contact.postalCode || "").trim(),
+      city: (contact.city || "").trim(),
       country: (contact.country || "NL").trim(),
       locale: isLocale(locale) ? locale : DEFAULT_LOCALE,
       companyName: (contact.companyName || "").trim(),
@@ -698,7 +731,11 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     .update(orders)
     .set(set)
     .where(whereClause)
-    .returning({ id: orders.id, voucherCode: orders.voucherCode, orderNumber: orders.orderNumber, totalCents: orders.totalCents });
+    .returning({
+      id: orders.id, voucherCode: orders.voucherCode, orderNumber: orders.orderNumber, totalCents: orders.totalCents,
+      customerId: orders.customerId, paidAt: orders.paidAt, createdAt: orders.createdAt,
+      sessionId: orders.sessionId,
+    });
   // Omzet-event op het choke-point van élke betaling. Het bestaande
   // purchase-event stond client-side op de bedanktpagina en miste daardoor
   // vrijwel alles (1 event tegenover 28.436 betaalde orders): adblockers,
@@ -710,7 +747,11 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
     for (const o of updated) {
       recordEvents([
         {
-          sessionId: "server",
+          // Het device van de bestelling in plaats van "server": daarmee valt
+          // deze aankoop op zijn plek in de sessie waarin hij werd gedaan, en
+          // klopt de funnel per device weer. Bij een order zonder device (kassa,
+          // handmatig) blijft het "server".
+          sessionId: o.sessionId || "server",
           type: "purchase",
           path: "/api/webhooks",
           // handle blijft leeg: dat veld is voor PRODUCT-handles (de ranking
@@ -718,8 +759,38 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
           handle: "",
           valueCents: o.totalCents,
           props: { source: "webhook", orderNumber: o.orderNumber },
+          customerId: o.customerId ?? null,
+          bron: "server",
         },
       ]).catch(() => {});
+
+      // Een betaalde bestelling verandert het klantbeeld ingrijpend (segment,
+      // recentheid, bestedingen) en dus ook in welke doelgroepen deze klant
+      // valt. Meteen verversen; wachten tot de nachtjob zou betekenen dat een
+      // klant nog een dag lang in "winkelwagen laten staan" zit nádat hij kocht.
+      if (o.customerId) {
+        const klant = o.customerId;
+        after(() => ververProfiel(klant));
+        if (o.sessionId) after(() => koppelDevice(klant, o.sessionId, "bestelling").then(() => {}));
+      }
+    }
+  }
+  /* Spaarpunten op hetzelfde choke-point als het omzet-event: élke betaling komt
+     hier langs (Mollie + Worldline, webhook én terugkeerpagina, cadeaubon-order,
+     kassa-order). Stond eerder in sendOrderConfirmationOnce, en dat was fout: dat
+     pad keert vóór de bijschrijving terug als er geen mailkanaal is, en na een
+     mislukte poging is de bevestigings-claim al gezet waardoor de punten er ook bij
+     een retry nooit meer langskwamen. Punten hingen zo aan e-mail-infrastructuur.
+     creditOrderLoyalty is idempotent op (refType, refId) → dubbel boeken kan niet.
+     Non-fataal: een webhook mag hier nooit op stuklopen. */
+  if (orderStatus === "paid" && updated.length) {
+    for (const o of updated) {
+      if (!o.customerId) continue; // gast — punten volgen bij account-koppeling (claimGuestData)
+      try {
+        await creditOrderLoyalty(o.customerId, { id: o.id, totalCents: o.totalCents, status: "paid", paidAt: o.paidAt, createdAt: o.createdAt });
+      } catch (e) {
+        console.warn(`[applyPaymentStatus] punten bijschrijven mislukt voor ${o.orderNumber}:`, e instanceof Error ? e.message : e);
+      }
     }
   }
   // Betaling mislukt/geannuleerd/verlopen → de voorraad-hold direct vrijgeven ÉN een
@@ -804,16 +875,8 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
   try {
     const [order] = await db.select(orderMailColumns).from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order) throw new Error(`Order ${orderId} niet gevonden na claim.`);
-    // Spaarpunten bijschrijven voor een ingelogde klant (gast-orders krijgen ze bij
-    // account-koppeling via claimGuestData). Idempotent + non-fataal — nooit de
-    // bevestiging blokkeren.
-    if (order.customerId) {
-      try {
-        await creditOrderLoyalty(order.customerId, { id: order.id, totalCents: order.totalCents, status: String(order.status), paidAt: order.paidAt, createdAt: order.createdAt });
-      } catch (e) {
-        console.warn("[order] punten bijschrijven mislukt:", e instanceof Error ? e.message : e);
-      }
-    }
+    // Spaarpunten staan bewust NIET meer hier maar in applyPaymentStatus: dit pad
+    // draait niet zonder mailkanaal en niet bij een retry na een mislukte poging.
     const lines = await db.select(orderLineColumns).from(orderLines).where(eq(orderLines.orderId, orderId));
     const recs = await getOrderCrossSell(orderId, 3).catch(() => []);
     // De webhook kent de klantsessie niet meer — de taal reist mee op de order.
@@ -1081,14 +1144,16 @@ export async function getPostPurchase(
   const uniq = [...new Set(handles.filter(Boolean))];
   if (!uniq.length) return { careItems: [], recommendations: [] };
   const db = getDb();
-  const rows = await db.execute<{ id: string; hg: string; was: string; mat: string }>(sql`
-    select id, attributes->>'hoofdgroep_omschrijving' hg, attributes->>'wasvoorschrift' was, attributes->>'materiaal' mat
+  // subgroep + titel horen erbij: pas die onderscheiden een chino van een pakbroek.
+  const rows = await db.execute<{ id: string; hg: string; sub: string; was: string; mat: string; titel: string }>(sql`
+    select id, attributes->>'hoofdgroep_omschrijving' hg, attributes->>'subgroep' sub,
+           attributes->>'wasvoorschrift' was, attributes->>'materiaal' mat, title titel
     from products where handle in (${sql.join(uniq.map((h) => sql`${h}`), sql`, `)})
   `);
   const seen = new Set<string>();
   const careItems: CareItem[] = [];
   for (const r of rows.rows) {
-    for (const ci of parseCare(r.was, { hoofdgroep_omschrijving: r.hg, materiaal: r.mat })) {
+    for (const ci of parseCare(r.was, { hoofdgroep_omschrijving: r.hg, subgroep: r.sub, materiaal: r.mat, titel: r.titel })) {
       if (!seen.has(ci.key)) {
         seen.add(ci.key);
         careItems.push(ci);

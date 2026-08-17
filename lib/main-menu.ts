@@ -3,6 +3,8 @@
  * (gelegenheid-first, conform de GENTS-positionering). Elke groep heeft
  * kolommen + een sfeer-tegel met beeld voor het mega-menu. "#" = alleen kop.
  */
+import { CLUB_NAME, CLUB_PATH } from "@/lib/club";
+
 export type MenuLink = { label: string; href: string };
 export type MenuColumn = { title?: string; links: MenuLink[] };
 export type MenuFeature = { label: string; caption?: string; href: string; image: string };
@@ -38,9 +40,11 @@ export const MAIN_MENU: MenuItem[] = [
         ],
       },
       {
-        title: "Broeken & jassen",
+        // "Broeken" heet in de winkel een pantalon — de categoriepagina
+        // (/categorie/pantalons) gebruikte die naam al, het menu nog niet.
+        title: "Pantalons & jassen",
         links: [
-          { label: "Broeken", href: "/collections/broeken" },
+          { label: "Pantalons", href: "/collections/broeken" },
           { label: "Jassen", href: "/collections/jassen" },
         ],
       },
@@ -99,12 +103,18 @@ export const MAIN_MENU: MenuItem[] = [
         ],
       },
       {
+        // Alle vier wezen naar dezelfde ongefilterde schoenenpagina: wie op
+        // "Loafers" klikte kreeg ook veterschoenen. De subgroep in de catalogus
+        // (Veterschoen/Lakschoenen/Loafers/Gespschoen/Sneakers) IS het filter —
+        // ?type= is exact de waarde waar de PLP op selecteert.
         title: "Schoenen",
         links: [
-          { label: "Veterschoenen", href: "/collections/schoenen" },
-          { label: "Lakschoenen", href: "/collections/schoenen" },
-          { label: "Loafers", href: "/collections/schoenen" },
-          { label: "Gespschoenen", href: "/collections/schoenen" },
+          { label: "Veterschoenen", href: "/collections/schoenen?type=Veterschoen" },
+          { label: "Lakschoenen", href: "/collections/schoenen?type=Lakschoenen" },
+          { label: "Loafers", href: "/collections/schoenen?type=Loafers" },
+          { label: "Gespschoenen", href: "/collections/schoenen?type=Gespschoen" },
+          { label: "Sneakers", href: "/collections/schoenen?type=Sneakers" },
+          { label: "Alle schoenen", href: "/collections/schoenen" },
         ],
       },
       {
@@ -122,4 +132,19 @@ export const MAIN_MENU: MenuItem[] = [
   },
   { label: "Looks", href: "/looks" },
   { label: "Sale", href: "/collections/sale" },
+];
+
+/**
+ * De servicelinks ónderin de mobiele menu-drawer. Stonden hardgecodeerd in de
+ * drawer; nu content (content:menu-service) zodat ze zonder deploy te wijzigen
+ * zijn. "Favorieten" hoort hier niet meer bij: dat is sinds de nieuwe mobiele
+ * header een eigen icoon in de balk, en twee ingangen naar dezelfde pagina las
+ * als twee verschillende dingen.
+ */
+export const MENU_SERVICE_LINKS: MenuLink[] = [
+  { label: "Account", href: "/account" },
+  { label: CLUB_NAME, href: CLUB_PATH },
+  { label: "Klantenservice", href: "/pages/service" },
+  { label: "Onze winkels", href: "/pages/winkels" },
+  { label: "Maatadvies", href: "/maatadvies" },
 ];

@@ -15,7 +15,8 @@ import { ShopTheLook } from "@/components/looks/shop-the-look";
 import { getProductByHandle, getRecommendations, getVariantSiblings } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
 import { getCategoryLabels } from "@/lib/nav-i18n";
-import { getMyStore } from "@/lib/store-preference";
+import { packshotContain } from "@/lib/packshot-weergave";
+import { getMyStores } from "@/lib/store-preference";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getT } from "@/lib/t-server";
 import { buildModelLook, buildSuitLook, resolveLook, getLookBuyData } from "@/lib/looks";
@@ -51,6 +52,8 @@ import { AiReviewSummary } from "@/components/reviews/ai-summary";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getProductContentOverride } from "@/lib/product-content";
 import { getBlogPostsForProduct } from "@/lib/blog";
+import { resolveAb } from "@/lib/experiments";
+import { TrackAb } from "@/components/analytics/track-ab";
 
 export const dynamic = "force-dynamic";
 
@@ -181,8 +184,9 @@ export default async function ProductPage({ params }: Props) {
 
   const hoofdgroep = String(attrs.hoofdgroep_omschrijving || "");
   // Brede/kleine accessoires (riem, das, strik, manchetknoop, pochet) passen niet
-  // in de 4:5-tegel met object-cover → toon ze heel met object-contain.
-  const fitContain = ["Riemen", "Stropdassen", "Strikken", "Manchetknopen", "Pochet", "Bretels", "Sjaals"].includes(hoofdgroep);
+  // in de 4:5-tegel met object-cover → toon ze heel met object-contain, op een
+  // witte tegel (die packshots staan op puur wit — zie lib/packshot-weergave).
+  const fitContain = packshotContain(hoofdgroep);
   const rating = parseRating(attrs);
   // Voorkeur: eigen categoriepagina (volledige listing) boven Shopify-collectie.
   const cat = categoryByHoofdgroep(hoofdgroep);
@@ -199,8 +203,8 @@ export default async function ProductPage({ params }: Props) {
   // van de productdata → mee in de parallelle batch i.p.v. twee losse round-trips.
   // Aanbevelingen ruim ophalen (8): na het resolven van de look filteren we de
   // look-items eruit zodat "Maak de look compleet" geen dubbelingen toont.
-  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStore] = await Promise.all([
-    getRecommendations(hoofdgroep, product.id, 8),
+  const [recommendationsRaw, metafieldSiblings, variantSiblings, reviewSummary, productReviews, delivery, viewStats, reviewAi, contentOverride, blogPosts, sessionCustomer, settings, myStores, ab] = await Promise.all([
+    getRecommendations(hoofdgroep, product.id, 8, { subgroep: String(attrs.subgroep || ""), attrs }),
     getColorSiblings(attrs, product.handle),
     getVariantSiblings(product.variantGroupKey || "", product.handle),
     getReviewSummary(product.handle),
@@ -212,8 +216,17 @@ export default async function ProductPage({ params }: Props) {
     getBlogPostsForProduct(product.handle),
     getSessionCustomer(),
     getSettings(),
-    getMyStore(),
+    getMyStores(),
+    // A/B: alleen experimenten met oppervlak "pdp" doen hier mee, eventueel
+    // beperkt tot een categorie of een handvol artikelen. Zowel de categorie-
+    // slug als de hoofdgroep gaan mee, zodat de portal op allebei kan mikken.
+    resolveAb({ oppervlak: "pdp", handle: product.handle, categorieen: [cat?.slug || "", hoofdgroep] }),
   ]);
+  // Wat de variant aan de productpagina verandert. Leeg = de huidige pagina.
+  const pdpAb = ab.overrides.pdp ?? {};
+  // Exposure alleen voor echte toewijzingen: een geforceerde preview (?ab=)
+  // mag de noemer niet vervuilen.
+  const pdpAbExposure = ab.assignments.filter((a) => !a.forced).map(({ id, variant }) => ({ id, variant }));
   // Shop in jouw maat: voor ingelogde klanten de opgeslagen maat voorselecteren.
   const mySize = resolveMySize(hoofdgroep, sessionCustomer?.sizeProfile);
   // Portal-beheerbare AI-omschrijving heeft voorrang op de gesynchroniseerde
@@ -382,7 +395,7 @@ export default async function ProductPage({ params }: Props) {
 
   // Materiaal + Onderhoud automatisch uit de SRS-data (samenstelling + wasvoorschrift).
   const composition = parseComposition(String(attrs.samenstelling_materiaal ?? attrs.samenstelling ?? ""));
-  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), attrs);
+  const careItems = parseCare(String(attrs.wasvoorschrift ?? attrs.wasvoorschriften ?? ""), { ...attrs, titel: product.title });
   const careProseLines = careProse(String(attrs.wasvoorschrift ?? ""));
   const materiaal = String(attrs.materiaal ?? "").trim();
 
@@ -476,12 +489,30 @@ export default async function ProductPage({ params }: Props) {
     })),
   };
 
+  /* Reviews staan standaard onderaan. Een variant mag ze direct onder de
+     koopkolom zetten: het onderzoek wijst reviews-plek aan als een van de
+     zwaardere hefbomen, en onderaan een lange PDP ziet driekwart ze nooit.
+     Eén definitie, twee plekken — anders lopen de twee uitvoeringen uit elkaar. */
+  const reviewsBlok = (
+    <>
+      <AiReviewSummary summary={reviewAi} />
+      <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
+    </>
+  );
+
   return (
     <div className="mx-auto max-w-page px-gutter py-8 pb-28 lg:pb-8">
       <JsonLd data={productJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
       <JsonLd data={faqJsonLd} />
-      <TrackRecent handle={product.handle} />
+      {pdpAbExposure.length > 0 ? <TrackAb assignments={pdpAbExposure} /> : null}
+      <TrackRecent
+        handle={product.handle}
+        title={product.title}
+        vendor={product.vendor}
+        category={hoofdgroep}
+        priceCents={minPrice}
+      />
 
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">
@@ -508,17 +539,27 @@ export default async function ProductPage({ params }: Props) {
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-12 lg:gap-y-10">
         <div className="lg:col-start-1 lg:row-start-1">
           <Gallery
-            images={[
+            images={(() => {
               // AI-beelden leiden de galerij ("model eerst"): modelpose 1 → modelpose 2
               // → detailfoto, daarna de echte productfoto's.
-              ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
-              ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
-              ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
-              ...images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain })),
-            ]}
+              const aiBeelden = [
+                ...(product.modelImageUrl ? [{ url: product.modelImageUrl, alt: product.modelImageAlt || product.title, contain: true }] : []),
+                ...(product.modelImageUrl2 ? [{ url: product.modelImageUrl2, alt: product.modelImageAlt2 || product.title, contain: true }] : []),
+                ...(product.detailImageUrl ? [{ url: product.detailImageUrl, alt: product.detailImageAlt || `${product.title} — detail` }] : []),
+              ];
+              const packshots = images.map((i) => ({ url: i.url, alt: i.alt, contain: fitContain, wit: fitContain }));
+              // A/B: variant kan de packshot vooropzetten. Alleen de VOLGORDE
+              // wisselt — geen enkel beeld verdwijnt, zodat beide varianten
+              // dezelfde informatie tonen.
+              const alles = pdpAb.galerijStart === "packshot" ? [...packshots, ...aiBeelden] : [...aiBeelden, ...packshots];
+              // …en een variant mag de galerij kórter maken. Dat is wél een
+              // echte inhoudelijke wijziging (er verdwijnen beelden), dus alleen
+              // als het experiment er expliciet om vraagt.
+              return pdpAb.galerijMax ? alles.slice(0, pdpAb.galerijMax) : alles;
+            })()}
             title={product.title}
             sizeMedia={sizeMedia}
-            video={product.modelVideoUrl || null}
+            video={pdpAb.video === "uit" ? null : product.modelVideoUrl || null}
             lookHref={resolvedModelLook && resolvedModelLook.products.some((h) => h.product) ? "#shop-de-look" : undefined}
           />
           {/* Eerlijkheid: alleen AI-packshots (product zonder echte foto's) →
@@ -536,7 +577,7 @@ export default async function ProductPage({ params }: Props) {
             hoofdgroep={hoofdgroep}
             sizeChartHandle={sizeChartFor(hoofdgroep)}
             productHandle={product.handle}
-              myStore={myStore?.title ?? null}
+              myStores={myStores.map((s) => s.title)}
             image={images[0]?.url || ""}
             colors={colors}
             minPriceCents={minPrice}
@@ -544,23 +585,29 @@ export default async function ProductPage({ params }: Props) {
             referenceCents={referenceCents}
             hasStock={hasStock}
             colorSiblings={colorSiblings}
-            deliveryPromise={delivery?.promise ?? null}
-            deliveryNote={delivery?.note ?? null}
-            cutoffHour={delivery?.cutoffHour ?? 16}
+            deliveryPromise={pdpAb.levertijd === "uit" ? null : delivery?.promise ?? null}
+            deliveryNote={pdpAb.levertijd === "uit" ? null : delivery?.note ?? null}
             mySize={mySize?.raw ?? null}
             fitNote={String(attrs.pasvorm ?? "").trim() || null}
             freeShipThresholdCents={settings.freeShippingCents}
+            ctaLabel={pdpAb.ctaLabel || null}
+            sticky={pdpAb.stickyKoopbalk !== "uit"}
+            kortingLabel={pdpAb.kortingLabel !== "uit"}
+            betaaliconen={pdpAb.betaaliconen !== "uit"}
           />
 
-          <SocialProof stats={viewStats} />
+          {pdpAb.socialProof === "uit" ? null : <SocialProof stats={viewStats} />}
 
           <ul className="mt-8 space-y-1.5">
-            {TRUST_KEYS.map((key) => (
-              <li key={key} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
+            {/* A/B: een variant mag dit vertrouwenslijstje vervangen (bv. een
+                merkbelofte in plaats van de retour-/vermaakregels). Losse
+                teksten, dus NL — zelfde taalregel als de aankondigingsbalk. */}
+            {(pdpAb.usps?.length ? pdpAb.usps : TRUST_KEYS.map((key) => t(key, returnVars))).map((regel) => (
+              <li key={regel} className="flex items-center gap-2 font-sans text-sm text-ink-soft">
                 <svg aria-hidden className="h-4 w-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-                {t(key, returnVars)}
+                {regel}
               </li>
             ))}
           </ul>
@@ -572,11 +619,13 @@ export default async function ProductPage({ params }: Props) {
             galerij leeg bleef. Rechts blijft alleen wat bij de koopbeslissing
             hoort; delen hoort bij de details en verhuist mee. */}
         <div className="lg:col-start-1 lg:row-start-2">
-          <Accordion items={accordionItems} />
+          <Accordion items={accordionItems} altijdOpen={pdpAb.accordionsOpen === true} />
           <ShareRow title={product.title} />
         </div>
       </div>
       </PdpSizeProvider>
+
+      {pdpAb.reviewsPositie === "boven" ? reviewsBlok : null}
 
       {/* Sfeerbeeld — AI-lifestyle (model in setting), groot en ongecropt */}
       {product.lifestyleImageUrl ? (
@@ -621,7 +670,7 @@ export default async function ProductPage({ params }: Props) {
       ) : null}
 
       {/* Maak de look compleet — slimme bijverkoop */}
-      {recommendations.length > 0 ? (
+      {recommendations.length > 0 && pdpAb.aanbevelingen !== "uit" ? (
         <section className="mt-20">
           <p className="label-brand">{t("pdp.complementary.eyebrow")}</p>
           <h2 className="mt-2 text-display-md">{t("pdp.complementary.title")}</h2>
@@ -637,9 +686,7 @@ export default async function ProductPage({ params }: Props) {
         </section>
       ) : null}
 
-      <AiReviewSummary summary={reviewAi} />
-
-      <ReviewsSection handle={product.handle} summary={reviewSummary} reviews={productReviews} />
+      {pdpAb.reviewsPositie === "boven" ? null : reviewsBlok}
 
       {blogPosts.length > 0 ? (
         <section className="mt-20">

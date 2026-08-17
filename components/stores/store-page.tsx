@@ -2,12 +2,15 @@ import Link from "next/link";
 import { Dot } from "@/components/icons";
 import { DAYS, openStatus, mapsEmbedUrl, mapsLinkUrl, type Store } from "@/lib/stores";
 import { getLocale } from "@/lib/locale-server";
+import { getMyStores } from "@/lib/store-preference";
+import { MyStoreToggle } from "@/components/stores/my-store-toggle";
 import { t } from "@/lib/messages";
 
 export async function StorePage({ store }: { store: Store }) {
   const { open, today, todayRange } = openStatus(store);
   const todayName = today;
   const locale = await getLocale();
+  const isMine = (await getMyStores()).some((s) => s.pageHandle === store.pageHandle);
 
   return (
     <div className="mx-auto max-w-page px-gutter py-12">
@@ -51,6 +54,14 @@ export async function StorePage({ store }: { store: Store }) {
             <Link href={`/afspraak?winkel=${encodeURIComponent(store.title)}`} className="btn-ghost">
               {t("stores.page.makeAppointment", locale)}
             </Link>
+          </div>
+
+          {/* Mijn winkel — hier hoort de keuze thuis: je staat op de pagina van
+              precies díé winkel. Mét de opbrengst erbij, anders is het een knop
+              zonder reden. */}
+          <div className="mt-4 border border-line bg-surface p-4">
+            <MyStoreToggle value={store.pageHandle} active={isMine} bron="winkelpagina" />
+            <p className="mt-2 font-sans text-xs text-ink-soft">{t("myStore.explain", locale)}</p>
           </div>
 
           {/* Openingstijden */}

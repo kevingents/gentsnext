@@ -1,4 +1,5 @@
 import { recommendSizes, type FitPreference, type CategoryAdvice } from "@/lib/sizing";
+import type { SizeChart } from "@/lib/size-chart";
 
 /**
  * "Ken je je maat al?" — vertaalt een bekende confectie-/merkmaat naar een
@@ -42,10 +43,15 @@ function cap(c: CategoryAdvice["confidence"]): CategoryAdvice["confidence"] {
   return c === "hoog" ? "gemiddeld" : c;
 }
 
-export function referenceAdvice(brand: ReferenceBrand, letter: ReferenceLetter, fit: FitPreference = "regular"): ReferenceAdvice {
+export function referenceAdvice(
+  brand: ReferenceBrand,
+  letter: ReferenceLetter,
+  fit: FitPreference = "regular",
+  chart?: SizeChart,
+): ReferenceAdvice {
   const chestCm = chestFromReference(brand, letter);
   // height/weight zijn placeholders — chestCm is leidend in recommendSizes.
-  const adv = recommendSizes({ heightCm: 182, weightKg: 82, chestCm, fit });
+  const adv = recommendSizes({ heightCm: 182, weightKg: 82, chestCm, fit }, chart);
   const jacketNum = Number(adv.jacket.size) || 50;
   const waist = Math.max(28, jacketNum - 6); // drop 6
   return {

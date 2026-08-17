@@ -64,14 +64,40 @@ export async function middleware(request: NextRequest) {
   headers.set(LOCALE_HEADER, locale);
   headers.set(PATH_HEADER, path);
 
+  let res: NextResponse;
   if (prefixed) {
     const to = url.clone();
     to.pathname = path;
-    const res = NextResponse.rewrite(to, { request: { headers } });
+    res = NextResponse.rewrite(to, { request: { headers } });
     res.cookies.set(LOCALE_COOKIE, locale, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
-    return res;
+  } else {
+    res = NextResponse.next({ request: { headers } });
   }
-  return NextResponse.next({ request: { headers } });
+
+  // A/B-bezoekers-id: anoniem, willekeurig, en stabiel per browser. De
+  // experimenten-laag (lib/experiments.ts) hasht deze id met het experiment-id
+  // naar een bucket — de cookie zelf verraadt dus niets over welke variant
+  // iemand ziet, en één cookie volstaat voor alle experimenten tegelijk.
+  // Pas vanaf het TWEEDE verzoek doet een bezoeker mee (de pagina leest de
+  // request-cookie, en die is er bij het allereerste verzoek nog niet) —
+  // dat is bewust: liever één pageview missen dan een flikkerende variant.
+  if (!request.cookies.get("gents_ab")?.value) {
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+    res.cookies.set("gents_ab", id, { path: "/", maxAge: 60 * 60 * 24 * 180, sameSite: "lax" });
+  }
+
+  // A/B-preview: ?ab=<experiment>:<variant> laat je een variant bekijken los
+  // van je eigen bucket (en zonder in de meting te tellen); ?ab=uit stopt dat.
+  // Kort houdbaar — een preview is een blik, geen verblijf.
+  const abForce = url.searchParams.get("ab");
+  if (abForce !== null) {
+    if (/^[a-z0-9-]{1,40}:[a-zA-Z0-9]{1,12}$/.test(abForce)) {
+      res.cookies.set("gents_ab_force", abForce, { path: "/", maxAge: 30 * 60, sameSite: "lax" });
+    } else {
+      res.cookies.delete("gents_ab_force");
+    }
+  }
+  return res;
 }
 
 export const config = {

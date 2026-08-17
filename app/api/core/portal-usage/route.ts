@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { portalUsage } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { coreAuth } from "@/lib/store-core-token";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +79,70 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     // Meten mag nooit een pagina stukmaken: fout terugmelden, niet laten crashen.
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+  }
+}
+
+/**
+ * GET /api/core/portal-usage — leest de meting terug, voor het toezicht op
+ * (externe) accounts in de portal ("wat doen ze in de tool").
+ *
+ * Twee vormen:
+ *   ?gebruikerIds=a,b,c[&dagen=30] — samenvatting per gebruiker (totaal aantal
+ *     opens, aantal verschillende pagina's, laatst actief) — voor het lijstje.
+ *   ?gebruikerId=a[&dagen=30]      — detail: rijen per dag per pagina — voor de
+ *     uitklap van één gebruiker.
+ *
+ * dagen is 1..90 (default 30). Zelfde auth als de schrijfkant (coreAuth).
+ */
+export async function GET(req: Request) {
+  if (!(await coreAuth(req))) {
+    return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 401 });
+  }
+
+  const url = new URL(req.url);
+  const dagen = Math.min(Math.max(parseInt(url.searchParams.get("dagen") || "30", 10) || 30, 1), 90);
+  /* ::int is verplicht: neon-http bindt de parameter als tekst en Postgres
+     kent geen `date - text` — zonder cast faalt elke GET. */
+  const vanaf = sql`(now() at time zone 'utc')::date - ${dagen}::int`;
+
+  try {
+    const db = getDb();
+
+    const idsRaw = String(url.searchParams.get("gebruikerIds") || "").trim();
+    if (idsRaw) {
+      const ids = [...new Set(idsRaw.split(",").map((s) => s.trim().slice(0, 80)).filter(Boolean))].slice(0, 200);
+      if (!ids.length) return NextResponse.json({ ok: true, rows: [] });
+      const rows = await db
+        .select({
+          gebruikerId: portalUsage.gebruikerId,
+          totaal: sql<number>`sum(${portalUsage.aantal})::int`,
+          paginas: sql<number>`count(distinct ${portalUsage.pad})::int`,
+          laatstOp: sql<string>`max(${portalUsage.laatstOp})`,
+        })
+        .from(portalUsage)
+        .where(and(inArray(portalUsage.gebruikerId, ids), sql`${portalUsage.dag} >= ${vanaf}`))
+        .groupBy(portalUsage.gebruikerId);
+      return NextResponse.json({ ok: true, rows });
+    }
+
+    const gebruikerId = String(url.searchParams.get("gebruikerId") || "").trim().slice(0, 80);
+    if (!gebruikerId) {
+      return NextResponse.json({ ok: false, error: "gebruikerId of gebruikerIds vereist." }, { status: 400 });
+    }
+    const rows = await db
+      .select({
+        dag: portalUsage.dag,
+        pad: portalUsage.pad,
+        aantal: portalUsage.aantal,
+        laatstOp: portalUsage.laatstOp,
+      })
+      .from(portalUsage)
+      .where(and(eq(portalUsage.gebruikerId, gebruikerId), sql`${portalUsage.dag} >= ${vanaf}`))
+      .orderBy(desc(portalUsage.dag), desc(portalUsage.laatstOp))
+      .limit(1000);
+    return NextResponse.json({ ok: true, rows });
+  } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
 }

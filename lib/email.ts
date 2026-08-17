@@ -3,6 +3,7 @@ import { formatEuro as euro } from "@/lib/format";
 import { DEFAULT_LOCALE, localizedPath, type Locale } from "@/lib/i18n";
 import { t as tStatic } from "@/lib/messages";
 import { getT } from "@/lib/t-server";
+import { walletConfigured } from "@/lib/apple-wallet-config";
 
 /**
  * Transactionele mail via Resend (env-gated op RESEND_API_KEY). Bewust zonder
@@ -91,7 +92,30 @@ type OrderInfo = {
 
 type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
 
-function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] = [], t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
+/** Bedenktijd + retourkosten uit Instellingen; zonder waarde valt de mail terug
+ *  op de standaard, zodat een tijdelijk onbereikbare instellingen-store nooit
+ *  "{amount}" in een klantmail zet. */
+export type RetourBelofte = { days: number; amount: string };
+
+/** Haalt de retourbelofte op uit Instellingen; faalt dat, dan de standaard. */
+async function retourBelofte(): Promise<RetourBelofte> {
+  try {
+    const { getSettings } = await import("@/lib/settings");
+    const s = await getSettings();
+    return { days: s.returnConfig.windowDays, amount: euro(s.returnConfig.dhlReturnCostCents) };
+  } catch {
+    return { days: 14, amount: euro(499) };
+  }
+}
+
+function orderHtml(
+  order: OrderInfo,
+  lines: OrderLine[],
+  recs: CrossSellItem[] = [],
+  t: Tr = nlT,
+  locale: Locale = DEFAULT_LOCALE,
+  retour: RetourBelofte = { days: 14, amount: euro(499) },
+): string {
   const site = getSiteUrl();
   // Links met locale-prefix: de mail wordt ook geopend zonder onze taal-cookie.
   const url = (path: string) => `${site}${localizedPath(path, locale)}`;
@@ -132,19 +156,16 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
           recs.length
             ? `<tr><td style="padding:20px 28px 4px">
           <p style="font:600 14px Arial,sans-serif;color:#0A0A0A;margin:0 0 12px">${t("order.complete_outfit_label")}</p>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            ${recs
-              .map(
-                (r) => `<td width="33%" valign="top" style="padding:0 5px">
-              <a href="${url(`/products/${r.handle}`)}" style="text-decoration:none;color:#0A0A0A">
-                ${r.imageUrl ? `<img src="${r.imageUrl}" width="100%" alt="" style="display:block;border:1px solid #E6E4DF;background:#F6F5F2"/>` : ""}
-                <div style="font:12px Arial,sans-serif;color:#0A0A0A;margin-top:6px;line-height:1.3">${r.title}</div>
-                <div style="font:12px Arial,sans-serif;color:#8B8B8B">${r.hasPriceRange ? `${t("product.from")} ` : ""}${euro(r.minPriceCents)}</div>
-              </a>
-            </td>`
-              )
-              .join("")}
-          </tr></table>
+          ${productCardsHtml(
+            recs.map((r) => ({
+              title: r.title,
+              imageUrl: r.imageUrl,
+              href: url(`/products/${r.handle}`),
+              minPriceCents: r.minPriceCents,
+              hasPriceRange: r.hasPriceRange,
+            })),
+            t,
+          )}
         </td></tr>`
             : ""
         }
@@ -163,7 +184,7 @@ function orderHtml(order: OrderInfo, lines: OrderLine[], recs: CrossSellItem[] =
             <strong>${t("checkout.delivery_address")}</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}
           </p>
           <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:16px">
-            ${t("mail.order.returnNote")}
+            ${t("mail.order.returnNote", { days: retour.days, amount: retour.amount })}
             ${t("mail.order.questions", { link: `<a href="${url("/")}" style="color:#0A0A0A">gents.nl</a>` })}
           </p>
         </td></tr>
@@ -280,6 +301,28 @@ function brandHeaderRow(): string {
  *  De links krijgen het locale-prefix mee (/en/…): een mail wordt ook geopend
  *  op een apparaat zonder onze taal-cookie, en dan zou de klant alsnog op de
  *  Nederlandse pagina belanden. */
+/**
+ * Memberspas-regel onder elke gebrande KLANTMAIL. Bewust in de gedeelde footer en
+ * niet per mailsoort: dan staat 'ie automatisch onder alles wat de klant krijgt,
+ * en is er één plek om 'm weer weg te halen.
+ *
+ * De link gaat naar /account en NIET rechtstreeks naar /api/wallet/apple: die
+ * route eist een ingelogde sessie, dus vanuit de mail zou 'm dat een 401 opleveren
+ * in plaats van een pas. Via het account loopt de klant door de magic-link heen en
+ * staat de knop er gewoon.
+ *
+ * `?bron=mail` is het meetpunt: zo is te zien hoeveel passen uit de mail komen.
+ * Env-gated — zonder pass-certificaat bieden we niets aan wat 503 geeft.
+ */
+function walletFooterBlock(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
+  if (!walletConfigured()) return "";
+  const href = `${getSiteUrl()}${localizedPath("/account", locale)}?tab=punten&bron=mail`;
+  return `<div style="border-top:1px solid #F0EEEA;margin-top:14px;padding-top:14px">
+      <div style="font:12px Arial,sans-serif;color:#2C2C2C;line-height:1.5">${t("mail.footer.wallet")}</div>
+      <a href="${attrUrl(href)}" style="display:inline-block;margin-top:8px;border:1px solid #111111;color:#111111;font:12px Arial,sans-serif;padding:8px 16px;text-decoration:none;letter-spacing:.3px">${t("mail.footer.walletLink")}</a>
+    </div>`;
+}
+
 function brandFooterRow(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
   const site = getSiteUrl();
   const link = (href: string, label: string) =>
@@ -289,6 +332,7 @@ function brandFooterRow(t: Tr = nlT, locale: Locale = DEFAULT_LOCALE): string {
       <div style="font:12px Arial,sans-serif;color:#111111">
         ${link("/account", t("common.account"))} &nbsp;·&nbsp; ${link("/pages/winkels", t("nav.stores"))} &nbsp;·&nbsp; ${link("/retourneren", t("retourneren.title"))} &nbsp;·&nbsp; ${link("/pages/klantenservice", t("help.link.service"))}
       </div>
+      ${walletFooterBlock(t, locale)}
       <div style="font:11px Arial,sans-serif;color:#B2AEA8;margin-top:12px">${t("mail.footer.usps")}</div>
     </div>
   </td></tr>`;
@@ -329,19 +373,94 @@ export function brandedEmailHtml(opts: {
     </td></tr>
     <tr><td style="padding:6px 28px;font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.65">${opts.bodyHtml}</td></tr>
     ${opts.cta ? `<tr><td style="padding:14px 28px 6px">
-      <a href="${opts.cta.href}" style="display:inline-block;background:#111111;color:#ffffff;font:14px Arial,sans-serif;padding:13px 26px;text-decoration:none;letter-spacing:.5px">${opts.cta.label}</a>
+      <a href="${attrUrl(opts.cta.href)}" style="display:inline-block;background:#111111;color:#ffffff;font:14px Arial,sans-serif;padding:13px 26px;text-decoration:none;letter-spacing:.5px">${opts.cta.label}</a>
     </td></tr>` : ""}
     ${opts.footnote ? `<tr><td style="padding:10px 28px 6px;font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.5">${opts.footnote}</td></tr>` : ""}
   `;
   return shell(inner, opts.locale ?? DEFAULT_LOCALE, opts.t ?? nlT);
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+/**
+ * URL veilig in een HTML-attribuut. Vooral de `&` telt: een getrackte link met
+ * meerdere query-parameters is in HTML pas correct als die `&amp;` is, anders
+ * mag een parser hem als entiteit lezen (&copy, &reg, …) en breekt de link.
+ */
+function attrUrl(url: string): string {
+  return String(url || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+/**
+ * Tekst uit de database of van de klant in HTML. Producttitels komen uit de
+ * SRS-/Shopify-import en de voornaam typt de klant zelf; vandaag staat er niets
+ * bijzonders in, maar één her-import met "Overhemd S&P" of een naam met een
+ * punthaak breekt anders de mail-opmaak.
+ */
+function escHtml(s: string): string {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Eén productkaartje in een mail: foto, titel, prijs — de hele kaart is de link. */
+export type MailProductCard = {
+  title: string;
+  imageUrl: string;
+  /** Volledige URL; de aanroeper bepaalt of daar tracking op zit. */
+  href: string;
+  minPriceCents: number;
+  hasPriceRange?: boolean;
+};
+
+/**
+ * Rij productkaartjes voor in een mail. Gedeeld door de orderbevestiging
+ * ("maak de look compleet") en de annuleringsmail ("dit hebben we wél"), zodat
+ * beide er hetzelfde uitzien en er maar één plek is die e-mail-HTML kent —
+ * tabellen en inline styles, want Outlook doet niet aan flexbox.
+ */
+export function productCardsHtml(items: MailProductCard[], t: Tr = nlT): string {
+  if (!items.length) return "";
+  const width = Math.floor(100 / items.length);
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            ${items
+              .map(
+                (r) => `<td width="${width}%" valign="top" style="padding:0 5px">
+              <a href="${attrUrl(r.href)}" style="text-decoration:none;color:#0A0A0A">
+                ${r.imageUrl ? `<img src="${attrUrl(r.imageUrl)}" width="100%" alt="" style="display:block;border:1px solid #E6E4DF;background:#F6F5F2"/>` : ""}
+                <div style="font:12px Arial,sans-serif;color:#0A0A0A;margin-top:6px;line-height:1.3">${escHtml(r.title)}</div>
+                <div style="font:12px Arial,sans-serif;color:#8B8B8B">${r.hasPriceRange ? `${t("product.from")} ` : ""}${euro(r.minPriceCents)}</div>
+              </a>
+            </td>`,
+              )
+              .join("")}
+          </tr></table>`;
+}
+
+/**
+ * Labels die met de mail meegaan naar Resend en TERUGKOMEN in de webhook.
+ *
+ * Zo weet een "geopend"-melding bij welke flowstap hij hoort zonder dat we
+ * berichtnummers hoeven bij te houden. Resend accepteert in naam en waarde
+ * alleen letters, cijfers, `_` en `-` — al het andere maakt de hele verzending
+ * ongeldig, dus we schrappen het hier in plaats van het te laten mislukken.
+ */
+export type MailLabels = Record<string, string>;
+
+const schoonLabel = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 256);
+
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  labels?: MailLabels,
+): Promise<boolean> {
   if (!emailConfigured() || !to) return false;
+  const tags = labels
+    ? Object.entries(labels)
+        .map(([name, value]) => ({ name: schoonLabel(name), value: schoonLabel(value) }))
+        .filter((t) => t.name && t.value)
+    : undefined;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: process.env.RESEND_FROM, to: [to], subject, html }),
+    body: JSON.stringify({ from: process.env.RESEND_FROM, to: [to], subject, html, ...(tags?.length ? { tags } : {}) }),
   });
   if (!res.ok) {
     console.error("[email] Resend-fout:", res.status, (await res.text()).slice(0, 200));
@@ -383,7 +502,7 @@ export async function sendProfileCompletionIncentiveEmail(email: string, firstNa
   const inner = `
     <tr><td style="padding:24px 28px 8px">
       <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">Rond je profiel af — 50 punten cadeau</h1>
-      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} maak je GENTS-profiel even compleet (je maten + voorkeuren). We zetten dan <strong>50 spaarpunten</strong> op je voucherkaart, en je krijgt voortaan advies en aanbiedingen die echt bij je passen.</p>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} maak je GENTS-profiel even compleet (je maten + voorkeuren). We zetten dan <strong>50 punten</strong> op je voucherkaart, en je krijgt voortaan advies en aanbiedingen die echt bij je passen.</p>
     </td></tr>
     <tr><td style="padding:18px 28px 28px">
       <a href="${url}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Profiel afronden (+50 punten)</a>
@@ -392,7 +511,32 @@ export async function sendProfileCompletionIncentiveEmail(email: string, firstNa
   return sendEmail(email, "Rond je GENTS-profiel af — 50 punten cadeau", shell(inner));
 }
 
-/** Reservering-bevestiging: "we houden 'm 7 dagen voor je vast" + afreken-link
+/**
+ * "vandaag tot 16:45" / "morgen tot 10:00" / "14 augustus tot 10:00".
+ *
+ * De reserveringsmails toonden alleen een DATUM ("tot en met 12 augustus"). Dat
+ * kon bij een hold van 7 dagen, maar de hold is 2 uur — dan moet er een tijd bij,
+ * anders weet de klant niet of 'ie nog kan komen.
+ *
+ * Altijd expliciet Europe/Amsterdam: zonder timeZone pakt toLocale* de zone van
+ * de SERVER (UTC op Vercel). Dan staat er 's avonds de verkeerde tijd en bij een
+ * late reservering zelfs de verkeerde dag — dezelfde val als op de kassabonnen.
+ */
+function reserveringTot(when: Date | string | null | undefined): string {
+  if (!when) return "";
+  const d = new Date(when);
+  if (isNaN(d.getTime())) return "";
+  const ZONE = "Europe/Amsterdam";
+  const tijd = d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: ZONE });
+  const dag = (x: Date) => x.toLocaleDateString("nl-NL", { day: "numeric", month: "numeric", year: "numeric", timeZone: ZONE });
+  const nu = new Date();
+  const morgen = new Date(nu.getTime() + 86400000);
+  if (dag(d) === dag(nu)) return `vandaag tot ${tijd}`;
+  if (dag(d) === dag(morgen)) return `morgen tot ${tijd}`;
+  return `${d.toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: ZONE })} tot ${tijd}`;
+}
+
+/** Reservering-bevestiging: "we houden 'm vandaag tot 16:45 voor je vast" + afreken-link
  *  (online afrekenen → onbeperkt vasthouden). */
 export async function sendReserveringEmail(input: {
   to: string; name?: string; store: string; validUntil?: Date | string | null;
@@ -401,7 +545,7 @@ export async function sendReserveringEmail(input: {
   // Naam escapen: sinds reserveer-om-te-passen is dit veld publiek beïnvloedbaar
   // (HTML-injectie in een gebrande mail = phishing-kanaal).
   const hi = input.name ? `Hoi ${String(input.name).replace(/</g, "&lt;")},` : "Hoi,";
-  const tot = input.validUntil ? new Date(input.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const tot = reserveringTot(input.validUntil);
   const itemsHtml = (input.lines || []).map((l) => `
     <tr><td style="padding:10px 0;border-bottom:1px solid #EAEAEA">
       <div style="font:700 14px Arial,sans-serif;color:#0A0A0A">${(l.title || l.sku || "Artikel").replace(/</g, "&lt;")}</div>
@@ -416,7 +560,7 @@ export async function sendReserveringEmail(input: {
   const inner = `
     <tr><td style="padding:24px 28px 4px">
       <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">We houden 'm voor je apart</h1>
-      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} je reservering staat klaar in <strong>${input.store.replace(/</g, "&lt;")}</strong>${tot ? ` — we houden 'm tot en met <strong>${tot}</strong> voor je vast` : ""}.</p>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${hi} je reservering staat klaar in <strong>${input.store.replace(/</g, "&lt;")}</strong>${tot ? ` — we houden 'm <strong>${tot}</strong> voor je vast` : ""}.</p>
     </td></tr>
     <tr><td style="padding:8px 28px 8px">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${itemsHtml}</table>
@@ -432,7 +576,7 @@ export async function sendReservationStoreNotify(n: {
   title: string; size: string; color: string; validUntil: Date | string | null;
 }): Promise<boolean> {
   if (!emailConfigured() || !n.to) return false;
-  const tot = n.validUntil ? new Date(n.validUntil).toLocaleDateString("nl-NL", { day: "numeric", month: "long" }) : "";
+  const tot = reserveringTot(n.validUntil);
   const lines = [
     `Nieuwe pas-reservering via gents.nl voor ${n.store}:`,
     "",
@@ -491,6 +635,9 @@ export async function sendOrderConfirmation(
 ): Promise<boolean> {
   if (!emailConfigured()) return false;
   const t = await mailT(locale);
+  // Bedenktijd + retourkosten uit Instellingen, niet uit de tekst zelf: past
+  // Kevin het bedrag aan, dan klopt de bevestigingsmail meteen mee.
+  const retour = await retourBelofte();
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -501,7 +648,7 @@ export async function sendOrderConfirmation(
       from: process.env.RESEND_FROM,
       to: [order.email],
       subject: t("mail.order.subject", { orderNumber: order.orderNumber }),
-      html: orderHtml(order, lines, recs, t, locale),
+      html: orderHtml(order, lines, recs, t, locale, retour),
     }),
   });
   if (!res.ok) {
@@ -544,6 +691,54 @@ export async function sendConceptOrderMail(c: ConceptOrderEmail): Promise<boolea
       <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:14px">De link blijft geldig — geen haast. Vragen? Antwoord gerust op deze mail.</p>
     </td></tr>`;
   return sendEmail(c.email, `Je GENTS-selectie van ${c.store} — rond af wanneer je wilt`, shell(inner));
+}
+
+/* ── Betaallink (back-office) ── */
+
+type BetaallinkEmail = {
+  email: string;
+  firstName: string;
+  orderNumber: string;
+  checkoutUrl: string;
+  totalCents: number;
+  /** true = de eerste betaling mislukte/verliep; false = nieuwe handmatige bestelling. */
+  opnieuw: boolean;
+  items: { title: string; size: string; color: string; qty: number; unitPriceCents: number }[];
+};
+
+/**
+ * Betaallink vanuit het back-office (Site → Bestellingen). Twee situaties, één
+ * mail: een handmatig aangemaakte bestelling die nog betaald moet worden, en
+ * een bestelling waarvan de betaling mislukte of verliep.
+ *
+ * Bewust ZONDER verwijt of urgentie ("laatste kans", "anders vervalt je
+ * bestelling"): een mislukte iDEAL-betaling is meestal een afgebroken app, geen
+ * onwil. De toon is dezelfde als de conceptmail van de kassa.
+ */
+export async function sendPaymentLinkMail(c: BetaallinkEmail): Promise<boolean> {
+  const hi = c.firstName ? `Hoi ${c.firstName},` : "Hoi,";
+  const rows = c.items
+    .map(
+      (l) => `<tr><td style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">
+        ${l.title}<div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && `maat ${l.size}`, `${l.qty}×`].filter(Boolean).join(" · ")}</div></td>
+        <td align="right" style="padding:6px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${euro(l.unitPriceCents * l.qty)}</td></tr>`,
+    )
+    .join("");
+  const intro = c.opnieuw
+    ? `${hi} de betaling van je bestelling <strong>${c.orderNumber}</strong> is niet afgerond — dat gebeurt zo nu en dan, bijvoorbeeld als de bank-app tussendoor sluit. Je bestelling staat nog voor je klaar; met de knop hieronder rond je 'm alsnog af.`
+    : `${hi} we hebben je bestelling <strong>${c.orderNumber}</strong> voor je klaargezet. Met de knop hieronder reken je 'm af.`;
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${c.opnieuw ? "Je bestelling staat nog klaar" : "Je bestelling staat klaar"}</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${intro}</p>
+    </td></tr>
+    ${rows ? `<tr><td style="padding:8px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td></tr>` : ""}
+    <tr><td style="padding:8px 28px 0;font:14px Arial,sans-serif;color:#0A0A0A"><strong>Te betalen: ${euro(c.totalCents)}</strong></td></tr>
+    <tr><td style="padding:18px 28px 28px">
+      <a href="${c.checkoutUrl}" style="display:inline-block;background:#0A0A0A;color:#fff;font:14px Arial,sans-serif;padding:12px 24px;text-decoration:none">Betalen</a>
+      <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:14px">Klopt er iets niet, of wil je liever iets wijzigen? Antwoord gerust op deze mail — dan regelen we het.</p>
+    </td></tr>`;
+  return sendEmail(c.email, `Je GENTS-bestelling ${c.orderNumber} — betaallink`, shell(inner));
 }
 
 /* ── Retouren ── */
@@ -641,6 +836,80 @@ export async function sendReturnRefunded(r: ReturnRefundedEmail): Promise<boolea
   return sendEmail(r.email, `Je GENTS-retour voor ${r.orderNumber} is terugbetaald`, shell(inner));
 }
 
+/* ── Niet leverbaar: annulering + terugbetaling ── */
+
+export type UnfulfillableRefundEmail = {
+  email: string;
+  firstName: string;
+  orderNumber: string;
+  /** Titels van de artikelen die vervallen (zoals ze op de order staan). */
+  cancelledTitles: string[];
+  /** 0 = er is (nog) niets teruggestort; dan noemt de mail geen bedrag. */
+  refundedCents: number;
+  /** Een deel was al verzonden en komt met een gratis retourlabel terug. */
+  partialReturn: boolean;
+  /** 2-3 vergelijkbare artikelen die NU wél leverbaar zijn; leeg = blok weglaten. */
+  alternatives: MailProductCard[];
+  orderUrl: string;
+  locale?: Locale;
+  t?: Tr;
+};
+
+/**
+ * De mail die de klant krijgt als zijn artikel niet meer leverbaar blijkt.
+ *
+ * Dit was tot nu toe een stille terugbetaling: geld terug, geen bericht. Twee
+ * dingen maken het verschil voor de klant: (1) uitleggen dát we alles hebben
+ * nagekeken — dat is bij een annulering altijd al gebeurd — en (2) meteen laten
+ * zien wat we wél in zijn maat hebben, zodat hij niet zelf hoeft te gaan zoeken.
+ */
+export async function sendUnfulfillableRefund(m: UnfulfillableRefundEmail): Promise<boolean> {
+  const t = m.t ?? nlT;
+  const locale = m.locale ?? DEFAULT_LOCALE;
+  // Escapen vóór de vertaling: interpolate() plakt de waarde rauw in de tekst.
+  const name = escHtml(m.firstName) || t("mail.greeting.fallbackName");
+  const titles = (m.cancelledTitles || []).filter(Boolean);
+
+  const itemsHtml = titles.length
+    ? `<ul style="margin:10px 0 0;padding-left:18px;color:#0A0A0A">${titles
+        .map((title) => `<li style="margin:2px 0">${escHtml(title)}</li>`)
+        .join("")}</ul>`
+    : "";
+
+  const altHtml = m.alternatives.length
+    ? `<div style="margin-top:22px;border-top:1px solid #E6E4DF;padding-top:18px">
+         <p style="font:600 14px Arial,sans-serif;color:#0A0A0A;margin:0 0 4px">${t("mail.unfulfillable.altHeading")}</p>
+         <p style="margin:0 0 12px;font:13px Arial,sans-serif;color:#8B8B8B">${t("mail.unfulfillable.altIntro")}</p>
+         ${productCardsHtml(m.alternatives, t)}
+       </div>`
+    : "";
+
+  const bodyHtml = `
+    <p style="margin:0">${t("mail.unfulfillable.intro", { name, orderNumber: m.orderNumber })}</p>
+    ${itemsHtml}
+    <p style="margin:14px 0 0">${t("mail.unfulfillable.checked")}</p>
+    <p style="margin:14px 0 0">${
+      m.refundedCents > 0
+        ? t("mail.unfulfillable.refunded", { amount: euro(m.refundedCents) })
+        : t("mail.unfulfillable.refundPending")
+    }</p>
+    ${m.partialReturn ? `<p style="margin:14px 0 0">${t("mail.unfulfillable.returnNote")}</p>` : ""}
+    ${altHtml}`;
+
+  return sendEmail(
+    m.email,
+    t("mail.unfulfillable.subject", { orderNumber: m.orderNumber }),
+    brandedEmailHtml({
+      heading: t("mail.unfulfillable.heading"),
+      bodyHtml,
+      cta: { label: t("mail.unfulfillable.cta"), href: m.orderUrl },
+      footnote: t("mail.unfulfillable.help"),
+      locale,
+      t,
+    }),
+  );
+}
+
 /* ── Klantafspraken (/afspraak) ── */
 
 const esc = (s: string) => String(s || "").replace(/</g, "&lt;");
@@ -721,4 +990,78 @@ export async function sendAppointmentStoreNotify(n: AppointmentStoreNotify): Pro
     return false;
   }
   return true;
+}
+
+/**
+ * Interne signaalmail (bewaking, storingen) — platte tekst, geen huisstijl-shell
+ * en geen klant in de cc. Bedoeld voor meldingen die iemand 's ochtends moet
+ * kunnen scannen, niet voor iets dat een klant ooit ziet.
+ *
+ * Ontvangers komen uit de instellingen (settings.alertEmails), niet uit env:
+ * wie de bewaking krijgt is een knop in de tool, geen deploy.
+ */
+export async function sendOpsAlert(to: string[], subject: string, text: string): Promise<boolean> {
+  const ontvangers = (to || []).map((a) => String(a || "").trim()).filter(Boolean);
+  if (!emailConfigured() || !ontvangers.length) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: process.env.RESEND_FROM, to: ontvangers, subject, text }),
+  });
+  if (!res.ok) {
+    console.error("[email] ops-melding Resend-fout:", res.status, (await res.text()).slice(0, 200));
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Verjaardagsmail.
+ *
+ * Het voorkeurenscherm belooft dit letterlijk ("Voor een attentie rond je
+ * verjaardag") en er stond niets tegenover — geen cron, geen template. Een
+ * belofte in de UI die nergens op uitkomt is erger dan het veld niet vragen.
+ *
+ * Bewust géén korting of aanbieding: dan is het geen felicitatie maar een
+ * campagne met een strikje, en dat prikt iedereen door. Wél een verwijzing naar
+ * het spaartegoed dat er al staat — dat is van hem, en het is een reden om
+ * langs te komen die niets aan marge kost.
+ */
+export async function sendVerjaardagEmail(
+  email: string,
+  firstName: string,
+  opts: { puntenBeschikbaar?: number; tegoedCents?: number } = {},
+): Promise<boolean> {
+  const site = getSiteUrl();
+  const hi = firstName ? `Gefeliciteerd, ${firstName}` : "Gefeliciteerd";
+  const punten = Math.max(0, Math.round(opts.puntenBeschikbaar ?? 0));
+  const tegoed = Math.max(0, Math.round(opts.tegoedCents ?? 0));
+
+  // Alleen noemen wat er écht staat. "Je hebt 0 punten" is geen felicitatie.
+  const extra =
+    tegoed > 0
+      ? `<p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:14px 0 0">
+           Je hebt trouwens nog <strong>${euro(tegoed)}</strong> aan tegoed openstaan — leek ons een goed moment om dat te noemen.
+         </p>`
+      : punten >= 100
+        ? `<p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:14px 0 0">
+             Je hebt <strong>${punten.toLocaleString("nl-NL")} spaarpunten</strong> staan bij The Club of GENTS — leek ons een goed moment om dat te noemen.
+           </p>`
+        : "";
+
+  const inner = `
+    <tr><td style="padding:24px 28px 8px">
+      <h1 style="font:400 22px Arial,sans-serif;color:#0A0A0A;margin:0">${hi}</h1>
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">
+        Vandaag even geen aanbieding — gewoon een fijne dag gewenst namens iedereen bij GENTS.
+      </p>
+      ${extra}
+    </td></tr>
+    <tr><td style="padding:14px 28px 28px">
+      <p style="font:14px Arial,sans-serif;color:#2C2C2C;line-height:1.7;margin:0">
+        Kom je binnenkort langs? In onze winkels helpen we je graag persoonlijk verder —
+        <a href="${site}/winkels" style="color:#0A0A0A">bekijk waar we zitten</a>.
+      </p>
+    </td></tr>`;
+  return sendEmail(email, "Gefeliciteerd met je verjaardag", shell(inner));
 }

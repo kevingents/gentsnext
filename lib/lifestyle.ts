@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { getVisualLearnings, learningsPromptBlock } from "@/lib/visual-learnings";
+import { buildPrompt, getMediaThemes, themeForProduct } from "@/lib/media-themes";
 
 /**
  * Herbruikbare sfeerbeeld-generatie per product (FASHN product-to-model), met de
@@ -12,82 +13,6 @@ import { getVisualLearnings, learningsPromptBlock } from "@/lib/visual-learnings
  */
 
 const API = "https://api.fashn.ai/v1";
-
-const EVERYMAN =
-  "An ordinary, natural-looking real man with authentic real skin texture and a genuine, relatable, slightly imperfect look — a real person, NOT a flawless fashion model. The fabric shows natural creases, folds and a lived-in look — NOT crisp, NOT perfectly pressed. Authentic candid editorial photo shot on 35mm film with visible natural grain, raw and real, a little imperfect — NOT glossy, NOT airbrushed, NOT studio-perfect. The shown product must stay accurate to the reference photo.";
-
-const MOODS: Record<string, { light: string; scenes: string[] }> = {
-  trouw: {
-    light: "Warm golden-hour Mediterranean sunlight, sun-drenched.",
-    scenes: [
-      "walking mid-stride down the whitewashed steps of a South-European coastal village, turning to laugh over his shoulder, one hand in his pocket",
-      "sitting back at a sun-dappled terrace cafe table with a cold drink, an arm draped over the chair, head tipped back mid-laugh",
-      "standing on a stone harbour quay lined with traditional wooden boats, the sea behind, hands in pockets, glancing aside with a relaxed grin",
-      "sitting on a large sun-warmed rock at the water's edge, forearms on his knees, a calm half-smile looking over the turquoise sea",
-      "leaning casually against a sun-warmed whitewashed wall in a narrow Mediterranean street, hands in pockets, a relaxed natural half-smile",
-      "at a relaxed casual outdoor beach wedding celebration at dusk, warm string lights and guests dancing behind, laughing with a drink in hand",
-      "at a lively garden party among olive trees and flowers, a long festive table behind him, laughing mid-conversation with a glass in hand",
-      "raising a glass in a toast at a sunny vineyard terrace celebration, a long festive table beside him, a warm genuine laugh",
-      "on the dance floor at an evening wedding party, jacket open, arms loose and up, mid-laugh under warm fairy lights",
-      "walking with an easy confident stride along a golden-hour seaside promenade, hands relaxed",
-    ],
-  },
-  polo: {
-    light: "Bright, cheerful, sunny summer light, vibrant and joyful.",
-    scenes: [
-      "laughing at a lively sun-soaked terrace cafe in Palermo, a cold drink on the table, colourful awnings and people around",
-      "strolling a colourful bustling Palermo old-town street, candid and cheerful, warm tones and life all around",
-      "by the bright turquoise Sardinian sea on a sunny day, relaxed and smiling, a carefree summer holiday feel",
-      "sitting on sun-warmed harbour steps by the boats, laughing, a lively cheerful summer moment",
-      "lingering over an espresso at a tiny sunny piazza cafe, a folded newspaper on the marble table",
-      "stepping off a small wooden boat onto a sun-baked stone jetty, laughing, sea sparkling behind",
-    ],
-  },
-  country: {
-    light: "Moody, dramatic, overcast Scottish Highland light, atmospheric and cinematic.",
-    scenes: [
-      "standing on a windswept Scottish Highland moor covered in purple heather, rugged misty mountains behind, hands in pockets, looking over the wild landscape",
-      "on a rugged grassy cliff edge above a stormy grey Scottish sea-loch, wind in his collar, a calm steady gaze into the distance",
-      "walking a rough stone path through a dramatic Highland glen beside an ancient crumbling castle ruin, low mist and brooding sky",
-      "beside a still Scottish loch with rugged hills and drifting low mist, quiet and contemplative",
-      "warming his hands by a crackling fire pit outside a stone cottage at dusk, a dram of whisky in hand",
-      "crossing an old stone packhorse bridge over a rushing peat-brown Highland stream",
-    ],
-  },
-  student: {
-    light: "Bright natural Dutch daylight, lively, playful and a little funny.",
-    scenes: [
-      "riding a chunky fat-tyre e-bike (fatbike) along a sunny Amsterdam canal, tall narrow gabled canal houses and a humpback bridge behind, a big cheerful grin, caught mid-ride",
-      "on a fatbike crossing a picturesque old canal bridge in historic Leiden, weathered Dutch brick buildings behind, a lively candid student moment",
-      "cycling a fatbike across a sunlit cobbled Dutch university-town square, an old bell-tower behind, cheerful and carefree",
-      "raising a glass at a long candle-lit student-society dinner table, lively and a little rowdy",
-    ],
-  },
-  stad: {
-    light: "Soft natural European city daylight, stylish, easy and relaxed.",
-    scenes: [
-      "sitting at a marble cafe table on a lively old-town terrace, espresso in hand, watching the street go by",
-      "walking a sunlit cobbled city street past grand historic facades, relaxed and unhurried",
-      "browsing a weekend vintage flea market among curious stalls, sunlight slanting between the awnings",
-      "crossing a grand city square past an old fountain, mid-stride, easy and quietly confident",
-      "stepping out of a classic barbershop onto a busy street, fresh, relaxed and smiling",
-      "leaning on a sunlit canal bridge railing, watching the boats drift past below",
-    ],
-  },
-};
-
-const CAT: Record<string, { mood: string; wear: string }> = {
-  Pakken: { mood: "trouw", wear: "wearing THIS suit with a crisp white dress shirt and brown leather shoes" },
-  Colberts: { mood: "trouw", wear: "wearing THIS blazer over a crisp white dress shirt with sand trousers and brown suede loafers" },
-  Gilets: { mood: "trouw", wear: "wearing THIS waistcoat over a crisp white dress shirt with sand trousers and brown loafers — the bottom button of the waistcoat is always left undone (open)" },
-  "Polo-shirts": { mood: "polo", wear: "wearing THIS polo shirt with light sand chino trousers and brown suede loafers" },
-  Truien: { mood: "country", wear: "wearing THIS knitwear with trousers and leather boots" },
-  Vesten: { mood: "country", wear: "wearing THIS cardigan over a shirt with trousers and boots" },
-  Jassen: { mood: "country", wear: "wearing THIS coat over a knit with trousers and leather boots" },
-  Overhemden: { mood: "stad", wear: "wearing THIS shirt with the sleeves relaxed, light chino trousers and brown leather loafers" },
-  Broeken: { mood: "stad", wear: "wearing THIS pair of trousers with a tucked-in light shirt and brown leather shoes" },
-  "T-Shirts": { mood: "stad", wear: "wearing THIS t-shirt with light chino trousers, a relaxed summer city look" },
-};
 
 function blobToken(): string {
   return process.env.STOREGENTS_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN || "";
@@ -148,20 +73,30 @@ function candidatePath(handle: string, slot: 1 | 2 | 3): string {
   return `ai-lifestyle/_candidates/${handle}-${slot}-${Date.now()}.jpg`;
 }
 
-type ProdRow = { id: string; handle: string; title: string; hg: string; img: string; l1: string; l2: string; l3: string };
+type ProdRow = { id: string; handle: string; title: string; hg: string; vcl: string | null; img: string; l1: string; l2: string; l3: string };
 
 async function loadProduct(handle: string): Promise<ProdRow | null> {
   const db = getDb();
   const rows = await db.execute<ProdRow>(sql`
-    select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg,
+    select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg, p.variant_color_label vcl,
       (select url from product_images pi where pi.product_id=p.id order by position limit 1) img,
       p.lifestyle_image_url l1, p.lifestyle_image_url2 l2, p.lifestyle_image_url3 l3
     from products p where p.handle=${handle} limit 1`);
   return rows.rows[0] || null;
 }
 
-/** Genereer één sfeerbeeld-slot (1|2|3) opnieuw, met de geleerde stijl-regels. */
-export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+/**
+ * Genereer één sfeerbeeld-slot (1|2|3) opnieuw, met de geleerde stijl-regels.
+ *
+ * `opties` laat je thema en camerastijl expliciet kiezen. Zonder keuze blijft het
+ * oude gedrag: thema volgt de hoofdgroep, camerastijl is willekeurig. Dat is wat
+ * de cron en de scripts doen — die moeten juist géén mening hebben.
+ */
+export async function regenerateLifestyleSlot(
+  handle: string,
+  slot: 1 | 2 | 3,
+  opties: { themaId?: string; camerastijlId?: string } = {},
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const key = process.env.FASHN_API_KEY || "";
   const token = blobToken();
   if (!key) return { ok: false, error: "FASHN_API_KEY ontbreekt." };
@@ -171,18 +106,62 @@ export async function regenerateLifestyleSlot(handle: string, slot: 1 | 2 | 3): 
   if (!r) return { ok: false, error: "Product niet gevonden." };
   if (!r.img) return { ok: false, error: "Geen productfoto om op te baseren." };
 
-  const isStudent = /\brok|jacquet/i.test(`${r.handle} ${r.title}`);
-  const conf = isStudent
-    ? { mood: "student", wear: "A cheerful young Dutch student wearing THIS formal item as part of a full white-tie tailcoat outfit — crisp white dress shirt, white bow tie and formal black trousers" }
-    : CAT[r.hg];
-  if (!conf) return { ok: false, error: `Geen sfeer-config voor hoofdgroep "${r.hg || "?"}".` };
-  const mood = MOODS[conf.mood] || MOODS.trouw;
-  const scene = mood.scenes[Math.floor(Math.random() * mood.scenes.length)];
+  // Thema + camerastijl komen uit de portal-store, net als in het script en de cron.
+  // Eén rail: pas je een thema aan, dan hergenereert de studio ook mét dat thema.
+  // De kleding-uitzonderingen (rok/jacquet = white-tie, smoking = black-tie) zitten
+  // in buildPrompt, zodat script en cron dezelfde blinde vlek niet meer hebben.
+  const store = await getMediaThemes();
 
+  /* Een expliciet gekozen thema wint van de hoofdgroep-regel. Bewust ZONDER de
+     enabled-check: een thema dat je met de hand aanwijst wil je ook kunnen
+     gebruiken als het niet in de automatische rotatie zit — anders moet je het
+     eerst aanzetten voor de hele catalogus om één beeld te maken. */
+  const theme = opties.themaId
+    ? store.themes.find((t) => t.id === opties.themaId)
+    : themeForProduct(store, { hoofdgroep: r.hg, handle: r.handle, title: r.title });
+  if (!theme) {
+    return {
+      ok: false,
+      error: opties.themaId
+        ? `Onbekend beeldthema: "${opties.themaId}".`
+        : `Geen actief beeldthema voor hoofdgroep "${r.hg || "?"}".`,
+    };
+  }
+
+  const stijlen = store.cameraStyles.filter((s) => s.enabled);
+  let camera;
+  if (opties.camerastijlId) {
+    camera = store.cameraStyles.find((s) => s.id === opties.camerastijlId);
+    if (!camera) return { ok: false, error: `Onbekende camerastijl: "${opties.camerastijlId}".` };
+  } else {
+    if (!stijlen.length) return { ok: false, error: "Geen actieve camerastijl — zet er één aan bij Beeldthema's." };
+    // Willekeurige camerastijl: "opnieuw proberen" moet iets ánders opleveren.
+    camera = stijlen[Math.floor(Math.random() * stijlen.length)];
+  }
+
+  const basis = buildPrompt(
+    { hoofdgroep: r.hg, color: r.vcl ?? "", title: r.title, handle: r.handle },
+    theme,
+    camera
+  );
+  if (!basis) return { ok: false, error: `Geen merkregel voor hoofdgroep "${r.hg || "?"}".` };
+
+  // Mét handle: de feedback op dít product telt als correctie in plaats van te
+  // verdrinken tussen die van alle andere producten. Zie lib/visual-learnings.ts.
   const learnings = await getVisualLearnings();
-  const prompt = `A man ${conf.wear}, ${scene}. ${mood.light} ${EVERYMAN}${learningsPromptBlock(learnings)}`;
+  const prompt = `${basis}${learningsPromptBlock(learnings, { handle })}`;
 
-  const out = await run({ product_image: toFullRes(r.img), prompt, output_format: "jpeg" }, key);
+  const out = await run(
+    {
+      product_image: toFullRes(r.img),
+      prompt,
+      aspect_ratio: "4:5",
+      resolution: "2k",
+      generation_mode: "quality",
+      output_format: "jpeg",
+    },
+    key
+  );
   if (!out) return { ok: false, error: "FASHN-generatie mislukt." };
   /* KANDIDAAT: naar een apart pad → het live-beeld blijft ongemoeid tot goedkeuren. */
   const url = await toBlob(out, candidatePath(handle, slot), token);

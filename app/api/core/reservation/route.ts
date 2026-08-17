@@ -62,6 +62,13 @@ export async function POST(req: Request) {
       }
       case "list": {
         if (!b.location) return NextResponse.json({ ok: false, error: "location vereist." }, { status: 400 });
+        /* Eerst verlopen reserveringen omzetten, dán pas lezen. De voorraad kwam al
+           vanzelf vrij (de hold heeft een eigen expires_at), maar de STATUS bleef
+           "open" tot iemand toevallig de expire-actie aanriep. Bij 7 dagen viel dat
+           niet op; bij een hold van 2 uur staat het winkeloverzicht anders vol met
+           reserveringen die allang vervallen zijn. Non-fataal: kan het opruimen
+           niet, dan tonen we gewoon de lijst. */
+        await expireReservations().catch(() => null);
         return NextResponse.json({ ok: true, reservations: await listReservations(b.location, b.status, b.limit) });
       }
       case "overview": {

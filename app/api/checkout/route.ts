@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   createOrder,
   attachMolliePayment,
@@ -97,9 +98,21 @@ export async function POST(req: Request) {
   // sessie weg. De middleware slaat /api over, dus getLocale() leest hier de
   // locale-cookie die diezelfde middleware op elke /en-, /de-… pagina zet.
   const locale = await getLocale();
+
+  // Attributie vastleggen op de order. Het device komt uit de cookie die de
+  // tracker meeschrijft (anoniem, geen PII); de campagnegegevens stuurt de
+  // checkout mee uit localStorage. Beide zijn optioneel: een klant die
+  // analytics weigerde bestelt gewoon door, alleen zonder toerekening.
+  const sid = (await cookies()).get("gents-sid")?.value || "";
+  const attributie =
+    body?.attributie && typeof body.attributie === "object" ? (body.attributie as Record<string, unknown>) : {};
+
   let order;
   try {
-    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore, "", sessionCustomer?.id ?? null, locale);
+    order = await createOrder(c, items, deliveryMethod, voucherCode, giftcardCode, pickupStore, "", sessionCustomer?.id ?? null, locale, {
+      sessionId: sid ? decodeURIComponent(sid) : "",
+      attributie,
+    });
   } catch (e) {
     // Voorraad-gate weigert → geef de niet-leverbare SKU's terug zodat de checkout
     // ze kan markeren en de klant ze in één klik kan verwijderen.

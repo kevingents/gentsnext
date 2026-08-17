@@ -33,6 +33,16 @@ export async function POST(req: Request) {
     if (!data) {
       return NextResponse.json({ ok: false, error: "Order niet gevonden." }, { status: 404 });
     }
+    /* Idempotent: staat de order al op deze status, doe dan NIETS. updateOrderStatus
+       kent geen where-clause op de huidige status en stuurt altijd een klantmelding
+       (mail + WhatsApp), dus een herhaalde aanroep — een dubbele kassa-tik, een
+       cron die opnieuw draait — zou de klant nog een keer "je bestelling is
+       onderweg" sturen. Het schrijft ook updated_at, en daar hangt de
+       web-reserveringstelling aan: blijven herschrijven houdt een verzonden order
+       eeuwig als reservering op de voorraad staan. */
+    if (data.order.status === status) {
+      return NextResponse.json({ ok: true, unchanged: true });
+    }
     // Completeness-gate (backstop): een multi-winkel-split mag pas op 'shipped' als
     // álle winkeldelen gereed gemeld zijn (/api/core/order-pick). Anders zou één winkel
     // de hele order op verzonden zetten → valse verzendmail + het deel van de andere

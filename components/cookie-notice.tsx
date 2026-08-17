@@ -39,7 +39,11 @@ export function CookieNotice() {
 
   if (!visible) return null;
   return (
-    <div role="dialog" aria-label={t("cookies.dialogAriaLabel")} className="fixed inset-x-3 bottom-3 z-[55] mx-auto max-w-2xl rounded-card border border-line bg-canvas p-4 shadow-pop sm:p-5">
+    // data-heat-uit: hoort niet bij de pagina zelf. De klik-heatmap slaat dit
+    // blok over (toestemming geven is geen gedrag op de pagina) en de
+    // heatmap-viewer verbergt het in de voorbeeldweergave, zodat de balk niet
+    // over de onderkant van elke gemeten pagina heen ligt.
+    <div data-heat-uit role="dialog" aria-label={t("cookies.dialogAriaLabel")} className="fixed inset-x-3 bottom-3 z-[55] mx-auto max-w-2xl rounded-card border border-line bg-canvas p-4 shadow-pop sm:p-5">
       <p className="font-display text-base">{t("cookies.title")}</p>
       <p className="mt-1 font-sans text-sm text-ink-soft">
         {t("cookies.body")}{" "}

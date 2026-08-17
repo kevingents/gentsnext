@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { adminOrToken } from "@/lib/studio-token";
-import { getVisualLearnings, REJECT_CATEGORIES } from "@/lib/visual-learnings";
+import { getVisualLearnings, hasDirectiveProvider, REJECT_CATEGORIES, REJECT_CATEGORY_LIST, topicOf } from "@/lib/visual-learnings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,9 +55,11 @@ export async function GET(req: Request) {
         url: l.url as string,
         handle: l.handle || "",
         slot: l.slot ?? null,
+        topic: l.topic || topicOf(l.category),
         category: l.category,
         categoryLabel: REJECT_CATEGORIES[l.category as keyof typeof REJECT_CATEGORIES]?.label || l.category,
         reason: l.reason || "",
+        directive: l.directive,
         at: l.at,
       }));
     return NextResponse.json({
@@ -66,7 +68,10 @@ export async function GET(req: Request) {
       page,
       pageSize,
       items,
-      categories: Object.entries(REJECT_CATEGORIES).map(([key, v]) => ({ key, label: v.label })),
+      categories: REJECT_CATEGORY_LIST,
+      // Zonder AI-sleutel worden notities niet omgezet naar positieve instructies;
+      // de portal waarschuwt daarvoor in plaats van dat je het in Vercel zoekt.
+      aiReady: hasDirectiveProvider(),
       learnings: { count: negatives.length, recent: negatives.slice(0, 30), updatedAt: learnings.updatedAt },
       likedCount: positives.length,
       rejected,

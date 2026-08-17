@@ -1,26 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { CLUB_LOGO_DARK, CLUB_LOGO_SIZE, CLUB_NAME, CLUB_PATH } from "@/lib/club";
 import { CheckIcon } from "@/components/icons";
+import { track } from "@/lib/track-client";
 import { useT } from "@/components/i18n/locale-provider";
 import { ORDER_STATUS_NL_KLANT, RETURN_STATUS_NL } from "@/lib/order-status";
 import { formatEuro } from "@/lib/pricing";
+import { PORTAL_URL } from "@/lib/portal";
+import { COLOR_FAMILIES } from "@/lib/colors";
+import { MAX_MY_STORES } from "@/lib/stores";
+import {
+  AGE_RANGES,
+  SHOP_OCCASIONS,
+  ageRangeFromBirthDate,
+  profileChecklist,
+  type ProfilePreferences,
+} from "@/lib/profiel-voorkeuren";
 import { AddressBook } from "@/components/account/address-book";
 import { SupportTickets } from "@/components/account/support-tickets";
 import { ProductCard } from "@/components/product-card";
+import { ClubPassCard, ClubPassButton } from "@/components/account/club-pass";
+import type { ClubPassData } from "@/lib/club-pass";
 import { AppleWalletButton } from "@/components/account/apple-wallet-button";
+import { GoogleWalletButton } from "@/components/account/google-wallet-button";
+import { Bestellingen, type OrderRow, type StoreBuyRow } from "@/components/account/bestellingen";
+import { SizeAdvisor, type AdviceSizes } from "@/components/maatadvies/size-advisor";
 import type { ProductCardData } from "@/lib/catalog";
+import type { NewsletterPrefs } from "@/lib/newsletter";
 
 /* ── Types (plain JSON van de server) ─────────────────────────────────────── */
-type Line = { title: string; size: string; color: string; quantity: number; unitPriceCents: number };
-type Order = {
-  id: string; orderNumber: string; status: string; createdAt: string;
-  totalCents: number; lines: Line[];
-};
-type StoreBuy = {
-  id: string; storeName: string; purchasedAt: string; totalCents: number;
-  pointsEarned: number; lines: { title: string; size?: string; color?: string; qty?: number; unitPriceCents?: number }[];
-};
+// Order- en winkelbon-vorm staan bij het besteloverzicht dat ze rendert.
+type Order = OrderRow;
+type StoreBuy = StoreBuyRow;
 type Voucher = {
   id: string; code: string; description: string; kind: string; valueCents: number;
   percentOff: number; status: string; expiresAt: string | null;
@@ -37,13 +52,14 @@ type Address = {
 type Customer = {
   id: string; email: string; firstName: string; lastName: string; phone: string;
   loyaltyPoints: number; sizeProfile: Record<string, string>; marketingOptIn: boolean;
-  /** Heeft deze persoon toegang tot de studio (beheerder of een rol)? */
+  /** Stijlvoorkeuren (geboortedatum, kleuren, vaste winkel, gelegenheden). */
+  preferences: ProfilePreferences;
+  /** Medewerker? Bepaalt alleen of we de ingang naar de portal tonen. */
   isStaff?: boolean;
-  /** De werkgebieden waar hij in mag — bepaalt welke snelkoppelingen we tonen. */
-  permissions?: string[];
-  /** Eerste studiopagina waar hij in mag; altijd zichtbaar als vangnet. */
-  studioHref?: string | null;
 };
+/** Eenmalige puntenbonus per actie — de server bepaalt stand en bedrag. */
+export type BonusTask = { kind: "maatadvies" | "wallet" | "winkel" | "profiel"; points: number; done: boolean; earned: boolean };
+type StoreOption = { pageHandle: string; title: string; city: string };
 type ReturnRow = {
   id: string; orderNumber: string; status: string; method: "dhl" | "store"; refundType: "money" | "credit";
   itemsCents: number; shippingCostCents: number; refundedCents: number; creditCode: string;
@@ -84,14 +100,38 @@ function nlDate(iso: string): string {
 const STATUS_NL = ORDER_STATUS_NL_KLANT;
 const RET_STATUS_NL = RETURN_STATUS_NL;
 
-const NEXT_TIER = 500; // punten voor de volgende beloning
+/** Inwisselkoers zoals in de tool ingesteld; deze waarden gelden alleen als de
+ *  server ze (nog) niet meestuurt. */
+export type RedeemConfig = { minPoints: number; stepPoints: number; centsPerPoint: number };
+const REDEEM_FALLBACK: RedeemConfig = { minPoints: 500, stepPoints: 500, centsPerPoint: 5 };
 
-export function ProfileClient({ customer, data, walletEnabled = false }: { customer: Customer; data: Data; walletEnabled?: boolean }) {
+export function ProfileClient({
+  customer,
+  data,
+  pass = null,
+  walletEnabled = false,
+  googleWalletEnabled = false,
+  bonuses = [],
+  redeem = REDEEM_FALLBACK,
+  stores = [],
+  newsletter,
+}: {
+  customer: Customer;
+  data: Data;
+  /** De scanbare memberspas; de server bouwt de QR (lib/club-pass). */
+  pass?: ClubPassData | null;
+  walletEnabled?: boolean;
+  googleWalletEnabled?: boolean;
+  bonuses?: BonusTask[];
+  redeem?: RedeemConfig;
+  stores?: StoreOption[];
+  /** Stand van de nieuwsbrief per kanaal; server-side gelezen (geen flikkering). */
+  newsletter?: NewsletterPrefs;
+}) {
   const t = useT();
   const [tab, setTab] = useState<TabKey>("overzicht");
   const name = customer.firstName || customer.email.split("@")[0];
   // Alleen presentatie: de pagina achter de link controleert zelf opnieuw.
-  const mag = (recht: string) => (customer.permissions ?? []).includes(recht);
 
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
@@ -102,15 +142,13 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
         </div>
         <div className="flex items-center gap-4">
           {customer.isStaff ? (
-            <>
-              {mag("meten") ? <a href="/account/statistieken" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.statistics")}</a> : null}
-              {mag("operatie") ? <a href="/account/orders" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.orders")}</a> : null}
-              {mag("klanten") ? <a href="/account/klanten" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.customers")}</a> : null}
-              {mag("meten") ? <a href="/account/rapportages" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reports")}</a> : null}
-              {mag("presentatie") ? <a href="/account/reviews" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.reviews")}</a> : null}
-              {mag("instellingen") ? <a href="/account/instellingen" className="font-sans text-sm text-ink underline hover:text-ink">{t("account.admin.settings")}</a> : null}
-              {customer.studioHref ? <a href={customer.studioHref} className="font-sans text-sm text-ink underline hover:text-ink">Site-studio</a> : null}
-            </>
+            <a
+              href={`${PORTAL_URL}/site`}
+              className="font-sans text-sm text-ink underline hover:text-ink"
+              rel="noopener noreferrer"
+            >
+              Portal
+            </a>
           ) : null}
           <form action="/api/account/logout" method="post">
             <button type="submit" className="font-sans text-sm text-muted underline hover:text-ink">{t("account.logout")}</button>
@@ -140,13 +178,13 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
       </nav>
 
       <div className="mt-8">
-        {tab === "overzicht" && <Overzicht customer={customer} data={data} onTab={setTab} />}
-        {tab === "bestellingen" && <Bestellingen data={data} />}
+        {tab === "overzicht" && <Overzicht customer={customer} data={data} pass={pass} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
+        {tab === "bestellingen" && <BestellingenTab data={data} />}
         {tab === "retouren" && <Retouren data={data} />}
-        {tab === "punten" && <Punten data={data} walletEnabled={walletEnabled} />}
+        {tab === "punten" && <Punten data={data} pass={pass} walletEnabled={walletEnabled} googleWalletEnabled={googleWalletEnabled} bonuses={bonuses} redeem={redeem} onTab={setTab} />}
         {tab === "vouchers" && <Vouchers data={data} />}
         {tab === "maten" && <Maten customer={customer} />}
-        {tab === "gegevens" && <Gegevens customer={customer} />}
+        {tab === "gegevens" && <Gegevens customer={customer} stores={stores} newsletter={newsletter} />}
         {tab === "adressen" && <Adressen data={data} />}
         {tab === "vragen" && <SupportTickets />}
         {tab === "privacy" && <Privacy />}
@@ -155,12 +193,234 @@ export function ProfileClient({ customer, data, walletEnabled = false }: { custo
   );
 }
 
+/* ── Punten verdienen zonder te kopen ─────────────────────────────────────────
+   Drie eenmalige acties die een retour helpen voorkomen: je maten bewaren, je
+   pas in Wallet zetten en je profiel afmaken. Wat elke actie oplevert komt van
+   de server (instelbaar), dus hier staat nergens een hardgecodeerde 50. Een
+   bonus op 0 punten valt automatisch uit de lijst. */
+const BONUS_COPY: Record<BonusTask["kind"], { title: string; body: string; cta: string; tab: TabKey }> = {
+  maatadvies: { title: "account.bonus.size.title", body: "account.bonus.size.body", cta: "account.bonus.size.cta", tab: "maten" },
+  wallet: { title: "account.bonus.wallet.title", body: "account.bonus.wallet.body", cta: "account.bonus.wallet.cta", tab: "punten" },
+  winkel: { title: "account.bonus.store.title", body: "account.bonus.store.body", cta: "account.bonus.store.cta", tab: "gegevens" },
+  profiel: { title: "account.bonus.profile.title", body: "account.bonus.profile.body", cta: "account.bonus.profile.cta", tab: "gegevens" },
+};
+
+/** Welke taken deze paginasessie al als "gezien" gemeld zijn (zie useEffect hieronder). */
+const GEZIEN = new Set<string>();
+
+function PuntenActies({ bonuses, onTab, compact = false }: { bonuses: BonusTask[]; onTab: (t: TabKey) => void; compact?: boolean }) {
+  const t = useT();
+  const router = useRouter();
+  const [ophalen, setOphalen] = useState(false);
+  // Een bonus op 0 punten staat uit → helemaal niet tonen, ook niet als 'gedaan'.
+  const zichtbaar = bonuses.filter((b) => b.points > 0);
+  const open = zichtbaar.filter((b) => !b.done);
+  const openKinds = open.map((b) => b.kind).join(",");
+
+  /* Meten: welke openstaande taken heeft deze klant gezién? Zonder dat weet je
+     alleen hoeveel mensen een bonus haalden, niet hoeveel er de kans op kregen —
+     en dus niets over of de taak overtuigt. Het toekennen zélf loggen we NIET als
+     event: dat staat al in het grootboek, en twee tellingen kunnen gaan verschillen.
+     `GEZIEN` ontdubbelt binnen deze paginasessie: het blok staat zowel op het
+     overzicht als op het puntentabblad, en dat is één kans, niet twee. */
+  useEffect(() => {
+    if (!openKinds) return;
+    for (const kind of openKinds.split(",")) {
+      if (GEZIEN.has(kind)) continue;
+      GEZIEN.add(kind);
+      track("bonus_shown", { handle: kind, path: "/account" });
+    }
+  }, [openKinds]);
+
+  if (!zichtbaar.length) return null;
+  // Op het overzicht alleen tonen zolang er nog iets te halen is.
+  if (compact && !open.length) return null;
+  const lijst = compact ? open : zichtbaar;
+  const teHalen = open.reduce((n, b) => n + b.points, 0);
+  /* Deed de klant dit al vóórdat de bonus bestond? Dan is de voorwaarde gehaald
+     maar staat er nog niets in het grootboek — één knop haalt ze alsnog op. */
+  const klaarOmOpTeHalen = open.filter((b) => b.earned);
+
+  async function haalOp() {
+    setOphalen(true);
+    track("bonus_click", { handle: "ophalen", path: "/account" });
+    try {
+      await fetch("/api/account/punten-bonus", { method: "POST" });
+      router.refresh();
+    } finally {
+      setOphalen(false);
+    }
+  }
+
+  return (
+    <div className="border border-line p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="label-brand">{t("account.bonus.title")}</p>
+        {teHalen > 0 ? <p className="font-sans text-xs text-ink-soft">{t("account.bonus.toEarn", { n: teHalen })}</p> : null}
+      </div>
+      <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.bonus.intro")}</p>
+      {klaarOmOpTeHalen.length ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-line bg-surface p-4">
+          <p className="font-sans text-sm text-ink-soft">
+            {t("account.bonus.readyToClaim", { n: klaarOmOpTeHalen.reduce((n, b) => n + b.points, 0) })}
+          </p>
+          <button type="button" onClick={haalOp} disabled={ophalen} className="btn-primary shrink-0 !py-2 disabled:opacity-50">
+            {ophalen ? t("common.processing") : t("account.bonus.claim")}
+          </button>
+        </div>
+      ) : null}
+      <ul className="mt-4 divide-y divide-line border-t border-line">
+        {lijst.map((b) => {
+          const copy = BONUS_COPY[b.kind];
+          /* GEEN flex-wrap op de regel: die met een knop is breder, wrapte
+             daardoor als enige, en het bedrag sprong dan naar het begín van de
+             nieuwe regel — precies de kolom die niet meer uitlijnde. De
+             linkerkant krimpt nu in plaats daarvan (min-w-0 + flex-1). */
+          return (
+            <li key={b.kind} className="flex items-center justify-between gap-3 py-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <span
+                  aria-hidden
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                    b.done ? "border-success bg-success text-canvas" : "border-line text-transparent"
+                  }`}
+                >
+                  <CheckIcon className="h-3 w-3" />
+                </span>
+                <div className="min-w-0">
+                  <p className={`font-sans text-sm ${b.done ? "text-muted line-through" : "text-ink"}`}>{t(copy.title)}</p>
+                  <p className="mt-0.5 font-sans text-xs text-ink-soft">{b.done ? t("account.bonus.done") : t(copy.body)}</p>
+                </div>
+              </div>
+              {/* Twee kolommen met een VASTE breedte, niet twee elementen achter
+                  elkaar. Een afgevinkte regel heeft geen knop, dus zonder vaste
+                  breedte schoof "+50" daar naar rechts en op de regels eronder
+                  weer naar links — een rij bedragen die niet onder elkaar staat.
+                  De knoppen krijgen dezelfde breedte, zodat ze ook uitlijnen. */}
+              {/* De twee breedtes staan in de stijl en niet in een klasse: dít
+                  is wat de rij uitlijnt, en een utility die niet meekomt in de
+                  CSS-build laat de kolom stil weer verspringen. clamp geeft de
+                  knopkolom op een telefoon wat terug aan de tekst ernaast. */}
+              <div className="flex shrink-0 items-center gap-3">
+                <span
+                  style={{ width: "3rem", textAlign: "right" }}
+                  className={`font-sans text-sm ${b.done ? "text-muted" : "text-ink"}`}
+                >
+                  +{b.points}
+                </span>
+                <span className="flex justify-end" style={{ width: "clamp(5rem, 22vw, 7rem)" }}>
+                  {b.done ? null : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        track("bonus_click", { handle: b.kind, path: "/account" });
+                        onTab(copy.tab);
+                      }}
+                      className="btn-ghost w-full !py-1.5 !text-xs"
+                    >
+                      {t(copy.cta)}
+                    </button>
+                  )}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+
+/**
+ * Weg naar je volgende tegoedbon. Eén component voor het overzicht én het
+ * punten-tabblad: er stonden twee balken met elk hun eigen rekensom, en die
+ * gaven ook elk een ander antwoord — de ene rekende met het totale saldo, de
+ * andere met wat je écht kunt uitgeven.
+ *
+ * Punten in behandeling zijn een lichter stuk van dezelfde balk: verdiend, maar
+ * nog niet vrij. Zonder dat stuk lijkt de klant verder weg dan hij is.
+ */
+function PuntenVoortgang({
+  available,
+  pending,
+  redeem,
+  onInwisselen,
+}: {
+  available: number;
+  pending: number;
+  redeem: RedeemConfig;
+  /** Naar het punten-tabblad; weglaten als je daar al bent. */
+  onInwisselen?: () => void;
+}) {
+  const t = useT();
+  const stap = Math.max(1, redeem.stepPoints || redeem.minPoints);
+  const drempel = Math.max(1, redeem.minPoints);
+  const kanInwisselen = available >= drempel;
+
+  /* Voorbij de drempel is "510 / 500" onzin: de balk stond vol en zei nog steeds
+     dat je onderweg was. Dan meten we naar de VOLGENDE mijlpaal, vanaf de vorige
+     — dus bij 510 punten en stappen van 500: 10 op weg naar de volgende 500. */
+  const doel = kanInwisselen ? stap : drempel;
+  const gedaan = kanInwisselen ? available % stap : available;
+  const wachtend = Math.min(pending, Math.max(0, doel - gedaan));
+  const nogNodig = Math.max(0, doel - gedaan);
+  const pctGedaan = Math.min(100, Math.round((gedaan / doel) * 100));
+  const pctMetWachtend = Math.min(100, Math.round(((gedaan + wachtend) / doel) * 100));
+  const wachtendDekt = pending >= nogNodig;
+  /* Wat er nu klaarstaat: hele stappen, niet het losse restant. */
+  const inwisselbaarCents = Math.floor(available / stap) * stap * redeem.centsPerPoint;
+
+  return (
+    <div className="border border-line p-5">
+      {kanInwisselen ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="font-sans text-sm font-medium text-ink">
+            {t("account.points.canRedeem", { amount: formatEuro(inwisselbaarCents) })}
+          </p>
+          {onInwisselen ? (
+            <button type="button" onClick={onInwisselen} className="font-sans text-sm text-ink underline underline-offset-4">
+              {t("account.points.canRedeemCta")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={`flex flex-wrap items-baseline justify-between gap-x-3 ${kanInwisselen ? "mt-2" : ""}`}>
+        <p className={`font-sans text-sm ${kanInwisselen ? "text-ink-soft" : ""}`}>
+          {kanInwisselen
+            ? t("account.points.toNextReward", { n: nogNodig, amount: formatEuro(stap * redeem.centsPerPoint) })
+            : t("account.points.toFirstReward", { n: nogNodig, amount: formatEuro(drempel * redeem.centsPerPoint) })}
+        </p>
+        <p className="font-sans text-sm text-muted">{gedaan} / {doel}</p>
+      </div>
+
+      <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+        {/* Eerst het wachtende deel, daaroverheen het besteedbare — zo lees je in
+            één balk allebei de standen. */}
+        <div className="absolute inset-y-0 left-0 bg-ink/25 transition-all" style={{ width: `${pctMetWachtend}%` }} />
+        <div className="absolute inset-y-0 left-0 bg-ink transition-all" style={{ width: `${pctGedaan}%` }} />
+      </div>
+
+      {/* Alleen iets zeggen als er punten in behandeling staan. Een regel als
+          "nog X euro besteden" zou een omrekening claimen die niet vastligt: de
+          punten-per-euro is een aparte knop en verschilt voor web en kassa. */}
+      {pending > 0 ? (
+        <p className="mt-1.5 font-sans text-xs text-muted">
+          {wachtendDekt && !kanInwisselen
+            ? t("account.points.pendingCovers")
+            : t("account.points.pendingCounts", { n: pending })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /* ── Overzicht ────────────────────────────────────────────────────────────── */
-function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; onTab: (t: TabKey) => void }) {
+function Overzicht({ customer, data, pass, bonuses, redeem, onTab }: { customer: Customer; data: Data; pass?: ClubPassData | null; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
   const totalOrders = data.onlineOrders.length + data.storeBuys.length;
-  const toNext = Math.max(0, NEXT_TIER - data.pointsBalance);
-  const pct = Math.min(100, Math.round((data.pointsBalance / NEXT_TIER) * 100));
+  const toNext = Math.max(0, redeem.minPoints - data.pointsAvailable);
   return (
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -168,6 +428,27 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
         <Stat label={t("account.overview.activeVouchers")} value={String(data.activeVouchers.length)} sub={t("account.overview.viewCredit")} onClick={() => onTab("vouchers")} />
         <Stat label={t("account.overview.purchases")} value={String(totalOrders)} sub={t("account.overview.onlinePlusStore")} onClick={() => onTab("bestellingen")} />
       </div>
+
+      {/* Vlak onder de cijfers, niet onderaan de pagina: dit is waarom je
+          spaart, en daar scrolde niemand naartoe. */}
+      <PuntenVoortgang
+        available={data.pointsAvailable}
+        pending={data.pointsPending}
+        redeem={redeem}
+        onInwisselen={() => onTab("punten")}
+      />
+
+      {/* Eén tik van binnenkomen naar een scanbare code. Wie in de winkel staat
+          heeft geen zin om eerst een tabblad te zoeken; de kaart zelf staat op
+          het clubtabblad, hier hangt alleen de snelle ingang. */}
+      {pass && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-line p-5">
+          <ClubPassButton pass={pass} />
+          <p className="font-sans text-sm text-ink-soft">{t("account.pass.scanHint")}</p>
+        </div>
+      )}
+
+      <PuntenActies bonuses={bonuses} onTab={onTab} compact />
 
       <div>
         <p className="label-brand mb-3">{t("account.overview.quickNav")}</p>
@@ -202,16 +483,6 @@ function Overzicht({ customer, data, onTab }: { customer: Customer; data: Data; 
           </div>
         </div>
       ) : null}
-
-      <div className="border border-line p-5">
-        <div className="flex items-center justify-between">
-          <p className="font-sans text-sm">{t("account.overview.progressTitle")}</p>
-          <p className="font-sans text-sm text-muted">{data.pointsBalance} / {NEXT_TIER}</p>
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
-          <div className="h-full bg-ink transition-all" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
 
       {!customer.sizeProfile?.colbert && !customer.sizeProfile?.overhemd ? (
         <button type="button" onClick={() => onTab("maten")} className="block w-full border border-dashed border-line p-5 text-left hover:border-ink">
@@ -250,8 +521,14 @@ function QuickTile({ title, sub, onClick }: { title: string; sub: string; onClic
 function RecentActivity({ data }: { data: Data }) {
   const t = useT();
   const items = [
-    ...data.onlineOrders.map((o) => ({ when: o.createdAt, kind: "Online", label: t("account.orderNumber", { n: o.orderNumber }), total: o.totalCents })),
-    ...data.storeBuys.map((s) => ({ when: s.purchasedAt, kind: "Winkel", label: s.storeName || t("account.activity.storePurchase"), total: s.totalCents })),
+    ...data.onlineOrders.map((o) => ({ when: o.createdAt, kind: "Online", retour: false, label: t("account.orderNumber", { n: o.orderNumber }), total: o.totalCents })),
+    ...data.storeBuys.map((s) => ({
+      when: s.purchasedAt,
+      kind: "Winkel",
+      retour: s.kind === "retour",
+      label: s.storeName || t("account.activity.storePurchase"),
+      total: s.totalCents,
+    })),
   ]
     .sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime())
     .slice(0, 5);
@@ -263,7 +540,9 @@ function RecentActivity({ data }: { data: Data }) {
         {items.map((i, idx) => (
           <li key={idx} className="flex items-center justify-between py-3 font-sans text-sm">
             <span className="flex items-center gap-3">
-              <span className={`inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-wide ${i.kind === "Winkel" ? "bg-ink text-canvas" : "border border-line"}`}>{i.kind === "Winkel" ? t("account.activity.store") : t("account.activity.online")}</span>
+              <span className={`inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-wide ${i.kind === "Winkel" ? "bg-ink text-canvas" : "border border-line"}`}>
+                {i.retour ? t("account.activity.storeReturn") : i.kind === "Winkel" ? t("account.activity.store") : t("account.activity.online")}
+              </span>
               <span>{i.label}</span>
             </span>
             <span className="text-ink-soft">{nlDate(i.when)} · {formatEuro(i.total)}</span>
@@ -274,87 +553,15 @@ function RecentActivity({ data }: { data: Data }) {
   );
 }
 
-/* ── Bestellingen (online + winkel) ───────────────────────────────────────── */
-function Bestellingen({ data }: { data: Data }) {
-  const t = useT();
-  if (!data.onlineOrders.length && !data.storeBuys.length) {
-    return <Empty title={t("account.orders.emptyTitle")} body={t("account.orders.emptyBody")} />;
-  }
+/* ── Bestellingen: één tijdlijn van online orders + winkelbonnen ───────── */
+function BestellingenTab({ data }: { data: Data }) {
   return (
-    <div className="space-y-8">
-      {data.onlineOrders.length ? (
-        <section>
-          <p className="label-brand mb-3">{t("account.orders.onlineTitle")}</p>
-          <ul className="space-y-3">
-            {data.onlineOrders.map((o) => (
-              <li key={o.id} className="border border-line p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{t("account.orderNumber", { n: o.orderNumber })}</span>
-                  <span className="font-sans text-sm text-muted">{nlDate(o.createdAt)}</span>
-                </div>
-                <p className="mt-1 font-sans text-xs text-ink-soft">{STATUS_NL[o.status] || o.status} · {formatEuro(o.totalCents)}</p>
-                {o.lines.length ? (
-                  <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
-                    {o.lines.map((l, i) => (
-                      <li key={i}>{l.quantity}× {l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                <OrderReturnFooter order={o} returns={data.returns} windowDays={data.returnWindowDays} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {data.storeBuys.length ? (
-        <section>
-          <p className="label-brand mb-3">{t("account.orders.storeTitle")}</p>
-          <ul className="space-y-3">
-            {data.storeBuys.map((s) => (
-              <li key={s.id} className="border border-line p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 font-medium">
-                    <span className="inline-block bg-ink px-2 py-0.5 text-[0.6rem] uppercase tracking-wide text-canvas">{t("account.activity.store")}</span>
-                    {s.storeName || t("account.activity.storePurchase")}
-                  </span>
-                  <span className="font-sans text-sm text-muted">{nlDate(s.purchasedAt)}</span>
-                </div>
-                <p className="mt-1 font-sans text-xs text-ink-soft">{formatEuro(s.totalCents)}{s.pointsEarned ? ` · ${t("puntenClaim.success.points", { points: s.pointsEarned })}` : ""}</p>
-                {s.lines?.length ? (
-                  <ul className="mt-3 space-y-1 font-sans text-sm text-ink-soft">
-                    {s.lines.map((l, i) => (
-                      <li key={i}>{l.qty ? `${l.qty}× ` : ""}{l.title}{l.size ? ` — ${t("cart.added.sizeMeta", { size: l.size })}` : ""}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-function OrderReturnFooter({ order, returns, windowDays }: { order: Order; returns: ReturnRow[]; windowDays: number }) {
-  const t = useT();
-  const ret = returns.find((r) => r.orderNumber === order.orderNumber);
-  const eligible = ["paid", "shipped", "delivered", "ready_pickup"].includes(order.status);
-  const withinWindow = Date.now() - new Date(order.createdAt).getTime() <= windowDays * 86400000;
-  if (!ret && (!eligible || !withinWindow)) return null;
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 font-sans text-xs">
-      {ret ? (
-        <span className="text-ink-soft">
-          {t("account.returns.prefix")} {RET_STATUS_NL[ret.status] || ret.status}
-          {ret.refundType === "credit" && ret.creditCode ? ` · ${t("account.returns.creditCode", { code: ret.creditCode })}` : ""}
-          {ret.refundType === "money" && ret.refundedCents ? ` · ${t("account.returns.refunded", { amount: formatEuro(ret.refundedCents) })}` : ""}
-        </span>
-      ) : (
-        <a href={`/retourneren?order=${encodeURIComponent(order.orderNumber)}`} className="underline underline-offset-2 hover:opacity-70">{t("retourneren.title")}</a>
-      )}
-    </div>
+    <Bestellingen
+      onlineOrders={data.onlineOrders}
+      storeBuys={data.storeBuys}
+      returns={data.returns}
+      returnWindowDays={data.returnWindowDays}
+    />
   );
 }
 
@@ -403,12 +610,15 @@ function Retouren({ data }: { data: Data }) {
   );
 }
 
-/* ── Spaarpunten ──────────────────────────────────────────────────────────── */
-/** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). 500 punten = € 25. */
-function RedeemPoints({ available }: { available: number }) {
+/* ── GENTS MEMBERS ────────────────────────────────────────────────────── */
+/** Punten inwisselen voor een tegoedbon (Neon-native, geen SRS). Koers uit de tool. */
+function RedeemPoints({ available, koers }: { available: number; koers: RedeemConfig }) {
   const t = useT();
-  const STEP = 500;
-  const STEP_CENTS = 2500; // 500 punten = € 25 (server is bron van waarheid)
+  /* Uit de tool, niet uit de code: de koers is een knop in Instellingen en de
+     server rekent er ook mee. Twee plekken met een eigen 500 liepen uit elkaar
+     zodra iemand hem verzette. */
+  const STEP = Math.max(1, koers.stepPoints || koers.minPoints);
+  const STEP_CENTS = STEP * koers.centsPerPoint;
   const maxSteps = Math.floor(available / STEP);
   const [steps, setSteps] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -489,25 +699,70 @@ function RedeemPoints({ available }: { available: number }) {
   );
 }
 
-function Punten({ data, walletEnabled }: { data: Data; walletEnabled: boolean }) {
+function Punten({ data, pass, walletEnabled, googleWalletEnabled, bonuses, redeem, onTab }: { data: Data; pass?: ClubPassData | null; walletEnabled: boolean; googleWalletEnabled?: boolean; bonuses: BonusTask[]; redeem: RedeemConfig; onTab: (t: TabKey) => void }) {
   const t = useT();
+  const walletBonus = bonuses.find((b) => b.kind === "wallet");
   return (
     <div className="space-y-6">
-      <div className="border border-line p-6">
-        <p className="label-brand">{t("account.points.balanceTitle")}</p>
-        <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
-        {data.pointsPending > 0 && (
-          <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
+      {/* Pas en saldokaart NAAST elkaar op een breed scherm. Onder elkaar liet
+          de pas rechts een half scherm leeg — en dat lege vlak is precies waar
+          de kaart met de voortgang thuishoort. Onder lg stapelen ze, met de pas
+          bovenaan: dat is het enige op deze pagina dat je stáánd aan een kassa
+          nodig hebt.
+          items-start, anders rekt de kortste kaart mee met de langste. */}
+      <div className={`grid items-start gap-6 ${pass ? "lg:grid-cols-2" : ""}`}>
+        {pass && (
+          <ClubPassCard
+            pass={pass}
+            available={data.pointsAvailable}
+            pending={data.pointsPending}
+            walletEnabled={walletEnabled}
+            googleWalletEnabled={googleWalletEnabled}
+            /* De wallet-bonus alleen tonen zolang hij te halen valt. */
+            walletBonusPoints={walletBonus && !walletBonus.done ? walletBonus.points : 0}
+          />
         )}
-        <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.points.explainer")}</p>
-        {walletEnabled && (
-          <div className="mt-5">
-            <AppleWalletButton />
-            <p className="mt-2 font-sans text-xs text-muted">{t("account.points.walletHint")}</p>
-          </div>
-        )}
+        {/* De rechterkolom is een stapel: eerst de balk naar je volgende
+            tegoedbon, daaronder wat je nog kunt verdienen. Die twee horen bij
+            elkaar — het is allebei "hoe kom ik verder" — en samen vullen ze de
+            hoogte van de pas ernaast. */}
+        <div className="space-y-6">
+        <div className="border border-line p-6">
+          {/* Zonder pas (theoretisch: prop niet meegegeven) valt het saldo hier
+              terug, anders staat het nergens. */}
+          {!pass && (
+            <>
+              <p className="label-brand">{t("account.points.balanceTitle")}</p>
+              <p className="mt-2 font-display text-4xl font-light">{data.pointsAvailable} <span className="text-lg text-muted">{t("account.points.available")}</span></p>
+              {data.pointsPending > 0 && (
+                <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.points.pending", { n: data.pointsPending })}</p>
+              )}
+            </>
+          )}
+          <PuntenVoortgang available={data.pointsAvailable} pending={data.pointsPending} redeem={redeem} />
+          <p className="mt-4 font-sans text-sm text-ink-soft">
+            {t("account.points.explainer")}{" "}
+            <Link href={CLUB_PATH} className="text-ink underline underline-offset-4">
+              {t("account.points.clubLink")}
+            </Link>
+            .
+          </p>
+          {/* De wallet-knoppen staan bij de pas, niet hier: je voegt een pas toe,
+              geen saldo. Zonder pas-kaart horen ze alsnog hier thuis. */}
+          {!pass && (walletEnabled || googleWalletEnabled) && (
+            <div className="mt-5">
+              <div className="flex flex-wrap gap-2">
+                {walletEnabled && <AppleWalletButton />}
+                {googleWalletEnabled && <GoogleWalletButton />}
+              </div>
+              <p className="mt-2 font-sans text-xs text-muted">{t("account.points.walletHint")}</p>
+            </div>
+          )}
+        </div>
+          <PuntenActies bonuses={bonuses} onTab={onTab} />
+        </div>
       </div>
-      <RedeemPoints available={data.pointsAvailable} />
+      <RedeemPoints available={data.pointsAvailable} koers={redeem} />
       {data.loyalty.length ? (
         <ul className="divide-y divide-line border-y border-line">
           {data.loyalty.map((e) => (
@@ -600,8 +855,24 @@ const SIZE_FIELDS: { key: string; label: string; placeholder: string }[] = [
 
 function Maten({ customer }: { customer: Customer }) {
   const t = useT();
+  const router = useRouter();
   const [size, setSize] = useState<Record<string, string>>(customer.sizeProfile || {});
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [bonus, setBonus] = useState(0);
+
+  /**
+   * De adviseur vult dit formulier, hij slaat niet zelf op — zo blijft er één
+   * opslag-knop (en één bonus-moment) op dit scherm. Lege adviesvelden slaan we
+   * over: die mogen nooit een maat wissen die de klant zelf heeft ingevuld.
+   */
+  function applyAdvice(sizes: AdviceSizes) {
+    setSize((p) => {
+      const next = { ...p };
+      for (const [k, v] of Object.entries(sizes)) if (v) next[k] = v;
+      return next;
+    });
+    setState("idle");
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -618,7 +889,14 @@ function Maten({ customer }: { customer: Customer }) {
         setState("error");
         return;
       }
+      const d = (await res.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
       setState("done");
+      const punten = puntenUit(d.bonuses);
+      if (punten) {
+        setBonus(punten);
+        // Saldo, puntenhistorie en het takenlijstje komen van de server.
+        router.refresh();
+      }
       setTimeout(() => setState("idle"), 2500);
     } catch {
       setState("error");
@@ -626,11 +904,16 @@ function Maten({ customer }: { customer: Customer }) {
   }
 
   return (
-    <form onSubmit={save} className="max-w-2xl">
+    // Twee kolommen op groot scherm: links wat je bewaart, rechts de rekenhulp
+    // die het invult. In één kolom bleef de halve pagina leeg — en stond de
+    // maatcalculator drie klikken verderop op /maatadvies.
+    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] lg:gap-12">
+    <form onSubmit={save}>
       <p className="font-sans text-sm text-ink-soft">
         {t("account.sizes.intro1")} <span className="text-ink">&ldquo;{t("plp.filters.shopMySize")}&rdquo;</span>.{" "}
         {t("account.sizes.intro2")}
       </p>
+      {bonus > 0 ? <BonusMelding points={bonus} /> : null}
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {SIZE_FIELDS.map((f) => (
           <label key={f.key} className="block">
@@ -661,6 +944,16 @@ function Maten({ customer }: { customer: Customer }) {
         <p role="alert" className="mt-2 font-sans text-sm text-danger">{t("account.form.saveError")}</p>
       ) : null}
     </form>
+
+      <aside className="border border-line p-5 lg:p-6">
+        <p className="label-brand">{t("nav.sizeAdvice")}</p>
+        <h2 className="mt-2 font-display text-xl font-light">{t("account.sizes.calcTitle")}</h2>
+        <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.sizes.calcBody")}</p>
+        <div className="mt-6">
+          <SizeAdvisor variant="panel" onApply={applyAdvice} />
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -728,19 +1021,58 @@ function Privacy() {
 }
 
 /* ── Gegevens ─────────────────────────────────────────────────────────────── */
-function Gegevens({ customer }: { customer: Customer }) {
+function Gegevens({ customer, stores, newsletter }: { customer: Customer; stores: StoreOption[]; newsletter?: NewsletterPrefs }) {
   const t = useT();
+  const router = useRouter();
   const [form, setForm] = useState({
     firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone,
-    marketingOptIn: customer.marketingOptIn,
+  });
+  const [prefs, setPrefs] = useState<ProfilePreferences>({
+    birthDate: customer.preferences?.birthDate ?? "",
+    ageRange: customer.preferences?.ageRange ?? "",
+    favoriteColors: customer.preferences?.favoriteColors ?? [],
+    favoriteStore: customer.preferences?.favoriteStore ?? "",
+    // Oude profielen hebben alleen het enkelvoudige veld — dat is winkel één.
+    favoriteStores:
+      customer.preferences?.favoriteStores?.length
+        ? customer.preferences.favoriteStores
+        : [customer.preferences?.favoriteStore ?? ""].filter(Boolean),
+    occasions: customer.preferences?.occasions ?? [],
+    styleNote: customer.preferences?.styleNote ?? "",
   });
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [bonus, setBonus] = useState(0);
+
+  // Live meelezende checklist — de klant ziet wat er nog mist vóór hij opslaat.
+  const checks = profileChecklist({ ...form, preferences: prefs });
+  const open = checks.filter((c) => !c.done).length;
+  // Geboortedatum ingevuld? Dan is de leeftijdsgroep afgeleid en niet los te kiezen.
+  const afgeleideGroep = prefs.birthDate ? ageRangeFromBirthDate(prefs.birthDate) : "";
+
+  const toggle = (veld: "favoriteColors" | "occasions", key: string) =>
+    setPrefs((p) => {
+      const huidig = p[veld] ?? [];
+      return { ...p, [veld]: huidig.includes(key) ? huidig.filter((k) => k !== key) : [...huidig, key] };
+    });
+
+  /** Winkel erbij of eraf; favoriteStore blijft de eerste uit de lijst. */
+  const toggleStore = (handle: string) =>
+    setPrefs((p) => {
+      const huidig = p.favoriteStores ?? [];
+      const next = huidig.includes(handle)
+        ? huidig.filter((h) => h !== handle)
+        : [...huidig, handle].slice(0, MAX_MY_STORES);
+      return { ...p, favoriteStores: next, favoriteStore: next[0] ?? "" };
+    });
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setState("busy");
+    setBonus(0);
     // res.ok checken + netwerkfouten opvangen — geen vals "Opgeslagen" bij 4xx/5xx.
     try {
+      // Eerst de persoonsgegevens, dan de voorkeuren: de bonus-check bij het
+      // tweede verzoek ziet zo de zojuist opgeslagen naam en telefoon staan.
       const res = await fetch("/api/account/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -750,7 +1082,25 @@ function Gegevens({ customer }: { customer: Customer }) {
         setState("error");
         return;
       }
+      const eerste = (await res.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
+      const res2 = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "preferences", preferences: prefs }),
+      });
+      if (!res2.ok) {
+        setState("error");
+        return;
+      }
+      const tweede = (await res2.json().catch(() => ({}))) as { bonuses?: { points: number }[] };
+      // Optellen, niet "de eerste die er is": één opslag kan de winkel-bonus én
+      // de profielbonus opleveren, en dan hoort er 100 te staan, geen 50.
+      const punten = puntenUit(eerste.bonuses) + puntenUit(tweede.bonuses);
       setState("done");
+      if (punten) {
+        setBonus(punten);
+        router.refresh();
+      }
       setTimeout(() => setState("idle"), 2500);
     } catch {
       setState("error");
@@ -758,7 +1108,9 @@ function Gegevens({ customer }: { customer: Customer }) {
   }
 
   return (
-    <form onSubmit={save} className="max-w-xl space-y-4">
+    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] lg:gap-12">
+    <form onSubmit={save} className="space-y-4">
+      {bonus > 0 ? <BonusMelding points={bonus} /> : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="font-sans text-sm">{t("checkout.firstname")}</span>
@@ -777,10 +1129,135 @@ function Gegevens({ customer }: { customer: Customer }) {
           <input type="email" value={customer.email} disabled className="mt-1 w-full border border-line bg-surface px-3 py-2.5 font-sans text-sm text-muted" />
         </label>
       </div>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={form.marketingOptIn} onChange={(e) => setForm((p) => ({ ...p, marketingOptIn: e.target.checked }))} />
-        <span className="font-sans text-sm">{t("account.details.marketingOptIn")}</span>
-      </label>
+      {/* ── Voorkeuren ─────────────────────────────────────────────────────────
+          Hoe beter dit staat, hoe gerichter we tonen wat er in jouw maat, kleur
+          en winkel ligt — en hoe minder er terug hoeft. De nieuwsbrief-opt-in
+          (rechts) telt bewust NIET mee voor de bonus: toestemming die je met
+          punten koopt is geen vrije toestemming. */}
+      <div className="!mt-8 border-t border-line pt-6">
+        <p className="label-brand">{t("account.prefs.title")}</p>
+        <p className="mt-1 font-sans text-sm text-ink-soft">{t("account.prefs.intro")}</p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="font-sans text-sm">{t("account.prefs.birthDate")}</span>
+            {/* Geen `max`-attribuut: dat zou uit de "datum van nu" komen en
+                server en browser kunnen daar rond middernacht over verschillen
+                (hydratiefout). De server weigert een datum in de toekomst. */}
+            <input
+              type="date"
+              value={prefs.birthDate || ""}
+              onChange={(e) => setPrefs((p) => ({ ...p, birthDate: e.target.value }))}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+            />
+            <span className="mt-1 block font-sans text-xs text-muted">{t("account.prefs.birthDateHint")}</span>
+          </label>
+          <label className="block">
+            <span className="font-sans text-sm">{t("account.prefs.ageRange")}</span>
+            <select
+              value={afgeleideGroep || prefs.ageRange || ""}
+              disabled={Boolean(afgeleideGroep)}
+              onChange={(e) => setPrefs((p) => ({ ...p, ageRange: e.target.value }))}
+              className="mt-1 w-full border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none disabled:bg-surface disabled:text-muted"
+            >
+              <option value="">{t("account.prefs.choose")}</option>
+              {AGE_RANGES.map((a) => (
+                <option key={a.key} value={a.key}>{a.label}</option>
+              ))}
+            </select>
+            <span className="mt-1 block font-sans text-xs text-muted">
+              {afgeleideGroep ? t("account.prefs.ageFromBirthDate") : t("account.prefs.ageRangeHint")}
+            </span>
+          </label>
+        </div>
+
+        <fieldset className="mt-5">
+          <legend className="font-sans text-sm">{t("account.prefs.colors")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {COLOR_FAMILIES.filter((c) => c.key !== "multi").map((c) => {
+              const aan = (prefs.favoriteColors ?? []).includes(c.key);
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => toggle("favoriteColors", c.key)}
+                  aria-pressed={aan}
+                  className={`flex items-center gap-2 border px-3 py-1.5 font-sans text-sm transition-colors ${aan ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"}`}
+                >
+                  <span aria-hidden className="h-3.5 w-3.5 rounded-full border border-line" style={{ backgroundColor: c.hex }} />
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="mt-5">
+          <legend className="font-sans text-sm">{t("account.prefs.occasions")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {SHOP_OCCASIONS.map((o) => {
+              const aan = (prefs.occasions ?? []).includes(o.key);
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => toggle("occasions", o.key)}
+                  aria-pressed={aan}
+                  className={`border px-3 py-1.5 font-sans text-sm transition-colors ${aan ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink"}`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {/* Winkels: meerdere mogen. Chips i.p.v. een keuzelijst — dezelfde
+            bediening als kleuren en gelegenheden hierboven, en je ziet in één
+            oogopslag wélke winkels het zijn. De eerste die je aanzet blijft
+            winkel nummer één (daar hangt de profielchecklist aan). */}
+        <fieldset className="mt-5">
+          <legend className="font-sans text-sm">{t("account.prefs.store")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {stores.map((s) => {
+              const gekozen = (prefs.favoriteStores ?? []).includes(s.pageHandle);
+              const vol = (prefs.favoriteStores ?? []).length >= MAX_MY_STORES;
+              return (
+                <button
+                  key={s.pageHandle}
+                  type="button"
+                  onClick={() => toggleStore(s.pageHandle)}
+                  aria-pressed={gekozen}
+                  disabled={!gekozen && vol}
+                  className={`border px-3 py-1.5 font-sans text-sm transition-colors ${
+                    gekozen ? "border-ink bg-ink text-canvas" : "border-line bg-canvas hover:border-ink disabled:opacity-40 disabled:hover:border-line"
+                  }`}
+                >
+                  {s.city}
+                </button>
+              );
+            })}
+          </div>
+          <span className="mt-2 block font-sans text-xs text-muted">
+            {t("account.prefs.storeHint")} {t("myStore.max", { count: MAX_MY_STORES })}
+          </span>
+        </fieldset>
+
+        <label className="mt-5 block">
+          <span className="font-sans text-sm">{t("account.prefs.note")}</span>
+          <textarea
+            rows={2}
+            value={prefs.styleNote || ""}
+            maxLength={400}
+            placeholder={t("account.prefs.notePh")}
+            onChange={(e) => setPrefs((p) => ({ ...p, styleNote: e.target.value }))}
+            className="mt-1 w-full resize-y border border-line bg-canvas px-3 py-2.5 font-sans text-sm focus:border-ink focus:outline-none"
+          />
+        </label>
+
+        <ProfielChecklist checks={checks} open={open} />
+      </div>
+
       <button type="submit" disabled={state === "busy"} className="btn-primary">
         {state === "busy" ? t("account.form.saving") : state === "done" ? <>{t("account.form.saved")} <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" /></> : t("account.details.save")}
       </button>
@@ -788,6 +1265,112 @@ function Gegevens({ customer }: { customer: Customer }) {
         <p role="alert" className="font-sans text-sm text-danger">{t("account.form.saveError")}</p>
       ) : null}
     </form>
+
+      <Nieuwsbrief prefs={newsletter} hasPhone={Boolean(customer.phone?.trim())} />
+    </div>
+  );
+}
+
+/* ── Nieuwsbrief-voorkeuren ───────────────────────────────────────────────── */
+/**
+ * Eén vinkje "hou me op de hoogte" zei niets over waar dat dan langs ging, en
+ * het stond los van de inschrijving zelf: je kon in je account "uit" staan en
+ * toch mail krijgen, omdat de campagne op newsletter_subscribers draait. Hier
+ * zet je het per kanaal aan/uit en schrijft dat meteen door naar allebei
+ * (zie /api/account/newsletter).
+ *
+ * Los van het gegevens-formulier ernaast, want het slaat direct op: een
+ * toestemming die pas telt als je onderaan nog een knop vindt, is er geen.
+ */
+function Nieuwsbrief({ prefs, hasPhone }: { prefs?: NewsletterPrefs; hasPhone: boolean }) {
+  const t = useT();
+  const [email, setEmail] = useState(prefs?.email === "subscribed");
+  const [whatsapp, setWhatsapp] = useState(prefs?.whatsapp === "subscribed");
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error" | "phone">("idle");
+  const pending = prefs?.email === "pending" && !email;
+
+  async function toggle(channel: "email" | "whatsapp", value: boolean) {
+    // Optimistisch omzetten: een schakelaar die pas na het antwoord meebeweegt
+    // voelt stuk. Bij een fout draaien we 'm terug.
+    const setLocal = channel === "email" ? setEmail : setWhatsapp;
+    setLocal(value);
+    setState("busy");
+    try {
+      const res = await fetch("/api/account/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [channel]: value }),
+      });
+      if (!res.ok) {
+        setLocal(!value);
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setState(body?.error === "geen-telefoonnummer" ? "phone" : "error");
+        return;
+      }
+      setState("done");
+      setTimeout(() => setState("idle"), 2500);
+    } catch {
+      setLocal(!value);
+      setState("error");
+    }
+  }
+
+  return (
+    <aside className="border border-line p-5 lg:p-6">
+      <p className="label-brand">{t("newsletter.label")}</p>
+      <h2 className="mt-2 font-display text-xl font-light">{t("account.newsletter.title")}</h2>
+      <p className="mt-2 font-sans text-sm text-ink-soft">{t("account.newsletter.intro")}</p>
+
+      <div className="mt-5 divide-y divide-line border-y border-line">
+        <Kanaal
+          label={t("account.newsletter.emailLabel")}
+          hint={t("account.newsletter.emailHint")}
+          checked={email}
+          disabled={state === "busy"}
+          onChange={(v) => toggle("email", v)}
+        />
+        <Kanaal
+          label={t("account.newsletter.whatsappLabel")}
+          hint={hasPhone ? t("account.newsletter.whatsappHint") : t("account.newsletter.needPhone")}
+          checked={whatsapp}
+          disabled={state === "busy" || !hasPhone}
+          onChange={(v) => toggle("whatsapp", v)}
+        />
+      </div>
+
+      {pending ? <p className="mt-3 font-sans text-xs text-ink-soft">{t("account.newsletter.pending")}</p> : null}
+      <p className="mt-3 font-sans text-xs text-muted">{t("account.newsletter.transactional")}</p>
+      {state === "done" ? (
+        <p role="status" className="mt-2 font-sans text-sm text-ink-soft">
+          {t("account.form.saved")} <CheckIcon className="inline-block h-3.5 w-3.5 align-[-2px]" />
+        </p>
+      ) : null}
+      {state === "error" || state === "phone" ? (
+        <p role="alert" className="mt-2 font-sans text-sm text-danger">
+          {t(state === "phone" ? "account.newsletter.needPhone" : "account.form.saveError")}
+        </p>
+      ) : null}
+    </aside>
+  );
+}
+
+function Kanaal({ label, hint, checked, disabled, onChange }: {
+  label: string; hint: string; checked: boolean; disabled: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className={`flex items-start gap-3 py-4 ${disabled ? "opacity-60" : "cursor-pointer"}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0"
+      />
+      <span className="min-w-0">
+        <span className="block font-sans text-sm text-ink">{label}</span>
+        <span className="mt-0.5 block font-sans text-xs text-ink-soft">{hint}</span>
+      </span>
+    </label>
   );
 }
 
@@ -796,7 +1379,44 @@ function Adressen({ data }: { data: Data }) {
   return <AddressBook addresses={data.addresses} />;
 }
 
-/* ── Helper ───────────────────────────────────────────────────────────────── */
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+
+/** Totaal aan punten dat één opslag opleverde (0, één of meerdere bonussen). */
+function puntenUit(bonuses: { points: number }[] | undefined): number {
+  return (bonuses ?? []).reduce((n, b) => n + (Number(b?.points) || 0), 0);
+}
+
+/** "+N punten bijgeschreven" na een opslag die een bonus opleverde. */
+function BonusMelding({ points }: { points: number }) {
+  const t = useT();
+  return (
+    <p role="status" className="flex items-center gap-2 border border-success/40 bg-success/5 px-4 py-3 font-sans text-sm text-ink">
+      <CheckIcon className="h-4 w-4 shrink-0 text-success" />
+      {t("account.bonus.awarded", { n: points })}
+    </p>
+  );
+}
+
+/** Wat er nog mist voor "profiel compleet" — meeschrijvend terwijl je invult. */
+function ProfielChecklist({ checks, open }: { checks: { key: string; labelKey: string; done: boolean }[]; open: number }) {
+  const t = useT();
+  return (
+    <div className="mt-6 border border-line bg-surface p-4">
+      <p className="font-sans text-sm font-medium text-ink">
+        {open === 0 ? t("account.prefs.checklistComplete") : t("account.prefs.checklistOpen", { n: open })}
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {checks.map((c) => (
+          <li key={c.key} className={`flex items-center gap-1.5 font-sans text-xs ${c.done ? "text-muted" : "text-ink"}`}>
+            <CheckIcon className={`h-3 w-3 ${c.done ? "text-success" : "text-line"}`} />
+            {t(c.labelKey)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Empty({ title, body }: { title: string; body: string }) {
   return (
     <div className="border border-dashed border-line p-10 text-center">

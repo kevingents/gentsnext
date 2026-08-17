@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
+import { TrackLijst } from "@/components/analytics/track-lijst";
 import { PlpFilters } from "@/components/plp/filters";
 import { SortSelect } from "@/components/plp/sort-select";
+import { PlpActiveChips } from "@/components/plp/active-chips";
 import { JsonLd } from "@/components/json-ld";
-import { getFilteredProducts, getFacets, getCustomerTasteCats } from "@/lib/catalog";
+import { getFilteredProducts, getFacets, getCustomerTasteCats, handlesInStores, matenVoorHandles } from "@/lib/catalog";
 import { categoryBySlug } from "@/lib/categories";
 import { parsePlpParams, selectionToFilters } from "@/lib/plp-params";
 import { getSiteUrl } from "@/lib/site-url";
@@ -18,6 +20,10 @@ import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSessionCustomer } from "@/lib/account";
 import { resolveMySize } from "@/lib/size-match";
 import { getMerchandisingPins } from "@/lib/merchandising";
+import { getActieveRegels } from "@/lib/merchandising-regels";
+import { plpStoreProps, storeFilterBranchIds } from "@/lib/plp-store";
+import { resolveAb } from "@/lib/experiments";
+import { TrackAb } from "@/components/analytics/track-ab";
 
 export const dynamic = "force-dynamic";
 
@@ -52,29 +58,67 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // Vertaald categorie-label (ns "nav") voor kop + breadcrumb.
   const catLabel = (await getCategoryLabels(locale)).get(cat.slug) ?? cat.label;
 
-  const filters = selectionToFilters(sel, { category: cat.hoofdgroep });
+  const filters = selectionToFilters(sel, {
+    category: cat.hoofdgroep,
+    storeBranchIds: storeFilterBranchIds(sel.stores),
+  });
   // Klant + facetten eerst — de klant voedt de "Aanbevolen"-ranking (maat + smaak).
-  const [sessionCustomer, facets] = await Promise.all([
+  const [sessionCustomer, facets, ab] = await Promise.all([
     getSessionCustomer(),
     getFacets({ category: cat.hoofdgroep }).then((fc) => localizeFacets(locale, fc)),
+    // A/B: alleen "plp"-experimenten, eventueel beperkt tot bepaalde lijsten.
+    resolveAb({ oppervlak: "plp", categorieen: [cat.slug, cat.hoofdgroep] }),
   ]);
+  const plpAb = ab.overrides.plp ?? {};
+  // Sleutels voor merchandising-regels die aan één variant hangen. Ook een
+  // geforceerde preview telt mee — anders kun je een variant-regelset nooit
+  // bekijken zonder in de bucket te vallen.
+  const abSleutels = ab.assignments.map((a) => `${a.id}:${a.variant}`.toLowerCase());
+  const plpAbExposure = ab.assignments.filter((a) => !a.forced).map(({ id, variant }) => ({ id, variant }));
+  // Standaardsortering van de variant geldt alleen zolang de bezoeker zelf
+  // niets koos. Alles hieronder rekent met déze sortering — óók de meting op
+  // de tegel, anders staat er "aanbevolen" in de data terwijl de bezoeker
+  // "nieuw" zag.
+  const sort = !sel.sortExpliciet && plpAb.sortering ? plpAb.sortering : sel.sort;
+  const perPagina = plpAb.perPagina ?? PER_PAGE;
+  // Filters bovenaan = geen vaste zijkolom, dus ook geen tweekoloms raster.
+  const bovenFilters = plpAb.filterPositie === "boven";
+  // Winkelfilter: keuzelijst + telling voor de winkel die de klant nu ziet.
+  const storeProps = await plpStoreProps(sel.stores, sessionCustomer?.preferences, {
+    category: cat.hoofdgroep,
+  });
   // Shop in jouw maat: bewaarde maat van de klant voor deze categorie.
   const my = resolveMySize(cat.hoofdgroep, sessionCustomer?.sizeProfile);
   // facet = maat mét matensysteem (`kl.M/L`, `sc.43`) — dat is de waarde waarop
   // het maatfilter selecteert; row blijft de kale rij voor de ranking.
   const mySize = my ? { row: my.row, raw: my.raw, facet: my.facet } : null;
   // Personalisatie + merchandising-pins alleen op de default ("Aanbevolen").
-  const isDefault = sel.sort === "aanbevolen";
-  const [tasteCats, pinnedHandles] = await Promise.all([
+  const isDefault = sort === "aanbevolen";
+  const [tasteCats, pinnedHandles, regels] = await Promise.all([
     isDefault && sessionCustomer?.id ? getCustomerTasteCats(sessionCustomer.id) : Promise.resolve([]),
     isDefault ? getMerchandisingPins("categorie", slug) : Promise.resolve([]),
+    isDefault ? getActieveRegels("categorie", slug, abSleutels) : Promise.resolve([]),
   ]);
-  const { items, total } = await getFilteredProducts(filters, sel.sort, sel.page, PER_PAGE, {
+  const { items, total } = await getFilteredProducts(filters, sort, sel.page, perPagina, {
     mySizeRows: my ? [my.row] : [],
     tasteCats,
     pinnedHandles,
+    regels,
   });
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const { myBranches, ...filterProps } = storeProps;
+  /* "Ligt in jouw winkel" op de tegel: één query voor de hele pagina, dezelfde
+     bron en regels als het filter. Zonder winkel geen query en geen label. */
+  const inMyStore = myBranches.length
+    ? await handlesInStores(items.map((p) => p.handle), myBranches.map((b) => b.branchId))
+    : new Set<string>();
+  /* Maten voor "snel toevoegen" — één query voor de hele pagina, en alleen als
+     de variant erom vraagt. Zonder die voorwaarde betaalt iedereen de query
+     voor een knop die niemand ziet. */
+  const maten = plpAb.snelToevoegen === "aan" ? await matenVoorHandles(items.map((p) => p.handle)) : null;
+  // Eén winkel? Dan de stad ("In Utrecht"). Meerdere: geen stad noemen, want dan
+  // zouden we moeten zeggen wélke — en dat weet dit label niet.
+  const storeLabel = myBranches.length === 1 ? myBranches[0].city : t("plp.card.inMyStoreGeneric");
+  const totalPages = Math.max(1, Math.ceil(total / perPagina));
 
   function pageHref(p: number): string {
     const params = new URLSearchParams();
@@ -103,6 +147,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   return (
     <div className="mx-auto max-w-page px-gutter py-10">
       <JsonLd data={breadcrumbJsonLd} />
+      {plpAbExposure.length > 0 ? <TrackAb assignments={plpAbExposure} /> : null}
       <nav className="font-sans text-sm text-muted" aria-label="Kruimelpad">
         <Link href="/" className="hover:text-ink">{t("common.home")}</Link>
         {" / "}
@@ -115,21 +160,31 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         <h1 className="text-display-md sm:mt-2">{catLabel}</h1>
       </div>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className={`mt-8 grid gap-10 ${bovenFilters ? "" : "lg:grid-cols-[16rem_minmax(0,1fr)]"}`}>
         {/* Het filter scrolt mee tot het vastplakt, en krijgt daarna een eigen
             schuifbalk. Zonder die maximumhoogte bleef een lange filterlijst
             onderaan buiten beeld hangen: je kon er pas bij nadat je langs álle
             producten had gescrold. */}
-        <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sel.sort} />
+        <aside className={bovenFilters ? "" : "lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"}>
+          <PlpFilters facets={facets} selection={sel} total={total} mySize={mySize} sort={sort} positie={plpAb.filterPositie} />
         </aside>
 
         <div>
           {/* Mobiel geen losse sorteer-rij: sorteren zit in de filter-drawer
               (knop + zwevende pil). Drie bedieningslagen was te druk. */}
+          {/* Actieve persoonlijke filters (jouw maat / op voorraad in je winkel)
+              als chips. Bewust BUITEN de lg-only sorteerregel: ook op een telefoon
+              moet zichtbaar zijn dat je een deel van de lijst ziet. */}
+          <PlpActiveChips
+            selection={sel}
+            mySize={mySize}
+            mySizeCount={mySize ? (facets.sizes.find((x) => x.value === mySize.facet)?.count ?? null) : null}
+            storeOptions={filterProps.storeOptions}
+            myStoreTitles={filterProps.myStoreTitles}
+          />
           <div className="mb-6 hidden items-center justify-between lg:flex">
             <span className="font-sans text-sm text-muted">{total} {t("plp.filters.itemPlural")}</span>
-            <SortSelect value={sel.sort} />
+            <SortSelect value={sort} />
           </div>
 
           {items.length === 0 ? (
@@ -140,9 +195,23 @@ export default async function CategoryPage({ params, searchParams }: Props) {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
+            <div className={`grid gap-x-4 gap-y-8 sm:grid-cols-3 ${plpAb.kolommenMobiel === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+              {/* De noemer onder de doorklikken: zonder view_item_list weet je
+                  alleen wát er geklikt werd, niet wat er getóónd werd. */}
+              <TrackLijst producten={items} listId={`categorie:${cat.slug}`} listName={catLabel} />
               {items.map((product, i) => (
-                <ProductCard key={product.id} product={product} priority={i < 8} position={(sel.page - 1) * PER_PAGE + i + 1} listId={`categorie:${cat.slug}`} sort={sel.sort} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  priority={i < 8}
+                  position={(sel.page - 1) * perPagina + i + 1}
+                  listId={`categorie:${cat.slug}`}
+                  sort={sort}
+                  inMyStore={inMyStore.has(product.handle) ? storeLabel : null}
+                  beeld={plpAb.tegelBeeld}
+                  badges={plpAb.tegelBadges !== "uit"}
+                  maten={maten?.get(product.handle)}
+                />
               ))}
             </div>
           )}

@@ -14,12 +14,20 @@ import {
   orders,
   orderLines,
   events,
+  srsStock,
+  srsStockMeta,
 } from "@/db/schema";
+import { buildRegelScore, type MerchRegel } from "@/lib/merchandising-regels";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale-server";
 import { COLOR_FAMILIES, type ColorFamily } from "@/lib/colors";
 import { NEW_COLLECTION_HANDLE } from "@/lib/new-collection";
+import { colorIsArticle } from "@/lib/variant-grouping";
+import { crossSellDoelen, isFormeel, FORMELE_KLEUREN } from "@/lib/cross-sell-regels";
 import { mySizeBuckets } from "@/lib/size-match";
+import { sortSizes } from "@/lib/sizing";
+import { stockAvailable } from "@/lib/stock";
+import { availableForSkus } from "@/lib/stock-reservations";
 import {
   rowSortIndex,
   rowDisplayLabel,
@@ -74,6 +82,14 @@ export type ProductCardData = {
   imageAlt: string;
   /** AI-modelfoto (of sfeerbeeld als terugval) — getoond bij hover over de kaart. */
   hoverImageUrl?: string;
+  /**
+   * Staat de MODELFOTO vooraan (en de packshot op hover), of andersom? Dat
+   * verschilt per categorie (kleding leidt met het model, accessoires met de
+   * packshot), en zonder deze vlag kan een A/B-variant niet vragen om "overal
+   * de packshot vooraan" — dan zou hij de twee beelden alleen omdraaien en dus
+   * per categorie iets ánders testen.
+   */
+  leidtMetModel?: boolean;
   minPriceCents: number;
   hasPriceRange: boolean;
   isNew?: boolean;
@@ -279,7 +295,11 @@ async function buildProductCards(
     const tl = titleTl.get(p.id);
     // Bij een kleurgroep tonen we de BASISnaam op de kaart (kleur weg uit titel),
     // zodat "Stropdas PE lichtblauw" → "Stropdas PE · In 19 kleuren".
-    const cnt = colorCount.get(p.id) ?? 1;
+    // Behalve waar de kleur HET artikel is (pochet/das/strik): daar staat elke
+    // kleur als eigen kaart in het overzicht, en zouden 19 kaarten allemaal
+    // "Pochet PE · In 19 kleuren" heten. Kleur in de titel, geen telling.
+    const kleurIsArtikel = colorIsArticle(categoryById.get(p.id) || "");
+    const cnt = kleurIsArtikel ? 1 : colorCount.get(p.id) ?? 1;
     const lbl = (colorLabel.get(p.id) || "").trim();
     let displayTitle = p.title;
     if (cnt > 1 && lbl && p.title.toLowerCase().endsWith(lbl.toLowerCase())) {
@@ -300,12 +320,13 @@ async function buildProductCards(
       imageUrl: leadModel ? model : pack,
       imageAlt: leadModel ? `${displayTitle} — op model` : cleanAlt,
       hoverImageUrl: leadModel ? pack : hoverById.get(p.id) || "",
+      leidtMetModel: leadModel,
       minPriceCents: range?.min ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,
       hasSale: saleRefCents.has(p.id),
       referenceCents: saleRefCents.get(p.id),
-      colorCount: colorCount.get(p.id) ?? 1,
+      colorCount: cnt,
       lowStock: (() => {
         const q = stockQtyById.get(p.id) ?? 0;
         return q > 0 && q <= 5;
@@ -435,6 +456,8 @@ export type PlpRankContext = {
   tasteCats?: string[];
   /** Merchandising-pins (product-handles, in volgorde) → altijd bovenaan in de default. */
   pinnedHandles?: string[];
+  /** Merchandising-regels die nú gelden voor deze PLP (getActieveRegels). */
+  regels?: MerchRegel[];
   /** Populariteits-venster in dagen (default 30). */
   popularityDays?: number;
 };
@@ -473,6 +496,8 @@ export type ProductFilters = {
   fits?: string[];
   priceMinCents?: number;
   priceMaxCents?: number;
+  /** Filiaalnummers: alleen artikelen die in ten mínste één ervan liggen. */
+  storeBranchIds?: string[];
 };
 
 export type Facets = {
@@ -717,6 +742,27 @@ function sizeCondition(values: string[]): SQL {
 }
 
 /**
+ * "Ligt dit in filiaal X?" — EXISTS op de SRS-voorraadbaseline, joined op de
+ * variant-sku (dé sleutel; zie db/schema: barcode is de leveranciers-EAN en
+ * matcht níét). `gen` uit srs_stock_meta zodat een half geschreven sync
+ * onzichtbaar blijft, precies zoals lib/srs-stock-core leest.
+ *
+ * Dit is de BRUTO baseline (3×/dag ververst), zonder kassa-delta, web-
+ * reserveringen of veiligheidsmarge — voor een filter "wat hangt er in mijn
+ * winkel" is dat de juiste maat: het is een reisbeslissing, geen verkoop. De
+ * harde belofte per maat blijft op de PDP staan (availableForSkus).
+ */
+function storeStockExists(branchIds: string[]): SQL {
+  return sql`exists (
+    select 1 from ${srsStock} s
+    where s.sku = v.sku
+      and s.gen = (select active_gen from ${srsStockMeta} where id = 'latest')
+      and s.branch_id in (${sqlInList(branchIds)})
+      and s.qty > 0
+  )`;
+}
+
+/**
  * Variant-niveau EXISTS — één variant moet aan álle gekozen variant-filters
  * voldoen ÉN op voorraad zijn. Filter je op maat S, dan zie je geen producten
  * waar S uitverkocht is (de matchende variant moet leverbaar zijn).
@@ -726,6 +772,13 @@ function variantExists(f: ProductFilters): SQL | null {
   let active = false;
   if (f.colorFamilies?.length) {
     parts.push(inList(sql`v.color_family`, f.colorFamilies));
+    active = true;
+  }
+  if (f.storeBranchIds?.length) {
+    // Bewust in DEZELFDE exists als maat/kleur/prijs: "maat 52 in Utrecht" moet
+    // één variant zijn die allebei waarmaakt, niet "heeft 52" én "heeft íéts in
+    // Utrecht". Meerdere winkels = in ten minste één ervan (in (...)).
+    parts.push(storeStockExists(f.storeBranchIds));
     active = true;
   }
   if (f.sizes?.length) {
@@ -742,7 +795,10 @@ function variantExists(f: ProductFilters): SQL | null {
   }
   if (!active) return null;
   // De matchende variant moet op voorraad zijn (geen uitverkochte maten tonen).
-  parts.push(sql`v.stock_qty > 0`);
+  // Filtert de klant op een winkel, dan IS de winkelvoorraad die eis: het hangt
+  // daar en je kunt het passen — of het online nog leverbaar is, doet dan niet
+  // ter zake (stock_qty is de online-pool).
+  if (!f.storeBranchIds?.length) parts.push(sql`v.stock_qty > 0`);
   return sql`exists (select 1 from ${productVariants} v where ${sql.join(parts, sql` and `)})`;
 }
 
@@ -778,12 +834,40 @@ function allConditions(f: ProductFilters): SQL[] {
   return conds;
 }
 
+/**
+ * Versheid = collectiejaar, met de aanmaakdatum als terugval.
+ *
+ * `source_created_at` is de aanmaakdatum van het Shopify-record uit de migratie,
+ * niet het moment dat het artikel echt nieuw was. Binnen de New arrivals-collectie
+ * (alles jaar=2026) loopt die datum van maart 2024 tot juni 2026, puur afhankelijk
+ * van of een artikel in de migratiebatch zat. Op "Nieuwste" zakten daardoor echte
+ * artikelen uit de nieuwe collectie naar de laatste pagina.
+ *
+ * SRS' `jaar` is het signaal dat de merchandiser zelf onderhoudt en dat 1-op-1
+ * samenvalt met de New arrivals-collectie. Het is tekst en bevat ook "NOS", dus:
+ * cijfers eruit filteren, casten, en bij géén jaartal terugvallen op het jaar van
+ * de aanmaakdatum — zo zakt een artikel zonder jaar niet naar de bodem.
+ */
+const VERSHEID = sql`coalesce(
+  nullif(regexp_replace(coalesce(${products.attributes} ->> 'jaar', ''), '\\D', '', 'g'), '')::int,
+  extract(year from ${products.sourceCreatedAt})::int
+)`;
+
+/**
+ * Stabiele staart. Zonder unieke laatste sleutel mag Postgres rijen met gelijke
+ * sorteerwaarde per query in een andere volgorde teruggeven — en dat gebeurt hier
+ * ook: tot 10 producten delen exact dezelfde `source_created_at` (importbatches).
+ * Met LIMIT/OFFSET betekent dat een product dat op pagina 2 én 3 opduikt, of
+ * helemaal wegvalt. `id` breekt elke gelijkstand definitief.
+ */
+const STABIEL = sql`${products.id} desc`;
+
 /** Objectieve sorteringen (los van personalisatie). */
 const SORT_ORDER: Record<"nieuw" | "prijs-op" | "prijs-af" | "naam", SQL> = {
-  nieuw: sql`${products.sourceCreatedAt} desc nulls last`,
-  "prijs-op": sql`mp asc nulls last`,
-  "prijs-af": sql`mp desc nulls last`,
-  naam: sql`${products.title} asc`,
+  nieuw: sql`${VERSHEID} desc nulls last, ${products.sourceCreatedAt} desc nulls last, ${STABIEL}`,
+  "prijs-op": sql`mp asc nulls last, ${STABIEL}`,
+  "prijs-af": sql`mp desc nulls last, ${STABIEL}`,
+  naam: sql`${products.title} asc, ${STABIEL}`,
 };
 
 /** `col in ('a','b',…)` met correcte placeholders voor een ruwe sql-fragment. */
@@ -803,7 +887,7 @@ function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; u
   }
   const popScore = sql`coalesce(pop.score, 0)`;
   const breadth = sql`(select count(*) from ${productVariants} vb where vb.product_id = ${products.id} and vb.stock_qty > 0)`;
-  const tail = sql`${products.stockQty} desc nulls last, ${products.sourceCreatedAt} desc nulls last`;
+  const tail = sql`${products.stockQty} desc nulls last, ${VERSHEID} desc nulls last, ${products.sourceCreatedAt} desc nulls last, ${STABIEL}`;
 
   if (sort === "populair") {
     return { order: sql`${popScore} desc, ${tail}`, usesPop: true };
@@ -822,9 +906,13 @@ function buildPlpOrder(sort: ProductSort, ctx?: PlpRankContext): { order: SQL; u
   const tasteBoost = tasteCats.length
     ? sql`(case when ${products.attributes} ->> 'hoofdgroep_omschrijving' in (${sqlInList(tasteCats)}) then 0 else 1 end), `
     : sql``;
+  // Merchandising-regels: één opgetelde score (omhoog +, omlaag −), boven de
+  // populariteit. Geen regels → letterlijk dezelfde ORDER BY als hiervoor.
+  const regelScore = buildRegelScore(ctx?.regels ?? []);
+  const regelBoost = regelScore ? sql`${regelScore} desc, ` : sql``;
 
   return {
-    order: sql`${pinBoost}${mySizeBoost}${popScore} desc, ${tasteBoost}${breadth} desc, ${tail}`,
+    order: sql`${pinBoost}${mySizeBoost}${regelBoost}${popScore} desc, ${tasteBoost}${breadth} desc, ${tail}`,
     usesPop: true,
   };
 }
@@ -1083,50 +1171,166 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
  */
 const _facetsCached = unstable_cache(
   (collectionId: string, category: string) => getFacetsUncached({ collectionId: collectionId || undefined, category: category || undefined }),
-  // v3: maat-facetten dragen nu hun matensysteem mee (sc.41 ≠ bo.41).
-  ["plp-facets-v3"],
+  // v4: boordmaten lezen nu uit de boordreeks (44 = hals XL, niet pakmaat XS).
+  ["plp-facets-v4"],
   { revalidate: 180 },
 );
 export function getFacets(f: ProductFilters): Promise<Facets> {
   return _facetsCached(f.collectionId || "", f.category || "");
 }
 
-/* ─────────────────────────── Bijverkoop / cross-sell ──────────────────── */
+/**
+ * Hoeveel artikelen uit deze context liggen er in dat filiaal? Puur voor het
+ * label bij het winkelfilter ("Utrecht · 37") — een filter zonder telling laat
+ * de klant op goed geluk klikken.
+ *
+ * Zelfde cache-profiel als de facetten (per context + filiaal, 3 min): de
+ * baseline ververst maar 3×/dag, dus vaker tellen levert niets op. De telling
+ * negeert de overige filters, net als elk ander facet-getal.
+ */
+async function getStoreStockCountUncached(collectionId: string, category: string, branchId: string): Promise<number> {
+  if (!branchId) return 0;
+  const f: ProductFilters = { collectionId: collectionId || undefined, category: category || undefined, storeBranchIds: [branchId] };
+  const ve = variantExists(f);
+  if (!ve) return 0;
+  const db = getDb();
+  const where = sql.join([...contextConditions(f), ve], sql` and `);
+  const res = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${products} where ${where}`);
+  return Number(res.rows[0]?.n ?? 0);
+}
+const _storeStockCountCached = unstable_cache(getStoreStockCountUncached, ["plp-store-stock-count-v1"], { revalidate: 180 });
 
-// Slimme categorie-regels: wat past bij wat ("maak de look compleet").
-const CROSS_SELL: Record<string, string[]> = {
-  Pakken: ["Overhemden", "Stropdassen", "Schoenen", "Pochet"],
-  Colberts: ["Overhemden", "Stropdassen", "Pochet"],
-  Broeken: ["Riemen", "Overhemden", "Schoenen"],
-  Overhemden: ["Stropdassen", "Manchetknopen", "Colberts"],
-  Stropdassen: ["Pochet", "Overhemden", "Dasspelden"],
-  Strikken: ["Pochet", "Overhemden", "Manchetknopen"],
-  Gilets: ["Overhemden", "Stropdassen"],
-  Schoenen: ["Riemen", "Sokken"],
-  Truien: ["Overhemden", "Broeken"],
-  "Polo-shirts": ["Broeken", "Riemen"],
-};
-const DEFAULT_CROSS = ["Overhemden", "Stropdassen", "Pochet"];
+/**
+ * Welke van deze producten liggen er in één van die filialen? Voor het label op
+ * de producttegel ("In Utrecht") — zonder dat moet je elk artikel openen om te
+ * zien of het in jouw winkel hangt.
+ *
+ * Eén query voor de hele pagina (24 tegels), op dezelfde bron en dezelfde regels
+ * als het filter. Niet gecached: hij hangt aan de getoonde producten én aan de
+ * winkels van déze bezoeker, dus een cache zou vrijwel nooit raak zijn.
+ */
+export async function handlesInStores(handles: string[], branchIds: string[]): Promise<Set<string>> {
+  const clean = [...new Set(handles.filter(Boolean))];
+  if (!clean.length || !branchIds.length) return new Set();
+  const db = getDb();
+  const res = await db.execute<{ handle: string }>(sql`
+    select distinct p.handle
+    from ${products} p
+    join ${productVariants} v on v.product_id = p.id
+    join ${srsStock} s on s.sku = v.sku
+    where p.handle in (${sqlInList(clean)})
+      and s.gen = (select active_gen from ${srsStockMeta} where id = 'latest')
+      and s.branch_id in (${sqlInList(branchIds)})
+      and s.qty > 0
+  `);
+  return new Set(res.rows.map((r) => String(r.handle)));
+}
+/** Eén maat op een tegel: genoeg om er direct mee in de winkelwagen te komen. */
+export type TegelMaat = { size: string; sku: string; priceCents: number; leverbaar: boolean };
+
+/**
+ * Leverbare maten voor een hele lijstpagina, in één query.
+ *
+ * Bestaat voor "snel toevoegen" op de tegel. Bewust één query voor alle handles
+ * samen (zoals handlesInStores) en niet per kaart: 24 losse queries per
+ * paginaweergave is precies het soort stille vertraging waar een A/B-test dan
+ * ten onrechte de schuld van krijgt.
+ *
+ * De voorraadbron is dezelfde als op de productpagina — availableForSkus, dus
+ * mét de reserveringen en de veiligheidsvoorraad erin verwerkt. Een tegel die
+ * een maat aanbiedt die de PDP daarna weigert is erger dan geen snelknop.
+ */
+export async function matenVoorHandles(handles: string[]): Promise<Map<string, TegelMaat[]>> {
+  const clean = [...new Set(handles.filter(Boolean))];
+  const uit = new Map<string, TegelMaat[]>();
+  if (!clean.length) return uit;
+  const db = getDb();
+  const res = await db.execute<{ handle: string; size: string; sku: string; price_cents: number; color: string }>(sql`
+    select p.handle, coalesce(v.size, '') as size, coalesce(v.sku, '') as sku, v.price_cents,
+           coalesce(v.color, '') as color
+    from ${products} p
+    join ${productVariants} v on v.product_id = p.id
+    where p.handle in (${sqlInList(clean)})
+      and coalesce(v.size, '') <> ''
+      and coalesce(v.sku, '') <> ''
+  `);
+  /* Meer dan één kleur onder dezelfde handle? Dan géén snelknop. Maat "S" zou
+     anders de SKU van een willekeurige kleur pakken — de klant ziet beige op de
+     tegel en krijgt blauw in de wagen. Die keuze hoort op de productpagina, waar
+     de kleurkiezer staat. */
+  const kleurenPerHandle = new Map<string, Set<string>>();
+  for (const r of res.rows) {
+    const set = kleurenPerHandle.get(String(r.handle)) ?? new Set<string>();
+    if (r.color) set.add(String(r.color));
+    kleurenPerHandle.set(String(r.handle), set);
+  }
+
+  const beschikbaar = await availableForSkus(res.rows.map((r) => String(r.sku)));
+  const bekend = await stockAvailable();
+  for (const r of res.rows) {
+    const handle = String(r.handle);
+    if ((kleurenPerHandle.get(handle)?.size ?? 0) > 1) continue;
+    const lijst = uit.get(handle) ?? [];
+    if (lijst.some((m) => m.size === r.size)) continue; // één rij per maat
+    const st = beschikbaar.get(String(r.sku));
+    lijst.push({
+      size: String(r.size),
+      sku: String(r.sku),
+      priceCents: Number(r.price_cents) || 0,
+      // Zonder voorraadgeneratie weten we het niet; dan niet blokkeren (zoals de PDP).
+      leverbaar: !bekend || (st?.online ?? 0) > 0,
+    });
+    uit.set(handle, lijst);
+  }
+  for (const [handle, lijst] of uit) uit.set(handle, sortSizes(lijst));
+  return uit;
+}
+
+export function getStoreStockCount(f: ProductFilters, branchId: string): Promise<number> {
+  return _storeStockCountCached(f.collectionId || "", f.category || "", branchId);
+}
+
+/* ─────────────────────────── Bijverkoop / cross-sell ──────────────────── */
 
 /**
  * Aanbevelingen om "de look compleet te maken": producten uit complementaire
  * categorieën, met afbeelding, gebalanceerd over de doelcategorieën.
+ *
+ * `subgroep` + `attrs` bepalen mee wát er past: bij een LAKSCHOEN werden een riem
+ * en turquoise sokken aangeboden, omdat alleen de hoofdgroep "Schoenen" telde.
+ * Bij black tie hoort geen riem en geen vrolijke kleur — zie lib/cross-sell-regels.
  */
 export async function getRecommendations(
   hoofdgroep: string,
   excludeProductId: string | null,
-  limit = 4
+  limit = 4,
+  opts: { subgroep?: string; attrs?: Record<string, unknown> } = {}
 ): Promise<ProductCardData[]> {
   const db = getDb();
-  const targets = CROSS_SELL[hoofdgroep] || DEFAULT_CROSS;
+  const attrs = opts.attrs ?? {};
+  const subgroep = opts.subgroep ?? String(attrs.subgroep ?? "");
+  const targets = crossSellDoelen(hoofdgroep, subgroep, attrs);
   const exclude = excludeProductId || "00000000-0000-0000-0000-000000000000";
+  // Formeel artikel → alleen sobere kleuren, behalve bij artikelen die zélf voor
+  // die gelegenheid zijn (een smokingoverhemd of strik is per definitie goed).
+  const formeel = isFormeel(hoofdgroep, subgroep, attrs);
+  const kleurCond = formeel
+    ? sql` and (
+        p.attributes ->> 'subgroep' in ('Smoking','Rokkostuum')
+        or exists (
+          select 1 from ${productVariants} v
+          where v.product_id = p.id and v.stock_qty > 0
+            and v.color_family in (${sql.join(FORMELE_KLEUREN.map((c: string) => sql`${c}`), sql`, `)})
+        )
+      )`
+    : sql``;
 
   const rows = await db.execute<{ id: string; handle: string; title: string; vendor: string; hg: string }>(sql`
     select p.id, p.handle, p.title, p.vendor, p.attributes ->> 'hoofdgroep_omschrijving' as hg
     from ${products} p
     where p.status = 'active' and p.has_image = true and p.in_stock = true and p.is_group_primary = true
       and p.attributes ->> 'hoofdgroep_omschrijving' in (${sql.join(targets.map((t) => sql`${t}`), sql`, `)})
-      and p.id <> ${exclude}
+      and p.id <> ${exclude}${kleurCond}
     order by p.source_created_at desc nulls last
     limit 60
   `);
@@ -1162,8 +1366,9 @@ export async function getRecommendations(
  */
 export async function getOrderCrossSell(orderId: string, limit = 3): Promise<ProductCardData[]> {
   const db = getDb();
-  const ordered = await db.execute<{ product_id: string; hg: string }>(sql`
-    select distinct v.product_id, p.attributes ->> 'hoofdgroep_omschrijving' as hg
+  const ordered = await db.execute<{ product_id: string; hg: string; sg: string; attrs: Record<string, unknown> }>(sql`
+    select distinct v.product_id, p.attributes ->> 'hoofdgroep_omschrijving' as hg,
+           coalesce(p.attributes ->> 'subgroep','') as sg, p.attributes as attrs
     from ${orderLines} ol
     join ${productVariants} v on v.sku = ol.sku
     join ${products} p on p.id = v.product_id
@@ -1173,7 +1378,11 @@ export async function getOrderCrossSell(orderId: string, limit = 3): Promise<Pro
   const orderedIds = ordered.rows.map((r) => r.product_id).filter(Boolean);
   const orderedCats = new Set(ordered.rows.map((r) => r.hg).filter(Boolean));
   const targets = new Set<string>();
-  for (const r of ordered.rows) for (const t of CROSS_SELL[r.hg] || DEFAULT_CROSS) if (!orderedCats.has(t)) targets.add(t);
+  // Zelfde regels als op de productpagina — wie een smoking bestelde krijgt in de
+  // bevestigingsmail geen riem aangeboden.
+  for (const r of ordered.rows) {
+    for (const t of crossSellDoelen(r.hg, r.sg, r.attrs ?? {})) if (!orderedCats.has(t)) targets.add(t);
+  }
   const targetList = [...targets];
   if (!targetList.length || !orderedIds.length) return [];
 

@@ -2,12 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PKPass } from "passkit-generator";
 import { b64Pem, walletConfigured, walletWebServiceUrl, passAuthToken } from "@/lib/apple-wallet-config";
+import { CLUB_LOGO_LIGHT, CLUB_NAME, CLUB_PASS_NAME, clubMemberCode } from "@/lib/club";
 
 // Her-export zodat bestaande imports `from "@/lib/apple-wallet"` blijven werken.
 export { walletConfigured, walletWebServiceUrl, passAuthToken, verifyPassAuth } from "@/lib/apple-wallet-config";
 
 /**
- * Apple Wallet — GENTS spaarpas (.pkpass, storeCard).
+ * Apple Wallet — de GENTS Memberspas (.pkpass, storeCard) van GENTS MEMBERS.
  *
  * Een geldige pas moet ondertekend worden met een Apple **Pass Type ID-certificaat**
  * uit het GENTS Apple Developer-account. Die secrets staan in Vercel-env (base64),
@@ -32,8 +33,16 @@ function passImages() {
   imgCache = {
     // Zwarte pas → WITTE merk-assets (Kevin, 21 juli: "zoals onze zwarte pas,
     // wit logo"). Wit vierkant icoon (notificaties/lockscreen) + witte wordmark.
-    icon: readFileSync(join(root, "public/brand/wallet-icon-wit.png")),
-    logo: readFileSync(join(root, "public/brand/brand-logo-wit.png")),
+    // De wordmark is die van het programma: dit ÍS de memberspas. Het icoon blijft
+    // het GENTS-merk — daar is geen ruimte voor twee regels tekst.
+    /* Het pas-icoon verschijnt NIET op de pas zelf maar in meldingen en op het
+       toegangsscherm - en daar zet iOS het op een LICHTE achtergrond. Een wit
+       merkteken op transparant is daar dus onzichtbaar (Kevin, 13 aug: de melding
+       "Je hebt nu 310 punten" kwam binnen met een leeg wit vlakje ervoor).
+       Het officiële vierkante logo heeft een dekkende zwarte achtergrond en werkt
+       daardoor op licht én donker. */
+    icon: readFileSync(join(root, "public/brand/brand-logo-vierkant.png")),
+    logo: readFileSync(join(root, CLUB_LOGO_LIGHT.replace(/^\//, "public/"))),
   };
   return imgCache;
 }
@@ -43,20 +52,42 @@ export type LoyaltyPassInput = {
   name: string;
   email: string;
   points: number;
+  /** Nog niet besteedbaar (recente aankoop). 0/undefined = niets in behandeling. */
+  pending?: number;
+  /** Wanneer die punten besteedbaar worden. */
+  pendingVestsAt?: Date | string | null;
   memberSince?: Date | string | null;
+  /**
+   * Openstaande tegoedbonnen. Staan op de pas zodat de klant in de winkel niets
+   * hoeft op te zoeken: de kassier scant de QR (= het klant-id) en haalt via
+   * /api/core/voucher op wat er openstaat. De codes staan er ook letterlijk bij,
+   * zodat het ook werkt aan een kassa die alleen een code-invoerveld heeft.
+   */
+  vouchers?: { code: string; label: string; valueCents?: number; verlooptOp?: Date | string | null }[];
 };
 
 /**
- * Bouwt een ondertekende GENTS-spaarpas (.pkpass) voor één klant. Premium look:
+ * Bouwt een ondertekende GENTS Memberspas (.pkpass) voor één klant. Premium look:
  * zwarte pas met wit logo, QR met de klant-referentie (scanbaar aan de kassa om
  * te sparen/inwisselen). serialNumber = customerId → opnieuw downloaden werkt de
  * bestaande pas bij i.p.v. een tweede pas te maken.
  */
+/** Bedrag voor op de pas — kort, want een pas-veld is smal. */
+function euroKort(cents: number): string {
+  return (cents / 100).toLocaleString("nl-NL", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
   if (!walletConfigured()) throw new Error("Apple Wallet is niet geconfigureerd.");
   const { icon, logo } = passImages();
   const points = Math.max(0, Math.round(Number(input.points) || 0));
-  const memberCode = "GENTS " + input.customerId.replace(/-/g, "").slice(0, 8).toUpperCase();
+  const pending = Math.max(0, Math.round(Number(input.pending) || 0));
+  const vestDatum = input.pendingVestsAt ? new Date(input.pendingVestsAt) : null;
+  // Datum in de NL-tijdzone, niet die van de server (die staat op UTC).
+  const vestLabel = vestDatum && !isNaN(vestDatum.getTime())
+    ? vestDatum.toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })
+    : null;
+  const memberCode = clubMemberCode(input.customerId);
   const sinceYear = input.memberSince ? new Date(input.memberSince).getFullYear() : null;
 
   const pass = new PKPass(
@@ -78,7 +109,7 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
       teamIdentifier: process.env.APPLE_TEAM_ID!,
       serialNumber: input.customerId,
       organizationName: "GENTS",
-      description: "GENTS Spaarpas",
+      description: CLUB_PASS_NAME,
       backgroundColor: "rgb(17, 17, 17)",
       foregroundColor: "rgb(255, 255, 255)",
       labelColor: "rgb(178, 174, 168)",
@@ -89,18 +120,68 @@ export function buildLoyaltyPass(input: LoyaltyPassInput): Buffer {
     },
   );
 
+  const tegoeden = (input.vouchers ?? []).filter((v) => v.code);
+  const tegoedCents = tegoeden.reduce((s, v) => s + (Number(v.valueCents) || 0), 0);
+
   pass.type = "storeCard";
-  pass.primaryFields.push({ key: "balance", label: "Spaarpunten", value: String(points) });
+  pass.primaryFields.push({
+    key: "balance",
+    label: "Punten",
+    value: String(points),
+    // iOS toont dit als melding zodra het saldo op de pas verandert.
+    changeMessage: "Je hebt nu %@ punten",
+  });
   pass.secondaryFields.push({ key: "member", label: "Lid", value: input.name });
-  if (sinceYear) pass.auxiliaryFields.push({ key: "since", label: "Lid sinds", value: String(sinceYear) });
+  /* Volgorde op waarde: tegoed (uitgeefbaar) → punten in behandeling (verklaart
+     waarom het saldo nog laag is) → lid sinds (decoratief). Er is maar plek voor
+     een handvol velden, dus "lid sinds" valt als eerste af. */
+  if (tegoeden.length) {
+    pass.auxiliaryFields.push({
+      key: "credit",
+      label: tegoeden.length === 1 ? "Tegoed" : `Tegoed (${tegoeden.length})`,
+      value: tegoedCents > 0 ? euroKort(tegoedCents) : tegoeden[0].label,
+    });
+  }
+  /* Zonder dit veld leest de pas als "0 punten" terwijl de klant net gekocht
+     heeft: punten vesten pas na de retourtermijn (21 dagen). */
+  if (pending > 0) {
+    pass.auxiliaryFields.push({
+      key: "pending",
+      label: "In behandeling",
+      value: String(pending),
+      changeMessage: "Er staan %@ punten in behandeling",
+    });
+  }
+  if (!tegoeden.length && pending <= 0 && sinceYear) {
+    pass.auxiliaryFields.push({ key: "since", label: "Lid sinds", value: String(sinceYear) });
+  }
   pass.backFields.push(
     {
       key: "how",
       label: "Zo werkt het",
       value:
-        "Je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen.",
+        `${CLUB_NAME}: je spaart 1 punt per bestede euro — online én in de winkel. Laat deze pas scannen bij de kassa om te sparen en punten in te wisselen. Punten van een nieuwe aankoop worden besteedbaar na de retourtermijn.`,
     },
-    { key: "value", label: "Je saldo", value: `${points} punten` },
+    {
+      key: "value",
+      label: "Je saldo",
+      value:
+        pending > 0
+          ? `${points} punten besteedbaar. ${pending} punten zijn nog in behandeling${vestLabel ? ` — besteedbaar vanaf ${vestLabel}` : ""}.`
+          : `${points} punten besteedbaar.`,
+    },
+  );
+  if (tegoeden.length) {
+    pass.backFields.push({
+      key: "credit-detail",
+      label: tegoeden.length === 1 ? "Je tegoedbon" : "Je tegoedbonnen",
+      // Code voluit: werkt ook aan een kassa die alleen een code-invoerveld heeft.
+      value: tegoeden
+        .map((v) => `${v.code} — ${v.label}${v.verlooptOp ? ` (geldig t/m ${new Date(v.verlooptOp).toLocaleDateString("nl-NL")})` : ""}`)
+        .join("\n"),
+    });
+  }
+  pass.backFields.push(
     { key: "account", label: "Account", value: "Bekijk en verzilver je punten op gents.nl/account." },
     {
       key: "terms",

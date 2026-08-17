@@ -10,7 +10,9 @@ import { ZakelijkLanding } from "@/components/landings/zakelijk-landing";
 import { StudentsLanding } from "@/components/landings/students-landing";
 import { KlantenserviceLanding } from "@/components/landings/klantenservice-landing";
 import { HerroepingLanding } from "@/components/landings/herroeping-landing";
-import { getStores, getStoreByPageHandle, openStatus, type Store } from "@/lib/stores";
+import { getStores, getStoreByPageHandle, openStatus, storesByDistance, type Store } from "@/lib/stores";
+import { headers } from "next/headers";
+import { getMyStores } from "@/lib/store-preference";
 import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getMigratedPage } from "@/lib/migrated-pages";
@@ -148,7 +150,14 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
 
   // 1. Winkeloverzicht
   if (handle === "winkels") {
-    const stores: LocatorStore[] = getStores().map((s) => {
+    /* Dichtstbijzijnde winkel eerst. Vercel schat de locatie uit het IP en zet 'm
+       in request-headers: geen toestemmingsvraag, geen GPS, niets opgeslagen.
+       Weten we 'm niet (lokaal, VPN), dan blijft de vaste volgorde staan. */
+    const h = await headers();
+    const lat = Number(h.get("x-vercel-ip-latitude"));
+    const lng = Number(h.get("x-vercel-ip-longitude"));
+    const vanaf = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0) ? { lat, lng } : null;
+    const stores: LocatorStore[] = storesByDistance(getStores(), vanaf).map((s) => {
       const st = openStatus(s);
       return {
         pageHandle: s.pageHandle,
@@ -158,6 +167,7 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
         phone: s.phone,
         open: st.open,
         todayRange: st.todayRange,
+        distanceKm: s.distanceKm ?? null,
       };
     });
     return (
@@ -184,7 +194,7 @@ export default async function GenericPage({ params }: { params: Promise<{ handle
           België.
         </p>
         <div className="mt-10">
-          <StoreLocator stores={stores} />
+          <StoreLocator stores={stores} myStores={(await getMyStores()).map((s) => s.pageHandle)} />
         </div>
       </div>
     );

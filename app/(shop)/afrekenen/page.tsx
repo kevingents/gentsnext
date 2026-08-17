@@ -9,8 +9,11 @@ import { useT } from "@/components/i18n/locale-provider";
 import { DeliveryOptions } from "@/components/cart/delivery-options";
 import { BrandedState } from "@/components/brand-state";
 import { track } from "@/lib/track-client";
+import { huidigeAttributie } from "@/lib/attributie-client";
+import { TrackAb } from "@/components/analytics/track-ab";
 import { formatEuro, tieredDiscountCents, type TieredDiscountCfg } from "@/lib/pricing";
-import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor } from "@/lib/shipping-zones";
+import { enabledZones, DEFAULT_COUNTRY, zoneFor, shippingCentsFor, type ShippingZoneOverrides } from "@/lib/shipping-zones";
+import { splitMethods, type PaymentChoice } from "@/lib/payment-methods";
 
 type Field = {
   name: string;
@@ -93,8 +96,25 @@ function CheckoutForm() {
   // Bezorgland: bepaalt tarief, gratis-drempel én postcode-formaat. Stond vast
   // op NL terwijl de bezorgpagina BE/DE/EU belooft (UX-audit).
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
-  const zone = zoneFor(country);
-  const countries = enabledZones();
+  /* Welke landen aanstaan en wat ze kosten is een knop in de tool; de tabel in
+     de code is alleen de startwaarde (en het vangnet als het ophalen faalt).
+     Landnaam en postcode-patroon komen wél uit die tabel — dat is techniek. */
+  const [zoneCfg, setZoneCfg] = useState<ShippingZoneOverrides>({});
+  useEffect(() => {
+    let active = true;
+    fetch("/api/verzendlanden")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!active || !Array.isArray(d?.zones)) return;
+        const map: ShippingZoneOverrides = {};
+        for (const z of d.zones) map[String(z.code)] = z;
+        setZoneCfg(map);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+  const zone = zoneFor(country, zoneCfg);
+  const countries = enabledZones(zoneCfg);
   const [business, setBusiness] = useState(false);
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
@@ -121,18 +141,72 @@ function CheckoutForm() {
   // Stappen-checkout: gegevens → betalen (één sectie per scherm, past op elke resolutie).
   const [step, setStep] = useState<"gegevens" | "betalen">("gegevens");
 
-  // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm).
+  // begin_checkout hoort bij het ÓPENEN van de checkout, niet bij het indrukken
+  // van de betaalknop. Stond het op die knop, dan telde alleen wie helemaal
+  // doorklikte als "gestart" — en was de afhaak binnen de checkout per definitie
+  // onzichtbaar, want de noemer ontbrak. Eén keer per bezoek aan deze pagina.
+  const checkoutGemeld = useRef(false);
+  useEffect(() => {
+    if (checkoutGemeld.current || !cart.hydrated || !cart.lines.length) return;
+    checkoutGemeld.current = true;
+    track("checkout_start", {
+      valueCents: cart.subtotalCents,
+      props: { items: cart.lines.length, stuks: cart.count },
+    });
+    track("checkout_stap", { props: { stap: "gegevens" } });
+  }, [cart.hydrated, cart.lines.length, cart.subtotalCents, cart.count]);
+
+  // Betaalmethode vooraf kiezen (i.p.v. Mollie's gehoste keuzescherm). Alleen de
+  // kopgroep krijgt een knop; payMethod "" betekent "geen methode meesturen" en
+  // dát is precies de Mollie-pagina met álle methoden — zie "Overige" hieronder.
   type PayMethod = { id: string; description: string; image: string };
-  const [methods, setMethods] = useState<PayMethod[]>([]);
+  const [pay, setPay] = useState<PaymentChoice>({ methods: [], top: [], maxVisible: 3, ab: [] });
   const [payMethod, setPayMethod] = useState("");
+  // Heeft de klant zelf een keuze gemaakt? Zo niet, dan mag een landwissel de
+  // voorselectie nog verzetten (BE → Bancontact); daarna nooit meer.
+  const payTouched = useRef(false);
+  // De kopgroep hangt aan het BEZORGLAND, en een lopend experiment kan de
+  // volgorde overschrijven. Beide weet alleen de server (instellingen + de
+  // ab-cookie), dus we halen de uitkomst op in plaats van 'm hier na te rekenen.
   useEffect(() => {
     let active = true;
-    fetch("/api/payment-methods")
+    fetch(`/api/payment-methods?land=${encodeURIComponent(country)}`)
       .then((r) => r.json())
-      .then((d) => { if (active) { const ms: PayMethod[] = d.methods || []; setMethods(ms); setPayMethod((cur) => cur || ms[0]?.id || ""); } })
+      .then((d) => { if (active && d?.ok !== false) setPay(d as PaymentChoice); })
       .catch(() => {});
     return () => { active = false; };
+  }, [country]);
+
+  /* Apple Pay werkt alleen op een Apple-apparaat met Safari. Op een Android-
+     telefoon zou de knop naar een betaalpagina leiden die niets kan — dus
+     verbergen we 'm daar. Na mount, want op de server bestaat `window` niet en
+     een verschil tussen server- en client-render geeft een hydratiefout.
+     Google Pay laten we staan: dat draait in vrijwel elke browser. */
+  const [applePayKan, setApplePayKan] = useState(true);
+  useEffect(() => {
+    const AP = (window as unknown as { ApplePaySession?: { canMakePayments?: () => boolean } }).ApplePaySession;
+    setApplePayKan(Boolean(AP?.canMakePayments?.()));
   }, []);
+  const methods = useMemo(
+    () => (applePayKan ? pay.methods : pay.methods.filter((m) => m.id !== "applepay")),
+    [pay.methods, applePayKan],
+  );
+  /* Filteren gebeurt vóór het verdelen: staat Apple Pay in de kopgroep maar kan
+     dit apparaat het niet, dan schuift de volgende methode gewoon door in plaats
+     van dat er een gat valt. */
+  const { visible: payVisible, rest: payRest } = useMemo(
+    () => splitMethods(methods, pay.top, pay.maxVisible),
+    [methods, pay.top, pay.maxVisible],
+  );
+
+  // Voorselectie = de eerste knop van de kopgroep, zolang de klant zelf nog niets
+  // koos. Zonder dit stond de keuze op de eerste methode die Mollie toevallig
+  // teruggaf, wat in België iDEAL kon zijn.
+  useEffect(() => {
+    if (payTouched.current) return;
+    setPayMethod(payVisible[0]?.id || "");
+  }, [payVisible]);
+
 
   const [delivery, setDelivery] = useState<"standard" | "express">("standard");
   const [expressSurcharge, setExpressSurcharge] = useState(0);
@@ -356,11 +430,18 @@ function CheckoutForm() {
       const d = await r.json();
       if (d.type === "giftcard") {
         setGiftcard({ code: d.code, balanceCents: d.balanceCents });
+        track("giftcard_ingewisseld", { valueCents: d.balanceCents, props: { code: d.code } });
         setCodeInput("");
       } else if (d.type === "voucher") {
         setVoucher({ code: d.code, discountCents: d.discountCents, label: d.label });
+        track("voucher_toegepast", { valueCents: d.discountCents, props: { coupon: d.code, label: d.label } });
         setCodeInput("");
       } else {
+        // Een geweigerde code is een omzetlek dat je alleen ziet als je 'm meet:
+        // de klant heeft een verwachting die de checkout niet waarmaakt, en
+        // haakt precies daar af. De REDEN gaat mee, want "verlopen" vraagt om
+        // een ander antwoord dan "bestaat niet".
+        track("voucher_geweigerd", { props: { coupon: code.slice(0, 40), reden: String(d.error || "onbekend").slice(0, 80) } });
         setCodeErr(d.error || t("checkout.error_code_unknown"));
       }
     } catch {
@@ -424,6 +505,19 @@ function CheckoutForm() {
     }
     if (business && !(form.companyName || "").trim()) { setError(t("checkout.error_company_name")); return; }
     setError("");
+    // GA4's add_shipping_info: de klant heeft zijn bezorgkeuze vastgelegd. Dit
+    // is de stap die tot nu toe volledig ontbrak, waardoor de checkout één
+    // zwarte doos was tussen "gestart" en "betaald" — je kon niet zien of mensen
+    // op het adres, op de verzendkosten of op de betaalpagina afhaakten.
+    track("verzendkeuze", {
+      valueCents: payableCents,
+      props: {
+        methode: pickupMode ? "pickup" : delivery,
+        ...(pickupMode ? { winkel: pickupStore } : {}),
+        shippingCents,
+      },
+    });
+    track("checkout_stap", { props: { stap: "betalen" } });
     setStep("betalen");
   }
 
@@ -453,7 +547,19 @@ function CheckoutForm() {
       return;
     }
     setBusy(true);
-    track("checkout_start", { valueCents: payableCents, props: { items: cart.lines.length } });
+    // GA4's add_payment_info. `checkout_start` hoort niet hier maar bij het
+    // ÓPENEN van de checkout (zie de useEffect hieronder): stond hij op dit
+    // punt, dan telde alleen wie helemaal doorklikte als "gestart" en was de
+    // afhaak in de checkout per definitie onzichtbaar.
+    track("betaalkeuze", {
+      valueCents: payableCents,
+      props: {
+        items: cart.lines.length,
+        methode: pickupMode ? "pickup" : delivery,
+        coupon: voucher?.code || "",
+        betaalmethode: payMethod || "overig",
+      },
+    });
     // Niet-voorgevinkte nieuwsbrief-opt-in (AVG): alleen bij expliciete keuze.
     if (newsletter && form.email) {
       fetch("/api/newsletter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email }) }).catch(() => {});
@@ -472,6 +578,10 @@ function CheckoutForm() {
           // Server vergelijkt: wijkt het echte totaal af (prijs/actie gewijzigd
           // sinds toevoegen) → 409 i.p.v. stil een ander bedrag innen.
           expectedTotalCents: payableCents,
+          // De campagne die deze klant bracht, vastgevroren op de order. Zonder
+          // dit komt élke conversie bij Google en Meta binnen als "direct" en
+          // lijkt betaalde reclame gratis.
+          attributie: huidigeAttributie() ?? undefined,
           items: cart.lines.map((l) => ({ sku: l.sku, qty: l.qty, groupId: l.groupId, roleLabel: l.roleLabel })),
         }),
       });
@@ -482,12 +592,24 @@ function CheckoutForm() {
           // verwijder-artikelen-flow: de artikelen zijn elders wél leverbaar.
           // Terug naar stap 1 met een ververste lijst, zodat de klant zélf
           // opnieuw een (complete) winkel kiest — nooit stil herkiezen.
+          track("checkout_fout", { valueCents: payableCents, props: { soort: "afhaalvoorraad", winkel: pickupStore } });
           setError(t("checkout.pickup_unavailable"));
           setPickupStore("");
           setPickupAvailRefresh((n) => n + 1);
           setStep("gegevens");
           return;
         }
+        // Een afgebroken checkout is de duurste afhaak die er is: de klant wilde
+        // betalen en kon het niet. Zonder dit event zie je alleen dat de order
+        // ontbreekt, niet wáárom — en dat is precies het verschil tussen een
+        // prijswijziging, een voorraadweigering en een echte storing.
+        track("checkout_fout", {
+          valueCents: payableCents,
+          props: {
+            soort: data.priceChanged ? "prijs_gewijzigd" : Array.isArray(data.unavailableSkus) && data.unavailableSkus.length ? "voorraad" : "overig",
+            melding: String(data.error || "").slice(0, 120),
+          },
+        });
         setError(data.error || t("common.error"));
         // Prijs gewijzigd → knop toont voortaan het server-totaal; nogmaals
         // betalen gaat dan wél door (expectedTotalCents matcht weer).
@@ -557,9 +679,13 @@ function CheckoutForm() {
         </div>
       ) : null}
 
+      {/* min-w-0 op de twee kolommen: zonder dat staat hun minimumbreedte op
+          "auto" en bepaalt het breedste onbreekbare stukje tekst diep in de
+          kolom hoe breed de héle pagina wordt. Eén regel met white-space:nowrap
+          blies de checkout op een telefoon van 375 naar 704px op. */}
       <div className="mt-5 grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Formulier */}
-        <form onSubmit={submit} noValidate>
+        <form onSubmit={submit} noValidate className="min-w-0">
           {step === "gegevens" ? (
           <>
           {/* Particulier / Zakelijk */}
@@ -732,6 +858,7 @@ function CheckoutForm() {
             <div className="mt-5 border-t border-line pt-4 empty:hidden lg:hidden">
               <DeliveryOptions
                 items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                country={country}
                 value={delivery}
                 onChange={(m, s) => {
                   setDelivery(m);
@@ -755,16 +882,22 @@ function CheckoutForm() {
             {t("checkout.back_to_details")}
           </button>
 
-          {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm. */}
-          {payableCents > 0 && methods.length ? (
+          {/* Betaalmethode vooraf — geen tussenstop meer op Mollie's keuzescherm.
+              Alleen de kopgroep (per land instelbaar) krijgt een knop; al het
+              andere zit onder één regel "Overige betaalmethoden" die zónder
+              gekozen methode naar Mollie gaat — dáár staat de volledige lijst. */}
+          {payableCents > 0 && payVisible.length ? (
             <>
+              {/* Exposure pas hier: wie de betaalstap nooit haalde heeft de proef
+                  niet gezien en hoort niet in de noemer van de conversie. */}
+              {pay.ab.length ? <TrackAb assignments={pay.ab} /> : null}
               <p className="label-brand mt-4">{t("checkout.payment_method")}</p>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {methods.map((m) => (
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {payVisible.map((m) => (
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setPayMethod(m.id)}
+                    onClick={() => { payTouched.current = true; setPayMethod(m.id); }}
                     aria-pressed={payMethod === m.id}
                     className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-left font-sans text-sm transition-colors ${payMethod === m.id ? "border-ink bg-surface" : "border-line hover:border-ink"}`}
                   >
@@ -776,6 +909,27 @@ function CheckoutForm() {
                   </button>
                 ))}
               </div>
+              {payRest.length ? (
+                <button
+                  type="button"
+                  onClick={() => { payTouched.current = true; setPayMethod(""); }}
+                  aria-pressed={payMethod === ""}
+                  className={`mt-2 flex w-full items-center gap-2.5 rounded-card border px-3 py-2.5 text-left font-sans text-sm transition-colors ${payMethod === "" ? "border-ink bg-surface" : "border-line hover:border-ink"}`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block">{t("checkout.payment_other")}</span>
+                    {/* Afbreken over twee regels, NIET truncate. `truncate` zet
+                        white-space:nowrap, en die min-content (hier ruim 600px
+                        aan methodenamen) duwt de hele checkout-grid open: op een
+                        telefoon van 375px werd de pagina 704px breed en liep
+                        álles buiten beeld. Klemmen op twee regels toont boven-
+                        dien meer dan een afgekapt "PayPal · Bancon…". */}
+                    <span className="mt-0.5 block overflow-hidden text-xs leading-snug text-muted [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box]">
+                      {payRest.map((m) => m.description).join(" · ")}
+                    </span>
+                  </span>
+                </button>
+              ) : null}
             </>
           ) : null}
 
@@ -848,19 +1002,36 @@ function CheckoutForm() {
             </div>
           ) : null}
 
-          <button type="submit" disabled={busy} className="btn-primary mt-4 w-full">
-            {busy
-              ? t("common.processing")
-              : payableCents === 0
-                ? t("checkout.complete_with_giftcard")
-                : `${t("checkout.pay_securely")} ${formatEuro(payableCents)}`}
+          {/* Slotje = "veilig", draaiend rondje = "er gebeurt iets". Zonder die
+              tweede stond de knop na de klik seconden lang stil terwijl de order
+              werd aangemaakt, en klikten mensen nog eens. */}
+          <button type="submit" disabled={busy} aria-busy={busy} className="btn-primary mt-4 w-full">
+            {busy ? (
+              <>
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 animate-spin" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" opacity="0.3" />
+                  <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+                {t("common.processing")}
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <rect x="4.5" y="10.5" width="15" height="10" rx="1.5" />
+                  <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" strokeLinecap="round" />
+                </svg>
+                {payableCents === 0
+                  ? t("checkout.complete_with_giftcard")
+                  : `${t("checkout.pay_securely")} ${formatEuro(payableCents)}`}
+              </>
+            )}
           </button>
           {/* Geen FooterPayments-strip hier: die chips zijn wit-op-wit buiten de
               donkere footer, en de gekozen methode staat al in het betaalgrid. */}
           <p className="mt-3 font-sans text-xs text-muted">
             {payableCents === 0
               ? t("checkout.giftcard_covers_full")
-              : `${t("checkout.payment_via")} ${methods.find((m) => m.id === payMethod)?.description || "Mollie"} · ${t("checkout.payment_note")}`}
+              : `${t("checkout.payment_via")} ${payMethod ? methods.find((m) => m.id === payMethod)?.description || "Mollie" : t("checkout.payment_other_via")} · ${t("checkout.payment_note")}`}
           </p>
           </>
           )}
@@ -868,7 +1039,7 @@ function CheckoutForm() {
 
         {/* Overzicht — op mobiel als inklapbaar blok bóven het formulier, zodat de
             bezorgkeuze en het kortingscode-veld vóór de betaalknop zichtbaar zijn. */}
-        <aside className="order-first lg:order-none lg:sticky lg:top-20 lg:h-fit">
+        <aside className="order-first min-w-0 lg:order-none lg:sticky lg:top-20 lg:h-fit">
           <button
             type="button"
             onClick={() => setSummaryOpen((v) => !v)}
@@ -932,6 +1103,7 @@ function CheckoutForm() {
                 ) : (
                   <DeliveryOptions
                     items={cart.lines.map((l) => ({ sku: l.sku, qty: l.qty }))}
+                    country={country}
                     value={delivery}
                     onChange={(m, s) => {
                       setDelivery(m);

@@ -3,7 +3,7 @@ import { put } from "@vercel/blob";
 import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { modelStylePrompt } from "@/lib/model-styling";
+import { modelStylePrompt, garmentSentence } from "@/lib/model-styling";
 import { getModelLearnings, modelLearningsBlock } from "@/lib/model-learnings";
 
 /**
@@ -20,20 +20,8 @@ const STUDIO = "Clean seamless studio background in a soft neutral light grey, s
 const POSE2 = "Full-length editorial pose, half-turned away looking back over his shoulder toward the camera, one hand relaxed at his side, a subtle confident natural smile.";
 const CONC = 4;
 
-function garmentFor(hg: string, s: { shirt: string; shoes: string }): string {
-  switch (hg) {
-    case "Pakken": return `Male model wearing THIS suit, complete with ${s.shirt} and ${s.shoes}.`;
-    case "Colberts": return `Male model wearing THIS blazer over ${s.shirt}, with matching trousers and ${s.shoes}.`;
-    case "Gilets": return `Male model wearing THIS waistcoat over ${s.shirt}, with matching trousers and ${s.shoes}. The lowest button of the waistcoat is left open.`;
-    case "Broeken": return `Male model wearing THESE trousers with a tucked ${s.shirt} and ${s.shoes}.`;
-    case "Overhemden": return "Male model wearing THIS shirt, neatly styled with trousers.";
-    case "Truien": case "Vesten": return "Male model wearing THIS knitwear, styled with neat trousers.";
-    case "Polo-shirts": return "Male model wearing THIS polo shirt, styled with neat trousers.";
-    case "T-Shirts": return "Male model wearing THIS t-shirt, styled casually with neat trousers.";
-    case "Jassen": return "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.";
-    default: return "Male model wearing THIS item, neatly styled with matching menswear.";
-  }
-}
+/* De zin over het kledingstuk komt uit lib/model-styling.ts (garmentSentence) —
+   dezelfde bron als de bulk-generator en de portal-hergenerator. */
 
 async function run(productImage: string, prompt: string, faceRef: string, apiKey: string): Promise<string | null> {
   const inputs: Record<string, unknown> = { product_image: productImage, prompt, output_format: "jpeg", aspect_ratio: "4:5" };
@@ -75,7 +63,9 @@ async function main() {
     order by p.handle`)).rows;
 
   console.log(`⏳ ${rows.length} tweede-poses hergenereren (zelfde man als pose 1)…`);
-  const learn = modelLearningsBlock(await getModelLearnings());
+  // Eén keer ophalen, per product uitrollen: de feedback die bij dít product
+  // hoort telt als correctie, de rest alleen als algemene huisregel.
+  const learnStore = await getModelLearnings();
   let done = 0, err = 0;
 
   async function worker(slice: Row[]) {
@@ -83,7 +73,8 @@ async function main() {
       if (!r.img || !r.m1) { err++; done++; continue; }
       try {
         const style = modelStylePrompt(r.hg, r.vcl, r.title, r.handle);
-        const prompt = `${garmentFor(r.hg, style)} ${POSE2} ${STUDIO}${learn}`;
+        const learn = modelLearningsBlock(learnStore, { handle: r.handle });
+        const prompt = `${garmentSentence(r.hg, style)} ${POSE2} ${STUDIO}${learn}`;
         const out = await run(r.img, prompt, r.m1, apiKey);
         if (!out) { err++; done++; continue; }
         const buf = Buffer.from(await (await fetch(out)).arrayBuffer());

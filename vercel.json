@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/media-sync",
+      "schedule": "40 3 * * *"
+    },
+    {
       "path": "/api/cron/sync-reviews",
       "schedule": "0 2 * * *"
     },
@@ -13,6 +17,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/sync-catalog",
+      "schedule": "20 */4 * * *"
+    },
+    {
       "path": "/api/cron/stock-check",
       "schedule": "0 */4 * * *"
     },
@@ -23,9 +31,54 @@
     {
       "path": "/api/cron/wallet-vesting-push",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/verify-possales",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/sandbox-verversen",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/punten-bijboeken",
+      "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/klantprofielen",
+      "schedule": "40 4 * * *"
+    },
+    {
+      "path": "/api/cron/klantprofielen",
+      "schedule": "0 7,12,17 * * *"
+    },
+    {
+      "path": "/api/cron/shopify-sync",
+      "schedule": "25 * * * *"
+    },
+    {
+      "path": "/api/cron/klantbronnen",
+      "schedule": "50 5 * * *"
+    },
+    {
+      "path": "/api/cron/heatmap-rollup",
+      "schedule": "50 2 * * *"
+    },
+    {
+      "path": "/api/cron/beeldgeneratie",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/verjaardagen",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/email-flows",
+      "schedule": "*/15 * * * *"
     }
   ],
   "regions": [
     "fra1"
-  ]
+  ],
+  "framework": "nextjs"
 }

@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { products } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
-import { modelStylePrompt, AL_IN_BEELD } from "@/lib/model-styling";
+import { modelStylePrompt, garmentSentence, frameFor, AL_IN_BEELD } from "@/lib/model-styling";
 import { getModelLearnings, modelLearningsBlock } from "@/lib/model-learnings";
 
 /**
@@ -58,21 +58,18 @@ const POSES_LOWER = [
   "Framed from the waist down, focus on the lower body and footwear, casual stance with feet slightly apart and weight shifted to one side.",
 ];
 
-type Frame = "full" | "upper" | "lower";
-type StyleParts = { shirt: string; shoes: string };
-const STYLE: Record<string, { garment: (s: StyleParts) => string; frame: Frame }> = {
-  Pakken: { garment: (s) => `Male model wearing THIS suit, complete with ${s.shirt} and ${s.shoes}.`, frame: "full" },
-  Colberts: { garment: (s) => `Male model wearing THIS blazer over ${s.shirt}, with matching trousers and ${s.shoes}.`, frame: "full" },
-  Gilets: { garment: (s) => `Male model wearing THIS waistcoat over ${s.shirt}, with matching trousers and ${s.shoes}. The lowest button of the waistcoat is left open.`, frame: "full" },
-  Jassen: { garment: () => "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.", frame: "full" },
-  Broeken: { garment: (s) => `Male model wearing THESE trousers with a tucked ${s.shirt} and ${s.shoes}.`, frame: "full" },
-  Overhemden: { garment: () => "Male model wearing THIS shirt, neatly styled with trousers.", frame: "upper" },
-  Truien: { garment: () => "Male model wearing THIS knitwear, styled with neat trousers.", frame: "upper" },
-  Vesten: { garment: () => "Male model wearing THIS cardigan/vest over a shirt, styled with neat trousers.", frame: "upper" },
-  "Polo-shirts": { garment: () => "Male model wearing THIS polo shirt, styled with neat trousers.", frame: "upper" },
-  "T-Shirts": { garment: () => "Male model wearing THIS t-shirt, styled casually with neat trousers.", frame: "upper" },
-  Schoenen: { garment: () => "Male model wearing THESE shoes with well-fitted trousers.", frame: "lower" },
-};
+/**
+ * Welke hoofdgroepen dit script verwerkt. De ZIN over het kledingstuk en het
+ * kader komen uit lib/model-styling.ts (garmentSentence / frameFor) — die stond
+ * hier vroeger apart en liep uiteen met de hergenerator in de portal: daar kende
+ * men wél schoenen en strikken, hier niet, en bij Overhemden gooiden allebei de
+ * berekende styling weg zodat een smokingoverhemd als los overhemd werd
+ * beschreven. Deze lijst bepaalt dus alleen nog wát er gegenereerd wordt.
+ */
+const CATEGORIEEN = [
+  "Pakken", "Colberts", "Gilets", "Jassen", "Broeken",
+  "Overhemden", "Truien", "Vesten", "Polo-shirts", "T-Shirts", "Schoenen",
+] as const;
 
 /* Drift-slot: AL_IN_BEELD (waarop de site shop-de-look-suggesties kleur-
    vergrendelt) moet exact beschrijven wat deze STYLE-prompts tonen. We renderen
@@ -91,8 +88,10 @@ const STYLE: Record<string, { garment: (s: StyleParts) => string; frame: Frame }
     "Polo-shirts": "shirt",
     "T-Shirts": "shirt",
   };
-  for (const [cat, def] of Object.entries(STYLE)) {
-    const txt = def.garment({ shirt: "shirt", shoes: "shoes" }).toLowerCase();
+  // Marker-woorden i.p.v. echte styling, zodat we alleen de ROLLEN vergelijken.
+  const proef = { shirt: "shirt", shoes: "shoes", trousers: "trousers", neckwear: "", blackTie: false };
+  for (const cat of CATEGORIEEN) {
+    const txt = garmentSentence(cat, proef).toLowerCase();
     const zichtbaar = Object.entries(ROLE_WORDS)
       .filter(([rol, re]) => re.test(txt) && OWN_WORD[cat] !== rol)
       .map(([rol]) => rol)
@@ -112,11 +111,11 @@ const STYLE: Record<string, { garment: (s: StyleParts) => string; frame: Frame }
  * wit kraag-overhemd; volgens model-styling.ts) + een relaxte pose + vaste studio.
  */
 function buildPrompt(cat: string, i: number, ctx: { color?: string | null; title: string; handle: string }): string | null {
-  const s = STYLE[cat];
-  if (!s) return null;
+  if (!(CATEGORIEEN as readonly string[]).includes(cat)) return null;
   const style = modelStylePrompt(cat, ctx.color, ctx.title, ctx.handle);
-  const pool = s.frame === "full" ? POSES_FULL : s.frame === "upper" ? POSES_UPPER : POSES_LOWER;
-  return `${s.garment(style)} ${pool[i % pool.length]} ${STUDIO}`;
+  const frame = frameFor(cat);
+  const pool = frame === "full" ? POSES_FULL : frame === "upper" ? POSES_UPPER : POSES_LOWER;
+  return `${garmentSentence(cat, style)} ${pool[i % pool.length]} ${STUDIO}`;
 }
 
 /** Shopify-CDN-URL → master zonder width/height-cap (scherpste FASHN-input). */
@@ -232,7 +231,7 @@ async function main() {
   const onlyHg = redoExisting ? "" : (process.argv[4] || "").trim(); // optioneel: beperk tot hoofdgroep(en), komma-gescheiden
   const db = getDb();
 
-  const cats = onlyHg ? onlyHg.split(",").map((s) => s.trim()).filter(Boolean) : Object.keys(STYLE);
+  const cats = onlyHg ? onlyHg.split(",").map((s) => s.trim()).filter(Boolean) : [...CATEGORIEEN];
   const rows = await db.execute<{ id: string; handle: string; title: string; hg: string; vcl: string | null; img: string }>(sql`
     select p.id, p.handle, p.title, p.attributes->>'hoofdgroep_omschrijving' hg, p.variant_color_label vcl,
       (select pi.url from product_images pi where pi.product_id=p.id and pi.source = '' order by pi.position asc limit 1) img
@@ -254,8 +253,10 @@ async function main() {
   `);
   console.log(`⏳ ${rows.rows.length} producten te verwerken (product-to-model)…`);
 
-  // Geleerde model-smaak (goed-/afkeuringen uit de portal Modellen-studio).
-  const learnBlock = modelLearningsBlock(await getModelLearnings());
+  // Geleerde smaak (goed-/afkeuringen uit de portal Modellen-studio). Eén keer
+  // ophalen, per product uitrollen: feedback op dít product telt als correctie,
+  // de rest alleen als algemene huisregel.
+  const learnStore = await getModelLearnings();
 
   let done = 0, err = 0, seen = 0, skipped = 0;
   const rowsArr = rows.rows;
@@ -264,7 +265,7 @@ async function main() {
     try {
       const prompt = buildPrompt(r.hg, i, { color: r.vcl, title: r.title, handle: r.handle });
       if (!prompt || !r.img) { skipped++; return; }
-      const out = await runProductToModel(r.img, prompt + learnBlock, apiKey!);
+      const out = await runProductToModel(r.img, prompt + modelLearningsBlock(learnStore, { handle: r.handle }), apiKey!);
       if (!out) { err++; return; }
       // FASHN levert native 4:5 (aspect_ratio); padTo45 is dan een no-op.
       const u = await toBlob(out, `ai-models/${r.handle}-model.jpg`, blobToken!);

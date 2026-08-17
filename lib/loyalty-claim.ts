@@ -2,7 +2,7 @@
  * lib/loyalty-claim.ts
  *
  * Anonieme-punten-claim-engine. Een kassabon (zonder account) of een gast-weborder
- * levert spaarpunten op; die worden bijgeschreven zodra de klant een account heeft.
+ * levert punten op; die worden bijgeschreven zodra de klant een account heeft.
  * Geclaimde punten landen in het ACCOUNT-grootboek (loyaltyEvents in Neon) — de
  * bron-van-waarheid voor het account. Idempotent op refType+refId, dus dubbel
  * claimen (dubbelklik, opnieuw inloggen) schrijft nooit dubbel bij.
@@ -11,16 +11,37 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, loyaltyEvents, vouchers } from "@/db/schema";
 import { pushPassUpdate } from "@/lib/apple-wallet-push";
+import { pushGoogleWalletForCustomer } from "@/lib/google-wallet-push";
 import { getPosSaleCore } from "@/lib/pos-sales-core";
 import { verifyReceiptToken, receiptSecretConfigured } from "@/lib/receipt-token";
 import { getSettings } from "@/lib/settings";
 import { formatEuro } from "@/lib/format";
 
-const POINTS_PER_EURO = 1; // pilot — zelfde regel als de kassa (pointsForAmount)
+/** Standaard-spaarsnelheid als de instellingen onbereikbaar zijn: 1 punt per euro. */
+export const DEFAULT_POINTS_PER_EURO = 1;
 
-/** 1 punt per hele euro. */
-export function pointsForCents(cents: number): number {
-  return Math.max(0, Math.floor((Number(cents) || 0) / 100)) * POINTS_PER_EURO;
+/**
+ * Punten voor een bedrag, bij een GEGEVEN spaarsnelheid. Puur, zodat een rapport
+ * of een backfill dezelfde rekenregel kan spiegelen zonder de instellingen nóg
+ * een keer te lezen. Altijd hele euro's naar beneden.
+ */
+export function pointsForCents(cents: number, pointsPerEuro: number = DEFAULT_POINTS_PER_EURO): number {
+  const rate = Number(pointsPerEuro) > 0 ? Number(pointsPerEuro) : DEFAULT_POINTS_PER_EURO;
+  // Ook de uitkomst afronden naar beneden: bij een halve punt per euro is 12,5
+  // geen geldige waarde voor een integer-kolom, en naar boven afronden zou de
+  // klant punten geven die hij niet besteed heeft.
+  return Math.floor(Math.max(0, Math.floor((Number(cents) || 0) / 100)) * rate);
+}
+
+/** De spaarsnelheid uit de instellingen (in de tool aanpasbaar, niet in code). */
+export async function pointsPerEuro(): Promise<number> {
+  const v = Number((await getSettings()).loyaltyConfig?.pointsPerEuro);
+  return v > 0 ? v : DEFAULT_POINTS_PER_EURO;
+}
+
+/** Punten voor een bedrag tegen de ACTUELE spaarsnelheid. */
+export async function earnedPointsFor(cents: number): Promise<number> {
+  return pointsForCents(cents, await pointsPerEuro());
 }
 
 export type ClaimResult = {
@@ -69,6 +90,46 @@ export async function pendingBalance(customerId: string): Promise<number> {
   return row?.total || 0;
 }
 
+export type LoyaltyPassSummary = {
+  /** Besteedbaar (gevest) saldo — het getal dat aan de kassa telt. */
+  redeemable: number;
+  /** Nog niet besteedbaar: punten van een recente aankoop. */
+  pending: number;
+  /** Wanneer de eerstvolgende punten besteedbaar worden (null = niets in behandeling). */
+  nextVestsAt: Date | null;
+  /** Wanneer de PASINHOUD voor het laatst veranderde — voor Last-Modified/304. */
+  lastChangedAt: Date | null;
+};
+
+/**
+ * Alles wat de Apple-Wallet-pas nodig heeft in ÉÉN query. De pas toonde alleen het
+ * geveste saldo, dus wie net gekocht had zag "0 punten" terwijl z'n punten wél
+ * geteld waren — met een vesting van 21 dagen is dat drie weken lang.
+ *
+ * `lastChangedAt` telt bewust TWEE momenten mee: het aanmaken van een event (nieuwe
+ * punten in behandeling) én het moment van vesten. Alleen op vests_at kijken gaf een
+ * 304 op een pas waarvan het "in behandeling"-getal net was gewijzigd.
+ */
+export async function loyaltyPassSummary(customerId: string): Promise<LoyaltyPassSummary> {
+  const db = getDb();
+  const gevest = sql`(${loyaltyEvents.vestsAt} is null or ${loyaltyEvents.vestsAt} <= now())`;
+  const [row] = await db
+    .select({
+      redeemable: sql<number>`coalesce(sum(case when ${gevest} then ${loyaltyEvents.points} else 0 end), 0)::int`,
+      pending: sql<number>`coalesce(sum(case when not ${gevest} then ${loyaltyEvents.points} else 0 end), 0)::int`,
+      nextVestsAt: sql<string | null>`min(case when not ${gevest} then ${loyaltyEvents.vestsAt} end)`,
+      lastChangedAt: sql<string | null>`max(greatest(${loyaltyEvents.createdAt}, case when ${gevest} then coalesce(${loyaltyEvents.vestsAt}, ${loyaltyEvents.createdAt}) else ${loyaltyEvents.createdAt} end))`,
+    })
+    .from(loyaltyEvents)
+    .where(eq(loyaltyEvents.customerId, customerId));
+  return {
+    redeemable: Math.max(0, Number(row?.redeemable) || 0),
+    pending: Math.max(0, Number(row?.pending) || 0),
+    nextVestsAt: row?.nextVestsAt ? new Date(row.nextVestsAt) : null,
+    lastChangedAt: row?.lastChangedAt ? new Date(row.lastChangedAt) : null,
+  };
+}
+
 /** Unieke inwissel-voucher-code (PUNT-XXXXXXXX, zonder verwarrende tekens). */
 function randVoucherCode(): string {
   const ab = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -80,7 +141,7 @@ function randVoucherCode(): string {
 export type RedeemResult = { ok: boolean; code?: string; valueCents?: number; points?: number; newBalance?: number; error?: string };
 
 /**
- * Wissel spaarpunten in voor een GENTS-tegoedbon — VOLLEDIG Neon-native, geen SRS.
+ * Wissel punten in voor een GENTS-tegoedbon — VOLLEDIG Neon-native, geen SRS.
  * Vervangt de oude SRS CreateFromLoyaltyPoints-flow. Boekt de punten af via een negatief
  * loyalty_events-event én maakt een vaste-bedrag-voucher aan (aan deze klant). Rekent op
  * het BESTEEDBARE (gevest) saldo; koers/minimum/stap/looptijd uit de settings-store.
@@ -136,7 +197,7 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     await db.insert(vouchers).values({
       code,
       customerId,
-      description: `Ingewisseld: ${pts} spaarpunten`,
+      description: `Ingewisseld: ${pts} punten`,
       kind: "amount",
       valueCents,
       status: "active",
@@ -145,6 +206,7 @@ export async function redeemPointsForVoucher(customerId: string, points: number)
     });
     // Apple-Wallet pas verversen (best-effort, env-gated → no-op zonder certs).
     await pushPassUpdate(customerId).catch(() => 0);
+    await pushGoogleWalletForCustomer(customerId).catch(() => false);
     return { ok: true, code, valueCents, points: pts, newBalance: Number(dec[0].balance) || 0 };
   } catch {
     // Cache terug + het negatieve ledger-event verwijderen → cache én grootboek blijven
@@ -194,43 +256,63 @@ async function creditOnce(customerId: string, points: number, reason: string, re
       .set({ loyaltyPoints: sql`${customers.loyaltyPoints} + ${points}`, updatedAt: new Date() })
       .where(eq(customers.id, customerId));
     await pushPassUpdate(customerId).catch(() => 0);
+    await pushGoogleWalletForCustomer(customerId).catch(() => false);
   }
   return { ok: true, points: inserted.length ? points : 0, alreadyClaimed: !inserted.length, balance: await ledgerBalance(customerId) };
 }
 
-/** Verzilver de spaarpunten van een ANONIEME kassabon naar een account. */
-export async function claimReceiptPoints(input: { saleId: string; token: string; customerId: string }): Promise<ClaimResult> {
+/**
+ * Eenmalige ACTIE-bonus (maatprofiel, Wallet-pas, compleet profiel): geen
+ * aankoop, dus geen vesting — direct besteedbaar. refId = het klant-id, zodat de
+ * unieke index (ref_type, ref_id) hem hoogstens één keer per klant doorlaat,
+ * ook bij twee gelijktijdige verzoeken.
+ */
+export async function creditBonusOnce(customerId: string, points: number, reason: string, refType: string): Promise<ClaimResult> {
+  const cid = String(customerId || "").trim();
+  if (!cid) return { ok: false, error: "Geen account." };
+  return creditOnce(cid, points, reason, refType, cid, null);
+}
+
+/** Verzilver de punten van een ANONIEME kassabon naar een account. */
+export async function claimReceiptPoints(input: { saleId: string; token: string; customerId: string; email?: string }): Promise<ClaimResult> {
   const saleId = String(input.saleId || "").trim();
   const customerId = String(input.customerId || "").trim();
+  const myEmail = String(input.email || "").trim().toLowerCase();
   if (!saleId || !customerId) return { ok: false, error: "Onvolledig verzoek." };
   // Fail closed: zonder een eigen bon-secret is het token te vervalsen → geen punten.
   if (!receiptSecretConfigured()) return { ok: false, error: "Punten verzilveren is nog niet ingeschakeld." };
   if (!verifyReceiptToken(saleId, input.token)) return { ok: false, error: "Ongeldige bon-link." };
   const sale = await getPosSaleCore(saleId);
   if (!sale) return { ok: false, error: "Bon niet gevonden." };
-  const s = sale as { cancelled?: boolean; customerId?: string; total?: number };
+  const s = sale as { cancelled?: boolean; customerId?: string; customerEmail?: string; total?: number };
   if (s.cancelled) return { ok: false, error: "Deze bon is geannuleerd." };
-  if (String(s.customerId || "") && String(s.customerId) !== customerId) {
+  /* Van wie is deze bon? Het customerId-veld is GEEN betrouwbaar account-id: de kassa
+     zet er het gents.nl-account (uuid) in óf een SRS-klantnummer, afhankelijk van in
+     welk bestand de verkoper de klant opzocht. Puur op dat veld vergelijken zei tegen
+     de rechtmatige eigenaar van een op SRS-nummer gekoppelde bon "hoort bij een andere
+     klant". Het e-mailadres op de bon is de brug tussen beide nummerreeksen. */
+  const saleEmail = String(s.customerEmail || "").trim().toLowerCase();
+  const linked = String(s.customerId || "").trim();
+  const isMine = (!!linked && linked === customerId) || (!!saleEmail && !!myEmail && saleEmail === myEmail);
+  if (linked && !isMine) {
     return { ok: false, error: "Deze bon hoort bij een andere klant." };
   }
-  /* Hoort de bon al bij DEZE klant, dan is 't een kassa-verkoop op naam en heeft de
-     kassa de punten al toegekend — in het loyalty-grootboek van storegents
-     (api/store/pos-sale.js: earnLoyalty bij elke sale.customerId). Hier nogmaals
-     boeken levert dezelfde euro twee keer punten op, in twee verschillende
-     grootboeken. `creditOnce` is namelijk idempotent BINNEN Neon, en weet niets van
-     wat de kassa in de blob deed.
-     Zolang die twee grootboeken niet samengevoegd zijn, is niet-boeken het enige
-     juiste antwoord. De QR-claim op de bon blijft wél werken waarvoor hij bedoeld is:
-     een ANONIEME bon aan een account koppelen. */
-  if (String(s.customerId || "") === customerId) {
-    return {
-      ok: true,
-      points: 0,
-      alreadyClaimed: true,
-      balance: await ledgerBalance(customerId),
-    };
+  /* Draagt de bon al een klant, dan heeft de kassa er zelf punten voor geboekt —
+     sinds het samenvoegen in HÉTZELFDE grootboek, met refId "<klant>|<bon>|<reden>".
+     Vroeger moesten we hier bail-outen omdat die punten in een ander grootboek
+     landden en niet te zien waren; nu kunnen we gewoon kijken of er al iets voor
+     deze bon staat. Zo levert scannen niets dubbel op, en krijgt een klant van wie
+     de kassa de punten NIET kon boeken ze alsnog. */
+  const db = getDb();
+  const [alGeboekt] = await db
+    .select({ id: loyaltyEvents.id })
+    .from(loyaltyEvents)
+    .where(and(eq(loyaltyEvents.refType, "pos_sale"), sql`${loyaltyEvents.refId} like ${`%|${saleId}|%`}`))
+    .limit(1);
+  if (alGeboekt) {
+    return { ok: true, points: 0, alreadyClaimed: true, balance: await ledgerBalance(customerId) };
   }
-  const points = pointsForCents(Math.round((Number(s.total) || 0) * 100));
+  const points = await earnedPointsFor(Math.round((Number(s.total) || 0) * 100));
   const saleDate = (sale as { createdAt?: string }).createdAt ? new Date(String((sale as { createdAt?: string }).createdAt)) : null;
   return creditOnce(customerId, points, "Kassabon gekoppeld", "pos_receipt", saleId, await vestsAtFrom(saleDate));
 }
@@ -246,25 +328,46 @@ export async function creditOrderLoyalty(
 ): Promise<ClaimResult> {
   const paidish = ["paid", "shipped", "ready_pickup", "delivered"];
   if (!paidish.includes(String(order.status))) return { ok: false, error: "Order nog niet betaald." };
-  const points = pointsForCents(order.totalCents);
+  const points = await earnedPointsFor(order.totalCents);
   // Vesting vanaf de betaaldatum (betaald + N dagen); val bij ontbrekende paidAt terug
   // op de orderdatum (niet nu) zodat oude/geïmporteerde orders niet onterecht weer
   // een vol venster "in behandeling" gaan.
-  return creditOnce(customerId, points, "Weborder gekoppeld", "web_order", order.id, await vestsAtFrom(order.paidAt ?? order.createdAt ?? null));
+  const vestsAt = await vestsAtFrom(order.paidAt ?? order.createdAt ?? null);
+  const basis = await creditOnce(customerId, points, "Weborder gekoppeld", "web_order", order.id, vestsAt);
+
+  /* Lopende puntenacties ("koop dit, krijg extra punten") erbovenop. Zelfde
+     vestingdatum als de gewone punten: ze hangen aan dezelfde aankoop, en die
+     kan teruggestuurd worden. Nooit fataal — een misgelopen actie mag de
+     normale punten niet kosten. */
+  try {
+    const { actiePuntenVoorOrder } = await import("@/lib/punten-acties");
+    for (const t of await actiePuntenVoorOrder(order.id, order.paidAt ?? order.createdAt ?? null)) {
+      await creditOnce(customerId, t.punten, `Actie: ${t.naam}`, "punten_actie", `${order.id}:${t.slug}`, vestsAt);
+    }
+  } catch (e) {
+    console.warn("[loyalty] puntenacties overgeslagen:", e instanceof Error ? e.message : e);
+  }
+  return basis;
 }
 
 /**
  * Draai (een deel van) de order-punten terug bij een retour — idempotent per retour
  * (refType 'loyalty_reversal', refId = retour-id). De punten staan normaal nog "in
  * behandeling" (binnen het vesting-venster), dus dit geeft geen negatief saldo.
- * Reverseert pointsForCents(itemsCents) — de waarde van de geretourneerde artikelen.
+ * Reverseert de puntwaarde van de geretourneerde artikelen.
+ *
+ * Rekent met de spaarsnelheid van NU, niet die van het moment van kopen. Bij een
+ * verlaagde snelheid draait dat te weinig terug; bij een verhoogde te veel — maar
+ * dat laatste vangt de cap hieronder al af (nooit meer dan er voor deze order is
+ * bijgeschreven). Een snelheid per order bewaren zou dat exact maken; zolang de
+ * snelheid zelden verandert weegt dat niet op tegen een extra kolom.
  */
 export async function reverseOrderLoyalty(customerId: string, orderId: string, basisCents: number, returnId: string): Promise<void> {
   const cid = String(customerId || "").trim();
   const oid = String(orderId || "").trim();
   const rid = String(returnId || "").trim();
   if (!cid || !oid || !rid) return;
-  const requested = pointsForCents(basisCents);
+  const requested = await earnedPointsFor(basisCents);
   if (requested <= 0) return;
   const db = getDb();
   const refKey = `${oid}:${rid}`; // per order + per retour → idempotent én optelbaar per order
@@ -274,13 +377,24 @@ export async function reverseOrderLoyalty(customerId: string, orderId: string, b
     .where(and(eq(loyaltyEvents.refType, "loyalty_reversal"), eq(loyaltyEvents.refId, refKey)))
     .limit(1);
   if (dup[0]) return;
-  // Nooit méér terugdraaien dan voor déze order is gecrediteerd (na eerdere reversals).
-  // Lost de grondslag-mismatch op: credit = pointsForCents(totalCents, net), reversal-
-  // basis = itemsCents (bruto) → cap voorkomt een negatief saldo dat in andere orders bijt.
+  /* Nooit méér terugdraaien dan voor déze order is gecrediteerd (na eerdere reversals).
+     Lost de grondslag-mismatch op: credit = pointsForCents(totalCents, net), reversal-
+     basis = itemsCents (bruto) → cap voorkomt een negatief saldo dat in andere orders bijt.
+     De actie-punten van deze order tellen mee in het plafond: wie het artikel
+     terugstuurt waarmee hij de actie haalde, mag die bonus ook kwijtraken —
+     anders is "koop dit, krijg extra punten, stuur terug" gratis geld. */
   const [cr] = await db
     .select({ total: sql<number>`coalesce(sum(${loyaltyEvents.points}), 0)::int` })
     .from(loyaltyEvents)
-    .where(and(eq(loyaltyEvents.customerId, cid), eq(loyaltyEvents.refType, "web_order"), eq(loyaltyEvents.refId, oid)));
+    .where(
+      and(
+        eq(loyaltyEvents.customerId, cid),
+        sql`(
+          (${loyaltyEvents.refType} = 'web_order' and ${loyaltyEvents.refId} = ${oid})
+          or (${loyaltyEvents.refType} = 'punten_actie' and ${loyaltyEvents.refId} like ${oid + ":%"})
+        )`,
+      ),
+    );
   const credited = Math.max(0, cr?.total || 0);
   const [rv] = await db
     .select({ total: sql<number>`coalesce(sum(${loyaltyEvents.points}), 0)::int` })
@@ -300,5 +414,6 @@ export async function reverseOrderLoyalty(customerId: string, orderId: string, b
       .set({ loyaltyPoints: sql`greatest(0, ${customers.loyaltyPoints} - ${toReverse})`, updatedAt: new Date() })
       .where(eq(customers.id, cid));
     await pushPassUpdate(cid).catch(() => 0);
+    await pushGoogleWalletForCustomer(cid).catch(() => false);
   }
 }

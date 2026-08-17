@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
-import { getStores, type Store } from "@/lib/stores";
+import { getStores, MAX_MY_STORES, type Store } from "@/lib/stores";
 import { getSessionCustomer } from "@/lib/account";
+import { BRANCH_CITY } from "@/lib/fulfillment-config";
 
 /**
  * "Mijn winkel" — de klant kiest één vaste winkel en ziet daarna overal meteen
@@ -32,22 +33,91 @@ export function storeByName(name: string): Store | null {
   return getStores().find((s) => s.title.toLowerCase() === n) ?? null;
 }
 
-/** De gekozen winkel voor dit verzoek (cookie → account → geen). */
-export async function getMyStore(): Promise<Store | null> {
+/**
+ * Filiaalnummer van een winkel — DE join-sleutel naar de voorraad (srs_stock
+ * draagt branch_id, geen pageHandle). Loopt via de stad omdat content/stores.json
+ * het filiaalnummer niet kent en BRANCH_CITY de enige plek is waar die koppeling
+ * staat. Null = geen filiaal bekend (dan kun je er ook niet op filteren).
+ */
+export function branchIdForStore(store: Store): string | null {
+  const city = store.city.trim().toLowerCase();
+  const hit = Object.entries(BRANCH_CITY).find(([, c]) => c.toLowerCase() === city);
+  return hit ? hit[0] : null;
+}
+
+/**
+ * Winkels waar je op voorraad kunt filteren: alleen die met een filiaalnummer.
+ * Een winkel zonder nummer zou een leeg resultaat geven zonder uit te leggen
+ * waarom — dus bieden we 'm niet aan.
+ */
+export function storesWithBranch(): { store: Store; branchId: string }[] {
+  return getStores()
+    .map((store) => ({ store, branchId: branchIdForStore(store) }))
+    .filter((x): x is { store: Store; branchId: string } => Boolean(x.branchId));
+}
+
+export { MAX_MY_STORES } from "@/lib/stores";
+
+/** Handles uit een cookie/lijst → bestaande winkels, ontdubbeld en begrensd. */
+export function storesFromHandles(raw: unknown): Store[] {
+  const list = Array.isArray(raw)
+    ? raw.map((v) => String(v ?? ""))
+    : String(raw ?? "").split(",");
+  const out: Store[] = [];
+  for (const h of list) {
+    const store = storeByPageHandle(h);
+    // Onbekende of dubbele handle stil overslaan: een oude cookie mag de site
+    // nooit stukmaken.
+    if (store && !out.some((s) => s.pageHandle === store.pageHandle)) out.push(store);
+    if (out.length >= MAX_MY_STORES) break;
+  }
+  return out;
+}
+
+/** De winkels uit een klantprofiel (nieuw veld, met terugval op het oude). */
+export function storesFromPreferences(prefs: unknown): Store[] {
+  const p = (prefs ?? {}) as { favoriteStores?: unknown; favoriteStore?: unknown };
+  const list = storesFromHandles(p.favoriteStores);
+  return list.length ? list : storesFromHandles(p.favoriteStore);
+}
+
+/**
+ * Alleen de cookie, géén databasevraag. Voor plekken die op ÉLKE pagina renderen
+ * (de kop): getMyStores() valt terug op het profiel en dat is een query per
+ * paginaweergave. De cookie wordt gezet zodra de klant hier winkels kiest, dus
+ * op dit apparaat is dit hetzelfde antwoord.
+ */
+export async function getMyStoresFromCookie(): Promise<Store[]> {
   try {
-    const fromCookie = (await cookies()).get(STORE_COOKIE)?.value || "";
-    const cookieStore = storeByPageHandle(fromCookie);
-    if (cookieStore) return cookieStore;
+    return storesFromHandles((await cookies()).get(STORE_COOKIE)?.value || "");
+  } catch {
+    return [];
+  }
+}
+
+/** De gekozen winkels voor dit verzoek (cookie → account → geen). */
+export async function getMyStores(): Promise<Store[]> {
+  try {
+    const fromCookie = storesFromHandles((await cookies()).get(STORE_COOKIE)?.value || "");
+    if (fromCookie.length) return fromCookie;
   } catch {
     /* buiten een request-context (scripts) → geen voorkeur */
   }
   try {
     const customer = await getSessionCustomer();
-    const prefs = (customer?.preferences ?? {}) as { favoriteStore?: unknown };
-    return storeByPageHandle(String(prefs.favoriteStore || ""));
+    return storesFromPreferences(customer?.preferences);
   } catch {
-    return null;
+    return [];
   }
+}
+
+/** De eerste gekozen winkel — voor plekken die er maar één kunnen tonen. */
+export async function getMyStore(): Promise<Store | null> {
+  return (await getMyStores())[0] ?? null;
+}
+
+export async function getMyStoreFromCookie(): Promise<Store | null> {
+  return (await getMyStoresFromCookie())[0] ?? null;
 }
 
 export type MyStoreStock = {

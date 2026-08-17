@@ -6,7 +6,7 @@ import { reserveOrderStock, releaseOrderHolds } from "@/lib/store-reserve";
 import { availableInStore } from "@/lib/store-core";
 import type { StockChannel } from "@/lib/fulfillment-config";
 import { createOrder, markRegisterPaid, confirmAndPlan, paymentRefForOrderNumber, type CheckoutContact, type CheckoutItem } from "@/lib/orders";
-import { getReservationHoldDays } from "@/lib/reservation-config";
+import { getReservationHoldMinutes } from "@/lib/reservation-config";
 
 /**
  * Reserveringen — gents.nl-native (SRS = WMS, klanten in gents.nl). Een reservering
@@ -16,7 +16,7 @@ import { getReservationHoldDays } from "@/lib/reservation-config";
  */
 
 // Hold-/geldigheidsduur is instelbaar via de ReserveringConfig-kaart → zie
-// getReservationHoldDays() (default 7 dagen).
+// getReservationHoldMinutes() (default 2 uur).
 // web_stock_holds.order_id is een uuid-kolom (geen FK) — de reservering-uuid zelf
 // is de hold-sleutel. Een hold = een hold; anti-oversell telt 'm correct mee.
 export const reservationHoldRef = (id: string) => id;
@@ -55,7 +55,7 @@ export async function createReservation(input: {
   const keys = [...new Set(lines.map((l) => l.stockKey))];
   const avail = await availableInStore(location, keys, { channel: input.channel === "store" ? "store" : "web" });
 
-  const holdTtlMin = (await getReservationHoldDays()) * 24 * 60; // instelbaar (default 7 dagen)
+  const holdTtlMin = await getReservationHoldMinutes(); // instelbaar (default 2 uur)
   const validUntil = new Date(Date.now() + holdTtlMin * 60_000);
   const payToken = randomBytes(24).toString("base64url");
 
@@ -69,7 +69,7 @@ export async function createReservation(input: {
     lines, validUntil, payToken, createdBy: input.createdBy || "",
   }).returning();
 
-  // HARDE hold (anti-oversell): claim de stukken in de winkel voor 7 dagen.
+  // HARDE hold (anti-oversell): claim de stukken in de winkel voor de holdduur.
   const requests = lines.map((l) => ({ location, stockKey: l.stockKey, qty: l.qty, gross: Math.max(0, Number(avail.get(l.stockKey) || 0)) }));
   const hold = await reserveOrderStock(reservationHoldRef(row.id), requests, holdTtlMin);
   if (!hold.ok) {

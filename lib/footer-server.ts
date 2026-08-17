@@ -1,3 +1,4 @@
+import { CLUB_NAME, CLUB_PATH } from "@/lib/club";
 import { getContentDoc } from "@/lib/content-store";
 
 /**
@@ -49,6 +50,7 @@ const DEFAULT_COLS: FooterCol[] = [
   {
     title: "GENTS",
     links: [
+      { label: CLUB_NAME, href: CLUB_PATH },
       { label: "Over GENTS", href: "/pages/over-gents" },
       { label: "Etiquette & dresscodes", href: "/pages/etiquette" },
       { label: "Trouwen met GENTS", href: "/pages/trouwen-met-gents" },

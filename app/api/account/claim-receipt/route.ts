@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * POST /api/account/claim-receipt — verzilver de spaarpunten van een anonieme
+ * POST /api/account/claim-receipt — verzilver de punten van een anonieme
  * kassabon naar het ingelogde account. Vereist een sessie (de bon-token alleen
  * verzilvert niet — je moet ingelogd zijn, zodat de punten naar een echt account
  * gaan). Idempotent.
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     saleId: String(b?.saleId || "").trim(),
     token: String(b?.token || "").trim(),
     customerId: customer.id,
+    email: customer.email,
   });
   return NextResponse.json(res, { status: res.ok ? 200 : 400 });
 }

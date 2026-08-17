@@ -15,6 +15,7 @@ import { Accordion } from "@/components/pdp/accordion";
 import { SizeMatrix } from "@/components/pdp/size-matrix";
 import { SizeFinderButton } from "@/components/pdp/size-finder-modal";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
+import { Gallery } from "@/components/pdp/gallery";
 
 const ROLE_LABEL: Record<SuitRole, string> = {
   colbert: "Colbert",
@@ -33,10 +34,9 @@ type Props = {
   /** Server-belofte uit de allocatie-engine (estimateDelivery) — net als de PDP. */
   deliveryPromise?: string | null;
   deliveryNote?: string | null;
-  cutoffHour?: number;
 };
 
-export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }: Props) {
+export function SuitBuilder({ suit, deliveryPromise, deliveryNote }: Props) {
   const cart = useCart();
   const t = useT();
   const colbert = suit.pieces.find((p) => p.role === "colbert")!;
@@ -44,6 +44,7 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
   const gilet = suit.pieces.find((p) => p.role === "gilet") ?? null;
 
   const pakTitle = colbert.title.replace(/^colbert[\s-]*/i, "").trim() || colbert.title;
+
   const [withGilet, setWithGilet] = useState(false);
   // Maat PER ONDERDEEL (de USP) — bv. een groter colbert met een kleinere pantalon.
   // We bewaren de werkelijke maat (bv. "50") per rol, net als op de productpagina.
@@ -55,6 +56,22 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
     () => [colbert, broek, ...(withGilet && gilet ? [gilet] : [])],
     [colbert, broek, gilet, withGilet]
   );
+
+  // De galerij toont het PAK: de AI-media van het colbert laat het complete pak op
+  // een model zien, daarna de echte packshots van de gekozen onderdelen. Die media
+  // lag er al (elk mix&match-colbert heeft een sfeerbeeld) maar werd hier nooit
+  // opgevraagd — de samensteller toonde alleen een platte packshot.
+  const galleryImages = useMemo(() => {
+    const m = colbert.media;
+    const uit: { url: string; alt: string; contain?: boolean }[] = [];
+    if (m.modelImage) uit.push({ url: m.modelImage, alt: `${pakTitle} — op model`, contain: true });
+    if (m.modelImage2) uit.push({ url: m.modelImage2, alt: `${pakTitle} — op locatie`, contain: true });
+    if (m.lifestyleImage) uit.push({ url: m.lifestyleImage, alt: `${pakTitle} — sfeerbeeld` });
+    for (const p of activePieces) {
+      if (p.image) uit.push({ url: p.image, alt: `${p.title} — ${ROLE_LABEL[p.role]}` });
+    }
+    return uit;
+  }, [colbert.media, pakTitle, activePieces]);
 
   // Val terug op Colbert als de actieve tab (gilet) verdwijnt bij 2-delig.
   useEffect(() => {
@@ -157,18 +174,17 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
 
   return (
     <div className="grid gap-10 lg:grid-cols-2">
-      {/* Visueel: de onderdelen */}
+      {/* Visueel: het pak op een model, dan de losse onderdelen */}
       <div>
-        <div className="grid grid-cols-2 gap-3">
-          {activePieces.map((p, i) => (
-            <div
-              key={p.role}
-              className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface"
-            >
+        <Gallery images={galleryImages} title={pakTitle} video={colbert.media.video || null} />
+        {/* De onderdelen als strip eronder: laat zien wát je samenstelt. */}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {activePieces.map((p) => (
+            <div key={p.role} className="relative aspect-[4/5] overflow-hidden rounded-card bg-surface">
               {p.image ? (
-                <Image src={p.image} alt={p.title} fill sizes="(max-width: 1024px) 50vw, 25vw" className="object-cover" priority={i === 0} />
+                <Image src={p.image} alt={p.title} fill sizes="(max-width: 1024px) 33vw, 16vw" className="object-cover" />
               ) : null}
-              <span className="absolute left-2 top-2 bg-canvas/90 px-2 py-0.5 font-sans text-[0.65rem] uppercase tracking-wide">
+              <span className="absolute left-1.5 top-1.5 bg-canvas/90 px-1.5 py-0.5 font-sans text-[0.6rem] uppercase tracking-wide">
                 {ROLE_LABEL[p.role]}
               </span>
             </div>
@@ -300,7 +316,7 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote, cutoffHour }:
         </p>
 
         {/* Levertijd — onder de bestelknop (zoals gevraagd). */}
-        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} cutoffHour={cutoffHour} />
+        <DeliveryPromise promise={deliveryPromise} note={deliveryNote} />
       </div>
 
       {/* Materiaal, onderhoud & pasvorm — net als op de productpagina */}

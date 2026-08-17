@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { createAppointment, listAppointmentsForStore, updateAppointmentStatus } from "@/lib/appointments";
-import { stuurAfspraakMails } from "@/lib/afspraak-mail";
+import { stuurAfspraakMails, stuurAfspraakBevestigdMail } from "@/lib/afspraak-mail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   if (!(await coreAuth(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { id?: string; status?: string; action?: string; type?: string; store?: string; preferredDate?: string; dagdeel?: string; name?: string; email?: string; phone?: string; wensen?: string; door?: string };
+  let body: { id?: string; status?: string; tijd?: string; action?: string; type?: string; store?: string; preferredDate?: string; dagdeel?: string; name?: string; email?: string; phone?: string; wensen?: string; door?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -65,6 +65,7 @@ export async function POST(req: Request) {
         store: String(body.store || ""),
         preferredDate: String(body.preferredDate || ""),
         dagdeel: String(body.dagdeel || ""),
+        tijd: String(body.tijd || ""),
         name: String(body.name || ""),
         email: String(body.email || ""),
         phone: String(body.phone || ""),
@@ -75,13 +76,21 @@ export async function POST(req: Request) {
       if (!res.ok) return NextResponse.json(res, { status: 400 });
 
       /* Mail is fail-soft: de afspraak stáát. Lukt de bevestiging niet, dan
-         geven we dat terug zodat de kassa kan zeggen "bel de klant even". */
-      const mail = await stuurAfspraakMails({
-        type: res.type, store: res.store, preferredDate: res.preferredDate, dagdeel: res.dagdeel,
-        name: String(body.name || ""), email: String(body.email || ""),
-        phone: String(body.phone || ""), wensen: String(body.wensen || ""),
-        viaWinkel: true,
-      }).catch(() => ({ klantMail: false }));
+         geven we dat terug zodat de kassa kan zeggen "bel de klant even".
+         Mét tijdstip is de afspraak definitief → de bevestigde-variant; zonder
+         tijd de ontvangstmail ("we bevestigen het tijdstip nog"). */
+      const mail = res.tijd
+        ? await stuurAfspraakBevestigdMail({
+            id: res.id, type: res.type, store: res.store, preferredDate: res.preferredDate,
+            dagdeel: res.dagdeel, tijd: res.tijd,
+            name: String(body.name || ""), email: String(body.email || ""), locale: "nl",
+          }).catch(() => ({ klantMail: false }))
+        : await stuurAfspraakMails({
+            type: res.type, store: res.store, preferredDate: res.preferredDate, dagdeel: res.dagdeel,
+            name: String(body.name || ""), email: String(body.email || ""),
+            phone: String(body.phone || ""), wensen: String(body.wensen || ""),
+            viaWinkel: true,
+          }).catch(() => ({ klantMail: false }));
 
       return NextResponse.json({ ok: true, id: res.id, store: res.store, preferredDate: res.preferredDate, mailVerstuurd: mail.klantMail });
     } catch (e) {
@@ -90,9 +99,21 @@ export async function POST(req: Request) {
   }
 
   try {
-    const res = await updateAppointmentStatus(String(body?.id || ""), String(body?.status || ""));
+    const status = String(body?.status || "");
+    const res = await updateAppointmentStatus(String(body?.id || ""), status, String(body?.tijd || ""));
     if (!res.ok) return NextResponse.json(res, { status: 400 });
-    return NextResponse.json({ ok: true });
+
+    /* Bij BEVESTIGEN krijgt de klant nu eindelijk de definitieve bevestiging —
+       de ontvangstmail beloofde "de winkel neemt contact op om het tijdstip te
+       bevestigen", en daarna bleef het stil. Het e-mailadres komt uit de
+       database (de kassa ziet het bewust nooit). Fail-soft: mail mislukt ≠
+       status terugdraaien; de kassa hoort het via mailVerstuurd. */
+    let mailVerstuurd: boolean | undefined;
+    if (status === "bevestigd") {
+      const mail = await stuurAfspraakBevestigdMail(res.appointment).catch(() => ({ klantMail: false }));
+      mailVerstuurd = mail.klantMail;
+    }
+    return NextResponse.json({ ok: true, tijd: res.appointment.tijd, ...(mailVerstuurd !== undefined ? { mailVerstuurd } : {}) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

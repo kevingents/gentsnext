@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { appSettings, productTranslations } from "@/db/schema";
 import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 import { uiSourceKeys } from "@/lib/messages";
+import { CLUB_NAME } from "@/lib/club";
 
 /**
  * Vertaal-engine (server). Eén bron voor de CLI-scripts én de nachtelijke cron.
@@ -15,8 +16,9 @@ import { uiSourceKeys } from "@/lib/messages";
  * Provider-flexibel: Claude (ANTHROPIC_API_KEY) of OpenAI (OPENAI_API_KEY).
  * Zonder sleutel doet niets (de cron geeft dan netjes 412 terug).
  *
- * Merk-veilig: de merknaam "GENTS" en de tagline "GENTS — Suits You" blijven
- * ONVERTAALD; maten/getallen/prijzen/HTML-tags blijven intact.
+ * Merk-veilig: de merknaam "GENTS", de tagline "GENTS — Suits You" en de naam van
+ * het spaarprogramma "GENTS MEMBERS" (lib/club) blijven ONVERTAALD;
+ * maten/getallen/prijzen/HTML-tags blijven intact.
  */
 
 export const LANG_NAME: Record<Locale, string> = {
@@ -57,7 +59,7 @@ export async function translateStrings(
   const sys =
     `You are a professional fashion translator for GENTS, a Dutch menswear brand (suits, blazers, formalwear). ` +
     `Translate the given Dutch ${toneByKind[kind]} into ${lang}. Rules: ` +
-    `keep the brand name "GENTS" and the tagline "GENTS — Suits You" UNtranslated; ` +
+    `keep the brand name "GENTS", the tagline "GENTS — Suits You" and the loyalty programme name "${CLUB_NAME}" UNtranslated; ` +
     `keep numbers, sizes (48, M, L), prices, %-signs, HTML tags and placeholders exactly; ` +
     `translate naturally and concisely in a refined, premium tone (no literal word-for-word). ` +
     `Return ONLY a JSON array of strings, same length and order as the input. No explanation.`;

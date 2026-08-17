@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getReturnableOrder, createReturn, type ReturnMethod, type RefundType } from "@/lib/returns";
+import { getReturnableOrder, createReturn, listReturnsForOrder, type ReturnMethod, type RefundType } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
 import { getStores } from "@/lib/stores";
 
@@ -10,8 +10,12 @@ export const runtime = "nodejs";
  * Publieke retour-API. Gate = bestelnummer + e-mailadres (moeten matchen).
  *   POST { action:"lookup", orderNumber, email }
  *        → { ok, orderNumber, withinWindow, lines:[…], policy:{ windowDays, dhlReturnCostCents, freeOnCredit } }
- *   POST { action:"create", orderNumber, email, items:[{orderLineId,qty}], method, refundType, pickupStore?, reason? }
+ *   POST { action:"create", orderNumber, email, items:[{orderLineId,qty}], method, refundType, pickupStore?, reasonCode, reasonNote? }
+ *        (reasonCode is VERPLICHT — zie lib/retour-redenen; `reason` blijft als legacy-veld werken)
  *        → { ok, id, status, itemsCents, shippingCostCents, refundType, method, label, labelPending }
+ *   POST { action:"status", orderNumber, email }
+ *        → { ok, orderNumber, returns:[{ status, method, refundType, refundedCents, lines, … }] }
+ *        (zonder creditCode — die gaat alleen per mail naar de klant zelf)
  */
 export async function POST(req: Request) {
   let body: Record<string, unknown>;
@@ -33,6 +37,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ...res, policy: returnConfig, stores: getStores().map((s) => s.title) });
   }
 
+  if (action === "status") {
+    const res = await listReturnsForOrder(orderNumber, email);
+    return NextResponse.json(res, { status: res.ok ? 200 : 404 });
+  }
+
   if (action === "create") {
     const items = Array.isArray(body.items)
       ? (body.items as { orderLineId: string; qty: number }[]).map((i) => ({ orderLineId: String(i.orderLineId), qty: Number(i.qty) }))
@@ -44,6 +53,8 @@ export async function POST(req: Request) {
       method: (body.method === "store" ? "store" : "dhl") as ReturnMethod,
       refundType: (body.refundType === "credit" ? "credit" : "money") as RefundType,
       pickupStore: String(body.pickupStore || ""),
+      reasonCode: String(body.reasonCode || ""),
+      reasonNote: String(body.reasonNote || ""),
       reason: String(body.reason || ""),
     });
     return NextResponse.json(res, { status: res.ok ? 200 : 400 });

@@ -186,11 +186,31 @@ export function parseCare(wasvoorschrift: string | undefined | null, attrs?: Rec
   if (!items.length) {
     const mat = String(attrs?.materiaal ?? "").toLowerCase();
     const hg = String(attrs?.hoofdgroep_omschrijving ?? "").toLowerCase();
-    const both = `${mat} ${hg}`;
-    if (/leer|leder|suède|suede|nubuck/.test(mat)) {
+    const sub = String(attrs?.subgroep ?? "").toLowerCase();
+    // De subgroep MOET mee: álle broeken zitten in hoofdgroep "Broeken", en pas de
+    // subgroep verraadt of het een chino is (wasbaar) of een pantalon/smoking/
+    // jacquet/MixMatch-pakbroek (stomerij). Zonder subgroep kreeg een pakbroek
+    // hieronder "wassen op 30° + strijken".
+    //
+    // De titel doet ook mee, maar alléén met ondubbelzinnige woorden: een handvol
+    // producten heeft helemaal geen categorie ("Jacquet compleet", "Leder classic").
+    // Let op: "mm" (MixMatch) mag NOOIT op een titel — "Riem 35 mm" zou dan naar
+    // de stomerij gaan. Die code toetsen we daarom alleen op de subgroep zelf.
+    const titel = String(attrs?.titel ?? attrs?.title ?? "").toLowerCase();
+    const both = `${mat} ${hg} ${sub}`;
+    const kleding = `${both} ${titel}`;
+    const mixmatch = sub === "mm" || /mixmatch/.test(both);
+    if (/manchetknop|dasspeld|knoop|sieraad/.test(hg)) {
+      // Metaal: een wasadvies slaat nergens op, dus tonen we er geen.
+    } else if (/stropdas|strik|pochet/.test(hg)) {
+      // Dassen en pochets: nooit de machine in en nooit direct strijken.
       add("nowash", "nowash");
       add("dryclean", "dryclean");
-    } else if (/pak|colbert|smoking|gilet|jacquet|rok|wol|kasjmier|zijde/.test(both)) {
+      add("noiron", "noiron");
+    } else if (/leer|leder|suède|suede|nubuck/.test(`${mat} ${titel}`)) {
+      add("nowash", "nowash");
+      add("dryclean", "dryclean");
+    } else if (mixmatch || /pak|kostuum|colbert|smoking|gilet|jacquet|pantalon|rokvest|rok|wol|kasjmier|zijde/.test(kleding)) {
       add("dryclean", "dryclean");
       add("notumble", "notumble");
       add("ironlow", "ironlow");

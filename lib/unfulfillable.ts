@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, fulfillmentMisses, returns as returnsTable, returnLines as returnLinesTable } from "@/db/schema";
@@ -7,6 +8,12 @@ import { recordMovements } from "@/lib/store-core";
 import { refundMolliePayment } from "@/lib/mollie";
 import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
 import { createReturnLabel, dhlConfigured, type ReturnAddress } from "@/lib/dhl";
+import { findAlternativesForCancelled, alternativeUrl, type AlternativeItem } from "@/lib/alternatives";
+import { mailT, sendUnfulfillableRefund } from "@/lib/email";
+import { recordEvents } from "@/lib/analytics";
+import { getSettings } from "@/lib/settings";
+import { getSiteUrl } from "@/lib/site-url";
+import { DEFAULT_LOCALE, isLocale, localizedPath, type Locale } from "@/lib/i18n";
 
 /**
  * "Niet leverbaar" — een winkel kan een toegewezen weborder-regel niet leveren.
@@ -159,7 +166,16 @@ export async function listUnresolvedUnfulfillable(limit = 100) {
  */
 export async function resolveUnfulfillable(orderNumber: string, mode: "cancel" | "return", by = ""): Promise<
   | { ok: false; error: string }
-  | { ok: true; mode: "cancel" | "return"; refundedCents: number; returnId?: string; labelPending?: boolean }
+  | {
+      ok: true;
+      mode: "cancel" | "return";
+      refundedCents: number;
+      returnId?: string;
+      labelPending?: boolean;
+      /** Of de klant het annuleringsbericht kreeg, en met hoeveel alternatieven. */
+      mailed?: boolean;
+      alternatives?: number;
+    }
 > {
   const nr = String(orderNumber || "").trim();
   if (!nr) return { ok: false, error: "Geen ordernummer." };
@@ -168,7 +184,7 @@ export async function resolveUnfulfillable(orderNumber: string, mode: "cancel" |
   const { order, lines } = data;
   const db = getDb();
 
-  const missRows = await db.select({ sku: fulfillmentMisses.sku }).from(fulfillmentMisses)
+  const missRows = await db.select({ id: fulfillmentMisses.id, sku: fulfillmentMisses.sku }).from(fulfillmentMisses)
     .where(and(eq(fulfillmentMisses.orderNumber, order.orderNumber), eq(fulfillmentMisses.outcome, "unresolved")));
   const missSet = new Set(missRows.map((r) => r.sku.toLowerCase()));
   if (!missSet.size) return { ok: false, error: "Geen open niet-leverbaar-melding voor deze order." };
@@ -179,9 +195,30 @@ export async function resolveUnfulfillable(orderNumber: string, mode: "cancel" |
   const refundCents = setLines.reduce((s, l) => s + l.unitPriceCents * l.quantity, 0);
 
   // 1. Terugbetalen (de set is onbruikbaar zonder alle delen).
+  //
+  // De idempotency-key is hier geen luxe: de meldingen worden pas ná de refund
+  // afgesloten (stap 3), dus twee klikken of een retry na een timeout zouden
+  // anders twee keer echt geld terugstorten.
+  //
+  // De sleutel hangt aan DEZE meldingen, niet aan het ordernummer. Een order kan
+  // namelijk later nóg een keer stukvallen op een andere set; met een sleutel per
+  // order zou Mollie die tweede terugbetaling herkennen als de eerste, `ok`
+  // teruggeven en niets uitbetalen — dan denkt de winkel dat het geld terug is
+  // terwijl de klant niets krijgt.
+  const refundKey = `unf-${createHash("sha1")
+    .update(`${order.orderNumber}|${missRows.map((r) => r.id).sort().join(",")}|${refundCents}`)
+    .digest("hex")
+    .slice(0, 32)}`;
+  let refunded = false;
   if (order.molliePaymentId && refundCents > 0) {
-    const r = await refundMolliePayment(order.molliePaymentId, refundCents, `Pak niet compleet leverbaar — ${order.orderNumber}`);
+    const r = await refundMolliePayment(
+      order.molliePaymentId,
+      refundCents,
+      `Pak niet compleet leverbaar — ${order.orderNumber}`,
+      refundKey,
+    );
     if (!r.ok) return { ok: false, error: r.error || "Terugbetaling mislukt." };
+    refunded = true;
   }
   // Verdiende punten van de terugbetaalde set terugdraaien (idempotent, gecapt op de
   // gecrediteerde order-punten) — anders houdt de klant punten voor een 100%-refund.
@@ -227,7 +264,156 @@ export async function resolveUnfulfillable(orderNumber: string, mode: "cancel" |
     .set({ outcome: mode === "return" ? "resolved-return" : "resolved-cancel", reroutedTo: by.slice(0, 200) })
     .where(and(eq(fulfillmentMisses.orderNumber, order.orderNumber), inArray(fulfillmentMisses.outcome, ["unresolved"])));
 
-  return { ok: true, mode, refundedCents: refundCents, returnId, labelPending };
+  // 4. De klant een bericht sturen, mét alternatieven. Dit was een stille
+  //    terugbetaling: geld terug zonder uitleg en zonder uitweg. Best-effort —
+  //    het geld is al terug, dus een mailstoring mag de afhandeling niet laten
+  //    mislukken (dan zou de operator opnieuw klikken en dus opnieuw refunden).
+  const notified = await notifyCancellation({
+    order,
+    cancelled: setLines,
+    orderHandles: lines.map((l) => l.productHandle),
+    // Alleen een bedrag noemen als er ook écht is teruggestort. Zonder
+    // Mollie-betaling (bv. volledig met een cadeaubon betaald) is er niets
+    // teruggeboekt; dan mag de mail dat ook niet beweren.
+    refundedCents: refunded ? refundCents : 0,
+    partialReturn: mode === "return",
+  }).catch((e) => {
+    console.error("[unfulfillable] klantbericht mislukt:", (e as Error).message);
+    return { mailed: false, alternatives: 0 };
+  });
+
+  return { ok: true, mode, refundedCents: refundCents, returnId, labelPending, ...notified };
+}
+
+type NotifyLine = {
+  productHandle: string;
+  title: string;
+  size: string | null;
+  color: string | null;
+  unitPriceCents: number;
+};
+
+/** Orderregel zoals de bestelpagina 'm al heeft — genoeg voor de set-logica. */
+type OrderLineForAlt = NotifyLine & { sku: string; groupId: string | null };
+
+/**
+ * Annuleringsbericht met alternatieven. Vóór een annulering zijn alle winkels al
+ * nagekeken, dus "we zoeken nog even verder" is geen optie meer — het enige
+ * zinnige aanbod is: dit hebben we wél, nu, in jouw maat.
+ *
+ * Het meetpunt `alt_offered` telt alleen een verstuurde mail (één per annulering);
+ * de kliks komen als `alt_click` binnen via /api/r. Die twee samen geven de
+ * doorklikratio. De bestelpagina toont hetzelfde blok maar telt geen extra
+ * 'offer' — anders zou elke herlaadbeurt de noemer vervuilen.
+ */
+async function notifyCancellation(input: {
+  order: { orderNumber: string; email: string; firstName: string; locale: string | null; accessToken: string | null };
+  cancelled: NotifyLine[];
+  orderHandles: string[];
+  refundedCents: number;
+  partialReturn: boolean;
+}): Promise<{ mailed: boolean; alternatives: number }> {
+  const cfg = (await getSettings()).unfulfillableConfig;
+  if (!cfg.emailEnabled || !input.order.email) return { mailed: false, alternatives: 0 };
+  // Geen regels om over te berichten (melding verwijst naar een SKU die niet
+  // meer op de order staat) → geen mail zonder inhoud sturen.
+  if (!input.cancelled.length) return { mailed: false, alternatives: 0 };
+
+  const locale: Locale = isLocale(String(input.order.locale || "")) ? (input.order.locale as Locale) : DEFAULT_LOCALE;
+  const alternatives = cfg.alternativesEnabled
+    ? await findAlternativesForCancelled({
+        cancelled: input.cancelled,
+        orderHandles: input.orderHandles,
+        limit: cfg.alternativesCount,
+      }).catch((e) => {
+        console.error("[unfulfillable] alternatieven zoeken mislukt:", (e as Error).message);
+        return [] as AlternativeItem[];
+      })
+    : [];
+
+  const t = await mailT(locale);
+  const base = getSiteUrl();
+  const q = input.order.accessToken ? `?t=${input.order.accessToken}` : "";
+  const mailed = await sendUnfulfillableRefund({
+    email: input.order.email,
+    firstName: input.order.firstName,
+    orderNumber: input.order.orderNumber,
+    cancelledTitles: input.cancelled.map((l) => l.title),
+    refundedCents: input.refundedCents,
+    partialReturn: input.partialReturn,
+    alternatives: alternatives.map((a) => ({
+      title: a.title,
+      imageUrl: a.imageUrl,
+      href: alternativeUrl({ handle: a.handle, src: "mail", locale }),
+      minPriceCents: a.minPriceCents,
+      hasPriceRange: a.hasPriceRange,
+    })),
+    orderUrl: `${base}${localizedPath(`/bestelling/${input.order.orderNumber}`, locale)}${q}`,
+    locale,
+    t,
+  });
+
+  if (mailed && alternatives.length) {
+    try {
+      await recordEvents([
+        { type: "alt_offered", path: "/bestelling", props: { src: "mail", count: alternatives.length } },
+      ]);
+    } catch (e) {
+      console.error("[unfulfillable] meetpunt alt_offered mislukt:", (e as Error).message);
+    }
+  }
+  return { mailed, alternatives: alternatives.length };
+}
+
+/**
+ * Wat is er op deze order geannuleerd wegens niet-leverbaar, en wat kunnen we in
+ * plaats daarvan aanbieden? Voor de bestelpagina: de klant die de mail kwijt is,
+ * ziet hetzelfde aanbod terug op de pagina die hij toch al opent.
+ */
+export async function getCancelledWithAlternatives(
+  orderNumber: string,
+  opts: { locale?: Locale; lines?: OrderLineForAlt[] } = {},
+): Promise<{ titles: string[]; alternatives: (AlternativeItem & { href: string })[] }> {
+  const empty = { titles: [], alternatives: [] };
+  const nr = String(orderNumber || "").trim();
+  if (!nr) return empty;
+
+  const db = getDb();
+  const rows = await db
+    .select({ sku: fulfillmentMisses.sku })
+    .from(fulfillmentMisses)
+    .where(and(eq(fulfillmentMisses.orderNumber, nr), inArray(fulfillmentMisses.outcome, ["resolved-cancel", "resolved-return"])));
+  if (!rows.length) return empty;
+
+  // De aanroeper (bestelpagina) heeft de regels meestal al opgehaald.
+  const orderLines = opts.lines ?? (await getOrderByNumber(nr))?.lines;
+  if (!orderLines?.length) return empty;
+  const missSet = new Set(rows.map((r) => r.sku.toLowerCase()));
+  const affected = orderLines.filter((l) => missSet.has(l.sku.toLowerCase()));
+  if (!affected.length) return empty;
+
+  // Zelfde set-logica als bij de afhandeling: een pak vervalt in z'n geheel.
+  const groupIds = new Set(affected.map((l) => l.groupId).filter(Boolean) as string[]);
+  const setLines = groupIds.size ? orderLines.filter((l) => l.groupId && groupIds.has(l.groupId)) : affected;
+
+  const cfg = (await getSettings()).unfulfillableConfig;
+  if (!cfg.alternativesEnabled) return { titles: setLines.map((l) => l.title), alternatives: [] };
+
+  const locale = opts.locale ?? DEFAULT_LOCALE;
+  const alternatives = await findAlternativesForCancelled({
+    cancelled: setLines,
+    orderHandles: orderLines.map((l) => l.productHandle),
+    limit: cfg.alternativesCount,
+  }).catch(() => [] as AlternativeItem[]);
+
+  return {
+    titles: setLines.map((l) => l.title),
+    alternatives: alternatives.map((a) => ({
+      ...a,
+      // Relatief: de klant blijft op de omgeving waar hij al is.
+      href: alternativeUrl({ handle: a.handle, src: "bestelpagina", locale, absolute: false }),
+    })),
+  };
 }
 
 export type StoreReliability = { store: string; misses: number; rerouted: number; unresolved: number };

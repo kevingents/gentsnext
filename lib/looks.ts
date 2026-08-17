@@ -83,7 +83,10 @@ export const LOOKS: Look[] = [
     hotspots: [
       { x: 50, y: 22, handle: "smoking-ov-plat-glad", label: "Overhemd" },
       { x: 55, y: 28, handle: "strik-poly-zwart", label: "Strik" },
-      { x: 50, y: 36, handle: "m-m-colbert-blend-zwart", label: "Colbert" },
+      // Was een gewoon zwart MixMatch-colbert. Black tie vraagt om een
+      // smokingjas (satijnen revers) — een effen zwart colbert met wit
+      // overhemd is een donker pak, geen black tie.
+      { x: 50, y: 36, handle: "jas-smoking-punt-pv-zwart", label: "Smoking jas" },
       { x: 50, y: 72, handle: "broek-rok-smok-pv", label: "Pantalon" },
       { x: 50, y: 93, handle: "lakschoen", label: "Schoenen" },
     ],

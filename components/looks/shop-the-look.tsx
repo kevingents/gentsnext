@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import type { ResolvedLook, LookBuyData } from "@/lib/looks";
 import { useCart } from "@/components/cart/cart-context";
@@ -36,6 +36,13 @@ export function ShopTheLook({
   const [active, setActive] = useState<number | null>(null);
   const [picked, setPicked] = useState<Record<number, string>>({});
   const [added, setAdded] = useState<Record<number, boolean>>({});
+
+  // MixMatch is een USP maar was onmeetbaar: we zagen alleen wat er in de wagen
+  // belandde, niet hoe vaak de combinatie überhaupt getoond werd. Zonder die
+  // noemer is elk percentage over MixMatch een gok.
+  useEffect(() => {
+    track("mixmatch_bekeken", { handle: look.slug, props: { artikelen: look.hotspots?.length ?? 0 } });
+  }, [look.slug, look.hotspots?.length]);
   const [sizeDrawer, setSizeDrawer] = useState<number | null>(null);
   const cardRefs = useRef<(HTMLLIElement | null)[]>([]);
   // Modal-a11y voor de maat-drawer (scroll-lock, focus-trap, Esc, focus-terugkeer);
@@ -78,7 +85,8 @@ export function ShopTheLook({
       hoofdgroep: data.hoofdgroep,
     });
     setAdded((p) => ({ ...p, [i]: true }));
-    track("add_to_cart", { handle: h.handle, props: { fromLook: look.slug } });
+    // Zie look-detail: cart.add() vuurt add_to_cart al. Dit event stond er
+    // dubbelop en telde elke look-toevoeging twee keer.
     setTimeout(() => setAdded((p) => ({ ...p, [i]: false })), 1800);
   }
 
@@ -243,7 +251,7 @@ export function ShopTheLook({
       {sizeDrawer !== null && dh?.product && dData ? (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t("looks.shopTheLook.sizeDrawerTitle")}>
           <div className="absolute inset-0 bg-ink/40" onClick={() => setSizeDrawer(null)} />
-          <div ref={drawerPanelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto bg-canvas p-5 shadow-drawer focus:outline-none">
+          <div ref={drawerPanelRef} tabIndex={-1} className="absolute inset-y-0 right-0 flex w-[92%] max-w-md flex-col overflow-y-auto scroll-gents bg-canvas p-5 shadow-drawer focus:outline-none">
             <div className="mb-4 flex items-center justify-between">
               <p className="label-brand">{t("looks.shopTheLook.sizeDrawerTitle")}</p>
               <button type="button" onClick={() => setSizeDrawer(null)} className="font-sans text-sm underline underline-offset-2">{t("look.drawer.close")}</button>

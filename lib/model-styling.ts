@@ -96,7 +96,10 @@ export const AL_IN_BEELD: Record<string, Role[]> = {
   Gilets: ["shirt", "trousers", "shoes"],
   Jassen: ["trousers", "shoes"],
   Broeken: ["shirt", "shoes"],
-  Overhemden: ["trousers"],
+  // Sinds de overhemd-zin de berekende styling gebruikt staan de schoenen er
+  // ook op ("neatly styled with trousers and <shoes>"), dus mag shop-de-look
+  // daar geen andere schoen bij voorstellen.
+  Overhemden: ["trousers", "shoes"],
   Truien: ["trousers"],
   Vesten: ["shirt", "trousers"],
   "Polo-shirts": ["trousers"],
@@ -129,7 +132,14 @@ function famOf(...parts: (string | null | undefined)[]): Family {
 
 function formalityOf(hg: string, title: string, handle: string): Formality {
   const t = `${title} ${handle}`.toLowerCase();
-  if (/smoking|tuxedo|vadermoord|pliss|wingtip|wing.?collar|galadui|rokkostuum/.test(t)) return "black-tie";
+  // "rokkostuum" stond er wél in, maar de artikelen heten rokjas, rokvest,
+  // rokstrik en broek-rok-smok — die vielen dus door naar smart-casual en
+  // kregen cognac bruine schoenen bij een rokkostuum. Idem de lakschoen: de
+  // kleurtabel wist allang dat lak zwart lakleer is, de formaliteit niet.
+  if (/smoking|tuxedo|vadermoord|pliss|wingtip|wing.?collar|galadui|rokkostuum|\brok|jacquet|lakschoen|lakleer|\blak\b|patent/.test(t)) return "black-tie";
+  // Een strik is in deze catalogus per definitie gala — losse dassen zitten in
+  // "Stropdassen". Op de hoofdgroep toetsen is preciezer dan op de titel.
+  if (hg === "Strikken") return "black-tie";
   if (/jeans|denim|t-?shirt|sweat|hoodie|sneaker|cargo|short|bermuda/.test(t)) return "casual";
   if (hg === "Pakken" || hg === "Colberts") return "business";
   if (hg === "Overhemden") return /casual|flanel|oxford.*casual|linnen/.test(t) ? "smart-casual" : "business";
@@ -225,6 +235,9 @@ function fotoPlanFor(role: Role, hoofdgroep: string, formality: Formality, targe
       return top === "brown" || top === "tan" ? { pref: ["brown", "tan"], forbid: [] } : { pref: ["black"], forbid: [] };
     }
     case "trousers":
+      // Bij black-tie zegt de prompt "black tuxedo trousers" — dan mag de
+      // suggestie geen beige pantalon zijn.
+      if (formality === "black-tie") return { pref: ["black", "charcoal"], forbid: [] };
       // Colberts/Gilets-prompt zegt "with matching trousers" → de kleur van het
       // kledingstuk zelf. Overige prompts ("neat/well-fitted trousers") tonen een
       // neutrale nette broek — grijs/navy/antraciet/beige.
@@ -249,21 +262,72 @@ export function modelStylePrompt(
   colorLabel: string | null | undefined,
   title: string,
   handle: string,
-): { shirt: string; shoes: string } {
+): { shirt: string; shoes: string; neckwear: string; trousers: string; blackTie: boolean } {
   const formality = formalityOf(hg, title, handle);
   const fam = famOf(colorLabel, title, handle);
   const topShoe = colorPlan("shoes", formality, fam).pref[0];
-  const shoes =
-    formality === "black-tie"
-      ? "black patent leather formal shoes"
-      : topShoe === "brown" || topShoe === "tan"
-        ? "cognac brown leather shoes"
-        : "black leather shoes";
-  const shirt =
-    formality === "black-tie"
-      ? "a crisp white formal dress shirt"
-      : "a crisp white collared dress shirt";
-  return { shirt, shoes };
+  const blackTie = formality === "black-tie";
+  const shoes = blackTie
+    ? "black patent leather formal shoes"
+    : topShoe === "brown" || topShoe === "tan"
+      ? "cognac brown leather shoes"
+      : "black leather shoes";
+  const shirt = blackTie ? "a crisp white formal dress shirt" : "a crisp white collared dress shirt";
+  // Bij black-tie hoort een strik. Die stond nergens in de prompt, dus vroeg het
+  // team er per product handmatig om — bij een smokingoverhemd zelfs meerdere
+  // keren, want er was geen enkele plek waar neckwear genoemd werd.
+  const neckwear = blackTie ? "a black bow tie" : "";
+  const trousers = blackTie ? "black tuxedo trousers" : "matching trousers";
+  return { shirt, shoes, neckwear, trousers, blackTie };
+}
+
+export type Styling = ReturnType<typeof modelStylePrompt>;
+
+/** Is dit een gala-artikel? Voor generators die geen volledige styling nodig hebben. */
+export function isBlackTie(hg: string, title: string, handle: string): boolean {
+  return formalityOf(hg, title, handle) === "black-tie";
+}
+
+/**
+ * De zin die het kledingstuk beschrijft — DE bron voor alle modelfoto-prompts:
+ * de hergenerator (lib/model-photo.ts), de bulk-generator en de tweede pose.
+ *
+ * Stond eerder drie keer los gekopieerd, en dat liep uiteen: de hergenerator
+ * kende geen Schoenen, de bulk-generator geen strik, en bij Overhemden gooiden
+ * ze allebei de berekende styling weg zodat een smokingoverhemd als los overhemd
+ * werd beschreven. Eén plek, één waarheid.
+ */
+export function garmentSentence(hg: string, s: Styling): string {
+  const das = s.neckwear ? ` with ${s.neckwear}` : "";
+  switch (hg) {
+    case "Pakken": return `Male model wearing THIS suit, complete with ${s.shirt}${das} and ${s.shoes}.`;
+    case "Colberts": return `Male model wearing THIS blazer over ${s.shirt}${das}, with ${s.trousers} and ${s.shoes}.`;
+    case "Gilets": return `Male model wearing THIS waistcoat over ${s.shirt}${das}, with ${s.trousers} and ${s.shoes}. The lowest button of the waistcoat is left open.`;
+    case "Broeken": return `Male model wearing THESE trousers with ${s.shirt} tucked in${s.neckwear ? `, wearing ${s.neckwear}` : ""}, and ${s.shoes}.`;
+    case "Overhemden": return `Male model wearing THIS shirt${das}, neatly styled with ${s.blackTie ? "black tuxedo trousers" : "trousers"} and ${s.shoes}.`;
+    case "Truien": return "Male model wearing THIS knitwear, styled with neat trousers.";
+    case "Vesten": return "Male model wearing THIS cardigan/vest over a shirt, styled with neat trousers.";
+    case "Polo-shirts": return "Male model wearing THIS polo shirt, styled with neat trousers.";
+    case "T-Shirts": return "Male model wearing THIS t-shirt, styled casually with neat trousers.";
+    case "Jassen": return "Male model wearing THIS coat over neat menswear, with trousers and leather shoes.";
+    case "Schoenen": return `Male model wearing THESE shoes with ${s.blackTie ? "black tuxedo trousers and dark dress socks" : "well-fitted trousers"}.`;
+    case "Riemen": return `Male model wearing THIS belt with well-fitted trousers, ${s.shirt} tucked in, and ${s.shoes}.`;
+    case "Stropdassen": return `Male model wearing THIS tie with ${s.shirt} and a classic jacket.`;
+    case "Strikken": return `Male model wearing THIS bow tie with ${s.shirt} and a black tuxedo jacket.`;
+    default: return "Male model wearing THIS item, neatly styled with classic menswear.";
+  }
+}
+
+export type Frame = "full" | "upper" | "lower";
+
+/** Hoe strak we inzoomen. Kleine artikelen vanaf het middel, bovenkleding vanaf de knie. */
+export function frameFor(hg: string): Frame {
+  switch (hg) {
+    case "Schoenen": case "Riemen": return "lower";
+    case "Overhemden": case "Truien": case "Vesten": case "Polo-shirts": case "T-Shirts":
+    case "Stropdassen": case "Strikken": return "upper";
+    default: return "full";
+  }
 }
 
 /**

@@ -35,17 +35,68 @@ const CLOTHING_ROW_MAP: Record<string, string> = {
 };
 
 /**
- * OVERHEMD-BOORDMATEN. Losse boordmaten stonden als eigen buckets in het
- * maatfilter (XS · M · XL · 36 · 39 · 41 · 43 …) — twee maatsystemen door
- * elkaar. Alleen de maten die NIET botsen met de pakken-reeks (42-64 even);
- * 42/44/46 blijven pakmaten, overhemden dragen daar toch "L 41/42"-labels.
+ * OVERHEMD-BOORDMATEN → lettermaat. De vertaling staat letterlijk in onze eigen
+ * maatlabels ("XS 35/36", "S 37/38", "M 39/40", "L 41/42", "XL 43/44",
+ * "XXL 45/46", "3XL 47/48", "4XL 49/50"); 33/34 en 51/52/53/54 zijn de
+ * doortrekking daarvan aan beide uiteinden.
+ *
+ * Eerder stonden hier alleen de maten die NIET botsen met de pakkenreeks, in de
+ * aanname dat overhemden bij 42/44/46 toch een "L 41/42"-label dragen. Die
+ * aanname klopte niet: Blumfontain/Marvelis leveren KALE boordmaten. Daardoor
+ * werd boordmaat 44 als pakmaat gelezen en belandde een 4XL-hals in de bucket
+ * "XS" — 42→XXS, 44→XS, 46→S, 48→M, 50→M/L, 52→L, allemaal fout. Daarom kiest
+ * sizeRowLabel/sizeFacetFor nu op FAMILIE welke tabel geldt i.p.v. ze te mengen.
  */
 const BOORD_ROW_MAP: Record<string, string> = {
-  "36": "XS", "37": "S", "38": "S", "39": "M", "40": "M",
-  "41": "L", "43": "XL", "45": "XXL",
+  "33": "XXS", "34": "XXS", "35": "XS", "36": "XS", "37": "S", "38": "S",
+  "39": "M", "40": "M", "41": "L", "42": "L", "43": "XL", "44": "XL",
+  "45": "XXL", "46": "XXL", "47": "3XL", "48": "3XL", "49": "4XL", "50": "4XL",
+  "51": "5XL", "52": "5XL", "53": "6XL", "54": "6XL",
 };
 
-const ROW_MAP: Record<string, string> = { ...CLOTHING_ROW_MAP, ...BOORD_ROW_MAP };
+/** Laagste/hoogste boordmaat die we als hals herkennen (zie BOORD_ROW_MAP). */
+const BOORD_MIN = 33;
+const BOORD_MAX = 54;
+
+/**
+ * Mouwlengte-7 (extra lange mouw) komt in twee schrijfwijzen binnen: als
+ * letter-suffix ("M7", "3XL7 47/48") en — bij kale boordmaten — met een streepje
+ * ("39-7", "44-7"). Die tweede vorm werd nergens herkend: 25 van die maten
+ * vielen als "confectiemaat" naast de boordmaten in het filter, en in de
+ * maatkiezer op de productpagina in de kolom Regular i.p.v. bij mouwlengte 7.
+ */
+const SLEEVE_DASH = /^(\d{2})-7$/;
+
+/** Kale boordmaat achter een maat-token ("39" of "39-7"), anders "". */
+function boordToken(token: string): string {
+  const dash = token.match(SLEEVE_DASH);
+  const bare = dash ? dash[1] : token;
+  if (!/^\d{2}$/.test(bare)) return "";
+  const n = Number(bare);
+  return n >= BOORD_MIN && n <= BOORD_MAX ? bare : "";
+}
+
+/**
+ * Terugval voor maten ZONDER bekende familie (losse producten zonder hoofdgroep):
+ * de kledingreeks, aangevuld met de boordmaten die de oude tabel ook al kende.
+ *
+ * Bewust NIET de hele boordreeks: die aanvullen leek onschuldig ("36–53 botst
+ * nergens mee") maar geldt alleen voor overhemden. Bij een andere familie is 47
+ * een schoenmaat en 33/34 een broekmaat — die werden dan 3XL en XXS. De
+ * boordreeks hoort achter de familie-check te blijven, niet in de terugval.
+ */
+const ROW_MAP: Record<string, string> = {
+  "36": "XS", "37": "S", "38": "S", "39": "M", "40": "M", "41": "L", "43": "XL", "45": "XXL",
+  ...CLOTHING_ROW_MAP,
+};
+
+/**
+ * Families met een EIGEN matensysteem: een schoenmaat, riemmaat of sokmaat is
+ * geen lettermaat en hoort er ook niet naartoe vertaald te worden. Zonder deze
+ * uitzondering werd schoenmaat 43 als "XL" weggeschreven, waardoor "nieuw in
+ * jouw maat" bij schoenmaat 43 ook alle XL-kleding aandroeg.
+ */
+const EIGEN_MAATSYSTEEM = new Set(["schoen", "riem", "sok"]);
 
 export const ROW_ORDER = ["XXS", "XS", "S", "M", "M/L", "L", "XL", "XXL", "3XL", "4XL", "5XL", "6XL"];
 
@@ -55,10 +106,28 @@ export function sizeToken(value: string): string {
   return String(value || "").trim().split(" ")[0].trim().toUpperCase();
 }
 
-/** Lettermaat-rij (de filter-bucket) voor een maatwaarde. */
-export function sizeRowLabel(value: string): string {
+/**
+ * Lettermaat-rij (de filter-bucket) voor een maatwaarde.
+ *
+ * `family` = de hoofdgroep van het PRODUCT. Die is nodig omdat hetzelfde getal
+ * in twee reeksen voorkomt: 44 is een pak-maat XS én een overhemd-boordmaat XL.
+ * Zonder familie wint de kledingreeks — en kreeg een hals-44-overhemd "XS".
+ */
+export function sizeRowLabel(value: string, family = ""): string {
   const token = sizeToken(value);
   if (!token) return "";
+  const fam = familyClass(family);
+  // Overhemd: kale (boord)maten lezen we uit de boordreeks, niet uit de
+  // pakkenreeks. "39-7" = boordmaat 39 met mouwlengte 7 → dezelfde rij als 39.
+  if (fam === "overhemd") {
+    const boord = boordToken(token);
+    if (boord) return BOORD_ROW_MAP[boord];
+  }
+  // Schoen/riem/sok houden hun eigen getal; alleen echte lettermaten (sokken
+  // komen ook als S/M/L) gaan door de kledingtabel.
+  if (EIGEN_MAATSYSTEEM.has(fam)) {
+    return /^\d/.test(token) ? token : CLOTHING_ROW_MAP[token] || token;
+  }
   // Mouwlengte-7 variant ("M7","XL7","3XL7","S7 37/38") → lettermaat zonder de 7.
   if (token.length > 1 && token.endsWith("7")) {
     const base = token.slice(0, -1);
@@ -73,14 +142,33 @@ export function sizeRowLabel(value: string): string {
   return ROW_MAP[token] || token;
 }
 
+/**
+ * Knoptekst onder de tab "Mouwlengte 7": de maat zónder de 7-markering, want de
+ * tab benoemt de mouwlengte al. "XL7 43/44" → "XL", "39-7" → "39" (de boordmaat
+ * blijft een getal — op de Regular-tab van datzelfde overhemd staan er ook
+ * getallen, dus daar "M" van maken zou twee reeksen door elkaar zetten).
+ */
+export function sizeSleeveBase(value: string): string {
+  const token = sizeToken(value);
+  const dash = token.match(SLEEVE_DASH);
+  if (dash) return dash[1];
+  if (token.length > 1 && token.endsWith("7") && !/^\d+$/.test(token)) {
+    const base = token.slice(0, -1);
+    if (ROW_MAP[base]) return base;
+  }
+  return token;
+}
+
 /** In welke kolom (regular/long/short) valt deze maat, gegeven de layout. */
 export function sizeGroup(value: string, layout: SizeLayout): SizeGroup {
   const token = sizeToken(value);
   const num = parseInt(token, 10);
   if (layout === "extra-sleeve") {
-    // Mouwlengte-7 = eindigt op 7 met een lettermaat-basis ("S7","3XL7").
+    // Mouwlengte-7 = eindigt op 7 met een lettermaat-basis ("S7","3XL7") of is
+    // een boordmaat met streepje ("39-7").
     // NIET op parseInt leunen: parseInt("3XL7")=3 (geen NaN) → "3XL7" belandde
     // in de Regular-kolom; en puur-numerieke maten ("27") zijn géén mouwlengte.
+    if (SLEEVE_DASH.test(token)) return "long";
     const base = token.slice(0, -1);
     if (SLEEVE7.test(token) && !/^\d+$/.test(token) && ROW_MAP[base]) return "long";
     return "regular";
@@ -258,9 +346,11 @@ export function sizeFacetFor(family: string, rawSize: string): { system: SizeSys
   if (fam === "sok") return { system: "sok", value: tok };
   // Overhemd met een KAAL getal = boordmaat (Blumfontain e.d.). Een overhemd
   // met een lettermaat ("L 41/42") is gewoon kleding — dezelfde rij als een trui.
-  if (fam === "overhemd" && /^\d{2}$/.test(tok)) {
-    const n = Number(tok);
-    if (n >= 30 && n <= 50) return { system: "boord", value: tok };
+  // "39-7" is diezelfde boordmaat 39, alleen met mouwlengte 7: één bucket, want
+  // de mouwlengte kiest de klant op de productpagina, niet in het maatfilter.
+  if (fam === "overhemd") {
+    const boord = boordToken(tok);
+    if (boord) return { system: "boord", value: boord };
   }
 
   const row = clothingRowLabel(tok);
@@ -313,6 +403,9 @@ export function sizeFilterBranches(facetValue: string): SizeFilterBranch[] | nul
   const candidates =
     parsed.system === "kleding" ? clothingTokensForRow(parsed.value)
     : parsed.system === "eenmaat" ? [...ONE_TOKENS]
+    // Boordmaat 39 zit in de catalogus als "39" én als "39-7" (mouwlengte 7);
+    // beide moeten onder hetzelfde filter vallen, anders verdwijnt de helft.
+    : parsed.system === "boord" ? [parsed.value, `${parsed.value}-7`]
     : [parsed.value];
 
   const branches: SizeFilterBranch[] = [];

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { events } from "@/db/schema";
+import { TOEGESTANE_EVENTS } from "@/lib/event-catalog";
 
 /**
  * Eigen storefront-analytics. Schrijft anonieme events (geen PII) en levert
@@ -16,28 +17,27 @@ export type IncomingEvent = {
   query?: string;
   valueCents?: number;
   props?: Record<string, unknown>;
+  /** Bekende klant. Wordt SERVER-side bepaald uit de identiteitsgrafiek; een
+   *  door de client meegestuurde waarde wordt genegeerd, anders kan iedereen
+   *  gedrag aan een willekeurige klant hangen. */
+  customerId?: string | null;
+  /** 'web' | 'pos' | 'server' | 'app'. */
+  bron?: string;
 };
 
-const ALLOWED = new Set([
-  "pageview", "product_view", "search", "search_no_results", "filter",
-  "add_to_cart", "cart_view", "checkout_start", "purchase", "stock_notify", "wishlist_add",
-  // search_click werd wél gevuurd (instant-search) maar ontbrak hier, dus élke
-  // klik op een zoekresultaat verdween — de enige doorklik-meting die er was.
-  "search_click",
-  // Navigatie + lijstgedrag: waar klikt de klant in menu/footer/tegels, welke
-  // filters en sortering kiest hij, en op welke POSITIE klikt hij in een lijst.
-  // Zonder positie beloont een populariteitsranking alleen wat toevallig
-  // bovenaan stond (positie-bias) — dit maakt de lus corrigeerbaar.
-  "nav_click", "product_click", "sort",
-  // Maat-frictie: klik op een uitverkochte maat = direct inkoopsignaal.
-  "size_click",
-  // Klantafspraken: server-side gelogd bij een geslaagde boeking (type+winkel in props).
-  "afspraak_geboekt",
-]);
+const BRONNEN = new Set(["web", "pos", "server", "app"]);
 
+/**
+ * Welke events we accepteren staat in lib/event-catalog — bewust niet meer
+ * hier. Die lijst stond als kale Set in dit bestand, waardoor een event dat wél
+ * gevuurd werd maar niet in de lijst stond STIL verdween: dat is `search_click`
+ * maandenlang overkomen, de enige doorklikmeting die we hadden. De catalogus is
+ * nu tegelijk allowlist, GTM-naamgeving en documentatie, zodat die drie niet
+ * meer uit elkaar kunnen lopen.
+ */
 export async function recordEvents(list: IncomingEvent[]): Promise<number> {
   const rows = list
-    .filter((e) => e && ALLOWED.has(e.type))
+    .filter((e) => e && TOEGESTANE_EVENTS.has(e.type))
     .slice(0, 50)
     .map((e) => ({
       sessionId: String(e.sessionId || "").slice(0, 64),
@@ -47,11 +47,27 @@ export async function recordEvents(list: IncomingEvent[]): Promise<number> {
       query: String(e.query || "").slice(0, 200).toLowerCase(),
       valueCents: Math.max(0, Math.round(Number(e.valueCents) || 0)),
       props: (e.props && typeof e.props === "object" ? e.props : {}) as Record<string, unknown>,
+      customerId: e.customerId || null,
+      bron: BRONNEN.has(String(e.bron)) ? String(e.bron) : "web",
     }));
   if (!rows.length) return 0;
   const db = getDb();
   await db.insert(events).values(rows);
   return rows.length;
+}
+
+/**
+ * Event-namen die de client stuurde maar die niet in de catalogus staan.
+ * /api/track logt ze, zodat een typefout of een vergeten catalogusregel
+ * zichtbaar wordt in plaats van geruisloos te verdwijnen — precies de fout die
+ * search_click zo lang onzichtbaar hield.
+ */
+export function onbekendeEvents(list: IncomingEvent[]): string[] {
+  const uniek = new Set<string>();
+  for (const e of list) {
+    if (e?.type && !TOEGESTANE_EVENTS.has(e.type)) uniek.add(String(e.type).slice(0, 60));
+  }
+  return [...uniek];
 }
 
 const sinceClause = (days: number) => sql`created_at > now() - (${days} || ' days')::interval`;

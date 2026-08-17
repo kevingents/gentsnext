@@ -9,7 +9,9 @@ import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 type SizeMedia = { threshold: string; url: string; alt: string };
 // `contain`: hele beeld tonen (object-contain) i.p.v. bijsnijden — voor staande
 // AI-modelfoto's/video (2:3) die anders kop/voeten verliezen in de 4:5-tegel.
-type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contain?: boolean };
+// `wit`: packshot op puur wit (accessoires). De tegel is dan óók wit, anders
+// steken de contain-randen af tegen de warme surface-achtergrond.
+type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contain?: boolean; wit?: boolean };
 
 /**
  * Mr Marvis-stijl galerij: alle productfoto's in een 2-koloms grid ("2 om 2") —
@@ -19,7 +21,7 @@ type Shot = { url: string; alt: string; badge?: boolean; video?: boolean; contai
  * wordt vooraan gezet zodra een maat ≥ drempel gekozen is. Een (AI-)productvideo
  * leidt — autoplay/gedempt/loop in het raster, met geluid in de lightbox.
  */
-export function Gallery({ images, title, sizeMedia, video, lookHref }: { images: { url: string; alt: string; contain?: boolean }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null; lookHref?: string }) {
+export function Gallery({ images, title, sizeMedia, video, lookHref }: { images: { url: string; alt: string; contain?: boolean; wit?: boolean }[]; title: string; sizeMedia?: SizeMedia | null; video?: string | null; lookHref?: string }) {
   const { sizeLabel } = usePdpSize();
   const [lightbox, setLightbox] = useState<number | null>(null);
 
@@ -99,7 +101,7 @@ export function Gallery({ images, title, sizeMedia, video, lookHref }: { images:
         {shots.map((shot, i) => (
           <div
             key={i}
-            className="group relative aspect-[4/5] w-full shrink-0 snap-start overflow-hidden rounded-card bg-surface sm:w-auto"
+            className={`group relative aspect-[4/5] w-full shrink-0 snap-start overflow-hidden rounded-card sm:w-auto ${shot.wit ? "bg-white" : "bg-surface"}`}
           >
             <button type="button" onClick={() => setLightbox(i)} aria-label={`Vergroot ${shot.alt}`} className="block h-full w-full">
             {shot.video ? (

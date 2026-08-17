@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SizeAdvisor } from "@/components/maatadvies/size-advisor";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { bonusPointsFor } from "@/lib/loyalty-bonus";
 
 export const metadata: Metadata = {
   title: "Maatadvies — vind jouw maat",
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 export default async function MaatadviesPage() {
   const locale = await getLocale();
   const t = await getT(locale);
+  const bonusPoints = await bonusPointsFor("maatadvies");
   return (
     <div className="mx-auto max-w-page px-gutter py-14">
       <div className="max-w-2xl">
@@ -31,7 +33,7 @@ export default async function MaatadviesPage() {
         </p>
       </div>
       <div className="mt-12">
-        <SizeAdvisor />
+        <SizeAdvisor bonusPoints={bonusPoints} />
       </div>
     </div>
   );

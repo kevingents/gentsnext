@@ -4,7 +4,7 @@ import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { getSessionCustomer } from "@/lib/account";
-import { getReturnableOrder } from "@/lib/returns";
+import { getReturnableOrder, getReturnableOrdersForCustomer } from "@/lib/returns";
 import { getSettings } from "@/lib/settings";
 import { formatEuro } from "@/lib/format";
 import { getStores } from "@/lib/stores";
@@ -34,22 +34,35 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
   const { returnConfig } = await getSettings();
   const policyVars = { days: returnConfig.windowDays, amount: formatEuro(returnConfig.dhlReturnCostCents) };
 
-  // Ingelogd + bestelnummer → direct de retourbare regels (sessie = bewijs, geen e-mail nodig).
+  /* Sessie = bewijs. Een ingelogde klant hoeft z'n bestelnummer en e-mailadres
+     niet in te tikken — die weten we al. Met een bestelnummer erbij springen we
+     direct naar de artikelkeuze; zonder tonen we z'n eigen retourneerbare
+     bestellingen om uit te kiezen. Het invulformulier blijft eronder staan voor
+     gasten en voor een bestelling op een ander adres. */
+  const customer = await getSessionCustomer();
   let prefill: React.ComponentProps<typeof RetourFlow>["prefill"] = null;
-  if (orderNr) {
-    const customer = await getSessionCustomer();
-    if (customer?.email) {
-      const base = await getReturnableOrder(orderNr, customer.email);
-      if (base.ok) {
-        prefill = {
-          orderNumber: base.orderNumber,
-          email: customer.email,
-          lines: base.lines.filter((l) => l.returnableQty > 0),
-          policy: returnConfig,
-          withinWindow: base.withinWindow,
-        };
-      }
+  let mine: React.ComponentProps<typeof RetourFlow>["mine"] = [];
+
+  if (orderNr && customer?.email) {
+    const base = await getReturnableOrder(orderNr, customer.email);
+    if (base.ok) {
+      prefill = {
+        orderNumber: base.orderNumber,
+        email: customer.email,
+        lines: base.lines.filter((l) => l.returnableQty > 0),
+        policy: returnConfig,
+        withinWindow: base.withinWindow,
+      };
     }
+  }
+  if (!prefill && customer?.email) {
+    mine = (await getReturnableOrdersForCustomer(customer.email)).map((o) => ({
+      orderNumber: o.orderNumber,
+      createdAt: o.createdAt.toISOString(),
+      totalCents: o.totalCents,
+      items: o.items,
+      titles: o.titles,
+    }));
   }
 
   return (
@@ -61,7 +74,7 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
           {t("retourneren.intro.part1", policyVars)} <strong>{t("retourneren.intro.credit")}</strong> {t("retourneren.intro.part2")}<strong> {t("retourneren.intro.free")}</strong>. {t("retourneren.intro.part3", policyVars)}
         </p>
         <div className="mt-8">
-          <RetourFlow initialOrder={orderNr} prefill={prefill} stores={getStores().map((s) => s.title)} />
+          <RetourFlow initialOrder={orderNr} prefill={prefill} mine={mine} stores={getStores().map((s) => s.title)} />
         </div>
       </div>
     </div>

@@ -2,6 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { DEFAULT_SYNONYMS } from "@/lib/search-helpers";
+import { DEFAULT_PAYMENT_TOP, type PaymentTopConfig } from "@/lib/payment-methods";
+import type { ShippingZoneOverrides } from "@/lib/shipping-zones";
+import type { PuntenActie } from "@/lib/punten-acties";
 
 /**
  * Centrale, in de backend instelbare configuratie. Eén bron van waarheid
@@ -27,6 +30,22 @@ export type Settings = {
    *  Bv. magazijn verzendt op vrijdag tot 16:00, winkels tot 17:00. */
   warehouseCutoffByDay: Record<string, number>;
   storeCutoffByDay: Record<string, number>;
+  /** Minuten vóór sluitingstijd dat een winkelorder nog dezelfde dag weg kan.
+   *  De cutoff van een winkel wordt nooit later dan haar sluitingstijd; deze
+   *  marge houdt daarnaast rekening met inpakken + overdracht aan de vervoerder. */
+  storeHandoverMinutes: number;
+  /** Verzendt er iemand op zondag? Vervoerders halen dan niet op, dus standaard
+   *  nee — anders belooft de site "vandaag verzonden" op een dag dat er niets
+   *  vertrekt. Zaterdag kan wél (winkels zijn open, vervoerders bezorgen ma-za). */
+  dispatchOnSunday: boolean;
+  dispatchOnSaturdayStores: boolean;
+  /** Filialen die tijdelijk GEEN orders mogen krijgen (verbouwing, vakantie-
+   *  sluiting, onderbezetting). Ze blijven bestaan, maar de allocatie slaat ze
+   *  over — zonder deploy of env-wijziging. */
+  pausedBranchIds: string[];
+  /** Extra verzendvrije dagen (yyyy-mm-dd) bovenop de feestdagen: bedrijfssluiting,
+   *  personeelsdag, inventarisatie. Geldt voor alle filialen. */
+  extraClosureDates: string[];
   // Levertijd (werkdagen)
   standardMinDays: number;
   standardMaxDays: number;
@@ -86,6 +105,12 @@ export type Settings = {
    * gewoon de normale prijs. Rekenkern: lib/pricing (computeReferencePrices).
    */
   saleAnnouncementDays: number;
+  /* Welke betaalprovider de webshop gebruikt. Stond eerder alleen als env-var
+     PAYMENT_PROVIDER in Vercel; die blijft als noodrem bestaan en gaat vóór op
+     deze instelling (zie lib/payments.ts). Zonder deze knop was omschakelen
+     alleen mogelijk met een deploy — en dat is precies hoe de webshop dagenlang
+     op een Worldline-sleutel bleef staan die 403 gaf. */
+  paymentProvider: "mollie" | "worldline";
   // Retouren: bedenktijd, retourkosten bij geld-terug (DHL-label), en of store
   // credit / omruilen altijd een gratis retour geeft.
   returnConfig: {
@@ -112,11 +137,34 @@ export type Settings = {
     tweedeRegels: string[];
     toonSteden: boolean;
   };
+  /* FACTUURGEGEVENS — de bedrijfsregels onderaan de klantfactuur. In de tool en
+     niet in code, want KvK/btw-nummer en IBAN veranderen zonder release. Leeg =
+     die regel valt weg; er wordt nooit een nummer verzonnen. */
+  factuur: {
+    bedrijfsnaam: string;
+    adres: string;
+    postcodePlaats: string;
+    kvk: string;
+    btwNummer: string;
+    iban: string;
+    /** Btw-tarief in procenten op kleding (NL: 21). */
+    btwPercent: number;
+  };
   // Spaarpunten: na hoeveel dagen na BETALING verdiende punten besteedbaar worden
   // (vesting). Dekt de retourperiode, zodat een retour binnen het venster geen
   // terugvordering / negatief saldo geeft — de punten staan tot dan "in behandeling".
   loyaltyConfig: {
     vestingDays: number;
+    /**
+     * Spaarsnelheid: punten per hele bestede euro (1 = € 1 → 1 punt). De ANDERE
+     * kant van de koers; samen met redeemCentsPerPoint bepaalt dit wat sparen
+     * een klant waard is (1 punt/euro × 5 cent/punt = 5% terug).
+     *
+     * LET OP: dit geldt voor de webshop. De kassa rekent in storegents met een
+     * eigen regel (pointsForAmount); wie hier draait moet die meedraaien, anders
+     * spaart dezelfde euro online anders dan in de winkel.
+     */
+    pointsPerEuro: number;
     /** Inwisselkoers: centen tegoedbon per punt (5 = 500 punten → € 25). */
     redeemCentsPerPoint: number;
     /** Minimaal in te wisselen punten. */
@@ -125,7 +173,52 @@ export type Settings = {
     redeemStepPoints: number;
     /** Geldigheid van de ingewisselde tegoedbon (dagen). */
     redeemVoucherDays: number;
+    /**
+     * Hoe ver de zelfherstel-cron terugkijkt naar orders die nooit punten kregen
+     * (dagen). Bewust kort: de historie bijboeken is een geld-besluit (2,87 mln
+     * punten over 23.476 klanten stond open bij het bouwen), geen bijwerking van
+     * een deploy. Zet dit hoog of draai `npm run backfill:punten -- --doen` als je
+     * de volledige historie alsnog wilt uitkeren.
+     */
+    backfillLookbackDays: number;
+    /*
+     * Eenmalige actie-bonussen die RETOUREN moeten terugdringen. Alle vier zorgen
+     * dat we (en de klant zelf) weten wat er past: een bewaard maatprofiel, de
+     * spaarpas in Wallet, een vaste winkel en een compleet profiel. Eén keer per
+     * klant, direct besteedbaar — er hangt geen aankoop aan die teruggestuurd kan
+     * worden, dus geen vesting. 0 = die bonus staat uit; de taak verdwijnt dan
+     * uit de klant-UI (bestaande toekenningen blijven staan).
+     */
+    bonusPoints: {
+      /**
+       * Welkomstbonus: het aanmaken van een profiel, online én aan de kassa.
+       * Geen taak maar een gebeurtenis — je kunt maar één keer een account
+       * aanmaken, dus dit staat nooit als "nog te doen" in de klant-UI.
+       */
+      accountCreated: number;
+      /** Maatprofiel bewaard — via /maatadvies of het tabblad Mijn maten. */
+      sizeAdvice: number;
+      /** Spaarpas écht toegevoegd aan Apple Wallet (device-registratie). */
+      walletPass: number;
+      /** Vaste winkel gekozen ("Mijn winkel"). */
+      favoriteStore: number;
+      /** Profiel compleet: leeftijd, kleuren, vaste winkel, gelegenheden. */
+      profileComplete: number;
+    };
+    /**
+     * Hoeveel punten een medewerker in één keer met de hand mag toekennen
+     * (coulance na een klacht). Een dak, geen doel: wie meer wil geven moet
+     * het twee keer doen, en dat staat dan ook twee keer in het logboek.
+     */
+    serviceMaxPerActie: number;
   };
+  /**
+   * Eigen puntenacties: "koop dit, krijg extra punten". Regels als data
+   * (lib/punten-acties), in de portal te maken zonder release. Ze geven PUNTEN
+   * en geen korting — punten kosten pas geld bij het inwisselen, en dan alleen
+   * vanaf de drempel; een korting kost meteen marge.
+   */
+  puntenActies: PuntenActie[];
   /**
    * Terug-op-voorraad-meldingen: aan/uit + welke kanalen (mail/WhatsApp) mogen
    * versturen, en of + na hoeveel dagen een klant een ALTERNATIEF-op-maat krijgt
@@ -139,11 +232,31 @@ export type Settings = {
     alternativeAfterDays: number;
   };
   /**
+   * Niet-leverbaar-afhandeling: krijgt de klant bij een annulering + terugbetaling
+   * een bericht, en tonen we daarin alternatieven? Uit = stille terugbetaling
+   * (zoals het vóór deze functie ging). In de tool te schakelen, niet in Vercel.
+   */
+  unfulfillableConfig: {
+    /** Annuleringsmail versturen (uit = geen bericht bij een terugbetaling). */
+    emailEnabled: boolean;
+    /** Alternatieven meesturen/tonen. */
+    alternativesEnabled: boolean;
+    /** Hoeveel alternatieven maximaal (1-6). */
+    alternativesCount: number;
+  };
+  /**
    * Merchandising-pins: per PLP-context (categorie/collectie) een geordende lijst
    * product-handles die bovenaan de "Aanbevolen"-sort komen. Sleutel = `${kind}:${slug}`
    * (bv. "categorie:pakken", "collection:bruiloft"). Beheerd vanuit de portal.
    */
   merchandisingPins: Record<string, string[]>;
+  /**
+   * Merchandising-regels: automatische boosts/demotions op productkenmerken
+   * ("jaar 2026 omhoog", "NOS omlaag"), optioneel met een looptijd zodat
+   * seizoensregels vanzelf aflopen. Vorm + compilatie naar SQL staan in
+   * lib/merchandising-regels.ts (type MerchRegel). Beheerd vanuit de portal.
+   */
+  merchandisingRegels: unknown[];
   /**
    * Notificatie-mailadres per winkel (sleutel = winkelnaam of stad, lowercase,
    * bv. "amsterdam" of "gents amsterdam"). Gebruikt voor o.a. de
@@ -151,6 +264,45 @@ export type Settings = {
    * env CONTACT_EMAIL_WEDDING/GENERAL is alleen fallback.
    */
   storeEmails: Record<string, string>;
+  /**
+   * Wie de interne bewakingsmeldingen krijgt (nu: de nachtelijke kassabon-
+   * verificatie, app/api/cron/verify-possales). Meerdere adressen mag. Leeg =
+   * niemand krijgt bericht en de melding blijft alleen in de cron-log staan —
+   * dus dit hoort gevuld te zijn zolang er bewaking draait.
+   * Env OPS_ALERT_EMAIL is alleen de initiële default.
+   */
+  alertEmails: string[];
+  /**
+   * Betaalkeuze op de afrekenpagina: welke methoden per land als knop bovenaan
+   * staan en hoeveel dat er zijn. Een A/B op die volgorde loopt niet hier maar
+   * via de experimenten-rail (lib/experiments, override `betaalmethoden`).
+   */
+  paymentTop: PaymentTopConfig;
+  /**
+   * Bezorglanden: per landcode aan/uit, tarief, gratis-vanaf en hoeveel
+   * werkdagen er bovenop de binnenlandse transittijd komen. Leeg = de tabel
+   * in lib/shipping-zones geldt. Voor NEDERLAND blijven `shippingCents` en
+   * `freeShippingCents` hierboven de baas over het tarief — anders zijn er
+   * twee knoppen voor hetzelfde land.
+   */
+  shippingZones: ShippingZoneOverrides;
+  /**
+   * Klik- en scroll-heatmap (lib/heatmap).
+   *
+   * `aan` staat aan de SERVERKANT: uitzetten gooit binnenkomend materiaal weg
+   * in plaats van de meting in de browser te stoppen. Dat is met opzet — een
+   * knop die pas werkt nadat iedereen zijn pagina herladen heeft, is geen knop.
+   *
+   * `bewaardagen` geldt alleen voor het RUWE materiaal (heatmap_klikken,
+   * heatmap_scroll). De dagtotalen blijven staan: die bevatten geen sessie-id
+   * en zijn niet meer tot een bezoek te herleiden.
+   *
+   * `steekproefPct` = welk deel van de sessies wordt vastgelegd. De keuze valt
+   * per sessie, niet per klik: anders krijg je halve pagina's waarop de ene
+   * knop wél en de andere niet geteld is, en dan is de vergelijking tussen twee
+   * knoppen stuk. 100 = alles vastleggen.
+   */
+  heatmap: { aan: boolean; bewaardagen: number; steekproefPct: number };
 };
 
 const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -161,13 +313,22 @@ export const DEFAULT_SETTINGS: Settings = {
   // landen staan in lib/shipping-zones.
   shippingCents: num(process.env.GENTS_SHIPPING_CENTS, 395),
   expressSurchargeCents: num(process.env.GENTS_EXPRESS_SURCHARGE_CENTS, 150),
-  // Basisuur = "einde dag" (geen vroege cutoff); de bindende cutoff zit in de
-  // per-weekdag-override hieronder (magazijn vrijdag 16:00, winkels vrijdag 17:00).
-  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 23),
-  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 23),
+  /* Basisuur = het laatste moment dat een pakket nog dezelfde dag aan de
+     vervoerder wordt meegegeven. Stond op 23 ("einde dag"), maar dat beloofde
+     's avonds same-day-verzending terwijl er niets meer vertrok — op koopavond
+     zelfs tot 21:00, want de winkel was dan nog open. 17 is een veilige
+     aanname; zet hier het échte ophaalmoment neer (per filiaal kan via
+     branchCutoffs, per weekdag via de overrides hieronder). */
+  warehouseCutoffHour: num(process.env.GENTS_WAREHOUSE_CUTOFF_HOUR, 17),
+  storeCutoffHour: num(process.env.GENTS_STORE_CUTOFF_HOUR, 17),
   branchCutoffs: {},
   warehouseCutoffByDay: { vrijdag: 16 },
   storeCutoffByDay: { vrijdag: 17 },
+  storeHandoverMinutes: num(process.env.GENTS_STORE_HANDOVER_MINUTES, 0),
+  dispatchOnSunday: false,
+  dispatchOnSaturdayStores: true,
+  pausedBranchIds: [],
+  extraClosureDates: [],
   standardMinDays: num(process.env.GENTS_STANDARD_MIN_DAYS, 2),
   standardMaxDays: num(process.env.GENTS_STANDARD_MAX_DAYS, 3),
   warehouseTransitDays: 1,
@@ -222,6 +383,19 @@ export const DEFAULT_SETTINGS: Settings = {
     ],
     toonSteden: true,
   },
+  factuur: {
+    // Naam + adres staan al zo in de klantmails (lib/email.ts). KvK, btw-nummer en
+    // IBAN bewust LEEG: die vul je in de instellingen in. Een verzonnen nummer op
+    // een factuur is erger dan een ontbrekende regel — de regel valt gewoon weg.
+    bedrijfsnaam: "GENTS B.V.",
+    adres: "Lemelerbergweg 15",
+    postcodePlaats: "1101 AJ Amsterdam",
+    kvk: process.env.GENTS_KVK || "",
+    btwNummer: process.env.GENTS_BTW_NUMMER || "",
+    iban: process.env.GENTS_IBAN || "",
+    btwPercent: num(process.env.GENTS_BTW_PERCENT, 21),
+  },
+  paymentProvider: "mollie",
   returnConfig: {
     windowDays: num(process.env.GENTS_RETURN_WINDOW_DAYS, 14),
     dhlReturnCostCents: num(process.env.GENTS_RETURN_DHL_COST_CENTS, 499), // S-pakket heenzending, ex toeslagen (eigen DHL-contract)
@@ -232,11 +406,22 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   loyaltyConfig: {
     vestingDays: num(process.env.GENTS_LOYALTY_VESTING_DAYS, 21),
+    pointsPerEuro: num(process.env.GENTS_LOYALTY_POINTS_PER_EURO, 1),
     redeemCentsPerPoint: num(process.env.GENTS_LOYALTY_REDEEM_CENTS_PER_POINT, 5), // 500 punten = € 25
     redeemMinPoints: num(process.env.GENTS_LOYALTY_REDEEM_MIN_POINTS, 500),
     redeemStepPoints: num(process.env.GENTS_LOYALTY_REDEEM_STEP_POINTS, 500),
     redeemVoucherDays: num(process.env.GENTS_LOYALTY_REDEEM_VOUCHER_DAYS, 365),
+    backfillLookbackDays: num(process.env.GENTS_LOYALTY_BACKFILL_LOOKBACK_DAYS, 30),
+    bonusPoints: {
+      accountCreated: num(process.env.GENTS_LOYALTY_BONUS_ACCOUNT, 50),
+      sizeAdvice: num(process.env.GENTS_LOYALTY_BONUS_SIZE_ADVICE, 50),
+      walletPass: num(process.env.GENTS_LOYALTY_BONUS_WALLET, 50),
+      favoriteStore: num(process.env.GENTS_LOYALTY_BONUS_STORE, 50),
+      profileComplete: num(process.env.GENTS_LOYALTY_BONUS_PROFILE, 50),
+    },
+    serviceMaxPerActie: num(process.env.GENTS_LOYALTY_SERVICE_MAX, 500),
   },
+  puntenActies: [],
   stockNotifyConfig: {
     enabled: true,
     emailEnabled: true,
@@ -244,8 +429,23 @@ export const DEFAULT_SETTINGS: Settings = {
     alternativeEnabled: true,
     alternativeAfterDays: num(process.env.GENTS_STOCK_ALT_DAYS, 14),
   },
+  unfulfillableConfig: {
+    emailEnabled: true,
+    alternativesEnabled: true,
+    alternativesCount: 3,
+  },
   merchandisingPins: {},
+  merchandisingRegels: [],
   storeEmails: {},
+  alertEmails: (process.env.OPS_ALERT_EMAIL || "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean),
+  paymentTop: DEFAULT_PAYMENT_TOP,
+  shippingZones: {},
+  // 45 dagen ruw is ruim genoeg om twee volle maandpatronen te zien en kort
+  // genoeg om niet zonder reden bezoekgedrag te bewaren.
+  heatmap: { aan: true, bewaardagen: 45, steekproefPct: 100 },
 };
 
 let _cache: Settings | null = null;
@@ -268,15 +468,44 @@ export async function getSettings(): Promise<Settings> {
       giftcardConfig: { ...DEFAULT_SETTINGS.giftcardConfig, ...(stored.giftcardConfig || {}) },
       tieredDiscount: { ...DEFAULT_SETTINGS.tieredDiscount, ...(stored.tieredDiscount || {}) },
       returnConfig: { ...DEFAULT_SETTINGS.returnConfig, ...(stored.returnConfig || {}) },
+      /* Twee niveaus diep: een opgeslagen loyaltyConfig van vóór de actie-bonussen
+         heeft nog geen `bonusPoints`, en een ondiepe merge zou die dan op undefined
+         zetten — een klant kreeg dan stil 0 punten voor z'n maatprofiel. */
+      loyaltyConfig: {
+        ...DEFAULT_SETTINGS.loyaltyConfig,
+        ...(stored.loyaltyConfig || {}),
+        bonusPoints: { ...DEFAULT_SETTINGS.loyaltyConfig.bonusPoints, ...(stored.loyaltyConfig?.bonusPoints || {}) },
+      },
       routeOverstockFirst: { ...DEFAULT_SETTINGS.routeOverstockFirst, ...(stored.routeOverstockFirst || {}) },
       stockNotifyConfig: { ...DEFAULT_SETTINGS.stockNotifyConfig, ...(stored.stockNotifyConfig || {}) },
+      unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
+      heatmap: { ...DEFAULT_SETTINGS.heatmap, ...(stored.heatmap || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
-      // Ook deze geneste objecten per-veld mergen (niet onder de top-level ...stored
-      // laten vallen): anders vervangt een blob die vóór een nieuwe veld-toevoeging is
-      // opgeslagen het defaults-object volledig en komt dat nieuwe veld als undefined.
-      loyaltyConfig: { ...DEFAULT_SETTINGS.loyaltyConfig, ...(stored.loyaltyConfig || {}) },
+      /* Deze twee geneste config-objecten ook per-veld mergen (niet onder de
+         top-level ...stored laten vallen): anders vervangt een blob van vóór een
+         nieuwe veld-toevoeging het defaults-object volledig en komt dat veld als
+         undefined. (loyaltyConfig wordt hierboven al twee niveaus diep gemerged.) */
       pakbon: { ...DEFAULT_SETTINGS.pakbon, ...(stored.pakbon || {}) },
       merchandisingPins: { ...DEFAULT_SETTINGS.merchandisingPins, ...(stored.merchandisingPins || {}) },
+      /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
+         gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */
+      pausedBranchIds: Array.isArray(stored.pausedBranchIds) ? stored.pausedBranchIds.map(String) : [],
+      extraClosureDates: Array.isArray(stored.extraClosureDates) ? stored.extraClosureDates.map(String) : [],
+      /* Een leeg opgeslagen lijstje is een bewuste keuze ("stuur niemand iets")
+         en mag dus niet stil terugvallen op de env-default; alleen als het veld
+         nooit gezet is telt die default nog. */
+      alertEmails: Array.isArray(stored.alertEmails) ? stored.alertEmails : DEFAULT_SETTINGS.alertEmails,
+      /* Vervanging, geen samenvoeging: een land dat je in de tool uitzet moet
+         uit blijven en niet via de code-default terugkomen. */
+      shippingZones: stored.shippingZones ?? DEFAULT_SETTINGS.shippingZones,
+      paymentTop: {
+        ...DEFAULT_SETTINGS.paymentTop,
+        ...(stored.paymentTop || {}),
+        // De landenlijst is een VERVANGING, geen samenvoeging: een land dat in de
+        // tool weggehaald is moet ook echt weg zijn en niet uit de code-default
+        // terugkomen. Alleen als er nog nooit iets is ingesteld valt hij terug.
+        topByCountry: stored.paymentTop?.topByCountry ?? DEFAULT_SETTINGS.paymentTop.topByCountry,
+      },
     };
   } catch {
     _cache = DEFAULT_SETTINGS;

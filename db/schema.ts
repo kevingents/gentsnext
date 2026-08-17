@@ -433,6 +433,12 @@ export const productImages = pgTable(
     // '' = echte (gesyncte) foto; 'ai-packshot' = gegenereerd beeld ter indicatie.
     // AI-rijen overleven de Shopify-import en wijken zodra echte foto's binnenkomen.
     source: text("source").notNull().default(""),
+    // true = deze foto is een packshot (alleen het product, egale achtergrond) i.p.v.
+    // een modelfoto/sfeerbeeld. Gezet door de beeld-classificatie in storegents, via
+    // /api/core/catalog/packshots. Wordt ALLEEN gebruikt om de kassa het artikel te
+    // laten zien i.p.v. een model; `position` blijft de redactionele volgorde en
+    // bepaalt onveranderd wat gents.nl toont.
+    isPackshot: boolean("is_packshot").notNull().default(false),
   },
   (t) => [index("images_product_idx").on(t.productId, t.position)]
 );
@@ -506,6 +512,11 @@ export const orders = pgTable(
     /** Mollie */
     molliePaymentId: text("mollie_payment_id"),
     paymentStatus: text("payment_status"),
+    /** Wélke methode de klant koos (ideal, creditcard, klarna, bancontact, …).
+     *  Stond nergens vast: `paymentStatus` is alleen 'paid'. Het is een sterk
+     *  profielkenmerk én het stuurt de volgorde van de betaalkeuze in de
+     *  checkout. Leeg voor de historische import — eerlijker dan een gok. */
+    betaalmethode: text("betaalmethode").notNull().default(""),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     /** SRS-weborder-push-status (na betaling) — voor de latere koppeling. */
     srsPushedAt: timestamp("srs_pushed_at", { withTimezone: true }),
@@ -515,6 +526,15 @@ export const orders = pgTable(
     fulfillmentStatus: text("fulfillment_status").notNull().default("pending"),
     /** Orderbevestigingsmail verstuurd (idempotent — webhook kan dubbel komen). */
     confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
+    /** De aanraking die déze order opleverde, vastgevroren bij het bestellen:
+     *  {source, medium, campaign, gclid, fbclid, …}. Bewust een kopie en geen
+     *  verwijzing naar visitorAttribution — die beweegt mee met het volgende
+     *  bezoek, terwijl een order toegerekend moet blijven aan de campagne die
+     *  'm bracht. Voedt ook de server-side conversie naar Google/Meta. */
+    attributie: jsonb("attributie").notNull().default({}),
+    /** Het device (gents-sid) waarop besteld is — koppelt de order aan het
+     *  gedrag ervoor (welke producten bekeken, welke zoekopdracht). */
+    sessionId: text("session_id").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -604,6 +624,14 @@ export const events = pgTable(
     query: text("query").notNull().default(""),
     valueCents: integer("value_cents").notNull().default(0),
     props: jsonb("props").notNull().default({}),
+    /** Bekende klant achter dit event; NULL zolang het device anoniem is. Wordt
+     *  óók met terugwerkende kracht ingevuld zodra een device bekend wordt
+     *  (lib/identity: koppelDevice), want de eerste sessie is meestal de sessie
+     *  waarin de klant zich oriënteerde — juist die wil je in het profiel. */
+    customerId: uuid("customer_id"),
+    /** 'web' | 'pos' | 'server' | 'app' — anders vallen kassa- en webevents in
+     *  dezelfde emmer en klopt elke funnel-telling niet meer. */
+    bron: text("bron").notNull().default("web"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -611,7 +639,45 @@ export const events = pgTable(
     index("events_handle_idx").on(t.handle),
     index("events_query_idx").on(t.query),
     index("events_session_idx").on(t.sessionId),
+    index("events_klant_time_idx").on(t.customerId, t.createdAt),
+    index("events_session_time_idx").on(t.sessionId, t.createdAt),
   ]
+);
+
+/**
+ * Eerste én laatste aanraking per device (het anonieme gents-sid).
+ *
+ * Attributie hoort bij het DEVICE, niet bij elk los event — daarom een aparte
+ * tabel in plaats van nog vijftien kolommen op `events` (die tabel groeit het
+ * hardst en moet smal blijven). De klik-id's zijn wat Google en Meta nodig
+ * hebben om een server-side of offline conversie aan de juiste advertentieklik
+ * te hangen; die werden tot nu toe nergens bewaard, waardoor élke conversie
+ * ongeattribueerd was.
+ */
+export const visitorAttribution = pgTable(
+  "visitor_attribution",
+  {
+    sessionId: text("session_id").primaryKey(),
+    firstSource: text("first_source").notNull().default(""),
+    firstMedium: text("first_medium").notNull().default(""),
+    firstCampaign: text("first_campaign").notNull().default(""),
+    firstTerm: text("first_term").notNull().default(""),
+    firstContent: text("first_content").notNull().default(""),
+    firstReferrer: text("first_referrer").notNull().default(""),
+    firstLanding: text("first_landing").notNull().default(""),
+    lastSource: text("last_source").notNull().default(""),
+    lastMedium: text("last_medium").notNull().default(""),
+    lastCampaign: text("last_campaign").notNull().default(""),
+    gclid: text("gclid").notNull().default(""),
+    gbraid: text("gbraid").notNull().default(""),
+    wbraid: text("wbraid").notNull().default(""),
+    fbclid: text("fbclid").notNull().default(""),
+    ttclid: text("ttclid").notNull().default(""),
+    msclkid: text("msclkid").notNull().default(""),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("visitor_attribution_bron_idx").on(t.firstSource, t.firstMedium)]
 );
 
 /**
@@ -765,11 +831,47 @@ export const vouchers = pgTable(
     singleUse: boolean("single_use").notNull().default(true),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    /**
+     * WAT de code verzilverde: het ordernummer, of aan de kassa de bon-referentie.
+     * Nodig voor idempotentie buiten de webshop: een kassa-POST kan opnieuw komen
+     * (netwerk, offline-sync), en zonder deze referentie is "al verzilverd" niet te
+     * onderscheiden van "door mijzelf verzilverd" — de kassier zou een geldige
+     * tegoedbon geweigerd zien, of 'm twee keer aftrekken.
+     */
+    redeemedRef: text("redeemed_ref").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("vouchers_code_unique").on(t.code),
     index("vouchers_customer_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Logboek van met de hand toegekende punten (coulance na een klacht).
+ *
+ * Waarom apart van loyaltyEvents: de `reason` daar staat in het puntenoverzicht
+ * van de KLANT. Een interne notitie hoort daar niet. Het grootboek krijgt een
+ * neutrale klanttekst; de echte reden en wie het deed staan hier.
+ */
+export const loyaltyServiceGrants = pgTable(
+  "loyalty_service_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    points: integer("points").notNull(),
+    /** Interne reden — niet zichtbaar voor de klant. */
+    reason: text("reason").notNull().default(""),
+    /** Wie het deed (portal-gebruiker); de API weigert een lege actor. */
+    actor: text("actor").notNull().default(""),
+    ticketId: text("ticket_id").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("loyalty_service_grants_customer_idx").on(t.customerId, t.createdAt),
+    index("loyalty_service_grants_actor_idx").on(t.actor, t.createdAt),
   ]
 );
 
@@ -813,6 +915,14 @@ export const walletAppleRegistrations = pgTable(
     deviceLibraryIdentifier: text("device_library_identifier").notNull(),
     serialNumber: text("serial_number").notNull(),
     pushToken: text("push_token").notNull(),
+    /**
+     * Het saldo zoals de pas het kent na de laatste geslaagde push. Maakt drift
+     * zichtbaar: wijkt dit af van het huidige saldo, dan loopt de pas achter en
+     * moet er alsnog gepusht worden. Zonder deze kolom is een gemiste push
+     * onzichtbaar — er komt geen fout, de klant ziet alleen een oud getal.
+     * NULL = nog nooit gepusht.
+     */
+    lastPushedPoints: integer("last_pushed_points"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1248,6 +1358,68 @@ export const posClosings = pgTable(
 );
 
 /**
+ * Kasmutaties (IN/UIT KAS, IN/UIT KLUIS tijdens de dag) — bron-van-waarheid in de
+ * Neon-core. Vervangt de storegents-blob admin/pos-kas-mutaties.json. Dit is een
+ * GELDSPOOR: append-only (fout = tegenmutatie boeken, geen bewerken/wissen) en
+ * zonder de 2000-records-cap van de blob — kasadministratie knip je niet af.
+ * Zelfde mirror-opzet als pos_sales: queryable kolommen + het volledige record
+ * als jsonb `data`; idempotent op id (retry/backfill boekt nooit dubbel).
+ */
+export const posKasMutaties = pgTable(
+  "pos_kas_mutaties",
+  {
+    id: text("id").primaryKey(), // km-<...> id van de kassa
+    store: text("store").notNull(),
+    date: text("date").notNull(), // YYYY-MM-DD (Europa/Amsterdam)
+    type: text("type").notNull(), // inkas | uitkas | kluis-in | kluis-uit
+    amountCents: integer("amount_cents").notNull().default(0),
+    data: jsonb("data").notNull(), // de volledige mutatie (incl. reason + actor)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pos_kas_mutaties_store_date_idx").on(t.store, t.date)],
+);
+
+/**
+ * Kas-openingen (beginkas/wisselgeld-telling per winkel per dag) — bron-van-waarheid
+ * in de Neon-core. Vervangt de storegents-blob admin/kassa-openings.json. Unieke
+ * (store, date) → één telling per dag; een hertelling overschrijft mét audit-spoor
+ * (`previous` in de data-jsonb). De SRS-claim (data->'srs') wordt hier ATOMAIR gezet
+ * (één conditionele update) — de blob-claim had een read-modify-write-venster waarin
+ * twee gelijktijdige tellingen allebei konden boeken.
+ */
+export const posOpenings = pgTable(
+  "pos_openings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    store: text("store").notNull(),
+    date: text("date").notNull(), // YYYY-MM-DD (Europa/Amsterdam)
+    amountCents: integer("amount_cents").notNull().default(0),
+    data: jsonb("data").notNull(), // de volledige opening (coupures/actor/previous/srs)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("pos_openings_store_date_unique").on(t.store, t.date)],
+);
+
+/**
+ * Geparkeerde kassa-mandjes (held sales / drafts) — bron-van-waarheid in de
+ * Neon-core. Vervangt de storegents-blob admin/pos-sales-drafts.json. Een concept
+ * boekt niets (geen voorraad/loyalty); zichtbaar over devices/locaties omdat de
+ * opslag centraal is. Upsert op id (het draft-id van de kassa).
+ */
+export const posDrafts = pgTable(
+  "pos_drafts",
+  {
+    id: text("id").primaryKey(), // draft-<...> id van de kassa
+    store: text("store").notNull(),
+    data: jsonb("data").notNull(), // het volledige concept (lines/klant/label/…)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pos_drafts_store_updated_idx").on(t.store, t.updatedAt)],
+);
+
+/**
  * Inbound goederenontvangst — een zending naar een winkel (replenishment vanuit
  * het magazijn, leverancier-levering of winkel→winkel-herverdeling). DE ASN: wat
  * verwacht wordt + de status (gepickt → onderweg → ontvangen). Gespiegeld op
@@ -1344,6 +1516,9 @@ export const appointments = pgTable(
     preferredDate: date("preferred_date").notNull(),
     /** 'ochtend' | 'middag' | 'avond' | 'geen-voorkeur' */
     dagdeel: text("dagdeel").notNull().default("geen-voorkeur"),
+    /** Het afgesproken tijdstip ("14:30"), gezet zodra de winkel bevestigt.
+     *  Leeg zolang alleen het dagdeel bekend is (de online aanvraag). */
+    tijd: text("tijd").notNull().default(""),
     name: text("name").notNull(),
     email: text("email").notNull(),
     phone: text("phone").notNull().default(""),
@@ -1548,4 +1723,925 @@ export const studentLeden = pgTable(
     uniqueIndex("student_leden_email_uq").on(t.klantEmail),
     index("student_leden_vereniging_idx").on(t.vereniging),
   ],
+);
+
+/* ── Exact Online-koppelingsstatus (verhuisd uit Vercel Blob, aug 2026) ────────
+   Kleine key/value-tabel: de versleutelde OAuth-tokens (storegents versleutelt
+   vóór het schrijven — de database ziet nooit een leesbare token), de
+   boekhoud-mapping en de geboekt-markers. Waarom Postgres i.p.v. blob: blob is
+   uiteindelijk-consistent en kent geen sloten, en Exacts refresh-token is
+   eenmalig — twee servers die tegelijk verversen kostte op 11-8-2026 de hele
+   koppeling ("Old refresh token used"). Hier is lezen altijd vers en is de
+   refresh-claim één atomaire statement. */
+export const exactState = pgTable("exact_state", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* ── Loyalty-core: kassa-spaarpunten (verhuisd uit Vercel Blob, aug 2026) ──────
+   Vervangt de storegents-blob admin/loyalty-core.json (saldo + mutaties per
+   klant, MAX 500 mutaties → historie werd afgekapt; mutateJsonBlob = last-
+   writer-wins → gelijktijdige boekingen konden elkaar overschrijven). Dit is de
+   belangrijkste GELD-store van de kassa: hier telt élke mutatie.
+
+   Sleutel = het kassa-klant-id zoals storegents het aanlevert (TEXT): meestal
+   het numerieke SRS-klantnummer, soms een gents.nl-klant-uuid. Bewust GEEN FK
+   naar `customers` — de kassa kent klanten die (nog) geen gents.nl-account
+   hebben; unificatie kan later via customers.srsCustomerId. Dit grootboek staat
+   dus NAAST loyaltyEvents (dat is het gents.nl-web-spaarprogramma op
+   customers.id); samenvoegen is een aparte stap.
+
+   Saldo-consistentie: het saldo staat gematerialiseerd op loyalty_accounts en
+   wordt SAMEN met de ledger-insert gemuteerd in ÉÉN data-modifying-CTE-statement
+   (zie lib/loyalty-core.ts). Eén statement = één impliciete transactie, ook over
+   de neon-http-driver (die kent geen multi-statement-transacties). De ledger is
+   append-only (geen cap) en blijft de audit-bron; NB: saldo ≠ SUM(ledger) is
+   mogelijk door de 0-vloer (blob-pariteit: saldo kan nooit negatief) en doordat
+   de blob-backfill alleen de laatste ≤500 mutaties per klant heeft. */
+export const loyaltyAccounts = pgTable(
+  "loyalty_accounts",
+  {
+    /** Kassa-klant-id (SRS-klantnummer of gents.nl-uuid) — zoals storegents 'm aanlevert. */
+    customerId: text("customer_id").primaryKey(),
+    name: text("name").notNull().default(""),
+    balance: integer("balance").notNull().default(0),
+    /** Gezet zodra de blob-baseline voor dit account is bijgeteld — maakt de
+     *  backfill idempotent én race-veilig (tweede backfill telt niet dubbel). */
+    backfilledAt: timestamp("backfilled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  }
+);
+
+export const loyaltyMutations = pgTable(
+  "loyalty_mutations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: text("customer_id").notNull(),
+    /** Punten-delta: positief = verdiend, negatief = ingewisseld/retour/terugdraai. */
+    delta: integer("delta").notNull(),
+    reason: text("reason").notNull().default(""),
+    /** Referentie naar de kassa-bon (sale-id); leeg bij handmatige correcties. */
+    saleId: text("sale_id").notNull().default(""),
+    store: text("store").notNull().default(""),
+    actor: text("actor").notNull().default(""),
+    /** Idempotentie-sleutel: met saleId = `<customerId>|<saleId>|<reason>` (zelfde
+     *  dedup als de blob: één earn/inwissel/terugdraai per bon per reden); zonder
+     *  saleId = het gegenereerde mutatie-id (correcties mogen altijd); backfill
+     *  zonder saleId = `blob:<mutatie-id>`. Herhaalde POST boekt nooit dubbel. */
+    mutationKey: text("mutation_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("loyalty_mutations_key_uq").on(t.mutationKey),
+    index("loyalty_mutations_customer_idx").on(t.customerId),
+    index("loyalty_mutations_sale_idx").on(t.saleId),
+  ]
+);
+
+/* ─────────────── Klantprofiel 360 & doelgroepen (CDP-laag) ──────────────── */
+
+/**
+ * Identiteitsgrafiek: alle sleutels waarmee één klant herkend kan worden.
+ *
+ * De aanleiding staat in het geheugen als "identiteitsprobleem SRS-nr vs uuid":
+ * dezelfde persoon leefde als uuid (orders, loyalty, posSales), als
+ * SRS-klantnummer (storePurchases), als los e-mailadres (tickets, retouren,
+ * afspraken, nieuwsbrief) en als wallet-pascode. Elke koppeling werd ad hoc op
+ * e-mail gedaan, met een stille terugval op "de eerste treffer" als dat niet
+ * lukte. Dit is de ene plek waar die sleutels bij elkaar komen.
+ *
+ * Uniek op (kind, value): een device of e-mailadres hangt aan precies één
+ * klant. Botst een nieuwe koppeling, dan wint de bestaande en waarschuwt de
+ * code — stil overschrijven zou de historie van de vórige klant naar de nieuwe
+ * verhuizen, en dat is een privacylek, geen datafoutje.
+ */
+export const customerIdentities = pgTable(
+  "customer_identities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    /** 'device' | 'email' | 'srs' | 'phone' | 'wallet' | 'pos'. */
+    kind: text("kind").notNull(),
+    /** Genormaliseerd: e-mail lowercase+trim, telefoon E.164, device = rauwe sid. */
+    value: text("value").notNull(),
+    /** 'zeker' (ingelogd/afgerekend) of 'afgeleid' (op e-mail gematcht zonder
+     *  login). Doelgroepen die geld kosten mogen kiezen om alleen 'zeker' mee te
+     *  nemen — een verkeerd gekoppeld device is een advertentie aan de verkeerde
+     *  persoon. */
+    zekerheid: text("zekerheid").notNull().default("zeker"),
+    bron: text("bron").notNull().default(""),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customer_identities_uniek").on(t.kind, t.value),
+    index("customer_identities_klant_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Het 360-profiel, platgeslagen en per nacht herbouwd.
+ *
+ * Waarom gematerialiseerd en niet live: het profiel raakt twaalf tabellen
+ * (orders, orderregels, posSales, storePurchases, returns, loyalty, vouchers,
+ * cadeaubonnen, tickets, afspraken, reviews, events). Dat is prima voor één
+ * klantkaart, maar een doelgroep telt over 46.000 klanten en moet in de portal
+ * binnen een seconde een aantal tonen. Deze tabel is de leescopie waar élke
+ * doelgroepregel op draait; lib/customer-360 bouwt hem.
+ *
+ * De _sha256-velden zijn wat naar Meta en Google Ads gaat: die matchen op een
+ * genormaliseerde hash, nooit op het rauwe adres. Vooraf berekend, zodat een
+ * uitlevering van 20k klanten niet 20k keer staat te hashen.
+ */
+export const customerProfiles = pgTable(
+  "customer_profiles",
+  {
+    customerId: uuid("customer_id")
+      .primaryKey()
+      .references(() => customers.id, { onDelete: "cascade" }),
+
+    email: text("email").notNull().default(""),
+    emailSha256: text("email_sha256").notNull().default(""),
+    phoneE164: text("phone_e164").notNull().default(""),
+    phoneSha256: text("phone_sha256").notNull().default(""),
+    voornaamSha256: text("voornaam_sha256").notNull().default(""),
+    achternaamSha256: text("achternaam_sha256").notNull().default(""),
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    land: text("land").notNull().default("NL"),
+    srsCustomerId: text("srs_customer_id").notNull().default(""),
+
+    ordersOnline: integer("orders_online").notNull().default(0),
+    ordersWinkel: integer("orders_winkel").notNull().default(0),
+    ordersTotaal: integer("orders_totaal").notNull().default(0),
+    besteedOnlineCents: integer("besteed_online_cents").notNull().default(0),
+    besteedWinkelCents: integer("besteed_winkel_cents").notNull().default(0),
+    besteedTotaalCents: integer("besteed_totaal_cents").notNull().default(0),
+    gemOrderwaardeCents: integer("gem_orderwaarde_cents").notNull().default(0),
+    eersteAankoop: timestamp("eerste_aankoop", { withTimezone: true }),
+    laatsteAankoop: timestamp("laatste_aankoop", { withTimezone: true }),
+    dagenSindsAankoop: integer("dagen_sinds_aankoop"),
+    klantwaardeCents: integer("klantwaarde_cents").notNull().default(0),
+
+    /** Retourquote in hele procenten. Een klant met 60% retour is een ándere
+     *  doelgroep dan zijn omzet suggereert; zonder dit veld adverteer je je
+     *  verlies groter. */
+    retouren: integer("retouren").notNull().default(0),
+    retourCents: integer("retour_cents").notNull().default(0),
+    retourquote: integer("retourquote").notNull().default(0),
+
+    punten: integer("punten").notNull().default(0),
+    puntenBeschikbaar: integer("punten_beschikbaar").notNull().default(0),
+    tegoedCents: integer("tegoed_cents").notNull().default(0),
+    actieveVouchers: integer("actieve_vouchers").notNull().default(0),
+    walletPas: boolean("wallet_pas").notNull().default(false),
+    /** Punten die uit de eenmalige actie-bonussen kwamen — wie reageert op een prikkel. */
+    bonusPunten: integer("bonus_punten").notNull().default(0),
+    /** Heeft de klant ZELF z'n maten opgegeven? Iets anders dan `maten` hieronder:
+     *  dat zijn de maten die hij gekocht heeft, afgeleid uit de orderregels.
+     *  Zonder opgegeven maat is een verkeerde-maat-retour veel waarschijnlijker,
+     *  dus dit is de doelgroep waar de retour-campagnes op mikken. */
+    maatprofiel: boolean("maatprofiel").notNull().default(false),
+    /** Voldoet aan de profiel-checklist (lib/profiel-voorkeuren). */
+    profielCompleet: boolean("profiel_compleet").notNull().default(false),
+    /** Heeft de welkomstbonus gehad. Nee = klant van vóór 13 aug 2026; dat zijn er
+     *  ruim 48.000 en met terugwerkende kracht uitbetalen is ± € 120.000. Als
+     *  doelgroep kun je ze in plaats daarvan een reden geven om iets te doen. */
+    welkomstbonus: boolean("welkomstbonus").notNull().default(false),
+
+    sessies30d: integer("sessies_30d").notNull().default(0),
+    productviews30d: integer("productviews_30d").notNull().default(0),
+    zoekopdrachten30d: integer("zoekopdrachten_30d").notNull().default(0),
+    laatstGezien: timestamp("laatst_gezien", { withTimezone: true }),
+    /** Laatste add_to_cart zónder aankoop erna — de winkelwagenverlaters. */
+    karVerlatenOp: timestamp("kar_verlaten_op", { withTimezone: true }),
+    laatstBekeken: jsonb("laatst_bekeken").notNull().default([]),
+
+    tickets: integer("tickets").notNull().default(0),
+    afspraken: integer("afspraken").notNull().default(0),
+    reviews: integer("reviews").notNull().default(0),
+
+    topCategorieen: jsonb("top_categorieen").notNull().default([]),
+    topMerken: jsonb("top_merken").notNull().default([]),
+    topKleuren: jsonb("top_kleuren").notNull().default([]),
+    maten: jsonb("maten").notNull().default({}),
+    favorieteWinkel: text("favoriete_winkel").notNull().default(""),
+    /** 'online' | 'winkel' | 'omni' | 'geen'. */
+    kanaal: text("kanaal").notNull().default("geen"),
+
+    /** Drie losse waarheden die tot nu toe door elkaar liepen. Een doelgroep die
+     *  naar een advertentieplatform of de mail gaat mag alleen op de eerste twee
+     *  leunen; de cookie-marketingkeuze geldt voor tags op de site. */
+    marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    nieuwsbrief: text("nieuwsbrief").notNull().default("geen"),
+    whatsappOptIn: boolean("whatsapp_opt_in").notNull().default(false),
+
+    rfmR: integer("rfm_r").notNull().default(0),
+    rfmF: integer("rfm_f").notNull().default(0),
+    rfmM: integer("rfm_m").notNull().default(0),
+    /** nieuw | trouw | vip | slapend | risico | eenmalig | verloren | geen. */
+    segment: text("segment").notNull().default("geen"),
+
+    /** Grote maten — Kevin wil deze groep expliciet kunnen benaderen. Afgeleid
+     *  langs TWEE wegen: lidmaatschap van de collectie 'Grote maten' én de
+     *  gekochte maten zelf. Eén weg is niet genoeg: de collectie dekt niet alle
+     *  artikelen, en een maat zegt per categorie iets anders. */
+    groteMaten: boolean("grote_maten").notNull().default(false),
+    maatprofielCompleet: boolean("maatprofiel_compleet").notNull().default(false),
+
+    /** Prijsgevoeligheid als PERCENTAGE van de orders met korting. Wie alleen in
+     *  de sale koopt is een andere campagne dan wie vol tarief betaalt — en die
+     *  tweede groep wil je nóóit een kortingsmail sturen. */
+    kortingsaandeel: integer("kortingsaandeel").notNull().default(0),
+    ordersMetKorting: integer("orders_met_korting").notNull().default(0),
+
+    zakelijk: boolean("zakelijk").notNull().default(false),
+    cadeaukoper: boolean("cadeaukoper").notNull().default(false),
+    taal: text("taal").notNull().default("nl"),
+    betaalmethode: text("betaalmethode").notNull().default(""),
+    bezorgvoorkeur: text("bezorgvoorkeur").notNull().default(""),
+    /** In welke maanden koopt deze klant. Voedt seizoenscampagnes: wie elk jaar
+     *  in mei een pak koopt (trouwseizoen) benader je in april, niet in
+     *  november. */
+    aankoopmaanden: jsonb("aankoopmaanden").notNull().default([]),
+
+    mailVerstuurd: integer("mail_verstuurd").notNull().default(0),
+    mailGeopend: integer("mail_geopend").notNull().default(0),
+    mailGeklikt: integer("mail_geklikt").notNull().default(0),
+    mailOpenratio: integer("mail_openratio").notNull().default(0),
+    mailLaatstGeopend: timestamp("mail_laatst_geopend", { withTimezone: true }),
+
+    /** Externe kanalen apart geteld. "Koopt bij ons én op Bol" is een eigen
+     *  groep: die klant kun je met een reden naar het eigen kanaal halen, en dat
+     *  scheelt marge. */
+    ordersBol: integer("orders_bol").notNull().default(0),
+    besteedBolCents: integer("besteed_bol_cents").notNull().default(0),
+    ordersShopify: integer("orders_shopify").notNull().default(0),
+    besteedShopifyCents: integer("besteed_shopify_cents").notNull().default(0),
+
+    retourRedenen: jsonb("retour_redenen").notNull().default([]),
+
+    verjaardag: date("verjaardag"),
+    /** Apart van de datum: een doelgroep "jarig deze maand" is de meest voor de
+     *  hand liggende die we niet hadden, en die filtert op maand, niet op jaar. */
+    geboortemaand: integer("geboortemaand"),
+    geslacht: text("geslacht").notNull().default(""),
+
+    /** Wat de klant ZELF opgaf op /account bij Voorkeuren. Stond alleen in
+     *  `customers.preferences` en werd uitsluitend gebruikt voor het vinkje
+     *  "profiel compleet" — terwijl datzelfde scherm belooft dat we de weergave
+     *  erop afstemmen. Nu als velden, zodat er doelgroepen op te bouwen zijn. */
+    leeftijdsgroep: text("leeftijdsgroep").notNull().default(""),
+    favorieteKleuren: jsonb("favoriete_kleuren").notNull().default([]),
+    gelegenheden: jsonb("gelegenheden").notNull().default([]),
+    vasteWinkel: text("vaste_winkel").notNull().default(""),
+    /* profielCompleet staat hierboven al — die wordt door lib/profiel-voorkeuren
+       gevuld en blijft daar. Twee schrijvers op één kolom is vragen om een
+       verschil dat niemand kan verklaren. */
+
+    attributie: jsonb("attributie").notNull().default({}),
+    berekendOp: timestamp("berekend_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_profiles_segment_idx").on(t.segment),
+    index("customer_profiles_grote_maten_idx").on(t.groteMaten),
+    index("customer_profiles_korting_idx").on(t.kortingsaandeel),
+    index("customer_profiles_mail_idx").on(t.mailOpenratio),
+    index("customer_profiles_kanaal_idx").on(t.kanaal),
+    index("customer_profiles_besteed_idx").on(t.besteedTotaalCents),
+    index("customer_profiles_laatste_idx").on(t.laatsteAankoop),
+    index("customer_profiles_optin_idx").on(t.marketingOptIn),
+    index("customer_profiles_winkel_idx").on(t.favorieteWinkel),
+    index("customer_profiles_rfm_idx").on(t.rfmR, t.rfmF, t.rfmM),
+    index("customer_profiles_maatprofiel_idx").on(t.maatprofiel, t.marketingOptIn),
+    index("customer_profiles_compleet_idx").on(t.profielCompleet, t.marketingOptIn),
+    index("customer_profiles_welkomstbonus_idx").on(t.welkomstbonus, t.marketingOptIn),
+  ]
+);
+
+/**
+ * Doelgroep: een herbruikbare selectie klanten die naar één of meer kanalen
+ * uitgeleverd wordt (mail, Meta, Google Ads, of gewoon een export).
+ *
+ * `definitie` is een regelBOOM als data, geen SQL-string. De regels worden in de
+ * portal geklikt en server-side vertaald tegen een vaste veldenlijst
+ * (lib/audience-regels). Vrije SQL in een kolom is een injectiedeur die vanzelf
+ * een keer opengaat.
+ */
+export const audiences = pgTable(
+  "audiences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    naam: text("naam").notNull(),
+    omschrijving: text("omschrijving").notNull().default(""),
+    definitie: jsonb("definitie").notNull().default({}),
+    /** 'dynamisch' = elke nacht opnieuw bepaald, 'statisch' = eenmalig vastgezet. */
+    soort: text("soort").notNull().default("dynamisch"),
+    actief: boolean("actief").notNull().default(true),
+    /** {"resend":{...},"meta":{...},"google":{...}} — per kanaal de instellingen. */
+    kanalen: jsonb("kanalen").notNull().default({}),
+    aantal: integer("aantal").notNull().default(0),
+    /** Hoeveel daarvan daadwerkelijk te bereiken zijn (opt-in + adres bekend).
+     *  Het verschil met `aantal` is precies waar een campagne op stukloopt. */
+    aantalBereikbaar: integer("aantal_bereikbaar").notNull().default(0),
+    laatstGebouwd: timestamp("laatst_gebouwd", { withTimezone: true }),
+    aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("audiences_slug_uniek").on(t.slug), index("audiences_actief_idx").on(t.actief)]
+);
+
+export const audienceMembers = pgTable(
+  "audience_members",
+  {
+    audienceId: uuid("audience_id")
+      .notNull()
+      .references(() => audiences.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    toegevoegdOp: timestamp("toegevoegd_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "audience_members_pk", columns: [t.audienceId, t.customerId] }),
+    index("audience_members_klant_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Uitleverlogboek: per kanaal per keer hoeveel erbij kwamen, hoeveel eraf
+ * gingen en wat er misging. Zonder dit logboek weet je bij een scheve
+ * Meta-doelgroep nooit of het aan de regel lag of aan de uitlevering.
+ */
+export const audienceSyncs = pgTable(
+  "audience_syncs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    audienceId: uuid("audience_id")
+      .notNull()
+      .references(() => audiences.id, { onDelete: "cascade" }),
+    /** 'resend' | 'meta' | 'google' | 'csv'. */
+    kanaal: text("kanaal").notNull(),
+    /** 'bezig' | 'klaar' | 'fout'. */
+    status: text("status").notNull().default("bezig"),
+    toegevoegd: integer("toegevoegd").notNull().default(0),
+    verwijderd: integer("verwijderd").notNull().default(0),
+    /** Overgeslagen wegens ontbrekende toestemming of onbruikbaar adres. */
+    overgeslagen: integer("overgeslagen").notNull().default(0),
+    fout: text("fout").notNull().default(""),
+    externId: text("extern_id").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audience_syncs_audience_idx").on(t.audienceId, t.createdAt)]
+);
+
+/* ───────────────── Externe bronnen in het klantbeeld ────────────────────── */
+
+/**
+ * Bestellingen die buiten ons eigen ordermodel omgaan: Bol.com, en straks elk
+ * ander marktplaats-kanaal.
+ *
+ * Eén tabel per SOORT FEIT, niet per systeem: een bestelling bij Bol en een bij
+ * een toekomstig kanaal zijn allebei "een externe order", ze verschillen in
+ * `bron`. Vijf losse tabellen zouden vijf keer dezelfde vraag anders
+ * beantwoorden. Shopify hoort hier bewust NIET bij: dat is onze eigen webshop,
+ * die landt via lib/shopify-sync gewoon in `orders`, zodat het profiel en alle
+ * rapportages er zonder uitzondering mee rekenen.
+ *
+ * `data` bewaart het ruwe record, zodat een verkeerde interpretatie later te
+ * herstellen is zonder opnieuw bij de bron te moeten trekken.
+ */
+export const externeOrders = pgTable(
+  "externe_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 'bol' | 'srs' | … */
+    bron: text("bron").notNull(),
+    externId: text("extern_id").notNull(),
+    orderNummer: text("order_nummer").notNull().default(""),
+    /** Brugsleutel: externe systemen kennen onze uuid niet. */
+    email: text("email").notNull().default(""),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    status: text("status").notNull().default(""),
+    totalCents: integer("total_cents").notNull().default(0),
+    kortingCents: integer("korting_cents").notNull().default(0),
+    besteldOp: timestamp("besteld_op", { withTimezone: true }).notNull(),
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    land: text("land").notNull().default("NL"),
+    telefoon: text("telefoon").notNull().default(""),
+    regels: jsonb("regels").notNull().default([]),
+    data: jsonb("data").notNull().default({}),
+    opgehaaldOp: timestamp("opgehaald_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Zonder deze unieke index verdubbelt élke sync de omzet van een klant.
+    uniqueIndex("externe_orders_uniek").on(t.bron, t.externId),
+    index("externe_orders_klant_idx").on(t.customerId),
+    index("externe_orders_tijd_idx").on(t.bron, t.besteldOp),
+  ]
+);
+
+/**
+ * Mailgedrag per adres (Spotler, en desgewenst Resend).
+ *
+ * Geaggregeerd, niet per bericht: we willen weten óf iemand onze mail leest,
+ * niet welke. Dat scheelt miljoenen rijen en het is precies wat een doelgroep
+ * nodig heeft — "opent al een jaar niets" verdient een eigen campagne, en een
+ * adres dat structureel bouncet moet je uit je uitleveringen houden voordat je
+ * afzenderreputatie eronder lijdt.
+ */
+export const mailEngagement = pgTable(
+  "mail_engagement",
+  {
+    email: text("email").primaryKey(),
+    bron: text("bron").notNull().default("spotler"),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    verstuurd: integer("verstuurd").notNull().default(0),
+    geopend: integer("geopend").notNull().default(0),
+    geklikt: integer("geklikt").notNull().default(0),
+    gebounced: integer("gebounced").notNull().default(0),
+    afgemeld: boolean("afgemeld").notNull().default(false),
+    laatstVerstuurd: timestamp("laatst_verstuurd", { withTimezone: true }),
+    laatstGeopend: timestamp("laatst_geopend", { withTimezone: true }),
+    laatstGeklikt: timestamp("laatst_geklikt", { withTimezone: true }),
+    /** Uit Spotler — staat nergens anders in ons klantbeeld. Een verjaardag is
+     *  een campagnemoment dat je precies één keer per jaar per klant hebt; een
+     *  mobiel nummer is een tweede matchsleutel bij Meta en Google Ads. */
+    verjaardag: date("verjaardag"),
+    geslacht: text("geslacht").notNull().default(""),
+    mobiel: text("mobiel").notNull().default(""),
+    taal: text("taal").notNull().default(""),
+    /** Wanneer we Spotler het laatst over dit adres bevraagd hebben — stuurt de
+     *  rollende verrijking (oudste eerst). */
+    gezochtOp: timestamp("gezocht_op", { withTimezone: true }),
+    /** Uit de Spotler-export. Postcode vult ons beeld aan waar de order er geen
+     *  had; de fase en doelgroepnamen bewaren we als BRON, niet als waarheid —
+     *  ons eigen segment rekent op onze data en heeft voorrang. */
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    /** Rauwe nieuwsbriefstand uit Spotler: 'yes' of 'no'. Bewust NIET vertaald
+     *  naar een afmelding — 96% van de export staat op 'no', en dat is "nooit
+     *  ingeschreven", niet "uitgeschreven". Alleen 'yes' is harde toestemming. */
+    spotlerNieuwsbrief: text("spotler_nieuwsbrief").notNull().default(""),
+    spotlerFase: text("spotler_fase").notNull().default(""),
+    spotlerDoelgroepen: text("spotler_doelgroepen").notNull().default(""),
+    bijgewerktOp: timestamp("bijgewerkt_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("mail_engagement_klant_idx").on(t.customerId)]
+);
+
+/**
+ * Retouren die buiten ons eigen retourportaal omgaan (Returnista).
+ *
+ * De REDEN is het hele punt van deze tabel. "Te klein" vraagt om beter
+ * maatadvies, "voldeed niet aan de verwachting" om betere foto's, "te laat
+ * geleverd" om iets heel anders. Zonder reden is een retour alleen een
+ * kostenpost en leer je er niets van.
+ */
+export const externeRetouren = pgTable(
+  "externe_retouren",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bron: text("bron").notNull().default("returnista"),
+    externId: text("extern_id").notNull(),
+    orderRef: text("order_ref").notNull().default(""),
+    email: text("email").notNull().default(""),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    status: text("status").notNull().default(""),
+    reden: text("reden").notNull().default(""),
+    bedragCents: integer("bedrag_cents").notNull().default(0),
+    regels: jsonb("regels").notNull().default([]),
+    aangemeldOp: timestamp("aangemeld_op", { withTimezone: true }),
+    data: jsonb("data").notNull().default({}),
+    opgehaaldOp: timestamp("opgehaald_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("externe_retouren_uniek").on(t.bron, t.externId),
+    index("externe_retouren_klant_idx").on(t.customerId),
+  ]
+);
+
+/* ──────────────────────────────── Heatmap ─────────────────────────────────
+ * Klik- en scroll-heatmap van de storefront. Twee lagen, met opzet:
+ *
+ *  - RUW (heatmap_klikken, heatmap_scroll) — één rij per klik / per
+ *    paginaweergave, mét sessie-id zodat "hoeveel SESSIES kwamen tot hier" te
+ *    beantwoorden is. Dit is de laag die groeit, en de laag die wordt opgeruimd.
+ *  - SAMENVATTING (heatmap_cellen, heatmap_elementen, heatmap_scroll_dag) —
+ *    per dag opgeteld, zónder sessie-id. Dit is wat overblijft en wat de
+ *    grafieken op lange termijn voedt.
+ *
+ * Die scheiding is er om de bewaartermijn te kunnen inkorten zonder de
+ * geschiedenis kwijt te raken: na de rollup mag het ruwe materiaal weg (zie
+ * lib/heatmap: rolHeatmapOp), en dan blijft er een reeks tellingen staan waar
+ * geen enkel individueel bezoek meer uit te halen is.
+ *
+ * Er staat NERGENS een customer_id in. Een heatmap beantwoordt "waar klikt men",
+ * niet "waar klikte deze klant" — dat tweede is een sessie-opname en dat bouwen
+ * we bewust niet.
+ */
+
+/** Eén klik. `pagina_key` is het sjabloon (/products/[handle]), `pad` de echte URL. */
+export const heatmapKlikken = pgTable(
+  "heatmap_klikken",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paginaKey: text("pagina_key").notNull(),
+    pad: text("pad").notNull().default(""),
+    apparaat: text("apparaat").notNull(),
+    sessionId: text("session_id").notNull().default(""),
+    /** x als promille (0–1000) van de vensterbreedte. */
+    x: integer("x").notNull(),
+    /** y in CSS-pixels vanaf de bovenkant van het document. */
+    y: integer("y").notNull(),
+    /** Positie binnen het geraakte element, promille — overleeft herindeling. */
+    ox: integer("ox").notNull().default(0),
+    oy: integer("oy").notNull().default(0),
+    selector: text("selector").notNull().default(""),
+    label: text("label").notNull().default(""),
+    /** 'klik' | 'dood' (niets klikbaars geraakt) | 'woede' (herhaald rammen). */
+    soort: text("soort").notNull().default("klik"),
+    docHoogte: integer("doc_hoogte").notNull().default(0),
+    vensterBreedte: integer("venster_breedte").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("heatmap_klik_pagina_idx").on(t.paginaKey, t.apparaat, t.createdAt),
+    index("heatmap_klik_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/** Eén rij per paginaweergave: hoe diep is de bezoeker gekomen. */
+export const heatmapScroll = pgTable(
+  "heatmap_scroll",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    sessionId: text("session_id").notNull().default(""),
+    /** Diepste bereikte punt, 0–100. */
+    maxPct: integer("max_pct").notNull().default(0),
+    docHoogte: integer("doc_hoogte").notNull().default(0),
+    vensterHoogte: integer("venster_hoogte").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("heatmap_scroll_pagina_idx").on(t.paginaKey, t.apparaat, t.createdAt),
+    index("heatmap_scroll_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/** Rollup: kliks per rastercel per dag (50 kolommen breed, rijen van 20 px). */
+export const heatmapCellen = pgTable(
+  "heatmap_cellen",
+  {
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    dag: date("dag").notNull(),
+    cx: integer("cx").notNull(),
+    cy: integer("cy").notNull(),
+    n: integer("n").notNull().default(0),
+    doden: integer("doden").notNull().default(0),
+    woede: integer("woede").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.paginaKey, t.apparaat, t.dag, t.cx, t.cy] }),
+    index("heatmap_cellen_dag_idx").on(t.dag),
+  ]
+);
+
+/** Rollup: kliks per element per dag — voedt de "waarop wordt geklikt"-lijst. */
+export const heatmapElementen = pgTable(
+  "heatmap_elementen",
+  {
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    dag: date("dag").notNull(),
+    selector: text("selector").notNull(),
+    label: text("label").notNull().default(""),
+    n: integer("n").notNull().default(0),
+    doden: integer("doden").notNull().default(0),
+    woede: integer("woede").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.paginaKey, t.apparaat, t.dag, t.selector] }),
+    index("heatmap_elementen_dag_idx").on(t.dag),
+  ]
+);
+
+/**
+ * Rollup: scrollbereik per dag, één rij per drempel van 5%.
+ *
+ * `weergaven` telt de paginaweergaven die deze drempel HAALDEN — bucket 0 is
+ * dus het totaal. Bewust rijen en geen jsonb-verdeling: dagen bij elkaar
+ * optellen is dan een gewone `sum(...) group by bucket`, en een mediaan over
+ * meerdere dagen is een leesbare query in plaats van jsonb-rekenwerk.
+ */
+export const heatmapScrollDag = pgTable(
+  "heatmap_scroll_dag",
+  {
+    paginaKey: text("pagina_key").notNull(),
+    apparaat: text("apparaat").notNull(),
+    dag: date("dag").notNull(),
+    /** 0, 5, 10, … 100. */
+    bucket: integer("bucket").notNull(),
+    weergaven: integer("weergaven").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.paginaKey, t.apparaat, t.dag, t.bucket] }),
+    index("heatmap_scroll_dag_dag_idx").on(t.dag),
+  ]
+);
+
+/**
+ * Logboek van handmatige order-acties uit de portal (Site → Bestellingen):
+ * nieuwe betaallink, terugbetaling, annulering, handmatig aangemaakte order.
+ *
+ * Alleen invoegen, nooit bijwerken — dit is een audit-spoor. Bij een
+ * terugbetaling is "wie deed dit, wanneer, voor hoeveel" de eerste vraag; dat
+ * antwoord hoort niet in een serverlog dat na dertig dagen weg is.
+ *
+ * INTERN. `notitie` is wat een medewerker typt en is NOOIT klantzichtbaar
+ * (zelfde les als loyalty_events.reason, dat wél in het klantprofiel opdook).
+ */
+export const orderLogboek = pgTable(
+  "order_logboek",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Nummer is leidend voor het lezen; het id koppelt aan de order zelf. */
+    orderId: uuid("order_id"),
+    orderNumber: text("order_number").notNull(),
+    /** 'aangemaakt' | 'betaallink' | 'terugbetaald' | 'betaalstatus' | 'geannuleerd' | 'bevestiging' | 'status' */
+    actie: text("actie").notNull(),
+    /** Portal-gebruiker (naam of e-mail); leeg = via de API/token. */
+    actor: text("actor").notNull().default(""),
+    notitie: text("notitie").notNull().default(""),
+    /** Bedrag waar de actie over ging (terugbetaling, ordertotaal). 0 = n.v.t. */
+    bedragCents: integer("bedrag_cents").notNull().default(0),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("order_logboek_order_idx").on(t.orderNumber, t.createdAt),
+    index("order_logboek_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/**
+ * Logboek van handmatige productwijzigingen uit het PIM (Site → Producten).
+ *
+ * Eén regel per gewijzigd VELD, niet per opslag-actie: de vraag achteraf is
+ * altijd "wie heeft dít veld veranderd", en een regel per formulier-post dwingt
+ * je dan om jsonb te doorzoeken.
+ *
+ * Alleen invoegen, nooit bijwerken — audit-spoor. INTERN: `actor` is een
+ * medewerkersnaam en is nooit klantzichtbaar.
+ */
+export const productWijzigingen = pgTable(
+  "product_wijzigingen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Handle is leidend voor het lezen; het id koppelt aan het product zelf. */
+    productId: uuid("product_id"),
+    handle: text("handle").notNull(),
+    /** Kolomnaam ('title'), metaveld ('attr:pasvorm') of laag ('override:descriptionHtml'). Zie lib/pim.ts. */
+    veld: text("veld").notNull(),
+    /** 'bewerkt' | 'vergrendeld' | 'ontgrendeld' | 'bulk' */
+    actie: text("actie").notNull().default("bewerkt"),
+    /** Afgekapt op 2000 tekens — een omschrijving van 8kB tweemaal bewaren maakt dit groter dan de catalogus. */
+    oudeWaarde: text("oude_waarde").notNull().default(""),
+    nieuweWaarde: text("nieuwe_waarde").notNull().default(""),
+    /** Portal-gebruiker (naam of e-mail); leeg = via de API/token. */
+    actor: text("actor").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("product_wijzigingen_handle_idx").on(t.handle, t.createdAt),
+    index("product_wijzigingen_tijd_idx").on(t.createdAt),
+  ]
+);
+
+/* ──────────────────────── E-mailflows (journeys) ────────────────────────── */
+
+/**
+ * Een flow: trigger → wachten → mail → vertakken → uitstappen.
+ *
+ * Wat er wás: 16 transactionele mails die elk vanuit hun eigen codepad afgaan,
+ * plus één geplande (verjaardag). Dus WIE (doelgroepen) en WAT (sjablonen),
+ * maar niet WANNEER, in welke VOLGORDE, en wanneer iemand er weer UIT moet.
+ */
+export const emailFlows = pgTable(
+  "email_flows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    naam: text("naam").notNull(),
+    omschrijving: text("omschrijving").notNull().default(""),
+    /** Categorie op DOEL, niet op onderwerp. "Winkelwagen" en "Retour" zijn
+     *  onderwerpen; die groeien mee met elk idee en leveren over een jaar
+     *  vijftien categorieën met één flow. Op doel blijven het er vijf, en het
+     *  dwingt de vraag die telt: wat moet deze flow bereiken? */
+    categorie: text("categorie").notNull().default("overig"),
+    /** 'doelgroep' (wie erin valt) of 'gebeurtenis' (op het moment zelf). */
+    triggerSoort: text("trigger_soort").notNull(),
+    triggerDoelgroepId: uuid("trigger_doelgroep_id"),
+    triggerEvent: text("trigger_event").notNull().default(""),
+    /** [{soort:'wacht',uren}, {soort:'mail',sjabloon}, {soort:'voorwaarde',…}] */
+    stappen: jsonb("stappen").notNull().default([]),
+    /** Dezelfde regelboom als een doelgroep. Klopt er één, dan verlaat de klant
+     *  de flow vóór de volgende stap — dus geen "je vergat iets in je
+     *  winkelwagen" nádat hij gekocht heeft. Dit is de kern, niet een extra. */
+    uitstap: jsonb("uitstap").notNull().default({}),
+    herhaalbaar: boolean("herhaalbaar").notNull().default(false),
+    herhaalNaDagen: integer("herhaal_na_dagen").notNull().default(90),
+    /** Percentage instappers dat bewust NIETS krijgt, als controlegroep. 0 = uit. */
+    holdoutProcent: integer("holdout_procent").notNull().default(0),
+    actief: boolean("actief").notNull().default(false),
+    aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("email_flows_slug_uniek").on(t.slug), index("email_flows_actief_idx").on(t.actief)]
+);
+
+/** Waar staat déze klant in déze flow, en wanneer is de volgende stap. */
+export const emailFlowLeden = pgTable(
+  "email_flow_leden",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => emailFlows.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    stap: integer("stap").notNull().default(0),
+    /** 'loopt' | 'klaar' | 'uitgestapt' | 'gestopt'. */
+    status: text("status").notNull().default("loopt"),
+    /** De loper pakt alles waarvan dit moment voorbij is — dat is meteen de
+     *  implementatie van een wachtstap. */
+    volgendeStapOp: timestamp("volgende_stap_op", { withTimezone: true }).notNull().defaultNow(),
+    redenUitstap: text("reden_uitstap").notNull().default(""),
+    ingestaptOp: timestamp("ingestapt_op", { withTimezone: true }).notNull().defaultNow(),
+    afgerondOp: timestamp("afgerond_op", { withTimezone: true }),
+  },
+  (t) => [
+    index("email_flow_leden_due_idx").on(t.status, t.volgendeStapOp),
+    index("email_flow_leden_klant_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Wat er daadwerkelijk is uitgevoerd. Twee taken in één tabel:
+ * idempotentie (uniek op lid+stap, dus een herstart stuurt niets dubbel) en het
+ * frequentieplafond (één flow-mail per klant per etmaal, over álle flows heen).
+ */
+/**
+ * Wat er met onze eigen mails gebeurt: bezorgd, geopend, geklikt, gebounced.
+ *
+ * `webhook_id` is uniek omdat Svix een melding opnieuw stuurt als hij geen 2xx
+ * kreeg. Zonder die index telt een trage response dezelfde opening drie keer.
+ */
+export const mailGebeurtenissen = pgTable(
+  "mail_gebeurtenissen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    webhookId: text("webhook_id").notNull(),
+    berichtId: text("bericht_id").notNull().default(""),
+    /** 'bezorgd' | 'geopend' | 'geklikt' | 'gebounced' | 'spam' | 'uitgeschreven'. */
+    soort: text("soort").notNull(),
+    lidId: uuid("lid_id").references(() => emailFlowLeden.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id").references(() => emailFlows.id, { onDelete: "cascade" }),
+    stap: integer("stap"),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    email: text("email").notNull().default(""),
+    /** Bij een klik: waar hij heen ging — zo zie je wélke link werkt. */
+    url: text("url").notNull().default(""),
+    gebeurdOp: timestamp("gebeurd_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("mail_gebeurtenissen_webhook_uniek").on(t.webhookId),
+    index("mail_gebeurtenissen_flow_idx").on(t.flowId, t.stap, t.soort),
+    index("mail_gebeurtenissen_klant_idx").on(t.customerId, t.gebeurdOp),
+    index("mail_gebeurtenissen_lid_idx").on(t.lidId, t.soort),
+  ]
+);
+
+export const emailFlowStappen = pgTable(
+  "email_flow_stappen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lidId: uuid("lid_id")
+      .notNull()
+      .references(() => emailFlowLeden.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => emailFlows.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").notNull(),
+    stap: integer("stap").notNull(),
+    soort: text("soort").notNull(),
+    sjabloon: text("sjabloon").notNull().default(""),
+    gelukt: boolean("gelukt").notNull().default(true),
+    fout: text("fout").notNull().default(""),
+    uitgevoerdOp: timestamp("uitgevoerd_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("email_flow_stappen_uniek").on(t.lidId, t.stap),
+    index("email_flow_stappen_klant_idx").on(t.customerId, t.uitgevoerdOp),
+  ]
+);
+
+/* ── Maattabel + maatadvies ────────────────────────────────────────────────
+   Hoort bij drizzle/0059_maattabel.sql (14 aug 2026). Die migratie én de code
+   die deze tabellen gebruikt stonden al op main, maar de drizzle-definities
+   erbij niet — daardoor faalde élke productie-build op "has no exported member
+   'maatadviesLog'". Deze definities volgen de DDL letterlijk; de toelichting bij
+   de keuzes (waarom géén unieke index op `actief`, waarom de maten nullable
+   zijn) staat in dat SQL-bestand. */
+
+export const maattabelVersies = pgTable(
+  "maattabel_versies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Oplopend nummer dat de portal toont — "versie 3" is een gesprek, een uuid niet. */
+    versie: integer("versie").notNull(),
+    bestandsnaam: text("bestandsnaam").notNull().default(""),
+    /** INTERN: medewerkersnaam, nooit klantzichtbaar. */
+    actor: text("actor").notNull().default(""),
+    aantalRijen: integer("aantal_rijen").notNull().default(0),
+    actief: boolean("actief").notNull().default(false),
+    notitie: text("notitie").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    nrIdx: uniqueIndex("maattabel_versies_nr_idx").on(t.versie),
+    tijdIdx: index("maattabel_versies_tijd_idx").on(t.createdAt),
+  })
+);
+
+export const maattabelRijen = pgTable(
+  "maattabel_rijen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versieId: uuid("versie_id")
+      .notNull()
+      .references(() => maattabelVersies.id, { onDelete: "cascade" }),
+    /** 'TOP' | 'BOTTOM' | 'FULL_BODY' */
+    productType: text("product_type").notNull().default("TOP"),
+    categorie: text("categorie").notNull(),
+    maat: text("maat").notNull(),
+    /** Alleen bij Overhemden (Boordmaat): de halsomvang, "39-40". */
+    boordCm: text("boord_cm").notNull().default(""),
+    /* Nullable en niet 0: "0 cm borst" is een meetwaarde, "onbekend" niet. */
+    borstMin: integer("borst_min"),
+    borstMax: integer("borst_max"),
+    tailleMin: integer("taille_min"),
+    tailleMax: integer("taille_max"),
+    binnenbeenMin: integer("binnenbeen_min"),
+    binnenbeenMax: integer("binnenbeen_max"),
+    /** Rijvolgorde uit het blad — maten sorteren niet alfabetisch of numeriek. */
+    sortering: integer("sortering").notNull().default(0),
+  },
+  (t) => ({
+    versieIdx: index("maattabel_rijen_versie_idx").on(t.versieId, t.sortering),
+    catIdx: index("maattabel_rijen_cat_idx").on(t.versieId, t.categorie),
+  })
+);
+
+export const maatadviesLog = pgTable(
+  "maatadvies_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /* Alleen bij een INGELOGDE bezoeker; een anonieme rij draagt geen enkele
+       identificatie. Bij accountverwijdering wordt dit null. */
+    klantId: uuid("klant_id"),
+    lengteCm: integer("lengte_cm").notNull().default(0),
+    gewichtKg: integer("gewicht_kg").notNull().default(0),
+    /** 'slim' | 'regular' | 'comfort' */
+    pasvorm: text("pasvorm").notNull().default("regular"),
+    borstCm: integer("borst_cm").notNull().default(0),
+    /** True als de klant zijn eigen lichaamsmaten invulde. */
+    gemeten: boolean("gemeten").notNull().default(false),
+    adviesColbert: text("advies_colbert").notNull().default(""),
+    adviesBoord: text("advies_boord").notNull().default(""),
+    adviesLengtemaat: text("advies_lengtemaat").notNull().default(""),
+    /** 'hoog' | 'gemiddeld' | 'laag' */
+    zekerheid: text("zekerheid").notNull().default("gemiddeld"),
+    /** 'maatadvies' | 'pdp' | 'account' */
+    bron: text("bron").notNull().default("maatadvies"),
+    /** Maattabel-versie waarop dit advies grondde. 0 = de fallback in code. */
+    tabelVersie: integer("tabel_versie").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    klantIdx: index("maatadvies_log_klant_idx").on(t.klantId, t.createdAt),
+    tijdIdx: index("maatadvies_log_tijd_idx").on(t.createdAt),
+  })
 );

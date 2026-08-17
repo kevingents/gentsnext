@@ -12,6 +12,7 @@ import { SizeFinderButton } from "@/components/pdp/size-finder-modal";
 import { ColorSiblings, type SiblingItem } from "@/components/pdp/color-siblings";
 import { DeliveryPromise } from "@/components/pdp/delivery-promise";
 import { ClickAndCollect } from "@/components/pdp/click-collect";
+import { StoreChooser } from "@/components/stores/store-chooser";
 import { StockNotify } from "@/components/pdp/stock-notify";
 import { WishlistButton } from "@/components/wishlist/wishlist-button";
 import { RatingStars } from "@/components/rating-stars";
@@ -25,16 +26,6 @@ function Dot() {
   return (
     <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden className="shrink-0">
       <circle cx="4" cy="4" r="4" fill="currentColor" />
-    </svg>
-  );
-}
-
-/** Belletje — signaleert de terug-op-voorraad-tip. */
-function BellIcon({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </svg>
   );
 }
@@ -65,8 +56,8 @@ type Props = {
   hoofdgroep: string;
   sizeChartHandle: string | null;
   productHandle: string;
-  /** "Mijn winkel" (winkelnaam) — server-side uit cookie/profiel. */
-  myStore?: string | null;
+  /** "Mijn winkels" (winkelnamen) — server-side uit cookie/profiel. */
+  myStores?: string[];
   image: string;
   colors: BuyColor[];
   minPriceCents: number;
@@ -77,13 +68,23 @@ type Props = {
   /** Server-belofte uit de allocatie-engine (estimateDelivery). */
   deliveryPromise?: string | null;
   deliveryNote?: string | null;
-  cutoffHour?: number;
   /** Opgeslagen maat van de ingelogde klant voor deze categorie (Shop in jouw maat). */
   mySize?: string | null;
   /** Pasvorm-noot (bv. "Modern fit") — getoond onder de maatkiezer. */
   fitNote?: string | null;
   /** Drempel gratis verzending (cents) uit de settings-store. */
   freeShipThresholdCents?: number;
+  /**
+   * A/B: eigen knoptekst ("Nu bestellen" i.p.v. "In winkelwagen"). Losse tekst
+   * uit het experiment, dus NL — zelfde taalregel als de aankondigingsbalk.
+   */
+  ctaLabel?: string | null;
+  /** A/B: mobiele meelopende koopbalk aan/uit. */
+  sticky?: boolean;
+  /** A/B: "−30%"-label naast de prijs. De van-prijs zelf blijft altijd staan. */
+  kortingLabel?: boolean;
+  /** A/B: het rijtje betaalmerken onder de koopknop. */
+  betaaliconen?: boolean;
 };
 
 export function BuyBox({
@@ -93,7 +94,7 @@ export function BuyBox({
   hoofdgroep,
   sizeChartHandle,
   productHandle,
-  myStore,
+  myStores = [],
   image,
   colors,
   minPriceCents,
@@ -103,10 +104,13 @@ export function BuyBox({
   colorSiblings,
   deliveryPromise,
   deliveryNote,
-  cutoffHour,
   mySize,
   fitNote,
   freeShipThresholdCents,
+  ctaLabel = null,
+  sticky = true,
+  kortingLabel = true,
+  betaaliconen = true,
 }: Props) {
   const cart = useCart();
   const t = useT();
@@ -117,25 +121,25 @@ export function BuyBox({
 
   // Deel de gekozen maat-bucket met de galerij (foto aanpassen bij grote maten).
   useEffect(() => {
-    setSizeLabel(size ? sizeRowLabel(size) : null);
-  }, [size, setSizeLabel]);
+    setSizeLabel(size ? sizeRowLabel(size, hoofdgroep) : null);
+  }, [size, hoofdgroep, setSizeLabel]);
 
   // Shop in jouw maat: selecteer de opgeslagen maat van de klant automatisch
   // voor (alleen leverbare maten), exact eerst, anders dezelfde lettermaat-bucket.
-  const myBucket = mySize ? sizeRowLabel(mySize) : null;
+  const myBucket = mySize ? sizeRowLabel(mySize, hoofdgroep) : null;
   const autoPicked = useRef(false);
   useEffect(() => {
     if (autoPicked.current || size || !mySize || !active) return;
     const available = active.sizes.filter((s) => !s.known || s.qty > 0);
     const pick =
       available.find((s) => s.size === mySize) ??
-      available.find((s) => sizeRowLabel(s.size) === myBucket);
+      available.find((s) => sizeRowLabel(s.size, hoofdgroep) === myBucket);
     if (pick) {
       setSize(pick.size);
       autoPicked.current = true;
     }
   }, [active, mySize, myBucket, size]);
-  const isMySize = Boolean(size && myBucket && sizeRowLabel(size) === myBucket);
+  const isMySize = Boolean(size && myBucket && sizeRowLabel(size, hoofdgroep) === myBucket);
 
   // Precies één maat → meteen voorselecteren (scheelt een klik). Is die ene maat
   // uitverkocht, dan wordt 'ie óók geselecteerd: de klant ziet de maat en krijgt
@@ -174,27 +178,14 @@ export function BuyBox({
     () => active?.sizes.find((s) => s.size === size) ?? null,
     [active, size]
   );
-  // Omnichannel-USP: aantal winkels met voorraad over ALLE maten van deze kleur.
-  // Bewust niet per gekozen maat: het kader hieronder rendert alleen zónder
-  // maatkeuze (daarna neemt "Passen & afhalen" het over), dus een per-maat-tak
-  // hier was dode code.
+  // Aantal winkels met voorraad over ALLE maten van deze kleur. Alleen nog nodig
+  // om te weten óf de omnichannel-boodschap überhaupt geldt: "Passen & afhalen"
+  // onder de bestelknop vertelt het verhaal per gekozen maat.
   const storeCount = useMemo(() => {
     const set = new Set<string>();
     for (const s of active?.sizes ?? []) for (const b of s.branches ?? []) if (b.qty > 0) set.add(b.store);
     return set.size;
   }, [active]);
-  // Deze maten worden ná hydratie automatisch voorgeselecteerd (één maat, of de
-  // opgeslagen maat van de klant). Het winkelkader zou dan server-side gerenderd
-  // worden en client-side meteen weer verdwijnen — een zichtbare flits plus een
-  // layout-sprong. Server en client kunnen dit allebei uit de props afleiden,
-  // dus verbergen we het kader dan van meet af aan.
-  const zalAutoSelecteren =
-    singleSize ||
-    Boolean(
-      mySize &&
-        active &&
-        active.sizes.some((s) => (!s.known || s.qty > 0) && (s.size === mySize || sizeRowLabel(s.size) === myBucket)),
-    );
   const priceCents = selectedSize?.priceCents ?? minPriceCents;
   const priceLabel = (minPriceCents !== maxPriceCents && !selectedSize ? `${t("product.from")} ` : "") + formatEuro(priceCents);
   // Alleen een korting tonen (doorgestreepte prijs + badge + Omnibus-noot) als de
@@ -223,6 +214,41 @@ export function BuyBox({
     });
   }
 
+  // Ophalen in de winkel. Staat pal ónder de bestelknop: het is de tweede
+  // koopkeuze ("nu online, of vandaag passen?"), niet een voetnoot onder de
+  // betaaliconen. Als variabele omdat de uitverkocht-tak 'm op een andere plek
+  // zet.
+  const winkelBlok = (
+    <>
+      {/* Nog geen winkel gekozen? Dan hoort hier de uitnodiging in plaats van de
+          afhaal-regel — allebei beantwoorden ze "kan ik 'm ergens passen?", en
+          die vraag komt ná de bestelknop, niet naast de maatkiezer. */}
+      {myStores.length === 0 && storeCount > 0 ? <StoreChooser bron="pdp" /> : null}
+      {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
+        <ClickAndCollect
+          // key per sku: maatwissel = verse component-staat (geen oude
+          // bevestiging/fout van een andere maat).
+          key={selectedSize.sku || selectedSize.size}
+          // Bij écht one-size geen maat meesturen — "Maat One ligt in 5 winkels"
+          // is onzin voor een accessoire; de generieke regel volstaat dan.
+          size={oneSize ? undefined : selectedSize.size}
+          branches={selectedSize.branches}
+          myStores={myStores}
+          reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
+        />
+      ) : null}
+      {/* De gekozen maat ligt in geen enkele winkel terwijl andere maten dat wél
+          doen: dan rendert ClickAndCollect niets en lost de omnichannel-boodschap
+          stil op. Zeg het dan gewoon. */}
+      {selectedSize && !oneSize && !soldOut && storeCount > 0 && !(selectedSize.branches ?? []).some((b) => b.qty > 0) ? (
+        <p className="mt-3 flex items-start gap-2 font-sans text-xs text-muted">
+          <StoreIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          {t("pdp.storeStock.sizeNone", { size: selectedSize.size })}
+        </p>
+      ) : null}
+    </>
+  );
+
   return (
     <div>
       {vendor ? <p className="label-brand">{vendor}</p> : null}
@@ -241,7 +267,10 @@ export function BuyBox({
           <span className="font-sans text-lg text-muted line-through">{formatEuro(referenceCents!)}</span>
         ) : null}
         <span className="font-display text-2xl">{priceLabel}</span>
-        {hasDiscount ? (
+        {/* Alleen het PERCENTAGE is testbaar. De doorgestreepte referentieprijs
+            en de toelichting eronder blijven staan: die zijn bij een korting
+            wettelijk verplicht (Omnibus), en dat is geen A/B-vraag. */}
+        {hasDiscount && kortingLabel ? (
           <span className="rounded bg-danger/10 px-1.5 py-0.5 font-sans text-xs font-medium text-danger">
             −{Math.round((1 - priceCents / referenceCents!) * 100)}%
           </span>
@@ -297,23 +326,12 @@ export function BuyBox({
         </p>
       ) : null}
 
-      {/* Omnichannel-USP: winkelvoorraad zichtbaar vanaf de eerste scroll —
-          maar ALLEEN zolang er nog geen maat gekozen is. Daarna vertelt de
-          "Passen & afhalen"-regel onder de bestelknop precies hetzelfde, en die
-          kun je ook aanklikken. Twee keer hetzelfde aantal winkels boven elkaar
-          las als twee verschillende feiten. Bij een maat die automatisch
-          voorgeselecteerd gaat worden renderen we 'm ook niet (zie
-          zalAutoSelecteren) — anders flitst het kader op en verdwijnt weer. */}
-      {hasStock && !oneSize && storeCount > 0 && !selectedSize && !zalAutoSelecteren ? (
-        <div className="mt-6 flex items-start gap-2.5 rounded-card border border-line px-3 py-2.5">
-          <StoreIcon className="mt-0.5 h-5 w-5 shrink-0 text-ink" />
-          <p className="font-sans text-sm">
-            <span className="font-medium text-ink">
-              {t(storeCount === 1 ? "pdp.storeStock.anyOne" : "pdp.storeStock.any", { count: storeCount })}
-            </span>
-            <span className="block text-xs text-muted">{t("pdp.storeStock.hint")}</span>
-          </p>
-        </div>
+      {/* Pasvorm boven de maatkiezer: het is de vraag die je jezelf stelt vóór je
+          een maat aanwijst ("valt dit klein?"), niet erna. */}
+      {fitNote ? (
+        <p className="mt-6 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
+          <span className="font-medium text-ink">{t("pdp.fit.prefix")} {fitNote}.</span> {t("pdp.fit.tip")}
+        </p>
       ) : null}
 
       {/* Maat — verborgen bij one-size (niets te kiezen). */}
@@ -354,55 +372,62 @@ export function BuyBox({
         ) : null}
         {/* Mijn winkel: direct antwoord op "ligt dit in mijn winkel?" — de
             winkelvoorraad per maat hebben we hier al, dus dit kost niets extra. */}
-        {myStore && selectedSize ? (() => {
-          const hit = (selectedSize.branches ?? []).find((b) => b.store === myStore);
-          const others = (selectedSize.branches ?? []).filter((b) => b.qty > 0 && b.store !== myStore).length;
-          return hit && hit.qty > 0 ? (
-            <p className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs text-success">
-              <StoreIcon className="h-3.5 w-3.5 shrink-0" />
-              <span>
-                {/* "Vandaag ophalen" alleen als de winkel nu open is — anders
-                    beloofde de regel iets wat vandaag niet kan. */}
-                <span className="font-medium">
-                  {hit.openNow ? t("myStore.inStock", { store: myStore }) : t("myStore.inStockClosed", { store: myStore })}
-                </span>
-                {hit.openLabel ? <span className="text-muted"> · {hit.openLabel}</span> : null}
-              </span>
-            </p>
-          ) : (
-            <p className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs text-muted">
-              <StoreIcon className="h-3.5 w-3.5 shrink-0" />
-              <span>
-                {t("myStore.notInStock", { store: myStore })}
-                {others > 0 ? <span> · {t("myStore.elsewhere", { count: others })}</span> : null}
-              </span>
-            </p>
+        {myStores.length > 0 && selectedSize ? (() => {
+          const branches = selectedSize.branches ?? [];
+          // Eigen winkels mét de maat eerst: het antwoord dat je zoekt ("waar
+          // kan ik 'm passen?") staat dan bovenaan, niet ergens in een rijtje.
+          const mijn = myStores
+            .map((naam) => ({ naam, hit: branches.find((b) => b.store === naam) }))
+            .sort((a, b) => Number((b.hit?.qty ?? 0) > 0) - Number((a.hit?.qty ?? 0) > 0));
+          const elders = branches.filter((b) => b.qty > 0 && !myStores.includes(b.store)).length;
+          const geen = mijn.every((m) => !m.hit || m.hit.qty <= 0);
+          return (
+            <div className="mt-3 space-y-1">
+              {mijn.map(({ naam, hit }) =>
+                hit && hit.qty > 0 ? (
+                  <p key={naam} className="flex flex-wrap items-center gap-x-2 font-sans text-xs text-success">
+                    <StoreIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      {/* "Vandaag ophalen" alleen als de winkel nu open is — anders
+                          beloofde de regel iets wat vandaag niet kan. */}
+                      <span className="font-medium">
+                        {hit.openNow ? t("myStore.inStock", { store: naam }) : t("myStore.inStockClosed", { store: naam })}
+                      </span>
+                      {hit.openLabel ? <span className="text-muted"> · {hit.openLabel}</span> : null}
+                    </span>
+                  </p>
+                ) : (
+                  <p key={naam} className="flex flex-wrap items-center gap-x-2 font-sans text-xs text-muted">
+                    <StoreIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{t("myStore.notInStock", { store: naam })}</span>
+                  </p>
+                )
+              )}
+              {/* Ligt 'ie in géén van je winkels? Zeg dan meteen of het elders wél
+                  kan — anders is de regel een doodlopende mededeling. */}
+              <p className="flex flex-wrap items-center gap-x-2 font-sans text-xs text-muted">
+                {geen && elders > 0 ? <span>{t("myStore.elsewhereFull", { count: elders })}</span> : null}
+                {/* Zichtbaar kunnen wisselen: zonder deze knop is "mijn winkel"
+                    een instelling die je alleen terugvindt waar je 'm ooit zette. */}
+                <StoreChooser myStores={myStores} variant="link" bron="pdp" />
+              </p>
+            </div>
           );
         })() : null}
-        {hasStock && selectedSize ? (
+        {/* Nog géén winkel gekozen? Dan stond er tot nu toe niets — de hele
+            functie bestond alleen voor wie 'm al gevonden had. Deze regel vraagt
+            het gewoon, op de plek waar de vraag speelt (onder je maat). */}
+        {/* Alleen melden wat de klant moet wéten. Een groene "Op voorraad" bij
+            elke gekozen maat is ruis: dat je kunt bestellen blijkt al uit de
+            bestelknop. Bijna-op en uitverkocht blijven — dat zijn de twee
+            gevallen waarin de stand z'n keuze verandert. */}
+        {hasStock && selectedSize && (selectedSize.qty <= 0 || selectedSize.qty <= 5) ? (
           <p className="mt-3 font-sans text-xs">
             {selectedSize.qty > 0 ? (
-              selectedSize.qty <= 5 ? (
-                <span className="inline-flex items-center gap-1.5 text-danger"><Dot />{t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-success"><Dot />{t("pdp.stock.inStock")}</span>
-              )
+              <span className="inline-flex items-center gap-1.5 text-danger"><Dot />{t("pdp.stock.lowDynamic", { count: selectedSize.qty })}</span>
             ) : (
               <span className="text-muted">{t("pdp.stock.sizeSoldOut", { size: selectedSize.size })}</span>
             )}
-          </p>
-        ) : null}
-        {/* Uitverkochte-maat-hint: maakt de terug-op-voorraad-tip vindbaar. */}
-        {hasStock && !oneSize && !soldOut && active && active.sizes.some((s) => s.known && s.qty <= 0) ? (
-          <p className="mt-2 flex items-center gap-1.5 font-sans text-xs text-muted">
-            <BellIcon className="h-3 w-3 shrink-0" />
-            {t("pdp.size.soldoutRowHint")}
-          </p>
-        ) : null}
-        {/* Pasvorm-noot — pal onder de maatkiezer, op het beslismoment. */}
-        {fitNote ? (
-          <p className="mt-2 rounded-card bg-surface px-3 py-2 font-sans text-xs text-ink-soft">
-            <span className="font-medium text-ink">{t("pdp.fit.prefix")} {fitNote}.</span> {t("pdp.fit.tip")}
           </p>
         ) : null}
         {/* Mail-me zodra een uitverkochte maat is gekozen — ook als het hele
@@ -418,21 +443,6 @@ export function BuyBox({
           />
         ) : null}
       </div>
-
-      {!allSoldOut ? (
-        <DeliveryPromise
-          promise={deliveryPromise}
-          note={deliveryNote}
-          cutoffHour={cutoffHour}
-          extra={
-            freeShipThresholdCents
-              ? priceCents >= freeShipThresholdCents
-                ? t("pdp.freeShip.now")
-                : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })
-              : null
-          }
-        />
-      ) : null}
 
       {/* Bestelknop + bewaren — of, als alles uitverkocht is, de mail-me-blok. */}
       {allSoldOut ? (
@@ -453,6 +463,7 @@ export function BuyBox({
               variant="block"
             />
           ) : null}
+          {winkelBlok}
         </div>
       ) : (
         <>
@@ -461,13 +472,44 @@ export function BuyBox({
               type="button"
               onClick={addToCart}
               disabled={!size || soldOut}
-              className="btn-primary w-full"
+              className="btn-primary w-full !px-4 sm:!px-6"
             >
-              {!size ? t("pdp.cta.chooseSize") : soldOut ? t("pdp.button.sold") : oneSize ? t("pdp.cta.addToCart") : t("pdp.cta.addToCartWithSize", { size })}
+              {!size ? (
+                t("pdp.cta.chooseSize")
+              ) : soldOut ? (
+                t("pdp.button.sold")
+              ) : oneSize || ctaLabel ? (
+                // Eigen knoptekst uit een A/B-variant krijgt géén maat-
+                // achtervoegsel: "Nu bestellen — maat 52" is niet wat er
+                // getest wordt, en de maat staat vlak erboven al opgelicht.
+                ctaLabel || t("pdp.cta.addToCart")
+              ) : (
+                <>
+                  {/* Op smalle schermen zonder maat-achtervoegsel: "In winkelwagen
+                      — maat XL7 43/44" paste niet op één regel. De gekozen maat
+                      licht vlak hierboven al op in de maatkiezer. */}
+                  <span className="sm:hidden">{t("pdp.cta.addToCart")}</span>
+                  <span className="hidden sm:inline">{t("pdp.cta.addToCartWithSize", { size })}</span>
+                </>
+              )}
             </button>
             <WishlistButton handle={productHandle} variant="pdp" />
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted">
+          {/* Bezorgbelofte hoort bij "wat gebeurt er als ik nu bestel", en dus
+              onder de knop — niet ertussen. */}
+          <DeliveryPromise
+            promise={deliveryPromise}
+            note={deliveryNote}
+            extra={
+              freeShipThresholdCents
+                ? priceCents >= freeShipThresholdCents
+                  ? t("pdp.freeShip.now")
+                  : t("pdp.freeShip.from", { amount: formatEuro(freeShipThresholdCents) })
+                : null
+            }
+          />
+          {winkelBlok}
+          <div className={`mt-3 flex-wrap items-center gap-x-2 gap-y-1 font-sans text-[0.7rem] text-muted ${betaaliconen ? "flex" : "hidden"}`}>
             <span>{t("pdp.payment.label")}</span>
             {["iDEAL", "Visa", "Mastercard", "Bancontact", "Apple Pay"].map((m) => (
               <span key={m} className="rounded border border-line px-1.5 py-0.5 text-ink-soft">{m}</span>
@@ -476,34 +518,9 @@ export function BuyBox({
         </>
       )}
 
-      {/* Ophalen in de winkel — secundaire optie, ónder de bestelknop. Met een
-          gekozen maat (sku) kan de klant er ook "reserveer om te passen". */}
-      {selectedSize && selectedSize.branches && selectedSize.branches.length ? (
-        <ClickAndCollect
-          // key per sku: maatwissel = verse component-staat (geen oude
-          // bevestiging/fout van een andere maat).
-          key={selectedSize.sku || selectedSize.size}
-          // Bij écht one-size geen maat meesturen — "Maat One ligt in 5 winkels"
-          // is onzin voor een accessoire; de generieke regel volstaat dan.
-          size={oneSize ? undefined : selectedSize.size}
-          branches={selectedSize.branches}
-          myStore={myStore}
-          reserve={selectedSize.sku ? { handle: productHandle, sku: selectedSize.sku } : undefined}
-        />
-      ) : null}
-      {/* De gekozen maat ligt in geen enkele winkel terwijl andere maten dat wél
-          doen: dan verdween hierboven het winkelkader en rendert ClickAndCollect
-          niets — de omnichannel-boodschap loste stil op. Zeg het dan gewoon. */}
-      {selectedSize && !oneSize && !soldOut && storeCount > 0 && !(selectedSize.branches ?? []).some((b) => b.qty > 0) ? (
-        <p className="mt-3 flex items-start gap-2 font-sans text-xs text-muted">
-          <StoreIcon className="mt-0.5 h-4 w-4 shrink-0" />
-          {t("pdp.storeStock.sizeNone", { size: selectedSize.size })}
-        </p>
-      ) : null}
-
       {/* Sticky mobiele bestelbalk — alleen zodra de hoofd-knop uit beeld is
           én de footer nog niet in beeld is (anders blijft de onderkant bedekt). */}
-      {stickyOn && !footerVisible && !allSoldOut ? (
+      {sticky && stickyOn && !footerVisible && !allSoldOut ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-page items-center gap-3">
             <div className="min-w-0 flex-1">
@@ -521,7 +538,7 @@ export function BuyBox({
               disabled={!size || soldOut}
               className="btn-primary !px-5"
             >
-              {!size ? t("pdp.sticky.choosesize") : soldOut ? t("pdp.button.sold") : t("pdp.cta.addToCart")}
+              {!size ? t("pdp.sticky.choosesize") : soldOut ? t("pdp.button.sold") : ctaLabel || t("pdp.cta.addToCart")}
             </button>
           </div>
         </div>

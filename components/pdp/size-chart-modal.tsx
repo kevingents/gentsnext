@@ -7,10 +7,10 @@ import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import {
   rowsForCategory,
   cmText,
-  BOORD_CHART,
   type ChartCategory,
 } from "@/lib/size-chart";
 import { hubSlugForHoofdgroep } from "@/lib/size-chart-hub";
+import { useSizeChart } from "@/components/maatadvies/size-chart-provider";
 import { useT } from "@/components/i18n/locale-provider";
 
 /** Catalogus-hoofdgroep → tabel: een chest/waist-categorie of de boord-tabel. */
@@ -54,7 +54,7 @@ export function SizeChartButton({ hoofdgroep, pageHandle }: { hoofdgroep: string
                   <p className="font-display text-lg">Onze maattabel</p>
                   <button type="button" onClick={() => setOpen(false)} aria-label={t("common.close")} className="font-sans text-sm underline">{t("common.close")}</button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-5 py-4">
+                <div className="flex-1 overflow-y-auto scroll-gents px-5 py-4">
                   <p className="mb-3 font-sans text-xs text-ink-soft">Lichaamsmaten in centimeters. Twijfel je tussen twee maten? Onze stylisten in de winkel helpen je graag.</p>
                   {target.boord ? <BoordTable /> : <CategoryTable category={target.category!} />}
                   <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-sans text-xs">
@@ -83,7 +83,8 @@ function Td({ children }: { children: React.ReactNode }) {
 }
 
 function CategoryTable({ category }: { category: ChartCategory }) {
-  const rows = rowsForCategory(category);
+  // De geüploade maattabel (Site → Maten), met de tabel in code als fallback.
+  const rows = rowsForCategory(category, useSizeChart());
   const hasChest = rows.some((r) => r.chestMin != null);
   const hasWaist = rows.some((r) => r.waistMin != null);
   const hasInner = rows.some((r) => r.innerLegMin != null);
@@ -112,6 +113,7 @@ function CategoryTable({ category }: { category: ChartCategory }) {
 }
 
 function BoordTable() {
+  const boord = useSizeChart().boord;
   return (
     <>
       <table className="w-full border-collapse">
@@ -124,7 +126,7 @@ function BoordTable() {
           </tr>
         </thead>
         <tbody>
-          {BOORD_CHART.map((r) => (
+          {boord.map((r) => (
             <tr key={r.confectie}>
               <Td>{r.confectie}</Td>
               <Td>{r.boordCm} cm</Td>

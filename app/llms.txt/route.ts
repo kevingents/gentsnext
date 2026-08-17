@@ -1,5 +1,6 @@
 import { getSiteUrl } from "@/lib/site-url";
 import { getSettings } from "@/lib/settings";
+import { formatEuro } from "@/lib/format";
 import { getSiteSettings } from "@/lib/site-settings";
 import { cutoffHourFor } from "@/lib/fulfillment-config";
 
@@ -65,7 +66,7 @@ GENTS is dé Nederlandse formele-momenten-specialist. Wij verkopen pakken, colbe
 ## Service
 
 - 19 fysieke winkels in Nederland en België met persoonlijk advies
-- 14 dagen retourrecht — gratis bij tegoed of inleveren in de winkel; geld terug per post kost € 4,99
+- ${settings.returnConfig.windowDays} dagen retourrecht — gratis bij tegoed of inleveren in de winkel; geld terug per post kost ${formatEuro(settings.returnConfig.dhlReturnCostCents)}
 - Gratis verzending vanaf €75
 - Voor ${cutoff} besteld = vandaag verzonden
 - Veilig betalen met iDEAL

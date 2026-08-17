@@ -5,6 +5,7 @@ import type { BuySize } from "@/components/pdp/buy-box";
 import {
   sizeLayoutFor,
   sizeRowLabel,
+  sizeSleeveBase,
   sizeGroup,
   sizeToken,
   rowSortIndex,
@@ -26,12 +27,12 @@ const COLUMNS: Record<string, Column[]> = {
   ],
 };
 
-/** Belletje op uitverkochte maten — signaleert dat je je kunt laten tippen zodra 'ie terug is. */
-function BellIcon({ className }: { className?: string }) {
+/** Envelop op uitverkochte maten — klik = mail me zodra deze maat terug is. */
+function MailIcon({ className }: { className?: string }) {
   return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="2.5" y="5" width="19" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
     </svg>
   );
 }
@@ -69,11 +70,12 @@ export function SizeMatrix({
     const sorted = [...list].sort((a, b) =>
       allNumeric
         ? num(a.size) - num(b.size)
-        : rowSortIndex(sizeRowLabel(a.size)) - rowSortIndex(sizeRowLabel(b.size))
+        : rowSortIndex(sizeRowLabel(a.size, hoofdgroep)) - rowSortIndex(sizeRowLabel(b.size, hoofdgroep))
     );
-    // Rustig, uniform grid — zelfde beeldtaal als de pakken-matrix: doorgestreept
-    // + klein belletje voor uitverkocht (geen "Uitverkocht"-woord per tegel; de
-    // hint-regel eronder legt het belletje uit), rood puntje voor bijna-op.
+    // Rustig, uniform grid. Een uitverkochte maat moet zichzelf uitleggen — er
+    // staat geen hintregel meer onder de kiezer: grijze vulling, gestippelde rand,
+    // diagonale streep én doorgestreepte maat, met een envelopje dat zegt dat je
+    // je kunt laten mailen. Rood puntje = bijna op.
     return (
       <ul
         className="mt-2 grid gap-2 [grid-template-columns:repeat(var(--maat-kolommen-m),minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--maat-kolommen),minmax(0,1fr))]"
@@ -96,19 +98,30 @@ export function SizeMatrix({
                 aria-pressed={on}
                 aria-label={out ? `${display(s.size)} — ${soldOutHint}` : undefined}
                 title={out ? soldOutHint : low ? `Nog ${s.qty} op voorraad` : undefined}
-                className={`relative flex h-11 w-full items-center justify-center border font-sans text-sm transition-colors ${
+                className={`relative flex h-11 w-full items-center justify-center overflow-hidden border font-sans text-sm transition-colors ${
                   on
                     ? out
-                      ? "border-ink text-ink ring-1 ring-ink"
+                      ? "border-dashed border-ink bg-surface text-ink ring-1 ring-ink"
                       : "border-ink bg-ink text-canvas"
                     : out
-                      ? "border-line/70 text-muted hover:border-ink"
+                      ? "border-dashed border-line bg-surface text-muted hover:border-ink hover:text-ink"
                       : "border-line text-ink hover:border-ink"
                 }`}
               >
-                <span className={out ? "line-through decoration-muted" : undefined}>{display(s.size)}</span>
+                {/* Diagonaal door de hele tegel: op één oogopslag "kan niet". */}
                 {out ? (
-                  <BellIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-ink-soft" />
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    className="pointer-events-none absolute inset-0 h-full w-full text-muted/40"
+                  >
+                    <line x1="0" y1="100" x2="100" y2="0" stroke="currentColor" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                  </svg>
+                ) : null}
+                <span className={out ? "relative line-through decoration-muted" : undefined}>{display(s.size)}</span>
+                {out ? (
+                  <MailIcon className="absolute bottom-0.5 right-0.5 h-3 w-3 text-ink-soft" />
                 ) : low ? (
                   <span aria-hidden className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" />
                 ) : null}
@@ -168,7 +181,7 @@ function GroupedSizes({
   // Onder de mouwlengte-tab de kale lettermaat tonen (S i.p.v. S7) — de tab
   // benoemt de mouwlengte al. Bij Regular/Long/Short blijft het échte
   // confectienummer staan (48 vs 98 zijn verschillende maten voor de klant).
-  const display = layout === "extra-sleeve" && activeCol.key === "long" ? sizeRowLabel : sizeToken;
+  const display = layout === "extra-sleeve" && activeCol.key === "long" ? sizeSleeveBase : sizeToken;
 
   return (
     <div className="mt-2">

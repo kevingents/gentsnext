@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     img: string | null;
   }>(sql`
     select v.barcode, v.sku, p.title, v.size, v.color, v.price_cents, v.shopify_variant_id, v.srs_artikel_id,
-      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.position asc limit 1), nullif(v.image_url, '')) img
+      coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.is_packshot desc, pi.position asc limit 1), nullif(v.image_url, '')) img
     from product_variants v join products p on p.id = v.product_id
     where lower(v.barcode) = ${code} or lower(v.sku) = ${code} or lower(v.srs_artikel_id) = ${code}
     order by (case when lower(v.barcode) = ${code} then 0 when lower(v.sku) = ${code} then 1 else 2 end), v.id
