@@ -71,6 +71,10 @@
     {
       "path": "/api/cron/verjaardagen",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/email-flows",
+      "schedule": "*/15 * * * *"
     }
   ],
   "regions": [

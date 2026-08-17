@@ -251,6 +251,27 @@ export const ANONIMISEER_STAPPEN: Stap[] = [
     `,
   },
   {
+    /* E-mailflows. De definities zelf bevatten geen klantgegevens, maar
+       `aangemaakt_door` is de naam of het mailadres van een medewerker — óók een
+       persoonsgegeven, en precies het soort veld dat je vergeet omdat het niet
+       over klanten gaat.
+
+       De loop-toestand (email_flow_leden, email_flow_stappen) hangt aan
+       customer_id en niet aan een adres, dus die volgt vanzelf met de
+       geanonimiseerde klanten mee.
+
+       Wél alle flows UITZETTEN. Een sandbox met een actieve flow en een
+       werkende mailsleutel stuurt echte mails naar sandbox.invalid-adressen —
+       en bij een verkeerd gezette sleutel naar echte mensen. Dit is de goedkope
+       verzekering tegen het duurste ongeluk dat deze motor kan veroorzaken. */
+    naam: "E-mailflows uitzetten en medewerkersnamen wissen",
+    sql: `
+      UPDATE email_flows SET actief = false, aangemaakt_door = 'sandbox';
+      UPDATE email_flow_leden SET status = 'gestopt', reden_uitstap = 'sandbox'
+        WHERE status = 'loopt';
+    `,
+  },
+  {
     /* mail_engagement is het buitenbeentje: het MAILADRES is de primaire sleutel
        én de manier waarop customer-360 deze cijfers aan een profiel hangt. Puur
        overschrijven zou dus twee dingen slopen — de unieke sleutel en de join.
