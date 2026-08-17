@@ -7,6 +7,7 @@ import { OPERATOREN, VELDEN, omschrijfDefinitie, valideerDefinitie, type RegelGr
 import { loopFlows, vulFlow, type Stap } from "@/lib/email-flows";
 import { SJABLOON_INFO } from "@/lib/email-flow-sjablonen";
 import { FLOW_CATEGORIEEN } from "@/lib/email-flow-categorieen";
+import { meetFlow, meetPerStap } from "@/lib/email-flow-meting";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -58,6 +59,7 @@ export async function POST(req: Request) {
             (select count(*)::int from ${emailFlowLeden} l where l.flow_id = f.id and l.status = 'loopt') lopend,
             (select count(*)::int from ${emailFlowLeden} l where l.flow_id = f.id and l.status = 'klaar') klaar,
             (select count(*)::int from ${emailFlowLeden} l where l.flow_id = f.id and l.status = 'uitgestapt') uitgestapt,
+            (select count(*)::int from ${emailFlowLeden} l where l.flow_id = f.id and l.status = 'holdout') holdout,
             (select count(*)::int from ${emailFlowStappen} s where s.flow_id = f.id and s.soort = 'mail' and s.gelukt) mails,
             a.naam doelgroep_naam, a.aantal_bereikbaar doelgroep_bereikbaar
           from ${emailFlows} f
@@ -86,11 +88,17 @@ export async function POST(req: Request) {
           select stap, count(*)::int n from ${emailFlowStappen}
           where flow_id = ${id}::uuid and soort = 'mail' and gelukt group by 1 order by 1
         `);
+        /* De meting hoort bij het openen van de flow, niet achter een extra
+           knop: anders kijkt niemand ernaar en blijft "hij draait" het enige
+           dat je van een flow weet. */
+        const [meting, perStapMeting] = await Promise.all([meetFlow(id), meetPerStap(id)]);
         return NextResponse.json({
           ok: true,
           flow: { ...flow, uitstapTekst: omschrijfDefinitie(flow.uitstap as RegelGroep) },
           perStap: perStap.rows,
           verstuurd: verstuurd.rows,
+          meting,
+          perStapMeting,
         });
       }
 
@@ -147,6 +155,8 @@ export async function POST(req: Request) {
           uitstap: uitstap as unknown as Record<string, unknown>,
           herhaalbaar: Boolean(b.herhaalbaar),
           herhaalNaDagen: Math.max(0, Number(b.herhaalNaDagen) || 90),
+          // Boven de 50% is het geen controlegroep meer maar een halve flow.
+          holdoutProcent: Math.min(50, Math.max(0, Math.round(Number(b.holdoutProcent) || 0))),
           aangemaaktDoor: String(b.door || "").slice(0, 120),
         };
         const [rij] = await db

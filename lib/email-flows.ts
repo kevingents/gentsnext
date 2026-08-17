@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { audienceMembers, customers, emailFlowLeden, emailFlowStappen, emailFlows, customerProfiles, loyaltyEvents } from "@/db/schema";
 import { definitieNaarSql, VELDEN, type RegelGroep } from "@/lib/audience-regels";
@@ -87,6 +87,30 @@ export type FlowResultaat = {
   punten: number;
 };
 
+/**
+ * Zit deze klant in de controlegroep van deze flow?
+ *
+ * Niet met een muntje per instapronde, maar met een hash van (flow, klant). Dat
+ * moet, om twee redenen:
+ *
+ *  1. Dezelfde klant krijgt bij een herhaalbare flow altijd dezelfde kant op.
+ *     Iemand die de ene keer wél en de andere keer geen mail krijgt, zit in
+ *     beide groepen en vervuilt de vergelijking.
+ *  2. Het is reproduceerbaar. Bij een scheve verhouding kun je narekenen wie
+ *     waar hoorde, in plaats van te moeten geloven dat het toeval was.
+ *
+ * De flow zit mee in de hash, zodat niet steeds dezelfde ongelukkigen in élke
+ * controlegroep belanden.
+ */
+function holdoutStatus(flowId: string, procent: number, klantId: SQL) {
+  const p = Math.min(50, Math.max(0, Math.round(procent || 0)));
+  if (!p) return sql`'loopt'`;
+  /* 24 bits, niet 32: bit(32) naar int is ONDERTEKEND, dus de helft van de
+     hashes zou negatief worden en `negatief % 100 < p` klopt altijd — dan zat
+     iedereen in de controlegroep. Met 24 bits past de waarde altijd positief. */
+  return sql`case when ('x' || substr(md5(${flowId} || ${klantId}::text), 1, 6))::bit(24)::int % 100 < ${p} then 'holdout' else 'loopt' end`;
+}
+
 /* ─────────────────────────────── Instappen ──────────────────────────────── */
 
 /**
@@ -122,7 +146,7 @@ export async function vulFlow(flowId: string): Promise<number> {
 
   const res = await db.execute(sql`
     insert into ${emailFlowLeden} (flow_id, customer_id, stap, status, volgende_stap_op)
-    select ${flowId}::uuid, p.customer_id, 0, 'loopt', now()
+    select ${flowId}::uuid, p.customer_id, 0, ${holdoutStatus(flowId, flow.holdoutProcent, sql`p.customer_id`)}, now()
     from ${customerProfiles} p
     where ${waar}
       -- Bereikbaar: dezelfde regel als bij de doelgroepen. Iemand zonder
@@ -144,7 +168,7 @@ export async function startFlowVoorKlant(slug: string, customerId: string): Prom
 
   const res = await db.execute(sql`
     insert into ${emailFlowLeden} (flow_id, customer_id, stap, status, volgende_stap_op)
-    select ${flow.id}::uuid, ${customerId}::uuid, 0, 'loopt', now()
+    select ${flow.id}::uuid, ${customerId}::uuid, 0, ${holdoutStatus(flow.id, flow.holdoutProcent, sql`${customerId}::uuid`)}, now()
     where exists (
       select 1 from ${customerProfiles} p
       where p.customer_id = ${customerId}::uuid
