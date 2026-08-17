@@ -21,11 +21,15 @@ export function normalizePhone(raw: string): string | null {
   if (!s) return null;
   if (s.startsWith("+")) s = s.slice(1);
   else if (s.startsWith("00")) s = s.slice(2);
-  // BE-mobiel (046x-049x, 10 cijfers) EERST: anders vangt de generieke NL-tak
-  // hieronder ('0' + lengte 10) een Belgisch 04-nummer weg en krijgt het landcode 31.
-  // NL-vast Eindhoven (040...) valt bewust NIET onder deze regex en blijft dus NL.
-  else if (/^04[5-9]\d{7}$/.test(s)) s = "32" + s.slice(1); // BE mobiel
-  else if (s.startsWith("06") || (s.startsWith("0") && s.length === 10)) s = "31" + s.slice(1); // NL mobiel/vast
+  // Zonder landcode defaulten we op NL (+31). BE-mobiel proberen we NIET heuristisch
+  // uit het nummer te halen: de NL- en BE-nummerplannen OVERLAPPEN in 04x. 045/046
+  // (Limburg) en 0475/0478/0492/0493/0495/0497/0499 (Brabant) zijn NL-vaste-lijnen,
+  // maar 046x-049x is óók BE-mobiel — op prefix raden stuurt die NL-nummers naar +32,
+  // en matcht dat toevallig een echt BE-mobiel op WhatsApp, dan gaat de melding naar een
+  // vreemde. Een BE-klant hoort z'n nummer mét landcode (+32/0032) in te vullen; dat
+  // wordt hierboven al correct afgehandeld. (Betrouwbaar BE-onderscheid vergt de
+  // country-hint uit de klant/order, niet het nummerplan.)
+  else if (s.startsWith("06") || (s.startsWith("0") && s.length === 10)) s = "31" + s.slice(1); // NL mobiel/vast (default)
   if (!/^\d{8,15}$/.test(s)) return null;
   return s;
 }
