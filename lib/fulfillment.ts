@@ -315,9 +315,17 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
       continue;
     }
 
-    // Geen filiaal dekt een regel volledig → split de zwaarste regel; vul uit de
-    // filialen met de MEESTE voorraad eerst (minste versnippering), dan prio.
-    const sku = open.sort((a, c) => (remaining.get(c) ?? 0) - (remaining.get(a) ?? 0))[0];
+    // Geen filiaal dekt een regel volledig → split de zwaarste regel die nog ÉÉN
+    // leverancier heeft; vul uit de filialen met de MEESTE voorraad eerst (minste
+    // versnippering), dan prio. SKU's zónder enige voorraad slaan we over: die
+    // blijven in `remaining` staan en komen straks als tekort terug. (Eerder brak
+    // één volledig-onleverbare regel de héle loop af, waardoor lichtere regels die
+    // nog wél leverbaar waren onterecht als tekort eindigden.)
+    const splitbaar = open
+      .filter((sku) => work.some((b) => (b.avail.get(sku) ?? 0) > 0))
+      .sort((a, c) => (remaining.get(c) ?? 0) - (remaining.get(a) ?? 0));
+    if (!splitbaar.length) break; // geen enkele open regel heeft nog voorraad
+    const sku = splitbaar[0];
     const suppliers = work
       .filter((b) => (b.avail.get(sku) ?? 0) > 0)
       .sort((a, b) => {
@@ -325,14 +333,11 @@ export async function allocateOrder(lines: OrderLineInput[], opts: AllocateOptio
         if (qa !== qb) return qb - qa;
         return better(a, b);
       });
-    let filled = false;
     for (const b of suppliers) {
       const take = Math.min(b.avail.get(sku) ?? 0, remaining.get(sku) ?? 0);
       assign(b, sku, take);
-      filled = true;
       if ((remaining.get(sku) ?? 0) <= 0) break;
     }
-    if (!filled) break;
   }
 
   // Shipments bouwen, magazijn eerst.

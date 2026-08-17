@@ -352,13 +352,36 @@ export async function createOrder(
        niet en de korting valt stil weg. */
     const smokingNiveaus = (await getSmokingSamenstelling()).niveaus;
     const pakketPrijs = new Map(smokingNiveaus.map((n) => [n.id, Math.round(Number(n.prijs) * 100)]));
+    /* Deelname-set uit hetzelfde beheer: welke handle mag welke rol vervullen
+       binnen welk niveau. De client stuurt groupId/roleLabel mee, maar die mogen
+       NOOIT bepalen wélk artikel voor de pakketprijs meetelt. Zonder deze check
+       tagt een aanvaller vier willekeurige dure colberts als jas/broek/overhemd/
+       strik met hetzelfde niveau en koopt zo een mand van €2000 voor de vaste
+       pakketprijs. Een regel telt alleen als smoking-onderdeel mee als zijn handle
+       in dat niveau/die rol daadwerkelijk een geldige keuze is; anders vervalt de
+       tag en betaalt de klant gewoon de losse prijs. */
+    const toegestaan = new Map<string, Map<string, Set<string>>>();
+    for (const n of smokingNiveaus) {
+      const perRol = new Map<string, Set<string>>();
+      for (const r of n.rollen) {
+        perRol.set(String(r.rol).toLowerCase(), new Set(r.handles.map((h) => h.trim().toLowerCase())));
+      }
+      toegestaan.set(n.id, perRol);
+    }
     const smokingKorting = smokingPakketKorting(
-      lines.map((l) => ({
-        groupId: l.groupId,
-        roleLabel: l.roleLabel,
-        priceCents: l.unitPriceCents,
-        quantity: l.quantity,
-      })),
+      lines.map((l) => {
+        const niveau = niveauUitGroupId(l.groupId);
+        const rol = String(l.roleLabel ?? "").toLowerCase();
+        const geldig = Boolean(
+          niveau && toegestaan.get(niveau)?.get(rol)?.has(l.productHandle.trim().toLowerCase())
+        );
+        return {
+          groupId: geldig ? l.groupId : undefined,
+          roleLabel: geldig ? l.roleLabel : undefined,
+          priceCents: l.unitPriceCents,
+          quantity: l.quantity,
+        };
+      }),
       (niveauId) => pakketPrijs.get(niveauId) ?? null
     );
     discountCents = Math.min(subtotalCents, discountCents + smokingKorting);
@@ -691,7 +714,18 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
   // voucher heractiveren) draaien niet nog eens. Cruciaal: anders kon een dubbele
   // 'failed'-webhook een voucher die order B intussen verzilverde weer 'active' maken.
   const whereClause = orderStatus
-    ? and(eq(orders.molliePaymentId, molliePaymentId), sql`${orders.status} is distinct from ${orderStatus}`)
+    ? and(
+        eq(orders.molliePaymentId, molliePaymentId),
+        orderStatus === "paid"
+          // Alleen naar 'paid' promoveren vanuit een nog-niet-afgeronde status. Mollie
+          // POST't de payment-webhook opnieuw bij o.a. een refund/chargeback, waarbij de
+          // payment nog steeds 'paid' teruggeeft; zonder deze guard zet zo'n herhaalde
+          // webhook een al verzonden/bezorgde/terugbetaalde order terug naar 'paid'
+          // (verzendstatus weg) én boekt de omzet nog eens. Late betalingen
+          // (expired/failed → paid, bv. banktransfer) blijven wél toegestaan.
+          ? sql`${orders.status} not in ('paid','shipped','ready_pickup','delivered','refunded','canceled')`
+          : sql`${orders.status} is distinct from ${orderStatus}`
+      )
     : eq(orders.molliePaymentId, molliePaymentId);
   const updated = await db
     .update(orders)

@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { visitorAttribution } from "@/db/schema";
 import { recordEvents, onbekendeEvents } from "@/lib/analytics";
 import { klantVoorIdentiteit } from "@/lib/identity";
+import { rateLimit, fingerprint } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +18,15 @@ export const dynamic = "force-dynamic";
  * dat is de normale situatie: een onbekende bezoeker meten we anoniem.
  */
 export async function POST(req: Request) {
+  // Backstop rate-limit per IP: dit is een publieke, ongeauthenticeerde endpoint —
+  // zonder limiet kan iemand er ongelimiteerd rijen in pompen (DB-bloat/kosten).
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "?";
+  if (!rateLimit("track:" + fingerprint(ip), 60, 60000).ok) {
+    return NextResponse.json({ ok: true }); // stil negeren, analytics mag de UX nooit breken
+  }
   try {
     const body = await req.json();
     const list = Array.isArray(body?.events) ? body.events : Array.isArray(body) ? body : [];
-
     // Eén indexed lookup per batch (batches komen hoogstens elke 2,5s), niet per
     // event. De sessie zelf valideren zou duurder zijn én zou het device van een
     // uitgelogde-maar-bekende bezoeker missen.
@@ -32,7 +38,11 @@ export async function POST(req: Request) {
     const onbekend = onbekendeEvents(list);
     if (onbekend.length) console.warn("[track] events buiten de catalogus:", onbekend.join(", "));
 
-    await recordEvents(list.map((e: Record<string, unknown>) => ({ ...e, customerId, bron: "web" })));
+    // 'purchase' wordt AUTORITATIEF server-side geboekt op het betaal-choke-point
+    // (lib/orders.ts applyPaymentStatus). Een client-purchase-event zou de omzet/funnel
+    // dubbel tellen én is hier vervalsbaar (publiek, ongeauth) → server-side weren.
+    const clean = list.filter((e: { type?: unknown }) => !(e && typeof e === "object" && e.type === "purchase"));
+    await recordEvents(clean.map((e: Record<string, unknown>) => ({ ...e, customerId, bron: "web" })));
 
     if (body?.attributie && sid) await bewaarAttributie(sid, body.attributie);
   } catch {

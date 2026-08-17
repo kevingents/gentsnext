@@ -1,4 +1,13 @@
+import { timingSafeEqual } from "crypto";
 import { getSessionCustomer } from "@/lib/account";
+
+/** Constante-tijd-vergelijking; false bij lengteverschil of leeg token. */
+function tokenEquals(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 /**
  * Auth voor de portal→gentsnext admin-API ("Nieuwe site"-CMS): een gentsnext-
@@ -13,7 +22,7 @@ export async function adminOrToken(req: Request): Promise<boolean> {
   const got = (req.headers.get("authorization") || req.headers.get("x-studio-token") || "")
     .replace(/^Bearer\s+/i, "")
     .trim();
-  return !!want && got === want;
+  return tokenEquals(got, want);
 }
 
 /** Standaard datumbereik uit ?from&?to (ISO), default = laatste N dagen. */

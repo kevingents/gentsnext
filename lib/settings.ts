@@ -481,6 +481,12 @@ export async function getSettings(): Promise<Settings> {
       unfulfillableConfig: { ...DEFAULT_SETTINGS.unfulfillableConfig, ...(stored.unfulfillableConfig || {}) },
       heatmap: { ...DEFAULT_SETTINGS.heatmap, ...(stored.heatmap || {}) },
       storeEmails: { ...DEFAULT_SETTINGS.storeEmails, ...(stored.storeEmails || {}) },
+      /* Deze twee geneste config-objecten ook per-veld mergen (niet onder de
+         top-level ...stored laten vallen): anders vervangt een blob van vóór een
+         nieuwe veld-toevoeging het defaults-object volledig en komt dat veld als
+         undefined. (loyaltyConfig wordt hierboven al twee niveaus diep gemerged.) */
+      pakbon: { ...DEFAULT_SETTINGS.pakbon, ...(stored.pakbon || {}) },
+      merchandisingPins: { ...DEFAULT_SETTINGS.merchandisingPins, ...(stored.merchandisingPins || {}) },
       /* Lijsten: opgeslagen waarde wint volledig (geen merge — anders kun je een
          gepauzeerd filiaal nooit meer weghalen), maar wel altijd een array. */
       pausedBranchIds: Array.isArray(stored.pausedBranchIds) ? stored.pausedBranchIds.map(String) : [],

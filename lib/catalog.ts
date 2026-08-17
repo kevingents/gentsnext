@@ -544,7 +544,7 @@ function contextConditions(f: ProductFilters): SQL[] {
 
 /** Productkaarten voor een lijst handles (favorieten/recent bekeken). */
 export async function getProductsByHandles(handles: string[]): Promise<ProductCardData[]> {
-  const list = [...new Set(handles)].slice(0, 60);
+  const list = [...new Set(handles)].slice(0, 100); // gelijk aan de cap van de route (was 60 → handles 61-100 verdwenen stil)
   if (!list.length) return [];
   const db = getDb();
   const rows = await db
@@ -1081,8 +1081,8 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
         -- Groeperen op de lettermaat-rij ontdubbelt regular/long/short; de
         -- cijfer-vlag houdt boordmaat 44 los van lettermaat XS bij overhemden.
         group by c.fam, coalesce(rm.row, c.tok), (c.tok ~ '^[0-9]')
-      union all select 'price_lo', ''::text, ''::text, coalesce(min(price_cents),0)::int from ctxv
-      union all select 'price_hi', ''::text, ''::text, coalesce(max(price_cents),0)::int from ctxv
+      union all select 'price_lo', ''::text, ''::text, coalesce(min(price_cents),0)::int from ctxv where stock_qty > 0
+      union all select 'price_hi', ''::text, ''::text, coalesce(max(price_cents),0)::int from ctxv where stock_qty > 0
     `),
   ]);
 

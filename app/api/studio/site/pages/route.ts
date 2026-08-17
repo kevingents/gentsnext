@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
 import { getStorePages, saveStorePages, type StorePage } from "@/lib/content-pages";
 import { reservedPageSlugs } from "@/lib/reserved-page-slugs";
+import { IMAGE_HINT, isSafeImageSrc } from "@/lib/safe-image";
 import { docVersion, CONFLICT_MESSAGE } from "@/lib/content-version";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +70,16 @@ export async function POST(req: Request) {
   if (reserved.length) {
     return NextResponse.json(
       { ok: false, error: `Deze slug(s) zijn gereserveerd voor een vaste pagina en kunnen niet als content-pagina: ${reserved.join(", ")}. Kies een andere slug.` },
+      { status: 400 },
+    );
+  }
+  // Een beeld dat next/image niet aankan zet de PUBLIEKE pagina op 500 — hier
+  // weigeren i.p.v. stil bewaren (gelijk aan /api/account/paginas; die divergentie
+  // was de bug: de portal-schrijfkant miste deze controle).
+  const badImages = items.filter((p) => !isSafeImageSrc(p.image || "")).map((p) => p.slug);
+  if (badImages.length) {
+    return NextResponse.json(
+      { ok: false, error: `Afbeelding klopt niet bij: ${badImages.join(", ")}. ${IMAGE_HINT}` },
       { status: 400 },
     );
   }

@@ -10,7 +10,6 @@ import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { formatEuro } from "@/lib/pricing";
 import { ClearCart } from "@/components/cart/clear-cart";
-import { TrackPurchase } from "@/components/analytics/track-purchase";
 import { CareBlock } from "@/components/pdp/care-material";
 import { ProductCard } from "@/components/product-card";
 import { OrderStatusPoller } from "@/components/order/order-status-poller";
@@ -41,7 +40,9 @@ function addBusinessDays(from: Date, days: number): Date {
   return d;
 }
 function fmtDate(d: Date, locale: string): string {
-  return d.toLocaleDateString(locale === "nl" ? "nl-NL" : locale, { weekday: "long", day: "numeric", month: "long" });
+  // timeZone expliciet: op Vercel (UTC) toont een bezorgschatting rond middernacht
+  // anders de verkeerde (werk)dag voor een NL-klant.
+  return d.toLocaleDateString(locale === "nl" ? "nl-NL" : locale, { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
 }
 
 // Verzonnen picker-namen — deterministisch per filiaal, zodat dezelfde winkel
@@ -143,7 +144,6 @@ export default async function OrderPage({ params, searchParams }: Props) {
   return (
     <div className="mx-auto max-w-2xl px-gutter py-16">
       {paid ? <ClearCart /> : null}
-      {paid ? <TrackPurchase orderNumber={order.orderNumber} totalCents={order.totalCents} /> : null}
 
       {paid ? (
         <>

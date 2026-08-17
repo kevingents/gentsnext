@@ -101,8 +101,13 @@ export async function redeemGiftcard(rawCode: string, orderNumber: string, amoun
     )
     select coalesce(
       (select -delta_cents from claim),
+      -- Fallback bij retry/race: geef het eerder afgeboekte bedrag terug. De giftcard
+      -- via de CODE opzoeken, NIET via gc — gc filtert balance_cents > 0, dus zodra een
+      -- bon volledig is opgemaakt (saldo 0, 'depleted') levert gc geen rij en zou de
+      -- fallback 0 teruggeven terwijl er wél is afgeboekt (kassa int dan dubbel).
       (select -delta_cents from giftcard_transactions t
-        where t.giftcard_id = (select id from gc) and t.order_number = ${orderNumber} and t.reason = 'redeem' limit 1),
+        where t.giftcard_id = (select id from giftcards where code = ${code})
+          and t.order_number = ${orderNumber} and t.reason = 'redeem' limit 1),
       0
     )::int as applied
   `);

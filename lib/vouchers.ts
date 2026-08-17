@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { and, eq, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { vouchers } from "@/db/schema";
@@ -193,21 +194,27 @@ export async function createWelcomeVoucher(email: string, percentOff = 10, days 
     .limit(1);
   if (existing[0]) return existing[0].code;
 
-  const code = "WELKOM-" + Math.abs(hash(norm)).toString(36).toUpperCase().slice(0, 6);
+  const base = "WELKOM-" + Math.abs(hash(norm)).toString(36).toUpperCase().slice(0, 6);
+  const expiresAt = new Date(Date.now() + days * 86400000);
+  const inserted = await db
+    .insert(vouchers)
+    .values({ code: base, email: norm, description: "Welkomstkorting eerste bestelling", kind: "percent", percentOff, status: "active", singleUse: true, expiresAt })
+    .onConflictDoNothing()
+    .returning({ code: vouchers.code });
+  if (inserted[0]) return inserted[0].code;
+
+  // Code bestond al (conflict). Hoort 'ie bij DIT adres (race/dubbele call), dan
+  // hergebruiken; bij een ánder adres (32-bit hash-botsing) een UNIEKE code maken —
+  // anders zouden we een single-use code van iemand anders teruggeven en mailen.
+  const [own] = await db.select().from(vouchers).where(and(eq(vouchers.code, base), eq(vouchers.email, norm))).limit(1);
+  if (own) return own.code;
+
+  const unique = base + "-" + randomBytes(3).toString("hex").toUpperCase();
   await db
     .insert(vouchers)
-    .values({
-      code,
-      email: norm,
-      description: "Welkomstkorting eerste bestelling",
-      kind: "percent",
-      percentOff,
-      status: "active",
-      singleUse: true,
-      expiresAt: new Date(Date.now() + days * 86400000),
-    })
+    .values({ code: unique, email: norm, description: "Welkomstkorting eerste bestelling", kind: "percent", percentOff, status: "active", singleUse: true, expiresAt })
     .onConflictDoNothing();
-  return code;
+  return unique;
 }
 
 function hash(s: string): number {

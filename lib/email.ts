@@ -208,16 +208,20 @@ type GiftcardEmail = {
 
 function giftcardHtml(g: GiftcardEmail): string {
   const site = getSiteUrl();
-  const greeting = g.recipientName ? `Hoi ${g.recipientName},` : "Hoi,";
+  // Koper-geleverde velden ALTIJD escapen: recipientName/senderName/message komen
+  // rechtstreeks uit de purchase-request en gaan naar een willekeurig ontvangeradres.
+  // Ongeescaped zou een koper <a>/<img>-HTML in een GENTS-gebrande mail kunnen
+  // injecteren (phishing). esc() (zelfde helper als de reserverings-/afspraakmail).
+  const greeting = g.recipientName ? `Hoi ${esc(g.recipientName)},` : "Hoi,";
   const fromLine = g.senderName
-    ? `<strong style="color:#0A0A0A">${g.senderName}</strong> heeft je een GENTS-cadeaubon gestuurd.`
+    ? `<strong style="color:#0A0A0A">${esc(g.senderName)}</strong> heeft je een GENTS-cadeaubon gestuurd.`
     : `Je hebt een GENTS-cadeaubon ontvangen.`;
   const expiry = g.expiresAt
     ? new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric" }).format(g.expiresAt)
     : null;
   const personal = g.message
     ? `<tr><td style="padding:8px 28px 0">
-         <div style="border-left:3px solid #0A0A0A;padding:6px 0 6px 14px;font:italic 14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${g.message}</div>
+         <div style="border-left:3px solid #0A0A0A;padding:6px 0 6px 14px;font:italic 14px Arial,sans-serif;color:#2C2C2C;line-height:1.6">${esc(g.message)}</div>
        </td></tr>`
     : "";
 

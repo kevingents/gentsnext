@@ -231,7 +231,16 @@ export async function consumeMagicToken(rawToken: string): Promise<boolean> {
   const magic = rows[0];
   if (!magic || magic.expiresAt.getTime() < Date.now()) return false;
 
-  await db.update(customerSessions).set({ consumedAt: sql`now()` }).where(eq(customerSessions.id, magic.id));
+  // Atomair verzilveren (CAS op consumedAt): alleen doorgaan als DEZE update de rij
+  // van null→now() zette. Zonder de guard passeren twee gelijktijdige GET's (of een
+  // link-prefetcher + de echte klik) beide de isNull-check hierboven en maken beide
+  // een sessie; nu wint er precies één en faalt de ander netjes.
+  const consumed = await db
+    .update(customerSessions)
+    .set({ consumedAt: sql`now()` })
+    .where(and(eq(customerSessions.id, magic.id), isNull(customerSessions.consumedAt)))
+    .returning({ id: customerSessions.id });
+  if (!consumed.length) return false;
   await createSession(magic.customerId);
 
   // Bestaande gast-orders met dit e-mailadres aan het account koppelen.

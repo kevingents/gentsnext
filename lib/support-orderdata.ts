@@ -33,7 +33,9 @@ export type SupportOrderStatus = {
 function fmtDateNL(d: Date | string | null | undefined): string {
   if (!d) return "";
   try {
-    return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "long" });
+    // timeZone expliciet: op Vercel (UTC) zou een event tussen ~22:00-24:00 UTC
+    // anders een dag te vroeg getoond worden in de order-/retour-/refundstatus.
+    return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
   } catch {
     return "";
   }

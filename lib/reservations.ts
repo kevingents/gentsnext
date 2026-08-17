@@ -212,6 +212,15 @@ export async function convertReservationToOrder(reservationId: string): Promise<
     await hervatBevestigenEnPlannen(r.convertedOrderId);
     return { ok: true, orderNumber: r.convertedOrderId, alreadyDone: true };
   }
+  if (r.status === "converting") {
+    // Een parallelle webhook/aanroep zit middenin de conversie: de status is al naar
+    // 'converting' geflipt maar convertedOrderId is nog niet gezet. Zou deze call
+    // doorlopen, dan matcht de CAS hieronder (status='converting' + convertedOrderId='')
+    // opnieuw en ontstaat een TWEEDE betaalde afhaalorder voor dezelfde betaling.
+    // Terugtrekken; Mollie biedt later opnieuw aan en die retry komt dan langs de
+    // 'al omgezet'-tak zodra convertedOrderId gezet is.
+    return { ok: false, error: "Conversie is al bezig." };
+  }
   const lines = (Array.isArray(r.lines) ? r.lines : []) as ReservationLine[];
   if (!lines.length) return { ok: false, error: "Reservering zonder regels." };
 

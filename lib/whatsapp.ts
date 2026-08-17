@@ -21,8 +21,11 @@ export function normalizePhone(raw: string): string | null {
   if (!s) return null;
   if (s.startsWith("+")) s = s.slice(1);
   else if (s.startsWith("00")) s = s.slice(2);
-  else if (s.startsWith("06") || (s.startsWith("0") && s.length === 10)) s = "31" + s.slice(1); // NL mobiel
-  else if (s.startsWith("04") && s.length === 10) s = "32" + s.slice(1); // BE mobiel
+  // BE-mobiel (046x-049x, 10 cijfers) EERST: anders vangt de generieke NL-tak
+  // hieronder ('0' + lengte 10) een Belgisch 04-nummer weg en krijgt het landcode 31.
+  // NL-vast Eindhoven (040...) valt bewust NIET onder deze regex en blijft dus NL.
+  else if (/^04[5-9]\d{7}$/.test(s)) s = "32" + s.slice(1); // BE mobiel
+  else if (s.startsWith("06") || (s.startsWith("0") && s.length === 10)) s = "31" + s.slice(1); // NL mobiel/vast
   if (!/^\d{8,15}$/.test(s)) return null;
   return s;
 }
