@@ -24,6 +24,15 @@ const FITS: { key: FitPreference; labelKey: string; hintKey: string }[] = [
   { key: "comfort", labelKey: "sizeAdvisor.fit.comfort", hintKey: "sizeAdvisor.fit.comfortHint" },
 ];
 
+/** De velden die een advies invult in het maatprofiel. */
+export type AdviceSizes = {
+  colbert: string;
+  overhemd: string;
+  pasvorm: string;
+  lengte: string;
+  gewicht: string;
+};
+
 const CONFIDENCE_LABEL_KEY: Record<CategoryAdvice["confidence"], string> = {
   hoog: "sizeAdvisor.confidence.high",
   gemiddeld: "sizeAdvisor.confidence.medium",
@@ -72,15 +81,26 @@ function AdviceCard({ title, advice, shopHref }: { title: string; advice: Catego
  *    kolommen van ~230px geperst en brak per twee woorden af. In de drawer
  *    tonen we ook geen lege placeholder — het advies verschijnt gewoon
  *    onder het formulier zodra het berekend is.
+ *  - "panel"  → als "drawer", maar bedoeld als kolom naast een formulier.
+ *
+ * `onApply`: staat de adviseur naast een maatformulier (Mijn GENTS → Mijn
+ * maten), dan slaat hij zelf niets op — hij vult dat formulier en de klant
+ * bevestigt met de opslag-knop die er al staat. Twee knoppen die allebei
+ * "opslaan" heten naast elkaar is een uitnodiging om de helft van je maten
+ * kwijt te raken; bovendien zou de eerste knop de punten opstrijken en het
+ * formulier met verouderde waarden laten staan.
  */
 export function SizeAdvisor({
   bonusPoints = 0,
   variant = "page",
-}: { bonusPoints?: number; variant?: "page" | "drawer" } = {}) {
+  onApply,
+}: {
+  bonusPoints?: number;
+  variant?: "page" | "drawer" | "panel";
+  onApply?: (sizes: AdviceSizes) => void;
+} = {}) {
   const t = useT();
-  // De actieve, geüploade maattabel; valt terug op de tabel in code.
-  const chart = useSizeChart();
-  const drawer = variant === "drawer";
+  const drawer = variant !== "page";
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [fit, setFit] = useState<FitPreference>("regular");
@@ -103,24 +123,30 @@ export function SizeAdvisor({
   const [refLetter, setRefLetter] = useState<ReferenceLetter | "">("");
   const refResult = refBrand && refLetter ? referenceAdvice(refBrand, refLetter, fit, chart) : null;
 
+  function adviceSizes(a: SizeAdvice): AdviceSizes {
+    return {
+      colbert: a.jacket.size,
+      overhemd: a.shirt.size,
+      pasvorm: fit === "regular" ? "modern" : fit,
+      lengte: heightCm ? String(heightCm) : "",
+      gewicht: weightKg ? String(weightKg) : "",
+    };
+  }
+
   async function saveToProfile() {
     if (!advice) return;
+    // Naast een maatformulier: invullen i.p.v. opslaan (zie onApply hierboven).
+    if (onApply) {
+      onApply(adviceSizes(advice));
+      setSaveState("saved");
+      return;
+    }
     setSaveState("saving");
     try {
       const res = await fetch("/api/account/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          section: "size",
-          merge: true,
-          sizeProfile: {
-            colbert: advice.jacket.size,
-            overhemd: advice.shirt.size,
-            pasvorm: fit === "regular" ? "modern" : fit,
-            lengte: heightCm ? String(heightCm) : "",
-            gewicht: weightKg ? String(weightKg) : "",
-          },
-        }),
+        body: JSON.stringify({ section: "size", merge: true, sizeProfile: adviceSizes(advice) }),
       });
       if (res.status === 401) {
         setSaveState("login");
@@ -379,13 +405,15 @@ export function SizeAdvisor({
                   <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
                   <div>
                     <p className="font-sans text-sm font-medium text-ink">
-                      {t("sizeAdvisor.savedToProfile")}
+                      {t(onApply ? "sizeAdvisor.applied" : "sizeAdvisor.savedToProfile")}
                       {earned > 0 ? <span className="ml-2 text-success">{t("sizeAdvisor.savedBonus", { n: earned })}</span> : null}
                     </p>
                     <p className="mt-1 font-sans text-xs text-ink-soft">
-                      {t("sizeAdvisor.savedMessage")}
+                      {t(onApply ? "sizeAdvisor.appliedMessage" : "sizeAdvisor.savedMessage")}
                     </p>
-                    <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.viewMySizes")}</Link>
+                    {onApply ? null : (
+                      <Link href="/account" className="mt-2 inline-block font-sans text-xs text-ink underline underline-offset-4">{t("sizeAdvisor.viewMySizes")}</Link>
+                    )}
                   </div>
                 </div>
               ) : saveState === "login" ? (
@@ -400,7 +428,7 @@ export function SizeAdvisor({
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-sans text-sm text-ink-soft">
-                    <span className="font-medium text-ink">{t("sizeAdvisor.saveSizeLabel")}</span> — {t("sizeAdvisor.saveSizeHint")}
+                    <span className="font-medium text-ink">{t(onApply ? "sizeAdvisor.applyLabel" : "sizeAdvisor.saveSizeLabel")}</span> — {t(onApply ? "sizeAdvisor.applyHint" : "sizeAdvisor.saveSizeHint")}
                     {bonusPoints > 0 ? <span className="mt-1 block text-ink">{t("sizeAdvisor.saveBonusHint", { n: bonusPoints })}</span> : null}
                   </p>
                   <button
@@ -409,7 +437,7 @@ export function SizeAdvisor({
                     disabled={saveState === "saving"}
                     className="btn-ghost shrink-0 !py-2"
                   >
-                    {saveState === "saving" ? t("sizeAdvisor.saving") : t("sizeAdvisor.saveButton")}
+                    {saveState === "saving" ? t("sizeAdvisor.saving") : t(onApply ? "sizeAdvisor.applyButton" : "sizeAdvisor.saveButton")}
                   </button>
                 </div>
               )}

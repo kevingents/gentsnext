@@ -11,8 +11,6 @@ import { useModalA11y } from "@/components/hooks/use-modal-a11y";
 import { SortSelect } from "@/components/plp/sort-select";
 import { track } from "@/lib/track-client";
 import { SIZE_SYSTEM_ORDER, sizeSystemKey, type SizeSystem } from "@/lib/size-taxonomy";
-import { StoreChooser } from "@/components/stores/store-chooser";
-import type { PlpStoreOption } from "@/lib/plp-store";
 
 type Props = {
   facets: Facets;
@@ -27,10 +25,6 @@ type Props = {
   /** Actieve sortering — de sticky pil belooft "Filter & sorteer", dus de mobiele
       drawer moet óók een sorteer-keuze bevatten. */
   sort?: ProductSort;
-  /** Winkels van de klant (+ wat er in de URL staat) — hier alleen nog om te
-   *  weten óf er al een winkel gekozen is; het filteren zelf staat als pil bij
-   *  de resultaten. */
-  storeOptions?: PlpStoreOption[];
   /**
    * A/B: vaste zijkolom (standaard) of een knop met lade bovenaan, ook op
    * desktop. Mobiel verandert er niets — daar was het altijd al een lade.
@@ -58,7 +52,7 @@ function trackFilter(facet: string, value: string, on: boolean) {
   track("filter", { props: { facet, value, on } });
 }
 
-export function PlpFilters({ facets, selection, total, mySize, sort, storeOptions = [], positie = "zijkant" }: Props) {
+export function PlpFilters({ facets, selection, total, mySize, sort, positie = "zijkant" }: Props) {
   /* "boven" laat de vaste zijkolom vallen en geeft ook desktop de knop-plus-lade
      die mobiel al had. Dat is de klassieke merchandising-afweging: filters altijd
      in beeld (meer verfijnen) versus een breder productraster (meer producten per
@@ -140,20 +134,11 @@ export function PlpFilters({ facets, selection, total, mySize, sort, storeOption
           maatfilter eronder. Het staat nu als chip bij de resultaten
           (components/plp/active-chips): aan = gevuld met een kruisje, uit = een
           omlijnd aanbod. Zie PlpActiveChips voor de afweging. */}
-      {/* Winkelvoorraad — "ligt dit in mijn winkel?" is een andere vraag dan "is
-          het leverbaar". Het stond hier als aanvinklijst in een kadertje; het
-          staat nu als pil bij de resultaten, naast "Alleen mijn maat"
-          (components/plp/active-chips). Dezelfde soort keuze hoort er hetzelfde
-          uit te zien, en daar zie je meteen wat 'ie oplevert.
-          Wat hier blijft: de uitnodiging voor wie nog géén winkel koos — dan valt
-          er bij de resultaten niets aan te bieden en zou de keuze nergens staan. */}
-      {storeOptions.length === 0 ? (
-        <div className="mb-4 border border-line p-3">
-          <p className="label-brand">{t("plp.filters.storeStock")}</p>
-          <StoreChooser variant="card" bron="plp" />
-        </div>
-      ) : null}
-
+      {/* Winkelvoorraad staat hier niet meer — niet als aanvinklijst en ook niet
+          als uitnodiging in een kadertje (Kevin, 13 aug: "staat nog steeds aan de
+          linkerkant"). Alles wat met winkels te maken heeft staat bij de
+          resultaten: de winkels als pil, en de kiezer als pil ervoor zolang er
+          nog geen winkel gekozen is. Zie components/plp/active-chips. */}
       {/* Maat staat bewust bovenaan en open: is het er niet in jouw maat, dan
           doet de rest er niet toe. Binnen de groep staan de maten per
           matensysteem (kleding · boordmaat · schoen · riem · …), want die

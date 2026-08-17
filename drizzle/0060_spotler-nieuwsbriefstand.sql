@@ -1,0 +1,13 @@
+-- Rauwe nieuwsbriefstand uit Spotler (Kevin, 13 aug 2026).
+--
+-- BEWUST als tekst en niet als afmeld-boolean. Bij de proefdraai vertaalde ik
+-- `newsletter=no` naar "afgemeld" en kwam op 20.896 van de 39.073 uit. Maar in
+-- de héle export staat 96% op `no` (1.628.406 van 1.687.715): dat is "nooit
+-- ingeschreven", niet "uitgeschreven".
+--
+-- Die twee door elkaar halen kost beide kanten op: tienduizenden mensen een
+-- opt-out geven die ze nooit gaven, of iemand die zich écht afmeldde tóch
+-- blijven mailen. De export kent het verschil niet, dus bewaren we de stand
+-- zoals hij is en beslissen we er niets op. Alleen `yes` is harde, bruikbare
+-- toestemming.
+ALTER TABLE "mail_engagement" ADD COLUMN IF NOT EXISTS "spotler_nieuwsbrief" text DEFAULT '' NOT NULL;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { adminOrToken } from "@/lib/studio-token";
 import { getDb } from "@/db";
-import { compleetheidScoreSql, pimWhereSql, pimCheckLabels, PIM_VELDEN } from "@/lib/pim";
+import { compleetheidScoreSql, pimWhereSql, pimFacetten, pimCheckLabels, miniatuurSql, PIM_VELDEN } from "@/lib/pim";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +42,9 @@ export async function GET(req: Request) {
   const kwaliteit = (sp.get("kwaliteit") || "").trim();
   const merk = (sp.get("merk") || "").trim();
   const groep = (sp.get("groep") || "").trim();
+  const subgroep = (sp.get("subgroep") || "").trim();
+  const jaar = (sp.get("jaar") || "").trim();
+  const seizoen = (sp.get("seizoen") || "").trim();
   const sort = sp.get("sort") || "nieuw";
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const pageSize = Math.min(200, Math.max(5, Number(sp.get("pageSize")) || 30));
@@ -52,9 +55,10 @@ export async function GET(req: Request) {
   /* Het filter staat in lib/pim.ts zodat de CSV-export exact hetzelfde selecteert
      als dit scherm. 'mist:<check>' is de werklijst achter een tegel op het
      kwaliteitsoverzicht. */
+  const filters = { search, status, kwaliteit, merk, groep, subgroep, jaar, seizoen };
   let where: SQL;
   try {
-    where = pimWhereSql({ search, status, kwaliteit, merk, groep });
+    where = pimWhereSql(filters);
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
   }
@@ -69,10 +73,15 @@ export async function GET(req: Request) {
       in_stock: boolean; stock_qty: number; has_image: boolean; created_at: string; image: string;
       variant_count: string; min_price_cents: string | null; max_price_cents: string | null;
       score: number; handmatig: string[] | null;
+      hoofdgroep: string; subgroep: string; jaar: string; seizoen: string;
     }>(sql`
       select p.handle, p.title, p.vendor, p.product_type, p.status,
              p.in_stock, p.stock_qty, p.has_image,
-             split_part(p.model_image_url,'?',1) image,
+             coalesce(p.attributes ->> 'hoofdgroep_omschrijving', '') hoofdgroep,
+             coalesce(p.attributes ->> 'subgroep', '') subgroep,
+             coalesce(p.attributes ->> 'jaar', '') jaar,
+             coalesce(p.attributes ->> 'seizoen', '') seizoen,
+             ${miniatuurSql()} image,
              to_char(p.created_at,'YYYY-MM-DD') created_at,
              ${score} score,
              coalesce(p.handmatige_velden, '[]'::jsonb) handmatig,
@@ -89,6 +98,10 @@ export async function GET(req: Request) {
       order by ${order}
       limit ${pageSize} offset ${(page - 1) * pageSize}`);
 
+    /* Ná de lijst, niet ervoor: de facet-tellingen zijn vier losse aggregaties
+       en die hoeven de rij-query niet op te houden. */
+    const facetten = await pimFacetten(filters);
+
     return NextResponse.json({
       ok: true,
       total: Number(n) || 0,
@@ -99,6 +112,7 @@ export async function GET(req: Request) {
          zijn dropdowns hieruit op, en dan hoeft een nieuwe check of een nieuw
          bewerkbaar veld niet op twee plekken bijgehouden te worden. */
       checks: pimCheckLabels(),
+      facetten,
       bulkVelden: PIM_VELDEN.filter((v) => v.bulk).map(({ sleutel, label, type, opties }) => ({
         sleutel,
         label,
@@ -121,6 +135,10 @@ export async function GET(req: Request) {
         createdAt: x.created_at,
         score: Number(x.score) || 0,
         handmatig: Array.isArray(x.handmatig) ? x.handmatig.map(String) : [],
+        hoofdgroep: x.hoofdgroep || "",
+        subgroep: x.subgroep || "",
+        jaar: x.jaar || "",
+        seizoen: x.seizoen || "",
       })),
     });
   } catch (e) {

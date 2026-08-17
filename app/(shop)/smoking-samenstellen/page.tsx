@@ -53,7 +53,10 @@ export default async function SmokingSamenstellenPage() {
       </div>
 
       {/* Verdwijnt vanzelf als de generator uitstaat of de sleutel ontbreekt. */}
-      <SmokingLook smokingNaam="smoking" />
+      <SmokingLook
+        smokingNaam="smokingjas"
+        kledingUrl={pakket.niveaus[0]?.rollen.find((r) => r.rol === "jas")?.opties[0]?.image}
+      />
 
       <section className="mt-16 grid gap-6 border-t border-line pt-10 sm:grid-cols-3">
         {[

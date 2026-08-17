@@ -429,12 +429,34 @@ export function productCardsHtml(items: MailProductCard[], t: Tr = nlT): string 
           </tr></table>`;
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+/**
+ * Labels die met de mail meegaan naar Resend en TERUGKOMEN in de webhook.
+ *
+ * Zo weet een "geopend"-melding bij welke flowstap hij hoort zonder dat we
+ * berichtnummers hoeven bij te houden. Resend accepteert in naam en waarde
+ * alleen letters, cijfers, `_` en `-` — al het andere maakt de hele verzending
+ * ongeldig, dus we schrappen het hier in plaats van het te laten mislukken.
+ */
+export type MailLabels = Record<string, string>;
+
+const schoonLabel = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 256);
+
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  labels?: MailLabels,
+): Promise<boolean> {
   if (!emailConfigured() || !to) return false;
+  const tags = labels
+    ? Object.entries(labels)
+        .map(([name, value]) => ({ name: schoonLabel(name), value: schoonLabel(value) }))
+        .filter((t) => t.name && t.value)
+    : undefined;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: process.env.RESEND_FROM, to: [to], subject, html }),
+    body: JSON.stringify({ from: process.env.RESEND_FROM, to: [to], subject, html, ...(tags?.length ? { tags } : {}) }),
   });
   if (!res.ok) {
     console.error("[email] Resend-fout:", res.status, (await res.text()).slice(0, 200));

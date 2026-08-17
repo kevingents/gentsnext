@@ -2181,6 +2181,17 @@ export const mailEngagement = pgTable(
     /** Wanneer we Spotler het laatst over dit adres bevraagd hebben — stuurt de
      *  rollende verrijking (oudste eerst). */
     gezochtOp: timestamp("gezocht_op", { withTimezone: true }),
+    /** Uit de Spotler-export. Postcode vult ons beeld aan waar de order er geen
+     *  had; de fase en doelgroepnamen bewaren we als BRON, niet als waarheid —
+     *  ons eigen segment rekent op onze data en heeft voorrang. */
+    postcode: text("postcode").notNull().default(""),
+    plaats: text("plaats").notNull().default(""),
+    /** Rauwe nieuwsbriefstand uit Spotler: 'yes' of 'no'. Bewust NIET vertaald
+     *  naar een afmelding — 96% van de export staat op 'no', en dat is "nooit
+     *  ingeschreven", niet "uitgeschreven". Alleen 'yes' is harde toestemming. */
+    spotlerNieuwsbrief: text("spotler_nieuwsbrief").notNull().default(""),
+    spotlerFase: text("spotler_fase").notNull().default(""),
+    spotlerDoelgroepen: text("spotler_doelgroepen").notNull().default(""),
     bijgewerktOp: timestamp("bijgewerkt_op", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("mail_engagement_klant_idx").on(t.customerId)]
@@ -2417,121 +2428,132 @@ export const productWijzigingen = pgTable(
   ]
 );
 
+/* ──────────────────────── E-mailflows (journeys) ────────────────────────── */
+
 /**
- * De GENTS-maattabel als DATA i.p.v. code.
+ * Een flow: trigger → wachten → mail → vertakken → uitstappen.
  *
- * Stond hardgecodeerd in lib/size-chart.ts (export uit Faslet, juni 2026): een
- * nieuwe maatvoering betekende een codewijziging en een deploy. Nu upload je het
- * Excel-blad in de portal. Elke upload is een nieuwe VERSIE; precies één versie
- * staat op actief. Dat maakt terugdraaien een knop in plaats van een revert —
- * en deze tabel bepaalt wat het maatadvies adviseert, dus dat wil je hebben.
- *
- * lib/size-chart.ts blijft bestaan als fallback: is er niets geüpload (of ligt
- * de DB eruit), dan draait de site op de ingebakken tabel en niet op niets.
+ * Wat er wás: 16 transactionele mails die elk vanuit hun eigen codepad afgaan,
+ * plus één geplande (verjaardag). Dus WIE (doelgroepen) en WAT (sjablonen),
+ * maar niet WANNEER, in welke VOLGORDE, en wanneer iemand er weer UIT moet.
  */
-export const maattabelVersies = pgTable(
-  "maattabel_versies",
+export const emailFlows = pgTable(
+  "email_flows",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** Oplopend, 1-gebaseerd — het nummer dat de portal toont. */
-    versie: integer("versie").notNull(),
-    bestandsnaam: text("bestandsnaam").notNull().default(""),
-    /** Portal-gebruiker; leeg = via de API/token. INTERN, nooit klantzichtbaar. */
-    actor: text("actor").notNull().default(""),
-    aantalRijen: integer("aantal_rijen").notNull().default(0),
-    /**
-     * Eén versie staat actief. Bewust ZONDER unieke index: activeren gebeurt in
-     * één atomair `SET actief = (id = $1)`, en dat kan niet met zo'n index —
-     * dan moet het in twee statements en is er even géén actieve tabel (deze DB
-     * praat via neon-http, zonder transacties). Zie drizzle/0059.
-     */
+    slug: text("slug").notNull(),
+    naam: text("naam").notNull(),
+    omschrijving: text("omschrijving").notNull().default(""),
+    /** Categorie op DOEL, niet op onderwerp. "Winkelwagen" en "Retour" zijn
+     *  onderwerpen; die groeien mee met elk idee en leveren over een jaar
+     *  vijftien categorieën met één flow. Op doel blijven het er vijf, en het
+     *  dwingt de vraag die telt: wat moet deze flow bereiken? */
+    categorie: text("categorie").notNull().default("overig"),
+    /** 'doelgroep' (wie erin valt) of 'gebeurtenis' (op het moment zelf). */
+    triggerSoort: text("trigger_soort").notNull(),
+    triggerDoelgroepId: uuid("trigger_doelgroep_id"),
+    triggerEvent: text("trigger_event").notNull().default(""),
+    /** [{soort:'wacht',uren}, {soort:'mail',sjabloon}, {soort:'voorwaarde',…}] */
+    stappen: jsonb("stappen").notNull().default([]),
+    /** Dezelfde regelboom als een doelgroep. Klopt er één, dan verlaat de klant
+     *  de flow vóór de volgende stap — dus geen "je vergat iets in je
+     *  winkelwagen" nádat hij gekocht heeft. Dit is de kern, niet een extra. */
+    uitstap: jsonb("uitstap").notNull().default({}),
+    herhaalbaar: boolean("herhaalbaar").notNull().default(false),
+    herhaalNaDagen: integer("herhaal_na_dagen").notNull().default(90),
+    /** Percentage instappers dat bewust NIETS krijgt, als controlegroep. 0 = uit. */
+    holdoutProcent: integer("holdout_procent").notNull().default(0),
     actief: boolean("actief").notNull().default(false),
-    notitie: text("notitie").notNull().default(""),
+    aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("email_flows_slug_uniek").on(t.slug), index("email_flows_actief_idx").on(t.actief)]
+);
+
+/** Waar staat déze klant in déze flow, en wanneer is de volgende stap. */
+export const emailFlowLeden = pgTable(
+  "email_flow_leden",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => emailFlows.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    stap: integer("stap").notNull().default(0),
+    /** 'loopt' | 'klaar' | 'uitgestapt' | 'gestopt'. */
+    status: text("status").notNull().default("loopt"),
+    /** De loper pakt alles waarvan dit moment voorbij is — dat is meteen de
+     *  implementatie van een wachtstap. */
+    volgendeStapOp: timestamp("volgende_stap_op", { withTimezone: true }).notNull().defaultNow(),
+    redenUitstap: text("reden_uitstap").notNull().default(""),
+    ingestaptOp: timestamp("ingestapt_op", { withTimezone: true }).notNull().defaultNow(),
+    afgerondOp: timestamp("afgerond_op", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("maattabel_versies_nr_idx").on(t.versie),
-    index("maattabel_versies_tijd_idx").on(t.createdAt),
+    index("email_flow_leden_due_idx").on(t.status, t.volgendeStapOp),
+    index("email_flow_leden_klant_idx").on(t.customerId),
   ]
 );
 
 /**
- * Eén rij = één maat binnen één categorie, met de lichaamsmaten in cm.
- *
- * Zelfde vorm als ChartRow in lib/size-chart.ts, plus `boordCm`: de
- * overhemdenrijen dragen daar hun halsomvang ("39-40"). In de code waren dat
- * twee losse tabellen (SIZE_CHART + BOORD_CHART) met dezelfde borst/taille-
- * ranges eronder — dat is één tabel met een extra kolom, niet twee.
- *
- * Puntwaarde = min en max gelijk (zo staat colbert/pak in de bron); een range
- * is min < max. Null = de bron geeft deze maat niet voor deze categorie.
+ * Wat er daadwerkelijk is uitgevoerd. Twee taken in één tabel:
+ * idempotentie (uniek op lid+stap, dus een herstart stuurt niets dubbel) en het
+ * frequentieplafond (één flow-mail per klant per etmaal, over álle flows heen).
  */
-export const maattabelRijen = pgTable(
-  "maattabel_rijen",
+/**
+ * Wat er met onze eigen mails gebeurt: bezorgd, geopend, geklikt, gebounced.
+ *
+ * `webhook_id` is uniek omdat Svix een melding opnieuw stuurt als hij geen 2xx
+ * kreeg. Zonder die index telt een trage response dezelfde opening drie keer.
+ */
+export const mailGebeurtenissen = pgTable(
+  "mail_gebeurtenissen",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    versieId: uuid("versie_id").notNull(),
-    /** 'TOP' | 'BOTTOM' | 'FULL_BODY' */
-    productType: text("product_type").notNull().default("TOP"),
-    categorie: text("categorie").notNull(),
-    maat: text("maat").notNull(),
-    /** Alleen bij Overhemden (Boordmaat): "39-40". Leeg bij de rest. */
-    boordCm: text("boord_cm").notNull().default(""),
-    borstMin: integer("borst_min"),
-    borstMax: integer("borst_max"),
-    tailleMin: integer("taille_min"),
-    tailleMax: integer("taille_max"),
-    binnenbeenMin: integer("binnenbeen_min"),
-    binnenbeenMax: integer("binnenbeen_max"),
-    /** Rijvolgorde uit het blad — maten sorteren niet alfabetisch (S/M/L, 44/46). */
-    sortering: integer("sortering").notNull().default(0),
+    webhookId: text("webhook_id").notNull(),
+    berichtId: text("bericht_id").notNull().default(""),
+    /** 'bezorgd' | 'geopend' | 'geklikt' | 'gebounced' | 'spam' | 'uitgeschreven'. */
+    soort: text("soort").notNull(),
+    lidId: uuid("lid_id").references(() => emailFlowLeden.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id").references(() => emailFlows.id, { onDelete: "cascade" }),
+    stap: integer("stap"),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    email: text("email").notNull().default(""),
+    /** Bij een klik: waar hij heen ging — zo zie je wélke link werkt. */
+    url: text("url").notNull().default(""),
+    gebeurdOp: timestamp("gebeurd_op", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("maattabel_rijen_versie_idx").on(t.versieId, t.sortering),
-    index("maattabel_rijen_cat_idx").on(t.versieId, t.categorie),
+    uniqueIndex("mail_gebeurtenissen_webhook_uniek").on(t.webhookId),
+    index("mail_gebeurtenissen_flow_idx").on(t.flowId, t.stap, t.soort),
+    index("mail_gebeurtenissen_klant_idx").on(t.customerId, t.gebeurdOp),
+    index("mail_gebeurtenissen_lid_idx").on(t.lidId, t.soort),
   ]
 );
 
-/**
- * Elk uitgebracht maatadvies, om te kunnen meten of het advies deugt.
- *
- * De vraag die dit beantwoordt: adviseren we maat 44 aan iemand die uiteindelijk
- * 54 koopt en houdt? Zonder log is dat onbeantwoordbaar — we kenden alleen de
- * uitkomst van de formule, nooit of hij klopte.
- *
- * AVG: lengte en gewicht zijn persoonsgegevens zódra ze aan iemand hangen.
- * `klantId` staat er dus alleen als de bezoeker was ingelogd (die gaf voor
- * precies dit doel toestemming bij Mijn maten); anonieme bezoekers leveren een
- * rij zonder enige identificatie — geen sessie-id, geen fingerprint. Bij
- * accountverwijdering wordt `klant_id` op null gezet: de meting blijft, de
- * persoon verdwijnt.
- */
-export const maatadviesLog = pgTable(
-  "maatadvies_log",
+export const emailFlowStappen = pgTable(
+  "email_flow_stappen",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    klantId: uuid("klant_id"),
-    lengteCm: integer("lengte_cm").notNull().default(0),
-    gewichtKg: integer("gewicht_kg").notNull().default(0),
-    /** 'slim' | 'regular' | 'comfort' */
-    pasvorm: text("pasvorm").notNull().default("regular"),
-    /** Borstomvang waar het advies op grondde — gemeten of geschat. */
-    borstCm: integer("borst_cm").notNull().default(0),
-    /** True als de klant zijn eigen lichaamsmaten invulde i.p.v. lengte/gewicht. */
-    gemeten: boolean("gemeten").notNull().default(false),
-    adviesColbert: text("advies_colbert").notNull().default(""),
-    adviesBoord: text("advies_boord").notNull().default(""),
-    adviesLengtemaat: text("advies_lengtemaat").notNull().default(""),
-    /** 'hoog' | 'gemiddeld' | 'laag' — de eigen zekerheid van het advies. */
-    zekerheid: text("zekerheid").notNull().default("gemiddeld"),
-    /** Waar het advies vandaan kwam: 'maatadvies' | 'pdp' | 'account'. */
-    bron: text("bron").notNull().default("maatadvies"),
-    /** Versie van de maattabel waarop dit advies grondde (0 = de fallback in code). */
-    tabelVersie: integer("tabel_versie").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lidId: uuid("lid_id")
+      .notNull()
+      .references(() => emailFlowLeden.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => emailFlows.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").notNull(),
+    stap: integer("stap").notNull(),
+    soort: text("soort").notNull(),
+    sjabloon: text("sjabloon").notNull().default(""),
+    gelukt: boolean("gelukt").notNull().default(true),
+    fout: text("fout").notNull().default(""),
+    uitgevoerdOp: timestamp("uitgevoerd_op", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("maatadvies_log_klant_idx").on(t.klantId, t.createdAt),
-    index("maatadvies_log_tijd_idx").on(t.createdAt),
+    uniqueIndex("email_flow_stappen_uniek").on(t.lidId, t.stap),
+    index("email_flow_stappen_klant_idx").on(t.customerId, t.uitgevoerdOp),
   ]
 );

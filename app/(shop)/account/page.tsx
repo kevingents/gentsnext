@@ -11,6 +11,7 @@ import { bonusTasks } from "@/lib/loyalty-bonus";
 import type { ProfilePreferences } from "@/lib/profiel-voorkeuren";
 import { getStores } from "@/lib/stores";
 import { getSettings } from "@/lib/settings";
+import { getNewsletterPrefs } from "@/lib/newsletter";
 import { ProfileClient } from "@/components/account/profile-client";
 // De QR van de memberspas wordt hier op de SERVER gebouwd: aan een kassa moet de
 // code er al staan bij de eerste render, niet pas als de browser klaar is met
@@ -42,11 +43,14 @@ export default async function AccountPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect("/account/login");
 
-  const [data, newInSize, recommended, walletOnDevice] = await Promise.all([
+  const [data, newInSize, recommended, walletOnDevice, newsletter] = await Promise.all([
     getProfileData(customer.id, customer.email),
     getNewArrivalsInSize(customer.sizeProfile, 4),
     getRecommendedFromHistory(customer.id, customer.sizeProfile, 4),
     walletInstalled(customer.id),
+    // Server-side: anders staan de schakelaars eerst even op "uit" en ziet de
+    // klant zichzelf uitgeschreven worden terwijl hij dat niet is.
+    getNewsletterPrefs(customer.email, customer.phone).catch(() => null),
   ]);
   const bonussen = await bonusTasks(customer, walletOnDevice);
 
@@ -87,6 +91,7 @@ export default async function AccountPage() {
       googleWalletEnabled={googleWalletConfigured()}
       bonuses={bonussen}
       stores={getStores().map((s) => ({ pageHandle: s.pageHandle, title: s.title, city: s.city }))}
+      newsletter={newsletter ?? undefined}
     />
   );
 }

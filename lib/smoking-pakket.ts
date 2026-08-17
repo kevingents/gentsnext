@@ -6,6 +6,7 @@ import { sortSizes } from "@/lib/sizing";
 import { BRANCH_CITY } from "@/lib/fulfillment-config";
 import { pickupInfoByCity } from "@/lib/stores";
 import { SMOKING_ROLES, SMOKING_ROLE_LABEL, type SmokingRole } from "@/lib/smoking-korting";
+import { getBundelDoc, bundelCompleet } from "@/lib/smoking-bundles";
 
 /**
  * "Smoking compleet" — de klant stelt zelf jas, pantalon, overhemd en strik
@@ -100,6 +101,11 @@ export type SmokingOptie = {
   handle: string;
   title: string;
   image: string;
+  /** FASHN-modelfoto (product-to-model) — ONS artikel op een model, al gemaakt
+      door de Modellen-studio. Daardoor kan de samensteller een echt beeld tonen
+      dat meeverandert met de keuze, zonder er iets voor te genereren. */
+  modelImage: string;
+  modelAlt: string;
   /** Kleur waarop we vastpinnen als het artikel er meerdere heeft (bv. schoenen). */
   kleur: string;
   sizes: {
@@ -130,7 +136,7 @@ export type SmokingPakket = {
   extras: (SmokingOptie & { label: string; omschrijving: string })[];
 };
 
-type RawProduct = { id: string; handle: string; title: string; image: string };
+type RawProduct = { id: string; handle: string; title: string; image: string; modelImage: string; modelAlt: string };
 
 /** Producten + hun varianten/voorraad ophalen voor een set handles. */
 async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>> {
@@ -138,8 +144,11 @@ async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>>
   if (!uniek.length) return new Map();
 
   const db = getDb();
-  const rows = await db.execute<RawProduct & { image: string | null }>(sql`
-    select p.id, p.handle, p.title,
+  const rows = await db.execute<{
+    id: string; handle: string; title: string;
+    image: string | null; model_image_url: string | null; model_image_alt: string | null;
+  }>(sql`
+    select p.id, p.handle, p.title, p.model_image_url, p.model_image_alt,
            (select url from ${productImages} pi where pi.product_id = p.id order by position limit 1) as image
     from ${products} p
     where p.status = 'active' and lower(p.handle) in ${uniek}
@@ -150,6 +159,8 @@ async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>>
     handle: r.handle,
     title: r.title,
     image: r.image || "",
+    modelImage: r.model_image_url || "",
+    modelAlt: r.model_image_alt || "",
   }));
   if (!gevonden.length) return new Map();
 
@@ -190,6 +201,8 @@ async function laadOpties(handles: string[]): Promise<Map<string, SmokingOptie>>
       handle: p.handle,
       title: p.title,
       image: p.image,
+      modelImage: p.modelImage,
+      modelAlt: p.modelAlt,
       kleur: "",
       sizes: sortSizes(
         alle.map((v) => {
@@ -256,8 +269,38 @@ function heeftVoorraad(optie: SmokingOptie): boolean {
 }
 
 /** Volledig smoking-pakket (config + producten + maten + voorraad) voor de samensteller. */
+/**
+ * Bron van waarheid: het bundel-beheer in /site. Staat daar nog niets, dan valt
+ * hij terug op de portal-config, zodat de pagina blijft werken tot iemand de
+ * bundels een keer in /site opslaat. Vanaf dat moment wint /site.
+ */
+export async function getSmokingSamenstelling(): Promise<SmokingConfig> {
+  const doc = await getBundelDoc().catch(() => null);
+  if (doc?.bundels?.length) {
+    const bruikbaar = doc.bundels.filter(bundelCompleet);
+    if (bruikbaar.length) {
+      return {
+        enabled: true,
+        heading: doc.heading || "Stel je smoking samen",
+        intro: doc.intro,
+        knoptekst: doc.knoptekst,
+        extras: doc.extras,
+        niveaus: bruikbaar.map((b) => ({
+          id: b.id,
+          naam: b.naam,
+          subtitel: b.subtitel,
+          badge: b.badge,
+          prijs: b.prijs,
+          rollen: b.rollen.map((r) => ({ rol: r.rol, label: SMOKING_ROLE_LABEL[r.rol], handles: r.handles })),
+        })),
+      };
+    }
+  }
+  return getSmokingConfig();
+}
+
 export async function getSmokingPakket(): Promise<SmokingPakket | null> {
-  const config = await getSmokingConfig();
+  const config = await getSmokingSamenstelling();
   if (!config.enabled || !config.niveaus.length) return null;
 
   const alleHandles = [

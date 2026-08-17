@@ -38,6 +38,16 @@ export function shopifyGeconfigureerd(): boolean {
 const cents = (s: string | null | undefined) => Math.round(parseFloat(String(s ?? "0")) * 100);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Geëxporteerd zodat lib/shopify-media.ts dezelfde client gebruikt. Bewust niet
+ * kopiëren: de THROTTLED-afhandeling hieronder (Shopify meldt een overschreden
+ * quotum in een HTTP 200) is precies het soort detail dat in een tweede kopie
+ * ontbreekt, en dan synct die stil niets.
+ */
+export async function shopifyGraphql(query: string, variables: Record<string, unknown> = {}): Promise<any> {
+  return gql(query, variables);
+}
+
 async function gql(query: string, variables: Record<string, unknown> = {}): Promise<any> {
   for (let poging = 0; poging < 6; poging++) {
     const res = await fetch(`https://${SHOP}/admin/api/${VERSION}/graphql.json`, {

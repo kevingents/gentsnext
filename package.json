@@ -14,6 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "migrate:possales": "tsx scripts/migrate-pos-sales-to-neon.ts",
     "seed:redirects": "tsx scripts/seed-redirects.ts",
+    "koppel:srs": "tsx scripts/koppel-srs.ts",
+    "media:sync": "tsx scripts/media-sync.ts",
     "import:cache": "tsx scripts/import-from-cache.ts",
     "import:shopify": "tsx scripts/import-shopify-bulk.ts",
     "cache:publish": "tsx scripts/publish-cache.ts",
@@ -29,7 +31,9 @@
     "verify:possales": "tsx scripts/verify-pos-sales.ts",
     "backfill:punten": "tsx scripts/backfill-loyalty.ts",
     "db:migratie": "tsx scripts/migratie-uitvoeren.ts",
-    "profielen:herbouw": "tsx scripts/herbouw-profielen.ts"
+    "profielen:herbouw": "tsx scripts/herbouw-profielen.ts",
+    "import:spotler": "tsx scripts/import-spotler-export.ts",
+    "flows:maak": "tsx scripts/maak-email-flows.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

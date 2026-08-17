@@ -151,6 +151,27 @@ export function compleetheidChecksSql(): SQL {
   return sql`jsonb_build_object(${sql.join(paren, sql`, `)})`;
 }
 
+/**
+ * De miniatuur van een product, over `products p`.
+ *
+ * Eerst de AI-modelfoto (die leidt ook de galerij op de productpagina), anders de
+ * eerste catalogusfoto. Die terugval is niet optioneel: **949 van de levende
+ * artikelen hebben wél catalogusfoto's maar géén modelfoto**. Zonder terugval
+ * toont de PIM-lijst daar een leeg camera-icoontje — je leest dan "geen foto"
+ * bij een artikel met elf foto's, terwijl de compleetheidsscore in dezelfde rij
+ * zegt dat de foto in orde is. Twee dingen op één regel die elkaar tegenspreken.
+ *
+ * De ?v= gaat eraf: die parameter verandert bij elke Shopify-herverwerking en
+ * hoort niet in een cache-sleutel van de beeldoptimalisatie.
+ */
+export function miniatuurSql(): SQL {
+  return sql`coalesce(
+    nullif(split_part(p.model_image_url, '?', 1), ''),
+    (select split_part(pi.url, '?', 1) from product_images pi where pi.product_id = p.id order by pi.position asc limit 1),
+    ''
+  )`;
+}
+
 /** De checks zonder SQL — voor de portal, die alleen labels en gewichten nodig heeft. */
 export function pimCheckLabels() {
   return PIM_CHECKS.map(({ sleutel, label, gewicht, uitleg }) => ({ sleutel, label, gewicht, uitleg }));
@@ -166,8 +187,37 @@ export type PimLijstFilters = {
   /** '' | 'onvolledig' | 'compleet' | 'handmatig' | 'mist:<check>' */
   kwaliteit?: string;
   merk?: string;
+  /** Hoofdgroep — dit is wat een mens "productsoort" noemt (Overhemden, Pakken). */
   groep?: string;
+  /** Subgroep binnen de hoofdgroep (Lange mouw, 2-delig, Smoking). */
+  subgroep?: string;
+  /** Collectiejaar uit SRS. Let op: dit is het échte signaal voor "nieuw", niet created_at. */
+  jaar?: string;
+  seizoen?: string;
 };
+
+/**
+ * De metavelden waarop je kunt filteren, met het pad in `attributes`.
+ *
+ * Waarom deze vier en niet meer: ze zijn op productie voor 89-99% gevuld én ze
+ * hebben een overzichtelijk aantal waarden (jaar 12, seizoen 5, hoofdgroep 29,
+ * subgroep 72). Een filter op een veld dat bij de helft leeg is levert een lijst
+ * op waarvan je niet weet of hij klopt.
+ *
+ * `product_type` staat er bewust NIET bij, hoe logisch die naam ook klinkt: op
+ * productie is die kolom bij 2.069 van de 2.959 artikelen leeg en bevat hij bij
+ * de rest bijna altijd een artikelnummer (874 verschillende waarden, meestal
+ * cijfers). De echte productsoort is de hoofdgroep.
+ */
+/** Sentinelwaarde in de filter-URL voor "dit veld is niet ingevuld". */
+export const LEEG = "(leeg)";
+
+export const PIM_FACETTEN = [
+  { sleutel: "groep", label: "Soort", attribuut: "hoofdgroep_omschrijving" },
+  { sleutel: "subgroep", label: "Subsoort", attribuut: "subgroep" },
+  { sleutel: "jaar", label: "Jaar", attribuut: "jaar" },
+  { sleutel: "seizoen", label: "Seizoen", attribuut: "seizoen" },
+] as const;
 
 /**
  * De WHERE-clausule van de productenlijst, over `products p`.
@@ -193,7 +243,18 @@ export function pimWhereSql(f: PimLijstFilters): SQL {
   }
   if (f.status) conds.push(sql`p.status = ${f.status}`);
   if (f.merk) conds.push(sql`coalesce(nullif(p.vendor, ''), p.attributes ->> 'merk', '') = ${f.merk}`);
-  if (f.groep) conds.push(sql`coalesce(p.attributes ->> 'hoofdgroep_omschrijving', '') = ${f.groep}`);
+  /* De metaveld-filters. '(leeg)' selecteert juist de artikelen waar het veld
+     ontbreekt — dat is een werklijst op zich ("welke 322 artikelen hebben geen
+     jaar?") en niet hetzelfde als geen filter. */
+  for (const facet of PIM_FACETTEN) {
+    const waarde = (f[facet.sleutel] || "").trim();
+    if (!waarde) continue;
+    conds.push(
+      waarde === LEEG
+        ? sql`coalesce(p.attributes ->> ${facet.attribuut}, '') = ''`
+        : sql`coalesce(p.attributes ->> ${facet.attribuut}, '') = ${waarde}`,
+    );
+  }
 
   const k = (f.kwaliteit || "").trim();
   if (k === "onvolledig") conds.push(sql`(${compleetheidScoreSql()}) < 100`);
@@ -207,6 +268,55 @@ export function pimWhereSql(f: PimLijstFilters): SQL {
     throw new Error("Onbekend kwaliteitsfilter.");
   }
   return sql.join(conds, sql` and `);
+}
+
+export type PimFacetWaarde = { waarde: string; aantal: number };
+export type PimFacet = { sleutel: string; label: string; waarden: PimFacetWaarde[] };
+
+/**
+ * De keuzemogelijkheden voor de filterbalk, mét aantallen.
+ *
+ * Per facet worden de ándere filters wél toegepast en die van het facet zelf
+ * niet. Dat is het verschil tussen een bruikbare en een liegende teller: sta je
+ * op "Pakken", dan wil je bij Jaar zien hoeveel PAKKEN er per jaar zijn — niet
+ * hoeveel artikelen er in totaal uit 2023 komen. En de eigen waarde weglaten
+ * zorgt dat je nog kunt wisselen zonder eerst je keuze te wissen.
+ *
+ * Vier losse aggregaties over ~3.000 rijen; dat is goedkoper dan het klinkt en
+ * een stuk eerlijker dan één globale telling.
+ */
+export async function pimFacetten(f: PimLijstFilters): Promise<PimFacet[]> {
+  const db = getDb();
+  const uit = await Promise.all(
+    PIM_FACETTEN.map(async (facet) => {
+      const where = pimWhereSql({ ...f, [facet.sleutel]: undefined });
+      /**
+       * Groeperen in een subquery, sorteren op het resultaat.
+       *
+       * Dit stond eerst als één query met de coalesce-expressie twee keer: in de
+       * SELECT en in de ORDER BY (om "(leeg)" onderaan te krijgen). Met LITERALEN
+       * werkt dat — postgres ziet dan dat het dezelfde expressie is en accepteert
+       * 'm naast `group by 1`. Maar drizzle stuurt de attribuutnaam als PARAMETER,
+       * dus werden het `$1` en `$3`: twee expressies die postgres niet aan elkaar
+       * kan knopen, en dan volgt "column p.attributes must appear in the GROUP BY
+       * clause". Precies de fout die je niet ziet als je de SQL met de hand met
+       * ingevulde waarden test — dan werkt hij.
+       */
+      const rows = await db.execute<{ waarde: string; n: string }>(sql`
+        select waarde, n from (
+          select coalesce(nullif(p.attributes ->> ${facet.attribuut}, ''), ${LEEG}) waarde, count(*)::int n
+          from products p where ${where}
+          group by 1
+        ) t
+        order by (t.waarde = ${LEEG}), t.waarde`);
+      return {
+        sleutel: facet.sleutel as string,
+        label: facet.label as string,
+        waarden: rows.rows.map((r) => ({ waarde: r.waarde, aantal: Number(r.n) || 0 })),
+      };
+    }),
+  );
+  return uit;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -236,7 +346,8 @@ export async function exporteerProducten(f: PimLijstFilters): Promise<string> {
     handle: string; title: string; vendor: string; product_type: string; status: string;
     kleur: string; score: number; checks: Record<string, boolean>; stock_qty: number;
     varianten: string; min_prijs: string | null; max_prijs: string | null;
-    hoofdgroep: string; materiaal: string; pasvorm: string; slot: string[] | null; created_at: string;
+    hoofdgroep: string; subgroep: string; jaar: string; seizoen: string;
+    materiaal: string; pasvorm: string; slot: string[] | null; created_at: string;
   }>(sql`
     select p.handle, p.title, p.vendor, p.product_type, p.status,
            p.variant_color_label kleur,
@@ -244,6 +355,9 @@ export async function exporteerProducten(f: PimLijstFilters): Promise<string> {
            ${compleetheidChecksSql()} checks,
            p.stock_qty,
            coalesce(p.attributes ->> 'hoofdgroep_omschrijving', '') hoofdgroep,
+           coalesce(p.attributes ->> 'subgroep', '') subgroep,
+           coalesce(p.attributes ->> 'jaar', '') jaar,
+           coalesce(p.attributes ->> 'seizoen', '') seizoen,
            coalesce(p.attributes ->> 'materiaal', p.attributes ->> 'samenstelling_materiaal', '') materiaal,
            coalesce(p.attributes ->> 'pasvorm', '') pasvorm,
            coalesce(p.handmatige_velden, '[]'::jsonb) slot,
@@ -257,17 +371,19 @@ export async function exporteerProducten(f: PimLijstFilters): Promise<string> {
 
   const euro = (c: string | null) => ((Number(c) || 0) / 100).toFixed(2).replace(".", ",");
   const kop = [
-    "Handle", "Titel", "Merk", "Producttype", "Status", "Kleurlabel", "Hoofdgroep", "Materiaal", "Pasvorm",
+    "Handle", "Titel", "Merk", "Status", "Kleurlabel", "Soort", "Subsoort", "Jaar", "Seizoen", "Materiaal", "Pasvorm",
     "Score", "Ontbreekt", "Vastgezette velden", "Voorraad", "Varianten", "Prijs vanaf", "Prijs tot", "Aangemaakt",
   ];
   const regels = rows.rows.map((x) => [
     x.handle,
     x.title,
     x.vendor,
-    x.product_type,
     x.status,
     x.kleur,
     x.hoofdgroep,
+    x.subgroep,
+    x.jaar,
+    x.seizoen,
     x.materiaal,
     x.pasvorm,
     Number(x.score) || 0,
