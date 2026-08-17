@@ -2427,3 +2427,95 @@ export const productWijzigingen = pgTable(
     index("product_wijzigingen_tijd_idx").on(t.createdAt),
   ]
 );
+
+/* ──────────────────────── E-mailflows (journeys) ────────────────────────── */
+
+/**
+ * Een flow: trigger → wachten → mail → vertakken → uitstappen.
+ *
+ * Wat er wás: 16 transactionele mails die elk vanuit hun eigen codepad afgaan,
+ * plus één geplande (verjaardag). Dus WIE (doelgroepen) en WAT (sjablonen),
+ * maar niet WANNEER, in welke VOLGORDE, en wanneer iemand er weer UIT moet.
+ */
+export const emailFlows = pgTable(
+  "email_flows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    naam: text("naam").notNull(),
+    omschrijving: text("omschrijving").notNull().default(""),
+    /** 'doelgroep' (wie erin valt) of 'gebeurtenis' (op het moment zelf). */
+    triggerSoort: text("trigger_soort").notNull(),
+    triggerDoelgroepId: uuid("trigger_doelgroep_id"),
+    triggerEvent: text("trigger_event").notNull().default(""),
+    /** [{soort:'wacht',uren}, {soort:'mail',sjabloon}, {soort:'voorwaarde',…}] */
+    stappen: jsonb("stappen").notNull().default([]),
+    /** Dezelfde regelboom als een doelgroep. Klopt er één, dan verlaat de klant
+     *  de flow vóór de volgende stap — dus geen "je vergat iets in je
+     *  winkelwagen" nádat hij gekocht heeft. Dit is de kern, niet een extra. */
+    uitstap: jsonb("uitstap").notNull().default({}),
+    herhaalbaar: boolean("herhaalbaar").notNull().default(false),
+    herhaalNaDagen: integer("herhaal_na_dagen").notNull().default(90),
+    actief: boolean("actief").notNull().default(false),
+    aangemaaktDoor: text("aangemaakt_door").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("email_flows_slug_uniek").on(t.slug), index("email_flows_actief_idx").on(t.actief)]
+);
+
+/** Waar staat déze klant in déze flow, en wanneer is de volgende stap. */
+export const emailFlowLeden = pgTable(
+  "email_flow_leden",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => emailFlows.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    stap: integer("stap").notNull().default(0),
+    /** 'loopt' | 'klaar' | 'uitgestapt' | 'gestopt'. */
+    status: text("status").notNull().default("loopt"),
+    /** De loper pakt alles waarvan dit moment voorbij is — dat is meteen de
+     *  implementatie van een wachtstap. */
+    volgendeStapOp: timestamp("volgende_stap_op", { withTimezone: true }).notNull().defaultNow(),
+    redenUitstap: text("reden_uitstap").notNull().default(""),
+    ingestaptOp: timestamp("ingestapt_op", { withTimezone: true }).notNull().defaultNow(),
+    afgerondOp: timestamp("afgerond_op", { withTimezone: true }),
+  },
+  (t) => [
+    index("email_flow_leden_due_idx").on(t.status, t.volgendeStapOp),
+    index("email_flow_leden_klant_idx").on(t.customerId),
+  ]
+);
+
+/**
+ * Wat er daadwerkelijk is uitgevoerd. Twee taken in één tabel:
+ * idempotentie (uniek op lid+stap, dus een herstart stuurt niets dubbel) en het
+ * frequentieplafond (één flow-mail per klant per etmaal, over álle flows heen).
+ */
+export const emailFlowStappen = pgTable(
+  "email_flow_stappen",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lidId: uuid("lid_id")
+      .notNull()
+      .references(() => emailFlowLeden.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => emailFlows.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").notNull(),
+    stap: integer("stap").notNull(),
+    soort: text("soort").notNull(),
+    sjabloon: text("sjabloon").notNull().default(""),
+    gelukt: boolean("gelukt").notNull().default(true),
+    fout: text("fout").notNull().default(""),
+    uitgevoerdOp: timestamp("uitgevoerd_op", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("email_flow_stappen_uniek").on(t.lidId, t.stap),
+    index("email_flow_stappen_klant_idx").on(t.customerId, t.uitgevoerdOp),
+  ]
+);

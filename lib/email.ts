@@ -429,7 +429,7 @@ export function productCardsHtml(items: MailProductCard[], t: Tr = nlT): string 
           </tr></table>`;
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   if (!emailConfigured() || !to) return false;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
