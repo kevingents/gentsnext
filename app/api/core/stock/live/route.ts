@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { applyLiveStockRows, clearLiveStockBranches, type LiveStockRowInput } from "@/lib/srs-stock-core";
+import { applyLiveStockRows, clearLiveStockBranches, liveStockStats, type LiveStockRowInput } from "@/lib/srs-stock-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,6 +15,8 @@ export const maxDuration = 60;
  *   clear-branches  { branchIds:[...] }                   → { ok, cleared }
  *     (full-run stuurt clear-branches vóór z'n batches: het delta-XML noemt alleen
  *      gewijzigde barcodes, dus verdwenen rijen moeten expliciet weg)
+ *   stats           {}  → { ok, gen:[{branchId,store,skus,qty}], live:[…],
+ *                          genSyncedAt, liveNewestAt } — voor de pariteitsmonitor
  */
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
@@ -32,6 +34,16 @@ export async function POST(req: Request) {
         return NextResponse.json(await applyLiveStockRows(Array.isArray(b.rows) ? (b.rows as LiveStockRowInput[]) : []));
       case "clear-branches":
         return NextResponse.json(await clearLiveStockBranches(Array.isArray(b.branchIds) ? b.branchIds.map(String) : []));
+      case "stats": {
+        const s = await liveStockStats();
+        return NextResponse.json({
+          ok: true,
+          gen: s.gen,
+          live: s.live,
+          genSyncedAt: s.genSyncedAt ? s.genSyncedAt.toISOString() : null,
+          liveNewestAt: s.liveNewestAt ? s.liveNewestAt.toISOString() : null,
+        });
+      }
       default:
         return NextResponse.json({ ok: false, error: `Onbekende actie "${String(b?.action || "")}".` }, { status: 400 });
     }
