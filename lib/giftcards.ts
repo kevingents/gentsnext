@@ -417,3 +417,26 @@ export async function getGiftcardsForCustomer(customerId: string, email: string)
     .orderBy(desc(giftcards.createdAt))
     .limit(50);
 }
+
+/**
+ * Recht op vergetelheid: haalt een e-mailadres los van cadeaubonnen.
+ *
+ * getGiftcardsForCustomer() matcht (naast customerId) puur op e-mailtekst. Zou
+ * een verwijderde klant zijn adres in buyer_email/recipient_email laten staan,
+ * dan ziet een LATERE klant die datzelfde (hergebruikte) adres registreert de
+ * codes en saldi van de verwijderde klant in 'Mijn GENTS' en in de AVG-export.
+ * We wissen daarom alléén de matchende e-mailvelden — de bon zelf (saldo, code)
+ * blijft staan als financiële administratie en blijft gewoon inwisselbaar.
+ */
+export async function scrubGiftcardEmails(email: string): Promise<void> {
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return;
+  const db = getDb();
+  await db.execute(sql`
+    update giftcards set
+      buyer_email = case when lower(buyer_email) = ${e} then '' else buyer_email end,
+      recipient_email = case when lower(recipient_email) = ${e} then '' else recipient_email end,
+      updated_at = now()
+    where lower(buyer_email) = ${e} or lower(recipient_email) = ${e}
+  `);
+}

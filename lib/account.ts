@@ -17,7 +17,7 @@ import {
   returns,
   returnLines,
 } from "@/db/schema";
-import { getGiftcardsForCustomer } from "@/lib/giftcards";
+import { getGiftcardsForCustomer, scrubGiftcardEmails } from "@/lib/giftcards";
 import { koppelDevice, synchroniseerKlantIdentiteiten } from "@/lib/identity";
 import { creditOrderLoyalty, reverseOrderLoyalty, redeemableBalance, pendingBalance } from "@/lib/loyalty-claim";
 import { listStoreBuysForProfileCore } from "@/lib/pos-sales-core";
@@ -688,6 +688,10 @@ export async function deleteAccount(customerId: string, email: string): Promise<
   await db.delete(customerAddresses).where(eq(customerAddresses.customerId, customerId));
   await db.delete(customerSessions).where(eq(customerSessions.customerId, customerId));
   if (email) await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.email, email.trim().toLowerCase()));
+  /* Cadeaubon-e-mails losmaken: getGiftcardsForCustomer matcht op e-mailtekst,
+     dus zonder dit ziet een later hergebruikt adres andermans bonnen. De bon
+     zelf (saldo/code) blijft als administratie staan en blijft inwisselbaar. */
+  if (email) await scrubGiftcardEmails(email);
   /* Maatadviezen ontkoppelen in plaats van verwijderen: lengte en gewicht zijn
      persoonsgegevens zolang ze aan iemand hangen, maar de meting "hoe vaak klopt
      ons advies" heeft die persoon niet nodig. Zonder klant_id is de rij niet
