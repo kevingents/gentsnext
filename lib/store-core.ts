@@ -4,6 +4,7 @@ import { storeStockMovements } from "@/db/schema";
 import { stockForSkus, stockSyncedAt } from "@/lib/stock";
 import { type StockChannel } from "@/lib/fulfillment-config";
 import { safetyAllocationFor, safetyKey } from "@/lib/safety-stock";
+import { resolveStockAliases, type ResolvedStockKey } from "@/lib/stock-key-alias";
 
 /**
  * Omnichannel voorraad-core (Fase A). De zelfgebouwde kassa (storegents) én de
@@ -221,6 +222,33 @@ export async function posDeltaByLocationKey(keys: string[]): Promise<Map<string,
 }
 
 /**
+ * Sleutel-resolutie voor de LEESkant. De schrijfkant is al sku-eerst (zie
+ * stockKey hierboven), maar aanroepers vragen nog in elke vorm op: de webshop
+ * met de sku, de kassa/scanner (storegents article-search) met `barcode || sku`
+ * — voor ~48% van de catalogus de leveranciers-EAN. De baseline en de
+ * web-reserveringen sleutelen op sku, dus zonder resolutie leverde een
+ * EAN-query "systeem 0" en viel storegents stil terug op de blob-snapshot
+ * (gemeten op prod, 18 aug: nul coreNet-vlaggen in de kassa-maatboog).
+ * Lookups: baseline/safety op de canonieke sku, het mutatie-grootboek en de
+ * reserveringen over álle aliassen (historische regels kunnen nog EAN-gekeyd
+ * zijn — vóór de sku-eerst-fix, en nooit-gsyncte correcties tellen eeuwig mee).
+ */
+function keyResolvers(aliasMap: Map<string, ResolvedStockKey>) {
+  const skuOf = (key: string) => {
+    const r = aliasMap.get(lower(key));
+    if (!r) return key;
+    // Niet via de catalogus opgelost (sku = de sleutel zelf, geen extra vormen)?
+    // Dan de OORSPRONKELIJKE schrijfwijze teruggeven — stockForSkus matcht exact
+    // op hoofdlettergebruik en dit was het gedrag van vóór de resolutie.
+    return r.sku === lower(key) && r.aliases.length === 1 ? key : r.sku;
+  };
+  const aliasesOf = (key: string) => aliasMap.get(lower(key))?.aliases || [lower(key)];
+  const sumOver = (m: Map<string, number> | undefined, key: string) =>
+    m ? aliasesOf(key).reduce((s, a) => s + (m.get(a) || 0), 0) : 0;
+  return { skuOf, aliasesOf, sumOver };
+}
+
+/**
  * Beschikbaar per artikel in één locatie =
  *   SRS-baseline(locatie) + core-delta(kassa/pos) − web-reservering(locatie).
  * Dit is de gedeelde waarheid: de kassa én de webshop rekenen hiermee, dus het
@@ -231,18 +259,21 @@ export async function availableInStore(location: string, keys: string[], opts: {
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, number>();
   if (!clean.length) return out;
+  const { skuOf, aliasesOf, sumOver } = keyResolvers(await resolveStockAliases(clean));
+  const skus = [...new Set(clean.map(skuOf))];
   const [stock, delta, webRes, safetyAlloc] = await Promise.all([
-    stockForSkus(clean),
-    coreDeltaForKeys(loc, clean),
+    stockForSkus(skus),
+    coreDeltaForKeys(loc, [...new Set(clean.flatMap(aliasesOf))]),
     webReservedForLocation(loc),
-    safetyAllocationFor(clean, { channel: opts.channel }),
+    safetyAllocationFor(skus, { channel: opts.channel }),
   ]);
   for (const key of clean) {
-    const st = stock.get(key);
+    const sku = skuOf(key);
+    const st = stock.get(sku);
     const branch = st ? st.byBranch.find((b) => lower(b.store) === lower(loc)) : undefined;
     const baseline = branch?.qty ?? 0;
-    const safety = branch ? safetyAlloc.get(safetyKey(branch.branchId, key)) || 0 : 0;
-    const net = baseline + (delta.get(lower(key)) || 0) - (webRes.get(lower(key)) || 0) - safety;
+    const safety = branch ? safetyAlloc.get(safetyKey(branch.branchId, sku)) || 0 : 0;
+    const net = baseline + sumOver(delta, key) - sumOver(webRes, key) - safety;
     out.set(key, Math.max(0, net));
   }
   return out;
@@ -262,19 +293,22 @@ export async function availableBreakdown(
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, { baseline: number; posDelta: number; webReserved: number; safety: number; available: number }>();
   if (!clean.length) return out;
+  const { skuOf, aliasesOf, sumOver } = keyResolvers(await resolveStockAliases(clean));
+  const skus = [...new Set(clean.map(skuOf))];
   const [stock, delta, webRes, safetyAlloc] = await Promise.all([
-    stockForSkus(clean),
-    coreDeltaForKeys(loc, clean),
+    stockForSkus(skus),
+    coreDeltaForKeys(loc, [...new Set(clean.flatMap(aliasesOf))]),
     webReservedForLocation(loc),
-    safetyAllocationFor(clean, { channel: opts.channel }),
+    safetyAllocationFor(skus, { channel: opts.channel }),
   ]);
   for (const key of clean) {
-    const st = stock.get(key);
+    const sku = skuOf(key);
+    const st = stock.get(sku);
     const branch = st ? st.byBranch.find((b) => lower(b.store) === lower(loc)) : undefined;
     const baseline = branch?.qty ?? 0;
-    const safety = branch ? safetyAlloc.get(safetyKey(branch.branchId, key)) || 0 : 0;
-    const posDelta = delta.get(lower(key)) || 0;
-    const webReserved = webRes.get(lower(key)) || 0;
+    const safety = branch ? safetyAlloc.get(safetyKey(branch.branchId, sku)) || 0 : 0;
+    const posDelta = sumOver(delta, key);
+    const webReserved = sumOver(webRes, key);
     out.set(key, { baseline, posDelta, webReserved, safety, available: Math.max(0, baseline + posDelta - webReserved - safety) });
   }
   return out;
@@ -311,27 +345,29 @@ export async function availableByBranch(keys: string[], opts: { channel?: StockC
   const clean = [...new Set(keys.map(norm).filter(Boolean))];
   const out = new Map<string, BranchAvailability[]>();
   if (!clean.length) return out;
+  const { skuOf, aliasesOf, sumOver } = keyResolvers(await resolveStockAliases(clean));
+  const skus = [...new Set(clean.map(skuOf))];
   const [stock, posByLoc, webByLoc, safetyAlloc] = await Promise.all([
-    stockForSkus(clean),
-    posDeltaByLocationKey(clean),
+    stockForSkus(skus),
+    posDeltaByLocationKey([...new Set(clean.flatMap(aliasesOf))]),
     webReservedAllLocations(),
-    safetyAllocationFor(clean, { channel: opts.channel }),
+    safetyAllocationFor(skus, { channel: opts.channel }),
   ]);
   for (const key of clean) {
-    const st = stock.get(key);
+    const sku = skuOf(key);
+    const st = stock.get(sku);
     // stockForSkus levert voor een onbekend artikel de gedeelde EMPTY-sentinel (nooit
     // undefined) en voor een artikel met alleen 0-voorraadrijen een entry met lege
     // byBranch. In beide gevallen hebben we GEEN autoritatieve per-filiaal-data → de key
     // NIET emitteren, zodat storegents netjes terugvalt op de blob-bron (geen lege lijst
     // die alle filialen op 0 zou zetten).
     if (!st || !st.byBranch.length) continue;
-    const lk = lower(key);
     const list: BranchAvailability[] = [];
     for (const b of st.byBranch) {
       const loc = lower(b.store);
-      const posDelta = posByLoc.get(loc)?.get(lk) || 0;
-      const webReserved = webByLoc.get(loc)?.get(lk) || 0;
-      const safety = safetyAlloc.get(safetyKey(b.branchId, key)) || 0;
+      const posDelta = sumOver(posByLoc.get(loc), key);
+      const webReserved = sumOver(webByLoc.get(loc), key);
+      const safety = safetyAlloc.get(safetyKey(b.branchId, sku)) || 0;
       list.push({
         branchId: b.branchId,
         store: b.store,
@@ -342,6 +378,8 @@ export async function availableByBranch(keys: string[], opts: { channel?: StockC
         available: Math.max(0, b.qty + posDelta - webReserved - safety),
       });
     }
+    // Antwoord onder de OORSPRONKELIJKE sleutel — storegents zoekt terug op wat
+    // het zelf stuurde (vaak de EAN), niet op de canonieke sku.
     out.set(key, list);
   }
   return out;
