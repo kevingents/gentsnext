@@ -30,9 +30,26 @@ export type MovementLine = {
 const norm = (v: unknown) => String(v ?? "").trim();
 const lower = (v: unknown) => norm(v).toLowerCase();
 
-/** Voorraad-sleutel van een regel: barcode > sku > artikelnummer (lowercase). */
+/**
+ * Voorraad-sleutel van een regel: sku > barcode > artikelnummer (lowercase).
+ *
+ * SKU EERST, en dat is cruciaal: de voorraad-BASELINE (srs_stock → lib/stock.ts) is
+ * op de SRS-sku gesleuteld, en ÁLLE lezers vragen op sku op — availableForSkus (web),
+ * availableInStore/availableBreakdown (kassa-gate /api/core/stock/available, checkout,
+ * reserveringen, inventory-telling). Een barcode-query levert daar "systeem 0".
+ *
+ * Stond deze sleutel op barcode-eerst (zoals voorheen), dan werden de mutaties
+ * (pos/correctie/reservering/inbound) van elk artikel met een eigen leveranciers-EAN
+ * (~48% van de catalogus: barcode <> sku) NOOIT teruggevonden door de sku-reads: de
+ * kassa/web-voorraadoverlay was de facto dood (0/103 POS-mutaties matchten een
+ * baseline-sleutel, gemeten op prod) en verkopen werden pas bij de volgende SRS-sync
+ * verrekend → oversell-venster. De inventory-telling loste dit voor de LEESkant al op
+ * door bewust op sku te zoeken; deze sleutel trekt de SCHRIJFkant daarmee gelijk.
+ * Barcode blijft de fallback voor gescande regels zonder sku (die matchen sowieso niet
+ * op de sku-baseline, maar we willen ze wel uniek en idempotent boeken).
+ */
 export function stockKey(line: Pick<MovementLine, "barcode" | "sku" | "articleNumber"> = {}): string {
-  const key = lower(line.barcode) || lower(line.sku) || lower(line.articleNumber);
+  const key = lower(line.sku) || lower(line.barcode) || lower(line.articleNumber);
   // Dienst-regels (vermaakservice, sku VERMAAK-<code>) zijn geen voorraad — zonder
   // deze uitsluiting zou elke kassa-verkoop/annulering/retour van een dienst een
   // fantoom-mutatie op een niet-bestaande sleutel in store_stock_movements schrijven.

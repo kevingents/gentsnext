@@ -150,11 +150,10 @@ export async function scanInventory(input: { sessionId: string; code: string; qt
   const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
 
   // Verwachte voorraad bij de eerste observatie = SRS-baseline + kassa-delta (fysiek).
-  // LET OP het sleutelverschil: stockKey is bewust `barcode || sku` — die sleutel deelt
-  // de telling met reserveringen, paspop en goederenontvangst. De VOORRAADBRON
-  // (srs_stock) kent echter alleen de SRS-sku; `product_variants.barcode` is de EAN van
-  // de leverancier en komt in srs_stock niet voor. Op de stockKey zoeken gaf daarom
-  // structureel "systeem 0" voor elk artikel met een eigen leveranciers-barcode.
+  // Op SKU zoeken: de VOORRAADBRON (srs_stock) kent alleen de SRS-sku;
+  // `product_variants.barcode` (leveranciers-EAN) komt daar niet in voor, dus een
+  // barcode-query gaf structureel "systeem 0". Sinds stockKey óók sku-eerst is
+  // (lib/store-core) lopen de lees- en schrijfsleutel weer gelijk.
   const voorraadSleutel = String(meta.sku || meta.barcode || "").trim();
   const breakdown = await availableBreakdown(session.location, [voorraadSleutel]);
   const b = breakdown.get(voorraadSleutel);
