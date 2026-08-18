@@ -301,6 +301,31 @@ export const srsStockMeta = pgTable("srs_stock_meta", {
 });
 
 /**
+ * Live SRS-voorraadstand per (filiaal, sku) — schaduw van de 5-min storeinfo-SFTP-
+ * delta's (fase 1 van "alles naar Neon"). De storegents delta-cron schrijft hier
+ * dual-write naast de per-filiaal blob-snapshot; qty is de ABSOLUTE stand uit het
+ * delta/full-XML (laatste wint, negatief blijft negatief — trouwe spiegel van de
+ * feed). Nog GEEN lezers: eerst pariteit bewijzen t.o.v. blob + actieve generatie,
+ * dan pas de leesformules (met per-artikel-watermark — een delta-merge mag nooit
+ * de globale synced_at bumpen, anders trekken kassa-movements dubbel af).
+ */
+export const srsStockLive = pgTable(
+  "srs_stock_live",
+  {
+    sku: text("sku").notNull(),
+    branchId: text("branch_id").notNull(),
+    store: text("store").notNull().default(""),
+    qty: integer("qty").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.sku] }),
+    // Reads straks: WHERE sku IN (...) over alle filialen (maatboog/PDP).
+    index("srs_stock_live_sku_idx").on(t.sku),
+  ],
+);
+
+/**
  * Print-inbox: wachtrij van print-opdrachten per winkel. De backend kan een winkel niet
  * direct laten printen (de kassa-agent zit op localhost achter NAT), dus een opdracht wordt
  * hier gequeued; de kassa van díe winkel pollt de inbox en print 'm via z'n lokale agent
