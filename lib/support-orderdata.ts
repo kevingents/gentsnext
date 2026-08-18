@@ -2,6 +2,7 @@ import { and, desc, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders, returns } from "@/db/schema";
 import { getSiteUrl } from "@/lib/site-url";
+import { refundSplit } from "@/lib/refund-breakdown";
 
 /**
  * Order-/retour-/refund-status voor de AI-klantenservice ("waar is mijn
@@ -111,7 +112,20 @@ function refundInfo(o: OrderRow, r: ReturnRow | null): { amountCents: number; st
       statusText: `${euro(r.refundedCents)} is teruggestort${when ? ` op ${when}` : ""}. Afhankelijk van je bank duurt het 1-3 werkdagen voordat het zichtbaar is.`,
     };
   }
-  const expected = Math.max(0, r.itemsCents - r.shippingCostCents);
+  // Het CASH-deel dat naar de bank teruggaat — niet de brutosom. Bij een deels met
+  // cadeaubon betaalde order komt dat deel als tegoed terug, niet cash; refundSplit
+  // rekent dezelfde formule als de uitvoering (processReturnReceived). Zonder cadeaubon
+  // is dit gelijk aan itemsCents − retourkosten (geen gedragswijziging).
+  const expected = refundSplit({
+    itemsCents: r.itemsCents,
+    returnShippingCents: r.shippingCostCents,
+    refundType: "money",
+    subtotalCents: o.subtotalCents ?? 0,
+    discountCents: o.discountCents ?? 0,
+    giftcardCents: o.giftcardCents ?? 0,
+    orderShippingCents: o.shippingCents ?? 0,
+    orderTotalCents: o.totalCents ?? 0,
+  }).cashCents;
   if (r.status === "received" || r.status === "processing") {
     return {
       amountCents: expected,
