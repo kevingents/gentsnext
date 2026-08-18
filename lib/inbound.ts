@@ -531,6 +531,53 @@ export async function receiveShipment(shipmentId: string, receivedBy?: string): 
   return { ok: true, booked, lines: counts, verdict: "full", discrepancies: disc.count };
 }
 
+/**
+ * BLIND ONTVANGEN ("Alles binnenmelden") — boek de zending op de VERWACHTE aantallen
+ * zónder te tellen. Voor een drukke winkel die geen tijd heeft om te scannen: de
+ * magazijn-/bronwinkel-pick wordt vertrouwd. Boekt per ASN-regel het verwachte aantal
+ * (minus een eventueel al gevlagd/beschadigd deel), plus al gescande extra-regels die
+ * niet in de ASN staan. Zelfde ref `RCV-<id>` als de gewone ontvangst → idempotent op
+ * (ref, channel, stockKey): een zending die daarna alsnog normaal ontvangen wordt boekt
+ * niet dubbel. Status → 'received'.
+ *
+ * Bewust GEEN afwijkingen loggen: er is niet geteld, dus er is geen manco-signaal —
+ * een blind-ontvangst mag geen valse afwijking naar supply chain sturen. De verantwoor-
+ * ding ligt bij de keuze om niet te tellen, niet bij een gemeten verschil.
+ */
+export async function receiveExpected(shipmentId: string, receivedBy?: string): Promise<{ ok: boolean; error?: string; booked: { stockKey: string; delta: number }[]; lines: ReturnType<typeof withVariance>[]; alreadyReceived?: boolean; verdict?: "blind" }> {
+  const data = await getInboundShipment(shipmentId);
+  if (!data) return { ok: false, error: "Zending niet gevonden.", booked: [], lines: [] };
+  const { shipment, counts } = data;
+  if (["received", "closed"].includes(shipment.status)) {
+    return { ok: true, booked: [], lines: counts, alreadyReceived: true };
+  }
+  const asn = (shipment.expectedLines as ExpectedLine[]) || [];
+  const countByKey = new Map(counts.map((c) => [c.stockKey, c]));
+  const asnKeys = new Set(asn.map((l) => l.stockKey));
+  // Verwacht − reeds gevlagd (schade/verkeerd blijft quarantaine, ook zonder tellen).
+  const bookLines = asn.map((l) => ({
+    barcode: l.barcode, sku: l.sku, name: l.title, color: l.color, size: l.size,
+    qty: Math.max(0, (Number(l.expectedQty) || 0) - (countByKey.get(l.stockKey)?.flagQty ?? 0)),
+  }));
+  // Al gescande regels die niet op de ASN stonden (iemand was al begonnen) tóch meenemen.
+  for (const c of counts) {
+    if (!asnKeys.has(c.stockKey) && c.scannedQty > 0) {
+      bookLines.push({ barcode: c.barcode, sku: c.sku, name: c.title, color: c.color, size: c.size, qty: Math.max(0, c.scannedQty - (c.flagQty ?? 0)) });
+    }
+  }
+  const real = bookLines.filter((l) => l.qty > 0);
+  let booked: { stockKey: string; delta: number }[] = [];
+  if (real.length) {
+    const res = await recordMovements({
+      location: shipment.toStore, channel: "inbound", sign: 1, ref: refFor(shipment.id),
+      reason: `blind ontvangen ${shipment.linkRef || shipment.source || ""}`.trim(), lines: real,
+    });
+    booked = res.applied;
+  }
+  await setShipmentStatus(shipment.id, "received", receivedBy);
+  return { ok: true, booked, lines: counts, verdict: "blind" };
+}
+
 /** Markeer de ontvangst-movements als 'in SRS verwerkt' (overdracht naar de baseline).
  *  Aan te roepen zodra SRS de Receive heeft geboekt — valideren tegen de echte
  *  SRS-flow vóór go-live. */
