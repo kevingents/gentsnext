@@ -1,13 +1,5 @@
-import { timingSafeEqual } from "crypto";
 import { getSessionCustomer } from "@/lib/account";
-
-/** Constante-tijd-vergelijking; false bij lengteverschil of leeg token. */
-function tokenEquals(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
-}
+import { tokenEquals } from "@/lib/timing-safe";
 
 /**
  * Auth voor de portal→gentsnext admin-API ("Nieuwe site"-CMS): een gentsnext-
