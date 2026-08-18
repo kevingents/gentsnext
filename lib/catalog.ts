@@ -1573,13 +1573,27 @@ export async function getVariantSiblings(groupKey: string, currentHandle: string
     where p.variant_group_key = ${groupKey} and p.status = 'active' and p.has_image = true
     order by p.in_stock desc, p.variant_color_label asc
   `);
-  return rows.rows.map((r) => ({
-    handle: r.handle,
-    colorLabel: r.label || "Variant",
-    imageUrl: r.url || "",
-    inStock: r.in_stock,
-    isCurrent: r.handle === currentHandle,
-  }));
+  // Ontdubbelen op kleurnaam: dubbele SRS-invoer (twee actieve producten met
+  // dezelfde kleur) gaf anders twee identieke swatches op de PDP, terwijl de
+  // kaart-kleurtelling (buildProductCards, count(distinct lower(label))) al
+  // ontdubbelt — die twee liepen uiteen. De query sorteert in_stock desc, dus de
+  // leverbare wint. Lege labels NIET samenvouwen: dat zijn naamloze varianten die
+  // elk hun eigen swatch horen te houden.
+  const seen = new Set<string>();
+  const out: VariantSibling[] = [];
+  for (const r of rows.rows) {
+    const key = (r.label || "").trim().toLowerCase();
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push({
+      handle: r.handle,
+      colorLabel: r.label || "Variant",
+      imageUrl: r.url || "",
+      inStock: r.in_stock,
+      isCurrent: r.handle === currentHandle,
+    });
+  }
+  return out;
 }
 
 /** Lijst van categorieën (hoofdgroep) met telling — voor nav/landing. */
