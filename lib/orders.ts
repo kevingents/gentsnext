@@ -286,6 +286,14 @@ export async function createOrder(
     voorverkoop?: boolean;
     sessionId?: string;
     attributie?: Record<string, unknown>;
+    /* SERVER-ONLY vaste regelprijzen (sku → centen). Uitsluitend voor paden waar de
+       klant al een VAST bedrag betaalde en de order dat exact moet registreren — nu:
+       de reservering-conversie (de klant betaalde de snapshot-prijs op reserveermoment,
+       niet de nu-herberekende DB-prijs). NOOIT vullen vanuit client-input: dat zou de
+       server-side prijsvalidatie omzeilen (zie ook de smoking-korting-guard hieronder).
+       Als gezet: order-brede autokorting (staffel/smoking) wordt overgeslagen — de
+       snapshot is al de definitieve prijs. */
+    fixedPricesBySku?: Record<string, number>;
   } = {}
 ): Promise<CreatedOrder> {
   const db = getDb();
@@ -307,6 +315,16 @@ export async function createOrder(
   const missingSkus = requestedSkus.filter((s) => !resolvedSkus.has(s));
   if (missingSkus.length) throw new OutOfStockError(missingSkus, missingSkus);
   if (!lines.length) throw new CheckoutError("Geen geldige producten in de bestelling.");
+
+  // Vaste-prijs-override (server-only): de order registreert het reeds afgerekende
+  // snapshot-bedrag i.p.v. de nu-herberekende DB-prijs. De sku is nog steeds via
+  // resolveLines gevalideerd (bestaat + actief); alleen de prijs komt uit de snapshot.
+  if (opts.fixedPricesBySku) {
+    for (const l of lines) {
+      const fp = opts.fixedPricesBySku[l.sku];
+      if (typeof fp === "number" && Number.isFinite(fp) && fp >= 0) l.unitPriceCents = Math.round(fp);
+    }
+  }
 
   // Onbekend land zou stil het NL-tarief krijgen — liever weigeren dan een
   // order aannemen die we niet tegen het juiste tarief kunnen verzenden.
@@ -330,15 +348,19 @@ export async function createOrder(
     }
   }
   // Staffelkorting (instelbaar, default uit): vanaf N artikelen X% op 't subtotaal.
+  // Bij vaste snapshot-prijzen (reservering) NIET toepassen: de klant betaalde een
+  // vast bedrag zonder deze korting, dus de order mag 'm niet alsnog verrekenen.
   const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
-  discountCents = Math.min(subtotalCents, discountCents + tieredDiscountCents(itemCount, subtotalCents, settings.tieredDiscount));
+  if (!opts.fixedPricesBySku) {
+    discountCents = Math.min(subtotalCents, discountCents + tieredDiscountCents(itemCount, subtotalCents, settings.tieredDiscount));
+  }
   // Smoking compleet: de vaste pakketprijs. Die is de klant op de samensteller
   // beloofd, dus hij hoort HIER verrekend te worden — niet alleen in de weergave,
   // anders rekent de kassa alsnog de losse som af. Alleen een complete groep
   // (jas, broek, overhemd, strik) telt; haalt de klant er een onderdeel uit, dan
   // vervalt de korting vanzelf. De prijzen komen uit het beheer, nooit uit de
   // client — net als alle andere bedragen hier.
-  if (lines.some((l) => niveauUitGroupId(l.groupId))) {
+  if (!opts.fixedPricesBySku && lines.some((l) => niveauUitGroupId(l.groupId))) {
     /* Zelfde bron als de samensteller (/site, met de portal als terugval).
        Zou de kassa een andere bron lezen, dan toont de pagina de nieuwe prijs
        terwijl de klant de oude betaalt -- of erger: het niveau bestaat daar
