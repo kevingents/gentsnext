@@ -251,6 +251,15 @@ export async function convertReservationToOrder(reservationId: string): Promise<
     street: "", houseNumber: "", postalCode: "", city: "", country: "NL",
   };
   const items: CheckoutItem[] = lines.map((l) => ({ sku: l.sku || "", qty: Math.max(1, Number(l.qty) || 1) }));
+  /* De klant heeft al de SNAPSHOT-prijs afgerekend (de prijs op reserveermoment,
+     reservationAmountCents). createOrder zou anders de nu-actuele DB-prijs + evt.
+     staffelkorting herberekenen → order.totalCents ≠ het afgeschreven bedrag. We
+     geven de snapshot-prijzen mee zodat de order exact registreert wat er betaald is. */
+  const fixedPricesBySku: Record<string, number> = {};
+  for (const l of lines) {
+    const s = String(l.sku || "").trim();
+    if (s) fixedPricesBySku[s] = Math.max(0, Math.round(Number(l.priceCents) || 0));
+  }
 
   let order;
   try {
@@ -259,7 +268,7 @@ export async function convertReservationToOrder(reservationId: string): Promise<
        de web-marge, dan kon een reservering die met marge 0 was aangemaakt bij de
        omzetting alsnog geweigerd worden - de klant heeft dan wel betaald en er
        ontstaat geen order. */
-    order = await createOrder(contact, items, "pickup", "", "", r.location, "", null, undefined, { channel: "store" });
+    order = await createOrder(contact, items, "pickup", "", "", r.location, "", null, undefined, { channel: "store", fixedPricesBySku });
   } catch (e) {
     // Order aanmaken faalde → claim teruggeven zodat een volgende webhook/retry het
     // opnieuw kan proberen (anders blijft de reservering voorgoed op "converting" staan).
