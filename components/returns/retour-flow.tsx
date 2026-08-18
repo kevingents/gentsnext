@@ -5,6 +5,7 @@ import { formatEuro } from "@/lib/format";
 import { useT } from "@/components/i18n/locale-provider";
 import { RETURN_REASONS, returnReason } from "@/lib/retour-redenen";
 import { track } from "@/lib/track-client";
+import { refundBreakdown } from "@/lib/refund-breakdown";
 
 type Line = { orderLineId: string; sku: string; title: string; size: string; color: string; unitPriceCents: number; orderedQty: number; returnableQty: number };
 type Policy = { windowDays: number; dhlReturnCostCents: number; freeOnCredit: boolean };
@@ -26,7 +27,10 @@ function nlDatum(iso: string): string {
 // de retourflow visueel aansluit op checkout en PDP.
 const inputCls = "w-full rounded-card border border-line px-3 py-2.5 text-base text-ink outline-none focus:border-ink";
 
-type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean };
+/** Ordertotalen voor een accurate refund-preview (order-korting → pro-rata, cadeaubon
+ *  → tegoed i.p.v. cash). Zelfde formule als de server via lib/refund-breakdown. */
+type Money = { subtotalCents: number; discountCents: number; giftcardCents: number; orderShippingCents: number; orderTotalCents: number };
+type Prefill = { orderNumber: string; email: string; lines: Line[]; policy: Policy; withinWindow: boolean; money: Money };
 /** Retourneerbare bestellingen van de ingelogde klant — kiezen i.p.v. intikken. */
 type MineOrder = { orderNumber: string; createdAt: string; totalCents: number; items: number; titles: string[] };
 
@@ -43,6 +47,7 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
   const [lines, setLines] = useState<Line[]>(prefill?.lines ?? []);
   const [policy, setPolicy] = useState<Policy | null>(prefill?.policy ?? null);
   const [withinWindow, setWithinWindow] = useState(prefill?.withinWindow ?? true);
+  const [money, setMoney] = useState<Money | null>(prefill?.money ?? null);
   const [qty, setQty] = useState<Record<string, number>>(prefill ? Object.fromEntries(prefill.lines.map((l) => [l.orderLineId, 0])) : {});
   const [method, setMethod] = useState<"dhl" | "store">("dhl");
   const [pickupStore, setPickupStore] = useState("");
@@ -76,15 +81,28 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
       const retLines = (d.lines as Line[]).filter((l) => l.returnableQty > 0);
       if (!retLines.length) throw new Error(t("retourneren.flow.error.nothingReturnable"));
       setLines(retLines); setPolicy(d.policy); setWithinWindow(d.withinWindow);
+      setMoney({
+        subtotalCents: Number(d.subtotalCents) || 0,
+        discountCents: Number(d.discountCents) || 0,
+        giftcardCents: Number(d.giftcardCents) || 0,
+        orderShippingCents: Number(d.orderShippingCents) || 0,
+        orderTotalCents: Number(d.orderTotalCents) || 0,
+      });
       setQty(Object.fromEntries(retLines.map((l) => [l.orderLineId, 0])));
       setStep("select");
     } catch (e) { setErr(e instanceof Error ? e.message : t("retourneren.flow.error.generic")); } finally { setBusy(false); }
   }
 
   const selected = lines.filter((l) => (qty[l.orderLineId] || 0) > 0);
-  const itemsCents = selected.reduce((s, l) => s + (qty[l.orderLineId] || 0) * l.unitPriceCents, 0);
+  const itemsGross = selected.reduce((s, l) => s + (qty[l.orderLineId] || 0) * l.unitPriceCents, 0);
   const free = method === "store" || (refundType === "credit" && (policy?.freeOnCredit ?? true));
   const shipCost = free ? 0 : policy?.dhlReturnCostCents ?? 0;
+  // Accurate preview: de brutosom is niet wat er terugkomt (order-korting → pro-rata,
+  // cadeaubon → tegoed i.p.v. cash). Zelfde formule als de server (refund-breakdown).
+  // Zonder ordertotalen (theoretisch) valt 'ie terug op de brutosom, net als voorheen.
+  const preview = money
+    ? refundBreakdown({ itemsGrossCents: itemsGross, returnShippingCents: shipCost, refundType, ...money })
+    : { itemsCents: itemsGross, cashCents: Math.max(0, itemsGross - shipCost), creditCents: itemsGross, refundTotalCents: refundType === "credit" ? itemsGross : Math.max(0, itemsGross - shipCost) };
 
   async function submit() {
     setErr("");
@@ -98,7 +116,7 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
       const d = (await r.json()) as Created;
       if (!r.ok || !d.ok) throw new Error(d.error || t("retourneren.flow.error.createFailed"));
       // De noemer onder de vermaak-hint: hoeveel retouren gingen er tóch door?
-      track("retour_aangemeld", { handle: reasonCode, valueCents: itemsCents, path: "/retourneren" });
+      track("retour_aangemeld", { handle: reasonCode, valueCents: itemsGross, path: "/retourneren" });
       setResult(d); setStep("done");
     } catch (e) { setErr(e instanceof Error ? e.message : t("retourneren.flow.error.generic")); } finally { setBusy(false); }
   }
@@ -263,7 +281,7 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
           <div className="grid gap-2 sm:grid-cols-2">
             <button onClick={() => setRefundType("credit")} className={`rounded-card border px-4 py-3 text-left ${refundType === "credit" ? "border-ink bg-ink/5" : "border-line"}`}>
               <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.refundCredit")}</span>
-              <span className="block text-xs text-ink-soft">{t("retourneren.flow.refundCreditSub", { amount: euro(itemsCents) })}</span>
+              <span className="block text-xs text-ink-soft">{t("retourneren.flow.refundCreditSub", { amount: euro(preview.itemsCents) })}</span>
             </button>
             <button onClick={() => setRefundType("money")} className={`rounded-card border px-4 py-3 text-left ${refundType === "money" ? "border-ink bg-ink/5" : "border-line"}`}>
               <span className="block text-sm font-semibold text-ink">{t("retourneren.flow.refundMoney")}</span>
@@ -273,9 +291,9 @@ export function RetourFlow({ initialOrder = "", prefill, mine = [], stores = [] 
         </section>
 
         <div className="rounded-card border border-line bg-surface px-4 py-3 text-sm">
-          <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.itemsValue")}</span><span>{euro(itemsCents)}</span></div>
+          <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.itemsValue")}</span><span>{euro(preview.itemsCents)}</span></div>
           <div className="flex justify-between text-ink-soft"><span>{t("retourneren.flow.returnCost")}</span><span>{shipCost === 0 ? t("retourneren.flow.free") : `− ${euro(shipCost)}`}</span></div>
-          <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>{refundType === "credit" ? t("retourneren.flow.creditLabel") : t("retourneren.flow.refundLabel")}</span><span>{euro(refundType === "credit" ? itemsCents : Math.max(0, itemsCents - shipCost))}</span></div>
+          <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>{refundType === "credit" ? t("retourneren.flow.creditLabel") : t("retourneren.flow.refundLabel")}</span><span>{euro(preview.refundTotalCents)}</span></div>
         </div>
 
         {err && <p className="text-sm text-danger">{err}</p>}

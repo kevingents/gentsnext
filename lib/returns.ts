@@ -9,6 +9,7 @@ import { refundMolliePayment } from "@/lib/mollie";
 import { reverseOrderLoyalty } from "@/lib/loyalty-claim";
 import { sendReturnRegistered, sendReturnRefunded } from "@/lib/email";
 import { canonicalReturnReason, REASON_NOTE_SEP } from "@/lib/retour-redenen";
+import { proRataItemsCents } from "@/lib/refund-breakdown";
 
 /**
  * Retouren — klant start vanuit z'n bestelling. Methode: DHL-retourlabel of in de
@@ -41,7 +42,22 @@ type ReturnableLine = {
 
 /** Haal de bestelling + de nog-retourbare regels op (na aftrek van eerdere retouren). */
 export async function getReturnableOrder(orderNumber: string, email: string): Promise<
-  | { ok: true; orderId: string; orderNumber: string; withinWindow: boolean; lines: ReturnableLine[] }
+  | {
+      ok: true;
+      orderId: string;
+      orderNumber: string;
+      withinWindow: boolean;
+      lines: ReturnableLine[];
+      // Bedragen voor een ACCURATE refund-preview aan de klant-kant: de brutosom van
+      // de regels is niet wat er wordt uitbetaald (order-korting → pro-rata, cadeaubon
+      // → tegoed i.p.v. cash). Met deze velden rekent de client dezelfde formule als de
+      // server (lib/refund-breakdown).
+      subtotalCents: number;
+      discountCents: number;
+      giftcardCents: number;
+      orderShippingCents: number;
+      orderTotalCents: number;
+    }
   | { ok: false; error: string }
 > {
   const nr = String(orderNumber || "").trim();
@@ -90,7 +106,18 @@ export async function getReturnableOrder(orderNumber: string, email: string): Pr
     returnableQty: Math.max(0, l.quantity - (priorByLine.get(l.id) || 0)),
   }));
 
-  return { ok: true, orderId: order.id, orderNumber: order.orderNumber, withinWindow, lines: returnable };
+  return {
+    ok: true,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    withinWindow,
+    lines: returnable,
+    subtotalCents: order.subtotalCents ?? 0,
+    discountCents: order.discountCents ?? 0,
+    giftcardCents: order.giftcardCents ?? 0,
+    orderShippingCents: order.shippingCents ?? 0,
+    orderTotalCents: order.totalCents ?? 0,
+  };
 }
 
 /**
@@ -298,8 +325,7 @@ export async function createReturn(input: CreateReturnInput): Promise<
   // die stuks betaald is. Verzending zit hier niet in (apart via shippingCostCents).
   const itemsGross = picked.reduce((s, p) => s + p.qty * p.line.unitPriceCents, 0);
   const subtotal = order?.subtotalCents ?? itemsGross;
-  const paidGoods = Math.max(0, subtotal - (order?.discountCents ?? 0));
-  const itemsCents = subtotal > 0 ? Math.round((itemsGross * paidGoods) / subtotal) : itemsGross;
+  const itemsCents = proRataItemsCents(itemsGross, subtotal, order?.discountCents ?? 0);
 
   const { returnConfig } = await getSettings();
   // Gratis retour bij in-winkel inleveren OF bij store credit/omruilen (instelbaar).

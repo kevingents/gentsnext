@@ -52,6 +52,14 @@ export default async function RetournerenPage({ searchParams }: { searchParams: 
         lines: base.lines.filter((l) => l.returnableQty > 0),
         policy: returnConfig,
         withinWindow: base.withinWindow,
+        // Ordertotalen mee voor een accurate refund-preview (pro-rata + cadeaubon-split).
+        money: {
+          subtotalCents: base.subtotalCents,
+          discountCents: base.discountCents,
+          giftcardCents: base.giftcardCents,
+          orderShippingCents: base.orderShippingCents,
+          orderTotalCents: base.orderTotalCents,
+        },
       };
     }
   }
