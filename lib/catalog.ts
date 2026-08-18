@@ -152,7 +152,9 @@ const MODEL_LEAD_CATS = new Set([
 ]);
 
 async function buildProductCards(
-  base: { id: string; handle: string; title: string; vendor: string }[]
+  // filteredMinCents (optioneel): de min-prijs ONDER een actief prijsfilter, uit de
+  // PLP-query. Zonder filter niet gezet → de kaart gebruikt de reguliere range.min.
+  base: { id: string; handle: string; title: string; vendor: string; filteredMinCents?: number }[]
 ): Promise<ProductCardData[]> {
   const db = getDb();
   const ids = base.map((p) => p.id);
@@ -321,7 +323,10 @@ async function buildProductCards(
       imageAlt: leadModel ? `${displayTitle} — op model` : cleanAlt,
       hoverImageUrl: leadModel ? pack : hoverById.get(p.id) || "",
       leidtMetModel: leadModel,
-      minPriceCents: range?.min ?? 0,
+      // Bij een actief prijsfilter: de min-prijs ONDER het filter (uit de query),
+      // niet de goedkoopste variant van het hele product — anders toont de kaart
+      // "vanaf €50" onder bv. een €100-200-filter.
+      minPriceCents: (typeof p.filteredMinCents === "number" ? p.filteredMinCents : range?.min) ?? 0,
       hasPriceRange: Boolean(range && range.min !== range.max),
       isNew: newFlag.get(p.id) ?? false,
       hasSale: saleRefCents.has(p.id),
@@ -1003,10 +1008,23 @@ export async function getFilteredProducts(
   // Pagineer op product-id met min-prijs voor de prijs-sortering. De kaart-basiskolommen
   // (handle/title/vendor) selecteren we meteen mee → de aparte hydrate-query vervalt, en
   // de id- + count-query draaien parallel (scheelt 2 round-trips op neon-http per PLP).
+  // `mp` = min-prijs voor de prijs-sortering ÉN de kaart-min-prijs. Bij een actief
+  // PRIJSfilter beperken we 'm tot de varianten binnen dat filter (met stock>0), zodat
+  // de sortering en de "vanaf"-prijs kloppen met wat de klant onder het filter krijgt.
+  // Zonder prijsfilter blijft mp = min over álle varianten (ongewijzigd gedrag).
+  const priceFilterActive = typeof f.priceMinCents === "number" || typeof f.priceMaxCents === "number";
+  const mpParts: SQL[] = [sql`v2.product_id = ${products.id}`];
+  if (priceFilterActive) {
+    if (typeof f.priceMinCents === "number") mpParts.push(sql`v2.price_cents >= ${f.priceMinCents}`);
+    if (typeof f.priceMaxCents === "number") mpParts.push(sql`v2.price_cents <= ${f.priceMaxCents}`);
+    mpParts.push(sql`v2.stock_qty > 0`);
+  }
+  const mpSub = sql`(select min(v2.price_cents) from ${productVariants} v2 where ${sql.join(mpParts, sql` and `)})`;
+
   const [idRows, totalRes] = await Promise.all([
-    db.execute<{ id: string; handle: string; title: string; vendor: string }>(sql`
+    db.execute<{ id: string; handle: string; title: string; vendor: string; mp: number | null }>(sql`
       ${withPop}select ${products.id} as id, ${products.handle} as handle, ${products.title} as title, ${products.vendor} as vendor,
-             (select min(v2.price_cents) from ${productVariants} v2 where v2.product_id = ${products.id}) as mp
+             ${mpSub} as mp
       from ${products}${popJoin}
       where ${whereSql}
       order by ${order}
@@ -1015,7 +1033,11 @@ export async function getFilteredProducts(
     db.execute<{ n: number }>(sql`select count(*)::int as n from ${products} where ${whereSql}`),
   ]);
   const total = Number(totalRes.rows[0]?.n ?? 0);
-  const ordered = idRows.rows.map((r) => ({ id: r.id, handle: r.handle, title: r.title, vendor: r.vendor }));
+  const ordered = idRows.rows.map((r) => ({
+    id: r.id, handle: r.handle, title: r.title, vendor: r.vendor,
+    // Alleen bij een actief prijsfilter de kaart-min overschrijven met de gefilterde min.
+    ...(priceFilterActive && r.mp != null ? { filteredMinCents: Number(r.mp) } : {}),
+  }));
   if (!ordered.length) return { items: [], total };
   return { items: await buildProductCards(ordered), total };
 }
