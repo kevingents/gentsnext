@@ -253,3 +253,51 @@ export async function clearLiveStockBranches(branchIds: string[]): Promise<{ ok:
   `);
   return { ok: true, cleared: clean.length };
 }
+
+export type BranchStockStats = { branchId: string; store: string; skus: number; qty: number };
+
+/**
+ * Per-filiaal aggregaten van de actieve baseline én de live-schaduwtabel, plus
+ * de watermerken — voor de dagelijkse voorraad-pariteitsmonitor in storegents
+ * (vergelijkt Neon vs de kassa-blob en alarmeert bij een Den Bosch-profiel:
+ * één bron vrijwel leeg terwijl de ander vol staat).
+ */
+export async function liveStockStats(): Promise<{
+  gen: BranchStockStats[];
+  live: BranchStockStats[];
+  genSyncedAt: Date | null;
+  liveNewestAt: Date | null;
+}> {
+  const db = getDb();
+  const meta = await activeBaselineMeta();
+  const gen: BranchStockStats[] = [];
+  if (meta.activeGen) {
+    const res = await db.execute<{ branch_id: string; store: string; skus: number; qty: number }>(sql`
+      select branch_id, max(store) as store,
+             count(*) filter (where qty > 0)::int as skus,
+             coalesce(sum(qty) filter (where qty > 0), 0)::int as qty
+      from srs_stock
+      where gen = ${meta.activeGen}
+      group by branch_id
+    `);
+    for (const r of res.rows) gen.push({ branchId: String(r.branch_id), store: String(r.store || ""), skus: Number(r.skus) || 0, qty: Number(r.qty) || 0 });
+  }
+  const live: BranchStockStats[] = [];
+  let liveNewestAt: Date | null = null;
+  const res = await db.execute<{ branch_id: string; store: string; skus: number; qty: number; newest: string | null }>(sql`
+    select branch_id, max(store) as store,
+           count(*) filter (where qty > 0)::int as skus,
+           coalesce(sum(qty) filter (where qty > 0), 0)::int as qty,
+           max(updated_at) as newest
+    from srs_stock_live
+    group by branch_id
+  `);
+  for (const r of res.rows) {
+    live.push({ branchId: String(r.branch_id), store: String(r.store || ""), skus: Number(r.skus) || 0, qty: Number(r.qty) || 0 });
+    if (r.newest) {
+      const d = new Date(r.newest);
+      if (!liveNewestAt || d > liveNewestAt) liveNewestAt = d;
+    }
+  }
+  return { gen, live, genSyncedAt: meta.syncedAt, liveNewestAt };
+}
