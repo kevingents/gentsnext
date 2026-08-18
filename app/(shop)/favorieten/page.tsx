@@ -13,6 +13,7 @@ export default function FavorietenPage() {
   const wl = useWishlist();
   const [items, setItems] = useState<ProductCardData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!wl.hydrated) return;
@@ -23,19 +24,30 @@ export default function FavorietenPage() {
     }
     let active = true;
     setLoading(true);
+    setFailed(false);
     fetch("/api/products-by-handles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ handles: wl.handles }),
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((d) => {
         if (active) {
           setItems(d.items || []);
           setLoading(false);
         }
       })
-      .catch(() => active && setLoading(false));
+      .catch(() => {
+        if (active) {
+          // Niet stil een lege grid tonen terwijl de teller wél items meldt:
+          // dan lijken de favorieten weg terwijl het een netwerkfout was.
+          setFailed(true);
+          setLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -46,6 +58,15 @@ export default function FavorietenPage() {
       <div className="mx-auto max-w-page px-gutter py-12">
         <h1 className="text-display-md">{t("wishlist.title")}</h1>
         <p className="mt-4 font-sans text-muted">{t("common.loading")}</p>
+      </div>
+    );
+  }
+
+  if (failed) {
+    return (
+      <div className="mx-auto max-w-page px-gutter py-12">
+        <h1 className="text-display-md">{t("wishlist.title")}</h1>
+        <p className="mt-4 font-sans text-muted">{t("common.error")}</p>
       </div>
     );
   }

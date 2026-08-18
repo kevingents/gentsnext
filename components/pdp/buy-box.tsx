@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro, isRealDiscount } from "@/lib/pricing";
 import { sizeRowLabel } from "@/lib/size-taxonomy";
@@ -153,15 +153,19 @@ export function BuyBox({
   }, [singleSize, active, size]);
 
   // Sticky mobiele bestelbalk pas tonen als de hoofd-bestelknop uit beeld is gescrolld.
-  const mainCtaRef = useRef<HTMLDivElement>(null);
+  // Callback-ref i.p.v. useEffect([]): de bestelknop-div (de)mount bij het wisselen
+  // tussen een uitverkochte en een leverbare kleur (hij staat in de !allSoldOut-tak).
+  // Een eenmalige effect-observer hangt maar één keer op en mist die remount — de
+  // balk blijft dan weg als de eerste kleur uitverkocht was. Een callback-ref hangt de
+  // observer telkens opnieuw aan de actuele node.
   const [stickyOn, setStickyOn] = useState(false);
-  useEffect(() => {
-    const el = mainCtaRef.current;
+  const stickyIoRef = useRef<IntersectionObserver | null>(null);
+  const mainCtaRef = useCallback((el: HTMLDivElement | null) => {
+    stickyIoRef.current?.disconnect();
     if (!el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(([e]) => setStickyOn(!e.isIntersecting), { rootMargin: "0px 0px -40px 0px" });
     io.observe(el);
-    return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    stickyIoRef.current = io;
   }, []);
   // …maar weer verbergen zodra de footer in beeld komt: de vaste balk dekt anders
   // permanent de onderste ~90px van elke PDP af (juridische links, betaaliconen).
