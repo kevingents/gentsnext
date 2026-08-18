@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import {
   createInboundShipment, listInboundShipments, openInboundForStore, getInboundShipment,
-  setShipmentStatus, startReceiving, scanReceipt, deleteReceiptCount, receiveShipment,
+  setShipmentStatus, startReceiving, scanReceipt, deleteReceiptCount, receiveShipment, receiveExpected,
   inTransitQtyForStore, markInboundReceiptPosted, createInterstoreTransfer, pickTransferByLinkRef, resolveCode, flagReceiptLine, type ExpectedLine,
 } from "@/lib/inbound";
 import { listOpenDiscrepancies, resolveDiscrepancy, getReceivingStats } from "@/lib/inbound-discrepancies";
@@ -24,6 +24,7 @@ export const runtime = "nodejs";
  *   scan          { shipmentId, code, qty?, mode? } → { ok, count }
  *   delete-count  { shipmentId, stockKey }          → { ok }
  *   receive       { id, receivedBy? }               → { ok, booked, lines }
+ *   receive-blind { id, receivedBy? }               → { ok, booked, lines, verdict:'blind' }  (boek ASN-verwacht, geen tellen)
  *   in-transit    { toStore, keys? }                → { ok, qty: { [stockKey]: n } }
  *   mark-srs-posted { id }                          → { ok }
  */
@@ -65,6 +66,8 @@ export async function POST(req: Request) {
         return NextResponse.json(await flagReceiptLine({ shipmentId: String(b.shipmentId || ""), stockKey: String(b.stockKey || ""), code: String(b.code || ""), qty: b.qty }));
       case "receive":
         return NextResponse.json(await receiveShipment(String(b.id || ""), b.receivedBy));
+      case "receive-blind":
+        return NextResponse.json(await receiveExpected(String(b.id || ""), b.receivedBy));
       case "transfer-out":
         return NextResponse.json(await createInterstoreTransfer({ fromStore: b.fromStore || "", toStore: b.toStore || "", expectedLines: b.expectedLines, skuExpected: b.skuExpected, createdBy: b.by, note: b.note, shipMethod: b.shipMethod, plannedRouteDate: b.plannedRouteDate, urgent: b.urgent, status: b.status }));
       case "pick":
