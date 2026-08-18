@@ -227,10 +227,14 @@ export async function assignCustomerToSaleCore(saleId: string, customerId: strin
 
   const nm = String(name || "").trim();
   const em = String(email || "").trim();
-  const newData = { ...(cur as object), customerId: cid, customer: nm || cur.customer || "", customerEmail: em || cur.customerEmail || "" };
+  // Alleen de klant-sleutels in de JSONB mergen (data || patch), niet het hele
+  // data-object herschrijven: anders wist een gelijktijdige SRS-sweep (die srsPosted
+  // zet vanuit een oudere lezing) deze net-gekoppelde klantvelden weer weg. De
+  // kolom-guard (customerId = '') blijft de dubbele-koppeling voorkomen.
+  const patch = JSON.stringify({ customerId: cid, customer: nm || cur.customer || "", customerEmail: em || cur.customerEmail || "" });
   const [upd] = await db
     .update(posSales)
-    .set({ customerId: cid, data: newData as object })
+    .set({ customerId: cid, data: sql`${posSales.data} || ${patch}::jsonb` })
     .where(and(eq(posSales.id, id), eq(posSales.customerId, ""))) // guard: alleen als nog niet gekoppeld
     .returning();
   if (!upd) {
@@ -255,9 +259,16 @@ export async function cancelPosSaleCore(id: string, actor: { name?: string } = {
   if (!r) return null;
   const sale = rowToSale(r);
   if (sale.cancelled) return sale;
-  const next: Sale = { ...sale, cancelled: true, cancelledAt: new Date().toISOString(), cancelledBy: String(actor?.name || "") };
-  await db.update(posSales).set({ cancelled: true, data: next }).where(eq(posSales.id, String(id)));
-  return next;
+  // Alleen de annuleer-sleutels mergen (data || patch), niet het hele data-object
+  // terugschrijven — anders overschrijft dit een gelijktijdige klant-koppeling of
+  // SRS-markering (lost update op de JSONB).
+  const patch = JSON.stringify({ cancelled: true, cancelledAt: new Date().toISOString(), cancelledBy: String(actor?.name || "") });
+  const [upd] = await db
+    .update(posSales)
+    .set({ cancelled: true, data: sql`${posSales.data} || ${patch}::jsonb` })
+    .where(eq(posSales.id, String(id)))
+    .returning();
+  return upd ? rowToSale(upd) : null;
 }
 
 /** Markeer (deels) verrekend naar SRS. Idempotent: 'posted' niet nog eens. */
@@ -271,8 +282,11 @@ export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: stri
      kunnen worden met het nieuwe, wél geldige nummer. */
   if (!opts.force && sale.srsPosted && sale.srsPostStatus === "posted") return sale;
   const status = String(opts.status || "posted");
-  const next: Sale = {
-    ...sale, srsPosted: status === "posted", srsPostStatus: status, srsPostedAt: new Date().toISOString(),
+  // Alleen de SRS-sleutels mergen (data || patch), niet het hele data-object
+  // terugschrijven — anders wist deze sweep-write klantvelden die net (vanuit een
+  // andere lezing) gekoppeld zijn. De queryable srsPosted-kolom gaat apart mee.
+  const patch = {
+    srsPosted: status === "posted", srsPostStatus: status, srsPostedAt: new Date().toISOString(),
     // srsRef nooit WISSEN bij een latere mislukte poging: het gereserveerde bonnr
     // is precies wat een herpost door de sweep ontdubbelbaar maakt.
     srsRef: opts.force ? String(opts.srsRef || "") : (String(opts.srsRef || "") || String((sale as { srsRef?: string }).srsRef || "")),
@@ -280,7 +294,11 @@ export async function markPosSaleSrsPostedCore(id: string, opts: { srsRef?: stri
     // Pogingteller — spiegelt de blob-store; de sweep leest Neon-first en strandt
     // een record na te veel mislukte pogingen i.p.v. eeuwig budget te verbranden.
     srsPostAttempts: status === "failed" ? (Number(sale.srsPostAttempts) || 0) + 1 : (Number(sale.srsPostAttempts) || 0),
-  } as Sale;
-  await db.update(posSales).set({ srsPosted: status === "posted", data: next }).where(eq(posSales.id, String(id)));
-  return next;
+  };
+  const [upd] = await db
+    .update(posSales)
+    .set({ srsPosted: status === "posted", data: sql`${posSales.data} || ${JSON.stringify(patch)}::jsonb` })
+    .where(eq(posSales.id, String(id)))
+    .returning();
+  return upd ? rowToSale(upd) : null;
 }
