@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/db";
-import { srsStock } from "@/db/schema";
+import { srsStock, srsStockLive } from "@/db/schema";
 
 /**
  * SRS-voorraadbaseline in Neon — bron van waarheid voor de bruto fysieke voorraad
@@ -192,4 +192,64 @@ export async function readActiveBaseline(): Promise<{ gen: string | null; synced
     ideaal: Number(r.ideaal) || 0,
   }));
   return { gen: meta.activeGen, syncedAt: meta.syncedAt, rows };
+}
+
+/* ── Live-schaduw (srs_stock_live): 5-min storeinfo-SFTP-delta's ─────────────────
+   Fase 1 van "alles naar Neon": de storegents delta-cron schrijft de absolute
+   standen uit het delta/full-XML hier dual-write naast de blob. Nog GEEN lezers —
+   eerst pariteit bewijzen, dan de leesformules (per-artikel-watermark) omzetten.
+   Bewust géén koppeling met srs_stock_meta.synced_at: dat watermark stuurt de
+   movement-/reserveringsvensters en mag alleen door een VOLLEDIGE baseline-sync
+   bewogen worden. */
+
+export type LiveStockRowInput = { sku: string; branchId: string; store?: string; qty: number };
+
+const LIVE_BATCH_MAX = 5000;
+
+/**
+ * Upsert een batch live-standen (laatste wint per (filiaal, sku)). qty is de
+ * absolute stand uit de feed — negatief blijft negatief (trouwe spiegel; lezers
+ * clampen straks zelf). Dedupt binnen de batch op (branchId|sku).
+ */
+export async function applyLiveStockRows(rows: LiveStockRowInput[]): Promise<{ ok: boolean; upserted: number; error?: string }> {
+  const byKey = new Map<string, { sku: string; branchId: string; store: string; qty: number }>();
+  for (const r of rows || []) {
+    const sku = norm(r?.sku);
+    const branchId = norm(r?.branchId);
+    if (!sku || !branchId) continue;
+    byKey.set(`${branchId}|${sku}`, { sku, branchId, store: norm(r?.store), qty: int(r?.qty) });
+  }
+  const values = [...byKey.values()];
+  if (!values.length) return { ok: true, upserted: 0 };
+  if (values.length > LIVE_BATCH_MAX) return { ok: false, upserted: 0, error: `Batch te groot (max ${LIVE_BATCH_MAX}).` };
+  const db = getDb();
+  await db
+    .insert(srsStockLive)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [srsStockLive.branchId, srsStockLive.sku],
+      set: {
+        store: sql`excluded.store`,
+        qty: sql`excluded.qty`,
+        updatedAt: sql`now()`,
+      },
+    });
+  return { ok: true, upserted: values.length };
+}
+
+/**
+ * Maak de live-stand van hele filialen leeg — de full-run (1×/nacht) stuurt dit
+ * vóór z'n batches, zodat rijen die uit het full-XML verdwenen zijn niet als
+ * spookstand blijven hangen (het delta-XML noemt alleen gewijzigde barcodes).
+ */
+export async function clearLiveStockBranches(branchIds: string[]): Promise<{ ok: boolean; cleared: number; error?: string }> {
+  const clean = [...new Set((branchIds || []).map(norm).filter(Boolean))];
+  if (!clean.length) return { ok: true, cleared: 0 };
+  if (clean.length > 100) return { ok: false, cleared: 0, error: "Te veel filialen in één clear." };
+  const db = getDb();
+  await db.execute(sql`
+    delete from srs_stock_live
+    where branch_id in (${sql.join(clean.map((b) => sql`${b}`), sql`, `)})
+  `);
+  return { ok: true, cleared: clean.length };
 }
