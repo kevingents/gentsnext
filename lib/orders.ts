@@ -1,4 +1,5 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { tokenEquals } from "@/lib/timing-safe";
 import { after } from "next/server";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -189,14 +190,6 @@ function generateOrderNumber(): string {
 /** Niet-raadbaar toegangstoken voor de bevestigingslink (32 tekens, 192 bit). */
 function generateAccessToken(): string {
   return randomBytes(24).toString("base64url");
-}
-
-/** Constante-tijd-vergelijking; false bij lengteverschil of leeg token. */
-function tokenEquals(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 type ResolvedLine = {

@@ -10,6 +10,7 @@
  * dezelfde pilot-default, dus in de pilot werkt het out-of-the-box.
  */
 import crypto from "crypto";
+import { tokenEquals } from "@/lib/timing-safe";
 
 function secret(): string {
   return (
@@ -44,8 +45,5 @@ export function receiptToken(saleId: string): string {
 
 /** Constant-time vergelijking van het meegegeven token. */
 export function verifyReceiptToken(saleId: string, token: string): boolean {
-  const expected = receiptToken(saleId);
-  const a = Buffer.from(String(token || ""));
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return tokenEquals(String(token || ""), receiptToken(saleId));
 }

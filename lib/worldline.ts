@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { tokenEquals } from "@/lib/timing-safe";
 
 /**
  * Dunne Worldline Direct-client (Hosted Checkout) — het redirect-alternatief voor
@@ -139,13 +140,7 @@ export function verifyWorldlineWebhook(rawBody: string, signature: string, keyId
   if (!secret || !signature) return false;
   if (expectedKeyId && keyId && keyId !== expectedKeyId) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
-  try {
-    const a = Buffer.from(expected);
-    const b = Buffer.from(signature);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
+  return tokenEquals(expected, signature);
 }
 
 /** Terugbetaling (retour) van een Worldline-betaling. paymentId volgt uit getWorldlineCheckoutStatus. */

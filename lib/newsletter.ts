@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
+import { tokenEquals } from "@/lib/timing-safe";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { newsletterSubscribers } from "@/db/schema";
@@ -16,13 +17,7 @@ export function newsletterToken(email: string): string {
 }
 
 export function verifyNewsletterToken(email: string, token: string): boolean {
-  const expected = newsletterToken(email);
-  if (!token || token.length !== expected.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-  } catch {
-    return false;
-  }
+  return tokenEquals(token, newsletterToken(email));
 }
 
 /** E-mail-opt-in naar de Resend-audience (env-gated; stub als niet geconfigureerd). */

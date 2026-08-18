@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
+import { tokenEquals } from "@/lib/timing-safe";
 
 /**
  * Lichte config-/auth-helpers voor de Apple-Wallet memberspas — BEWUST zonder de
@@ -64,12 +65,5 @@ export function passAuthToken(customerId: string): string {
 
 /** Constant-tijd-verificatie van een aangeboden pas-token. Fail-closed. */
 export function verifyPassAuth(customerId: string, token: string): boolean {
-  const expected = passAuthToken(customerId);
-  const got = String(token || "");
-  if (!expected || got.length !== expected.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
-  } catch {
-    return false;
-  }
+  return tokenEquals(String(token || ""), passAuthToken(customerId));
 }

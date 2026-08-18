@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { tokenEquals } from "@/lib/timing-safe";
 
 /**
  * Volg-link voor een klantenservice-ticket: de klant volgt z'n vraag ZONDER in te
@@ -33,9 +34,5 @@ export function signFollowToken(ref: string, email: string): string {
  * secret/token of lengteverschil — timingSafeEqual eist gelijke lengte.
  */
 export function verifyFollowToken(ref: string, email: string, token: string): boolean {
-  const expected = signFollowToken(ref, email);
-  if (!expected || !token) return false;
-  const a = Buffer.from(String(token));
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return tokenEquals(String(token || ""), signFollowToken(ref, email));
 }
