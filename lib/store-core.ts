@@ -114,12 +114,14 @@ export async function recordMovements(input: RecordInput): Promise<{ applied: { 
  * Markeer de kassa-mutaties van een verkoop (ref = sale-id) als 'in SRS geboekt'.
  * De delta blijft nog meetellen tot een SRS-sync ná dit moment de baseline
  * bijwerkt; daarna valt 'ie uit de posDelta-som (geen dubbeltelling). Aangeroepen
- * door storegents zodra een POS-verkoop succesvol naar SRS is gepost.
+ * door storegents zodra een POS-verkoop succesvol naar SRS is gepost — en bij
+ * 'correction'-mutaties (kassa-correctie/inventarisatie) zodra supply chain de
+ * correctie handmatig in SRS heeft doorgevoerd.
  */
-export async function markMovementsSrsPosted(ref: string, channel: "pos" | "inbound" | "transfer" = "pos"): Promise<void> {
+export async function markMovementsSrsPosted(ref: string, channel: "pos" | "correction" | "inbound" | "transfer" = "pos"): Promise<void> {
   const r = String(ref || "").trim();
   if (!r) return;
-  const ch = (["inbound", "transfer"] as const).includes(channel as "inbound" | "transfer") ? channel : "pos";
+  const ch = (["correction", "inbound", "transfer"] as const).includes(channel as "correction" | "inbound" | "transfer") ? channel : "pos";
   const db = getDb();
   await db.execute(sql`
     update store_stock_movements
