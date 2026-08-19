@@ -205,6 +205,53 @@ export async function unsyncedMovementStats(
   };
 }
 
+export type UnsyncedCorrectionRow = {
+  location: string;
+  stockKey: string;
+  delta: number;
+  reason: string;
+  ref: string | null;
+  meta: Record<string, string> | null;
+  createdAt: string;
+};
+
+/**
+ * Alle nog niet als 'in SRS geboekt' gemarkeerde correction-movements, regel
+ * voor regel (oudste eerst) — voor de eenmalige opschoonactie in storegents.
+ *
+ * WAAROM een aparte lijst naast unsyncedMovementStats: die geeft voor
+ * 'correction' alleen een aggregaat (en de stale-lijst slaat het kanaal bewust
+ * over). Voor historische correcties van vóór de werklijst-koppeling
+ * (storegents #475) moet een MENS per ref beslissen of de correctie destijds
+ * óók handmatig in SRS is doorgevoerd (→ markeren, anders telt 'ie dubbel) of
+ * niet (→ delta is nog nodig). Daarvoor zijn de regels zelf nodig: ref,
+ * locatie, artikel (meta), delta en datum. Read-only; het markeren loopt via
+ * /api/core/stock/movement-synced met channel 'correction'.
+ */
+export async function unsyncedCorrectionRows(limit = 2000): Promise<UnsyncedCorrectionRow[]> {
+  const max = Math.min(Math.max(Math.round(Number(limit) || 2000), 1), 5000);
+  const db = getDb();
+  const r = await db.execute<{
+    location: string; stock_key: string; delta: number; reason: string;
+    ref: string | null; meta: Record<string, string> | null; created_at: string;
+  }>(sql`
+    select location, stock_key, delta, reason, ref, meta, created_at
+    from store_stock_movements
+    where srs_posted_at is null and channel = 'correction'
+    order by created_at asc
+    limit ${max}
+  `);
+  return r.rows.map((row) => ({
+    location: String(row.location),
+    stockKey: String(row.stock_key),
+    delta: Number(row.delta) || 0,
+    reason: String(row.reason || ""),
+    ref: row.ref == null ? null : String(row.ref),
+    meta: row.meta && typeof row.meta === "object" ? (row.meta as Record<string, string>) : null,
+    createdAt: row.created_at ? new Date(row.created_at as string).toISOString() : "",
+  }));
+}
+
 /** Netto core-delta per stockKey voor één locatie. */
 export async function coreDeltaForKeys(location: string, keys: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
