@@ -1,0 +1,1090 @@
+<title>Van pakbon tot kassa</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ── Tokens ───────────────────────────────────────────────────────────────
+   Licht = basis. Donker wordt alleen op tokenniveau herschreven, twee keer:
+   via prefers-color-scheme (systeemstand) en via [data-theme="dark"] (keuze). */
+:root{
+  --ground:#EFF1EE;
+  --surface:#FFFFFF;
+  --surface-2:#F6F8F4;
+  --line:#D6DBD3;
+  --line-soft:#E5E9E1;
+  --text:#141B21;
+  --muted:#5B6670;
+  --brass:#87680F;
+  --navy:#1D3B53;
+  --pos:#2C6849;
+  --neg:#96382A;
+  --warn:#8E6113;
+  --code-bg:#EEF1EA;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1418;
+    --surface:#141C22;
+    --surface-2:#18212A;
+    --line:#27323A;
+    --line-soft:#1F2830;
+    --text:#E5EAE7;
+    --muted:#93A1AA;
+    --brass:#D5AC46;
+    --navy:#8DB6D6;
+    --pos:#63B189;
+    --neg:#E28D79;
+    --warn:#DDAF5F;
+    --code-bg:#1B242C;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1418;
+  --surface:#141C22;
+  --surface-2:#18212A;
+  --line:#27323A;
+  --line-soft:#1F2830;
+  --text:#E5EAE7;
+  --muted:#93A1AA;
+  --brass:#D5AC46;
+  --navy:#8DB6D6;
+  --pos:#63B189;
+  --neg:#E28D79;
+  --warn:#DDAF5F;
+  --code-bg:#1B242C;
+}
+
+*{box-sizing:border-box}
+html{
+  scroll-snap-type:y proximity;
+  scroll-behavior:smooth;
+  background:var(--ground);
+}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:"Archivo","Helvetica Neue",Arial,sans-serif;
+  font-size:16px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+}
+
+/* ── Slide-frame ──────────────────────────────────────────────────────── */
+.slide{
+  scroll-snap-align:start;
+  min-height:100svh;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  justify-content:safe center;
+  gap:clamp(18px,2.6vh,30px);
+  padding:clamp(48px,7vh,80px) clamp(22px,6vw,88px) clamp(56px,8vh,88px);
+  border-bottom:1px solid var(--line-soft);
+  position:relative;
+}
+.slide > *{width:min(1120px,100%);margin-inline:auto}
+
+.rail{
+  display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+  padding-bottom:10px;border-bottom:1px solid var(--line);
+}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:11.5px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--brass);
+}
+.num{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11.5px;letter-spacing:.12em;color:var(--muted);font-variant-numeric:tabular-nums;
+}
+
+h1,h2,h3{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:clamp(38px,6.4vw,78px);line-height:1.02;letter-spacing:-.02em}
+h2{font-size:clamp(26px,3.5vw,44px);line-height:1.08;letter-spacing:-.015em}
+h3{font-size:clamp(17px,1.5vw,20px);line-height:1.25;letter-spacing:-.005em}
+p{margin:0}
+.lede{max-width:62ch;color:var(--muted);font-size:clamp(15px,1.25vw,18px)}
+.lede strong{color:var(--text);font-weight:600}
+
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{
+  background:var(--code-bg);border:1px solid var(--line-soft);border-radius:3px;
+  padding:.08em .34em;font-size:.86em;color:var(--text);white-space:nowrap;
+}
+
+/* ── Bouwstenen ───────────────────────────────────────────────────────── */
+.cols{display:grid;gap:clamp(12px,1.4vw,18px)}
+.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.c21{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+@media (max-width:880px){
+  .c2,.c3,.c4,.c21{grid-template-columns:minmax(0,1fr)}
+}
+
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:4px;
+  padding:clamp(14px,1.5vw,20px);display:flex;flex-direction:column;gap:8px;
+}
+.card.flat{background:var(--surface-2)}
+.card > .label{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;font-weight:500;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+}
+.card p{font-size:14.5px;color:var(--muted)}
+.card p strong{color:var(--text);font-weight:600}
+.card .big{
+  font-family:"Fraunces",Georgia,serif;font-size:clamp(24px,2.6vw,34px);
+  line-height:1;color:var(--text);font-variant-numeric:tabular-nums;
+}
+
+ul.ticks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+ul.ticks li{position:relative;padding-left:19px;font-size:14.5px;color:var(--muted)}
+ul.ticks li::before{
+  content:"";position:absolute;left:0;top:.62em;width:8px;height:1.5px;background:var(--brass);
+}
+ul.ticks li strong{color:var(--text);font-weight:600}
+
+/* Genummerde keten: alleen daar waar volgorde échte informatie is (statussen). */
+.chain{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.step{
+  flex:1 1 150px;background:var(--surface);border:1px solid var(--line);border-radius:4px;
+  padding:12px 14px;display:flex;flex-direction:column;gap:5px;position:relative;
+}
+.step .k{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--brass);
+}
+.step .t{font-weight:600;font-size:15px}
+.step .d{font-size:13px;color:var(--muted)}
+.step.done{border-color:var(--pos)}
+.step.stop{border-color:var(--neg)}
+
+.tag{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;
+  border:1px solid var(--line);border-radius:3px;padding:3px 7px;color:var(--muted);
+  background:var(--surface-2);white-space:nowrap;
+}
+.tag.neg{color:var(--neg);border-color:color-mix(in srgb,var(--neg) 45%,var(--line))}
+.tag.pos{color:var(--pos);border-color:color-mix(in srgb,var(--pos) 45%,var(--line))}
+.tag.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.tagrow{display:flex;flex-wrap:wrap;gap:7px}
+
+/* Formule */
+.formula{
+  background:var(--surface);border:1px solid var(--line);border-radius:4px;
+  padding:clamp(16px,2vw,26px);display:flex;flex-wrap:wrap;align-items:center;
+  gap:10px 14px;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:clamp(13px,1.45vw,18px);
+}
+.formula .term{display:flex;flex-direction:column;gap:3px;min-width:0}
+.formula .term b{font-weight:600;color:var(--text);white-space:nowrap}
+.formula .term span{
+  font-family:"Archivo",sans-serif;font-size:11.5px;color:var(--muted);letter-spacing:.01em;
+}
+.formula .op{color:var(--brass);font-size:1.15em;font-weight:600}
+.formula .term.minus b{color:var(--neg)}
+.formula .term.plus b{color:var(--pos)}
+
+/* Tabel */
+.scrollx{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+thead th{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;font-weight:500;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+  background:var(--surface-2);border-bottom:1px solid var(--line);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+td strong{font-weight:600}
+td small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margin-top:2px}
+
+/* Aandachtsblok: hairline boven + monolabel, geen gekleurde balk-cliché */
+.note{
+  border-top:2px solid var(--brass);background:var(--surface-2);
+  border-inline:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0 0 4px 4px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:5px;
+}
+.note .label{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--brass);
+}
+.note p{font-size:14px;color:var(--muted)}
+.note p strong{color:var(--text)}
+.note.stop{border-top-color:var(--neg)}
+.note.stop .label{color:var(--neg)}
+
+/* Cover + deel-openers */
+.cover{justify-content:center;gap:clamp(20px,3vh,34px)}
+.cover .kicker{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--brass);
+}
+.cover .sub{font-size:clamp(16px,1.8vw,22px);color:var(--muted);max-width:52ch}
+.cover .meta{
+  display:flex;flex-wrap:wrap;gap:8px 26px;padding-top:18px;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--muted);
+}
+.pipe{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pipe .box{
+  border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:10px 14px;
+  display:flex;flex-direction:column;gap:2px;min-width:0;
+}
+.pipe .box b{font-size:14px;font-weight:600}
+.pipe .box span{font-size:12px;color:var(--muted)}
+.pipe .arr{color:var(--brass);font-family:"IBM Plex Mono",monospace;font-size:15px}
+
+.opener{justify-content:center}
+.opener .roman{
+  font-family:"Fraunces",Georgia,serif;font-size:clamp(64px,12vw,150px);line-height:.85;
+  color:var(--brass);letter-spacing:-.03em;
+}
+.opener .promise{max-width:44ch;color:var(--muted);font-size:clamp(15px,1.5vw,19px)}
+
+/* HUD */
+.progress{
+  position:fixed;top:0;left:0;height:2px;background:var(--brass);width:0;z-index:20;
+  transition:width .12s linear;
+}
+@media (prefers-reduced-motion: reduce){.progress{transition:none}}
+.hud{
+  position:fixed;right:clamp(12px,2vw,26px);bottom:clamp(12px,2vh,24px);z-index:20;
+  display:flex;align-items:center;gap:4px;background:var(--surface);
+  border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 12px;
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.hud .count{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;letter-spacing:.06em;padding-right:6px;
+}
+.hud button{
+  border:1px solid var(--line);background:var(--surface-2);color:var(--text);
+  width:28px;height:28px;border-radius:999px;cursor:pointer;font-size:14px;line-height:1;
+  display:grid;place-items:center;font-family:"IBM Plex Mono",monospace;
+}
+.hud button:hover{border-color:var(--brass);color:var(--brass)}
+.hud button:focus-visible,a:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* Zachte intro per slide */
+.slide > *{opacity:1}
+@media (prefers-reduced-motion: no-preference){
+  /* Alleen verbergen als de scriptlaag draait — anders blijft de inhoud gewoon staan. */
+  .js .slide:not(.in) > *{opacity:0;transform:translateY(8px)}
+  .js .slide > *{transition:opacity .4s ease,transform .4s ease}
+  .js .slide.in > *:nth-child(2){transition-delay:.05s}
+  .js .slide.in > *:nth-child(3){transition-delay:.09s}
+  .js .slide.in > *:nth-child(n+4){transition-delay:.13s}
+}
+
+@media print{
+  html{scroll-snap-type:none}
+  .slide{min-height:auto;page-break-after:always;border-bottom:0}
+  .hud,.progress{display:none}
+}
+</style>
+
+<div class="progress" id="progress"></div>
+
+<!-- 1 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide cover">
+  <p class="kicker">Supply chain · werkwijze &amp; instellingen</p>
+  <h1>Van pakbon<br>tot kassa</h1>
+  <p class="sub">Hoe de kassa, de webshop en het portal samen tot één voorraadgetal komen — en welke knoppen van jullie zijn.</p>
+  <div class="pipe">
+    <div class="box"><b>SRS</b><span>magazijnvoorraad (WMS)</span></div>
+    <span class="arr">→</span>
+    <div class="box"><b>De core</b><span>grootboek van elke mutatie</span></div>
+    <span class="arr">→</span>
+    <div class="box"><b>Kassa &amp; webshop</b><span>rekenen met hetzelfde getal</span></div>
+  </div>
+  <div class="meta">
+    <span>GENTS omnichannel</span>
+    <span>19 augustus 2026</span>
+    <span>Bron: repo gentsnext</span>
+  </div>
+</section>
+
+<!-- 2 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Wat je hierna weet</span><span class="num"></span></header>
+  <h2>Vier delen</h2>
+  <div class="cols c4">
+    <div class="card">
+      <span class="label">Deel I</span>
+      <h3>Het fundament</h3>
+      <p>Waar het voorraadgetal vandaan komt, en waarom het maar één getal is.</p>
+    </div>
+    <div class="card">
+      <span class="label">Deel II</span>
+      <h3>De werkwijzen</h3>
+      <p>Ontvangen, herverdelen, tellen, weborders, apart houden.</p>
+    </div>
+    <div class="card">
+      <span class="label">Deel III</span>
+      <h3>Jullie knoppen</h3>
+      <p>Alles wat je zonder ontwikkelaar zelf kunt instellen — met de standaardwaarden.</p>
+    </div>
+    <div class="card">
+      <span class="label">Deel IV</span>
+      <h3>Ritme &amp; grenzen</h3>
+      <p>Wanneer wat synchroniseert, wat de dagstart is, en wat nog niet kan.</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Lezen als</span>
+    <p>De logica en de instellingen liggen vast in <strong>gentsnext</strong> (webshop + core). De schermen waarop je ze bedient — de kassa en het portal — leven in de andere twee repo's; schermnamen kunnen daar dus iets afwijken van de namen hier.</p>
+  </div>
+</section>
+
+<!-- 3 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide opener">
+  <span class="eyebrow">Deel I</span>
+  <p class="roman">I</p>
+  <h2>Het fundament</h2>
+  <p class="promise">Eén rekensom, één grootboek. Wie dat snapt, snapt elke melding die daarna volgt.</p>
+</section>
+
+<!-- 4 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel I · Het fundament</span><span class="num"></span></header>
+  <h2>Drie systemen, één getal</h2>
+  <p class="lede">SRS is sinds juni 2026 <strong>alleen nog WMS</strong>: het levert de magazijn- en winkelvoorraad. Er gaat géén weborder meer naar SRS terug. De gedeelde waarheid leeft in de core.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Levert de basis</span>
+      <h3>SRS</h3>
+      <p>De bruto fysieke voorraad per artikel per filiaal. Komt structureel binnen als volledige momentopname; een lege levering wordt geweigerd, zodat de site nooit leeggetrokken wordt.</p>
+    </div>
+    <div class="card">
+      <span class="label">Legt de actualiteit erop</span>
+      <h3>De core (gentsnext)</h3>
+      <p>Elke verkoop, retour, correctie, ontvangst en herverdeling wordt hier geboekt — direct, dus vóór SRS het gezien heeft.</p>
+    </div>
+    <div class="card">
+      <span class="label">Rekenen ermee</span>
+      <h3>Kassa &amp; webshop</h3>
+      <p>Beide lezen hetzelfde getal. Het laatste stuk kan dus maar één keer verkocht worden: online óf aan de balie.</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Waarom dit voor jullie telt</span>
+    <p>Een mutatie in de winkel is <strong>meteen</strong> zichtbaar voor de webshop. Je hoeft niet te wachten op de volgende SRS-sync — en je moet ook niet zelf gaan corrigeren omdat je "denkt" dat de sync het nog niet heeft.</p>
+  </div>
+</section>
+
+<!-- 5 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel I · Het fundament</span><span class="num"></span></header>
+  <h2>De rekensom</h2>
+  <p class="lede">Dit is het getal dat de kassa toont, waarop de webshop verkoopt en waarop de allocatie plant. Vier termen, meer niet.</p>
+  <div class="formula">
+    <span class="term"><b>beschikbaar</b><span>per winkel, per artikel</span></span>
+    <span class="op">=</span>
+    <span class="term"><b>SRS-baseline</b><span>wat het WMS zegt</span></span>
+    <span class="op">+</span>
+    <span class="term plus"><b>kassa-delta</b><span>verkopen, retouren, correcties, ontvangsten</span></span>
+    <span class="op">−</span>
+    <span class="term minus"><b>web-reservering</b><span>lopende weborders vanuit deze winkel</span></span>
+    <span class="op">−</span>
+    <span class="term minus"><b>veiligheidsvoorraad</b><span>de buffer die jullie instellen</span></span>
+  </div>
+  <div class="cols c2">
+    <ul class="ticks">
+      <li><strong>Nooit negatief.</strong> De uitkomst wordt afgekapt op 0 — liever te weinig tonen dan te veel verkopen.</li>
+      <li><strong>Onderweg telt niet mee.</strong> Een zending die nog rijdt staat nergens in dit getal (wel apart zichtbaar als "komt eraan").</li>
+    </ul>
+    <ul class="ticks">
+      <li><strong>De kassa ziet de uitsplitsing.</strong> Per maat: baseline, kassa-delta, web-reservering, buffer en het nettogetal — inclusief andere filialen en het magazijn.</li>
+      <li><strong>Zodra SRS een mutatie zelf verwerkt heeft</strong>, valt die bij de volgende sync uit de delta. Zo telt niets dubbel.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 6 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel I · Het fundament</span><span class="num"></span></header>
+  <h2>Het grootboek: elke mutatie is een regel</h2>
+  <p class="lede">De core is <strong>append-only</strong>: er wordt nooit een getal overschreven, er komt een regel bij. Daardoor is elk verschil naderhand te herleiden tot wie, wat, waar en waarom.</p>
+  <div class="scrollx">
+    <table>
+      <thead><tr><th>Kanaal</th><th>Wanneer</th><th>Richting</th><th>Kenmerk</th></tr></thead>
+      <tbody>
+        <tr><td><strong>pos</strong></td><td>kassaverkoop, retour, annulering</td><td class="n">− / +</td><td class="n">bon-id</td></tr>
+        <tr><td><strong>web</strong></td><td>webverkoop en vrijgave</td><td class="n">− / +</td><td class="n">ordernummer</td></tr>
+        <tr><td><strong>inbound</strong></td><td>goederenontvangst afgesloten</td><td class="n">+</td><td class="n">RCV-&lt;zending&gt;</td></tr>
+        <tr><td><strong>transfer</strong></td><td>herverdeling: eraf bij de bronwinkel</td><td class="n">−</td><td class="n">XFER-OUT-&lt;zending&gt;</td></tr>
+        <tr><td><strong>correction</strong></td><td>inventarisatieverschil, fantoomcorrectie</td><td class="n">− / +</td><td class="n">INV-&lt;telling&gt;</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <span class="label">De belangrijkste eigenschap</span>
+    <p>Elke boeking is uniek op <strong>kenmerk + kanaal + artikel</strong>. Twee keer afsluiten, een offline kassa die z'n wachtrij nog eens verstuurt, een dubbele klik op "ontvangen": het boekt <strong>nooit</strong> dubbel. Je hoeft dus nooit "voor de zekerheid" te corrigeren.</p>
+  </div>
+</section>
+
+<!-- 7 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel I · Het fundament</span><span class="num"></span></header>
+  <h2>Waar je het doet</h2>
+  <p class="lede">Grofweg: de winkelvloer werkt in de kassa, jullie werken in het portal. Beide praten met dezelfde core.</p>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Kassa · winkelvloer</span>
+      <h3>Handelingen</h3>
+      <ul class="ticks">
+        <li>Voorraad opzoeken (eigen winkel, magazijn, andere filialen)</li>
+        <li>Zending ontvangen: scannen, schade melden, afsluiten</li>
+        <li>Inventarisatie tellen en afsluiten</li>
+        <li>Herverdeling versturen en pickbon scannen</li>
+        <li>Weborders picken, afhaalorders afhandelen</li>
+        <li>Artikel apart houden voor een klant, paspop markeren</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="label">Portal · supply chain</span>
+      <h3>Handelingen</h3>
+      <ul class="ticks">
+        <li>Ontvangst-afwijkingen afhandelen + het ontvangstdashboard</li>
+        <li>Inventarisaties klaarzetten en verschillen goedkeuren</li>
+        <li>Niet-leverbaar-meldingen en de miss-rate per winkel</li>
+        <li>Voorraaddrift-monitor</li>
+        <li>Terug-op-voorraad-aanmeldingen</li>
+        <li>Instellingen: buffers, steekproef, ritten, verzendvenster</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 8 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide opener">
+  <span class="eyebrow">Deel II</span>
+  <p class="roman">II</p>
+  <h2>De werkwijzen</h2>
+  <p class="promise">Vijf stromen die allemaal in hetzelfde grootboek uitkomen: inkomend, herverdeling, telling, weborder, apart houden.</p>
+</section>
+
+<!-- 9 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Inkomend</span><span class="num"></span></header>
+  <h2>Scan-to-receive: de zending als spoor</h2>
+  <p class="lede">Een zending — replenishment uit het magazijn, een leverancier of een andere winkel — bestaat als <strong>pakbon met verwachte regels</strong> voordat de doos aankomt. De status vertelt precies waar hij is.</p>
+  <div class="chain">
+    <div class="step"><span class="k">1 · gepickt</span><span class="t">picked</span><span class="d">Klaargezet bij de bron. Telt nergens mee.</span></div>
+    <div class="step"><span class="k">2 · onderweg</span><span class="t">in_transit</span><span class="d">Verstuurd. Zichtbaar als "komt eraan", niet als voorraad.</span></div>
+    <div class="step"><span class="k">3 · bezig</span><span class="t">receiving</span><span class="d">Winkel scant. Meerdere mensen tegelijk mag.</span></div>
+    <div class="step done"><span class="k">4 · ontvangen</span><span class="t">received</span><span class="d">Pas hier wordt voorraad bijgeboekt.</span></div>
+    <div class="step"><span class="k">5 · afgesloten</span><span class="t">closed</span><span class="d">Administratief dicht; voedt het manco-profiel.</span></div>
+  </div>
+  <div class="cols c2">
+    <ul class="ticks">
+      <li><strong>Scannen kan op alles:</strong> barcode, sku óf het SRS-artikelnummer. De pakbonregel en de scan komen altijd op dezelfde regel uit.</li>
+      <li><strong>Te veel of niet besteld?</strong> Die scan komt als eigen regel binnen en wordt een afwijking.</li>
+    </ul>
+    <ul class="ticks">
+      <li><strong>Onderweg = fantoomvrij.</strong> Voorraad die nog rijdt is bij niemand beschikbaar: niet bij de bron (daar is hij al af) en niet bij de ontvanger.</li>
+      <li><strong>Per ongeluk gescand?</strong> Regel verwijderen kan tot het afsluiten.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 10 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Inkomend</span><span class="num"></span></header>
+  <h2>Wat er precies geboekt wordt</h2>
+  <p class="lede">Bij het afsluiten telt alleen wat er écht ligt. Het ontbrekende stuk wordt niet geboekt — er ontstaat dus nooit voorraad die er niet is.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Normaal afsluiten</span>
+      <h3>Gescand − gemeld</h3>
+      <p>Per regel wordt <strong>het gescande aantal minus de schademelding</strong> bijgeboekt. Wat je niet scande, komt er niet bij.</p>
+    </div>
+    <div class="card">
+      <span class="label">Schade of fout artikel</span>
+      <h3>Quarantaine</h3>
+      <p>Markeer (een deel van) een regel als <span class="tag neg">DAMAGED</span> <span class="tag neg">WRONG_ITEM</span> <span class="tag neg">QUALITY</span> <span class="tag neg">MISLABELED</span>. Die stuks worden <strong>niet</strong> als verkoopbaar geboekt en leveren een afwijking op.</p>
+    </div>
+    <div class="card">
+      <span class="label">Geen tijd om te tellen</span>
+      <h3>Alles binnenmelden</h3>
+      <p>Boekt de <strong>verwachte</strong> aantallen zonder telling — voor een drukke winkel. Bewust géén afwijkingen: er is niet gemeten, dus er is geen manco-signaal.</p>
+    </div>
+  </div>
+  <div class="note stop">
+    <span class="label">Let op bij "alles binnenmelden"</span>
+    <p>Je vertrouwt dan de pick van de bron. Een tekort komt pas bij de volgende telling boven water — en dan zonder claimbewijs richting de leverancier. Gebruik het bewust, niet als gewoonte.</p>
+  </div>
+</section>
+
+<!-- 11 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Inkomend</span><span class="num"></span></header>
+  <h2>Steekproef in plaats van alles tellen</h2>
+  <p class="lede">Het systeem bepaalt per zending of er 100% geteld moet worden of dat een steekproef volstaat — op basis van de eigen ontvangsthistorie. Het plan wordt bij openen <strong>bevroren</strong>, zodat de winkel niet halverwege een ander lijstje krijgt.</p>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Altijd 100% tellen bij</span>
+      <ul class="ticks">
+        <li><strong>Kleine partij</strong> — tot en met 20 stuks (tellen kost dan niets)</li>
+        <li><strong>Nieuwe bron</strong> — minder dan 3 ontvangsten historie</li>
+        <li><strong>Bron met manco-historie</strong> — vanaf 10% afwijkende regels</li>
+        <li><strong>Hoge waarde</strong> — een stukprijs vanaf € 150 (de pakken)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="label">Anders: gerichte steekproef</span>
+      <ul class="ticks">
+        <li><strong>Verplicht mee:</strong> artikelen die eerder manco kwamen (≥ 2 keer én ≥ 15% van de keren, binnen 180 dagen)</li>
+        <li><strong>Aangevuld</strong> met de duurste regels tot de steekproefomvang gehaald is</li>
+        <li><strong>Betrouwbare bron</strong> (≤ 2% manco en ≥ 10 schone ontvangsten) → steekproef × 0,6</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Accepteren of afkeuren</span>
+    <p>Bij te veel afwijkende regels in de steekproef wordt de levering <strong>afgekeurd</strong>: er wordt nog niets geboekt en de winkel krijgt de opdracht de hele levering te tellen. Wordt hij geaccepteerd, dan gelden de niet-getelde regels als "verwacht = ontvangen" — en tellen die dus ook niet mee als afwijking.</p>
+  </div>
+</section>
+
+<!-- 12 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Inkomend</span><span class="num"></span></header>
+  <h2>Afwijkingen: van melding tot afhandeling</h2>
+  <p class="lede">Bij het afsluiten wordt elke geverifieerde regel die niet klopte vastgelegd. Dat is tegelijk jullie werkvoorraad én het geheugen waarmee de volgende steekproef scherper wordt.</p>
+  <div class="cols c21">
+    <div class="card">
+      <span class="label">Codes</span>
+      <div class="tagrow">
+        <span class="tag neg">SHORT — te weinig</span>
+        <span class="tag warn">OVER — te veel</span>
+        <span class="tag warn">NOT_ORDERED — niet besteld</span>
+        <span class="tag neg">DAMAGED — beschadigd</span>
+        <span class="tag neg">WRONG_ITEM — verkeerd artikel</span>
+        <span class="tag neg">QUALITY — kwaliteit</span>
+        <span class="tag neg">MISLABELED — verkeerd gelabeld</span>
+      </div>
+      <p>Per regel wordt vastgelegd: bron, winkel, artikel, verwacht, geteld en het verschil.</p>
+    </div>
+    <div class="card">
+      <span class="label">Afhandelen in het portal</span>
+      <ul class="ticks">
+        <li><strong>open</strong> → nog te beoordelen</li>
+        <li><strong>claim ingediend</strong> → bij leverancier of magazijn</li>
+        <li><strong>gecrediteerd</strong> / <strong>afgeschreven</strong> / <strong>opgelost</strong></li>
+      </ul>
+      <p>Met notitie en naam van wie afhandelde.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 13 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Inkomend</span><span class="num"></span></header>
+  <h2>Het ontvangstdashboard</h2>
+  <p class="lede">Vier meetpunten over de laatste 90 dagen. Ze beantwoorden de vraag die er echt toe doet: <strong>op wie kunnen we bouwen?</strong></p>
+  <div class="cols c4">
+    <div class="card">
+      <span class="label">Nauwkeurigheid per bron</span>
+      <p class="big">%</p>
+      <p>Aandeel geverifieerde regels waar geteld = verwacht. Voedt ook automatisch het steekproefregime van die bron.</p>
+    </div>
+    <div class="card">
+      <span class="label">Nauwkeurigheid per winkel</span>
+      <p class="big">%</p>
+      <p>Zelfde meting, maar dan op de ontvangende kant — verschil tussen winkels wijst op telgedrag, niet op de leverancier.</p>
+    </div>
+    <div class="card">
+      <span class="label">Dock-to-stock</span>
+      <p class="big">uren</p>
+      <p>Gemiddeld tussen "onderweg" en "ontvangen", per bron. Hier zie je waar dozen blijven staan.</p>
+    </div>
+    <div class="card">
+      <span class="label">Open afwijkingen</span>
+      <p class="big">#</p>
+      <p>De werkvoorraad. Ouder dan een week = geld dat je niet meer terugclaimt.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 14 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Herverdeling</span><span class="num"></span></header>
+  <h2>Winkel naar winkel</h2>
+  <p class="lede">Een herverdeling is een zending met een extra stap vooraf: de voorraad gaat er meteen af bij de bron, want de stuks zijn fysiek weg.</p>
+  <div class="chain">
+    <div class="step"><span class="k">1</span><span class="t">Aanmaken</span><span class="d">Bron kiest artikelen en doelwinkel.</span></div>
+    <div class="step stop"><span class="k">2 · poort</span><span class="t">Voorraadtoets</span><span class="d">Onvoldoende fysiek aanwezig? Geweigerd, met de tekorten erbij.</span></div>
+    <div class="step"><span class="k">3</span><span class="t">Eraf bij de bron</span><span class="d">Direct afgeboekt — geen dubbeltelling.</span></div>
+    <div class="step"><span class="k">4</span><span class="t">Pickbon printen</span><span class="d">Met scanbare barcode, via de printerwachtrij van die winkel.</span></div>
+    <div class="step"><span class="k">5</span><span class="t">Scan = onderweg</span><span class="d">Bron scant de bon; status springt naar onderweg.</span></div>
+    <div class="step done"><span class="k">6</span><span class="t">Ontvangen</span><span class="d">Doelwinkel scant en boekt bij — gewone ontvangstflow.</span></div>
+  </div>
+  <div class="note">
+    <span class="label">Waarom de poort er zit</span>
+    <p>Zonder toets zou de bronwinkel negatief kunnen komen te staan en zou de doelwinkel voorraad krijgen die nooit bestond. De toets rekent met de <strong>fysiek aanwezige</strong> stuks — de veiligheidsbuffer telt hier bewust niet mee, want die is bedoeld tegen oververkoop, niet tegen verplaatsen.</p>
+  </div>
+</section>
+
+<!-- 15 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Herverdeling</span><span class="num"></span></header>
+  <h2>Rit of DHL?</h2>
+  <p class="lede">Bij het versturen krijgt de winkel een advies, gebaseerd op de rittenschema's die jullie beheren. Geen schema ingevuld = altijd DHL.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Advies: rit</span>
+      <h3>Gratis, vaste dag</h3>
+      <p>Bron én doel liggen op dezelfde rit, en die vertrekt binnen de wachttijd die jullie instellen (standaard 4 dagen).</p>
+    </div>
+    <div class="card">
+      <span class="label">Advies: DHL</span>
+      <h3>€ 7,00, morgen binnen</h3>
+      <p>Geen gedeelde rit, óf de eerstvolgende rit duurt te lang. Bedrag is instelbaar.</p>
+    </div>
+    <div class="card">
+      <span class="label">Spoed aangevinkt</span>
+      <h3>Altijd DHL</h3>
+      <p>Snelheid wint; het advies rekent dan niet meer met ritten.</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Advies, geen dwang</span>
+    <p>De winkel mag ervan afwijken. De gekozen methode en de geplande ritdatum blijven wel op de zending staan — dus achteraf is te zien hoe vaak er duur verstuurd wordt terwijl er een rit reed.</p>
+  </div>
+</section>
+
+<!-- 16 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Inventarisatie</span><span class="num"></span></header>
+  <h2>Tellen in vier stappen</h2>
+  <p class="lede">Jullie zetten klaar, de winkel telt, jullie keuren goed. Pas bij goedkeuren wordt er iets aan de voorraad veranderd.</p>
+  <div class="chain">
+    <div class="step"><span class="k">1 · supply chain</span><span class="t">Klaarzetten</span><span class="d">Scope: alles, een productgroep, een lijst artikelen of een sectie. De verwachte stand wordt op dat moment vastgelegd.</span></div>
+    <div class="step"><span class="k">2 · winkel</span><span class="t">Tellen</span><span class="d">Scannen met de handscanner; per artikel meteen het verschil met de systeemstand.</span></div>
+    <div class="step"><span class="k">3 · winkel</span><span class="t">Afsluiten</span><span class="d">Niet-getelde artikelen uit de scope komen op nul — behalve wat apart ligt of op de paspop staat.</span></div>
+    <div class="step done"><span class="k">4 · supply chain</span><span class="t">Verwerken</span><span class="d">Verschillen worden als correctie geboekt. Eén keer — nog eens verwerken doet niets.</span></div>
+  </div>
+  <div class="cols c2">
+    <ul class="ticks">
+      <li><strong>Apart gehouden en paspopstuks tellen mee.</strong> Ze liggen er fysiek, dus ze worden niet weggeboekt bij het nul-zetten.</li>
+      <li><strong>Deelinventarisatie</strong> op sectie of productgroep is een volwaardige telling — geen half werk.</li>
+    </ul>
+    <ul class="ticks">
+      <li><strong>Zoeken over alle tellingen:</strong> "was dit artikel aanwezig op 3 juni in Den Bosch?" — met aantal, verwacht en verschil.</li>
+      <li><strong>Overzicht per sessie:</strong> aantal regels, geteld, overschot, tekort en het totale verschil.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 17 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Weborders</span><span class="num"></span></header>
+  <h2>De webshop bestelt bij de winkel</h2>
+  <p class="lede">Elke betaalde weborder krijgt een plan: welk filiaal levert welke regel. Dat plan bepaalt ook wat er bij jullie in de winkel gereserveerd staat.</p>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Zo kiest de allocatie</span>
+      <ul class="ticks">
+        <li><strong>Compleet uit één locatie</strong> — scheelt verzendkosten</li>
+        <li><strong>Magazijn eerst</strong> — winkelvoorraad bewaren we voor de winkelklant</li>
+        <li><strong>Anders zo min mogelijk splitsen</strong>, en dan de locatie met de meeste voorraad</li>
+        <li><strong>Open en op tijd</strong> — gesloten filiaal, feestdag of na de cutoff schuift naar later</li>
+        <li><strong>Pak-sets blijven bij elkaar</strong>; Belgische klanten bij voorkeur uit Antwerpen</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="label">Op de winkelvloer</span>
+      <ul class="ticks">
+        <li>De winkel ziet zijn deel in de kassa en meldt het <strong>gereed</strong> na het picken</li>
+        <li>Bij een order uit meerdere winkels komt het <strong>verzendlabel pas vrij als alle winkeldelen gereed zijn</strong> — geen half verscheepte order</li>
+        <li>Afhaalorders (click &amp; collect) lopen via dezelfde lijst</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 18 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Weborders</span><span class="num"></span></header>
+  <h2>"Ik kan het niet vinden"</h2>
+  <p class="lede">De belangrijkste knop van de winkelvloer voor jullie datakwaliteit. Eén melding zet drie dingen in gang.</p>
+  <div class="chain">
+    <div class="step"><span class="k">1</span><span class="t">Voorraad corrigeren</span><span class="d">Het fantoomstuk gaat er in die winkel af, zodat het niet nóg eens verkocht of gerouteerd wordt.</span></div>
+    <div class="step"><span class="k">2</span><span class="t">Opnieuw plannen</span><span class="d">De order wordt herverdeeld met die winkel uitgesloten: magazijn eerst, anders een andere winkel.</span></div>
+    <div class="step"><span class="k">3</span><span class="t">Vastleggen per winkel</span><span class="d">De miss-rate per filiaal — een hard betrouwbaarheidssignaal.</span></div>
+  </div>
+  <div class="note stop">
+    <span class="label">Als herplannen niet lukt</span>
+    <p>Dan komt de melding bij jullie terecht om de klant heel te maken: annuleren en terugbetalen, of — als een deel al verstuurd is — een retour voor dat deel. Of de klant daarbij bericht met alternatieven krijgt, is een instelling (zie deel III).</p>
+  </div>
+</section>
+
+<!-- 19 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Apart houden</span><span class="num"></span></header>
+  <h2>Apart houden en paspop</h2>
+  <p class="lede">Twee handelingen die er sterk op lijken maar precies tegengesteld werken. Het verschil zit in de vraag: mag iemand anders dit stuk nog verkopen?</p>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Reservering · blokkeert</span>
+      <h3>Apart voor een klant</h3>
+      <ul class="ticks">
+        <li>Houdt het stuk <strong>hard</strong> vast — niemand anders verkoopt het, online noch aan de balie</li>
+        <li>Verloopt vanzelf na de ingestelde geldigheidsduur; de voorraad valt dan weer vrij</li>
+        <li>Rekent de klant online af, dan wordt het een betaalde afhaalorder</li>
+        <li>Telt mee bij de inventarisatie: het ligt er immers</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="label">Paspop · blokkeert niet</span>
+      <h3>Etalage of showstuk</h3>
+      <ul class="ticks">
+        <li>Blijft gewoon <strong>verkoopbaar</strong> — dit is puur zichtbaarheid</li>
+        <li>Eén regel per winkel en artikel, met aantal en notitie</li>
+        <li>Telt mee bij de inventarisatie, zodat een showstuk niet als "kwijt" wordt weggeboekt</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 20 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel II · Bescherming</span><span class="num"></span></header>
+  <h2>Waarom het laatste stuk niet dubbel verkocht wordt</h2>
+  <p class="lede">Twee kanalen die tegelijk het laatste stuk willen: dat is precies het scenario waar de core voor gebouwd is.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Web · hard geblokkeerd</span>
+      <h3>Claim bij het afrekenen</h3>
+      <p>De webshop claimt de stuks in één ondeelbare handeling. Twee klanten die op dezelfde seconde afrekenen: er kan er maar één winnen. De claim vervalt vanzelf bij een mislukte of afgebroken betaling.</p>
+    </div>
+    <div class="card">
+      <span class="label">Winkel · gewaarschuwd</span>
+      <h3>De balie wint</h3>
+      <p>Ligt een artikel in het mandje dat online gereserveerd is, dan <strong>waarschuwt</strong> de kassa de verkoper — maar blokkeert niet. De klant staat er fysiek; die verkoop mag doorgaan.</p>
+    </div>
+    <div class="card">
+      <span class="label">Controle</span>
+      <h3>Driftmonitor</h3>
+      <p>Een controle die elke 10 minuten kijkt of de reserveringsteller nog klopt met de werkelijke reserveringen, en bijstelt. Het portal toont de historie: hoe vaak en hoeveel er weggelopen is.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 21 ────────────────────────────────────────────────────────────────── -->
+<section class="slide opener">
+  <span class="eyebrow">Deel III</span>
+  <p class="roman">III</p>
+  <h2>Jullie knoppen</h2>
+  <p class="promise">Alles hieronder staat in de tool en niet in de techniek. Aanpassen kan zonder ontwikkelaar en zonder release.</p>
+</section>
+
+<!-- 22 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel III · Instellingen</span><span class="num"></span></header>
+  <h2>Voorraadbescherming</h2>
+  <p class="lede">De buffer die voorkomt dat de webshop het laatste stuk uit het rek verkoopt. <strong>Per artikel</strong> — dus over de hele maatboog en over alle winkels samen, niet per maat per filiaal.</p>
+  <div class="scrollx">
+    <table>
+      <thead><tr><th>Instelling</th><th>Standaard</th><th>Wat het doet</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Veiligheidsvoorraad winkels</strong></td><td class="n">2</td><td>Zoveel stuks per artikel blijven online onverkoopbaar. Het budget gaat naar de dunste regels eerst: de winkel met nog één stuk wordt beschermd, de diepte blijft verkoopbaar.<small>Ooit werkte dit per maat per filiaal — dat hield 80% van de winkelvoorraad vast. Nu is het één budget per artikel.</small></td></tr>
+        <tr><td><strong>Veiligheidsvoorraad magazijn</strong></td><td class="n">0</td><td>Zelfde principe voor de magazijnen. Nul, want daar is de telling betrouwbaar.</td></tr>
+        <tr><td><strong>Marge winkelkanaal</strong></td><td class="n">0</td><td>Aparte buffer voor kassa en winkels onderling. Nul: een verkoper heeft het artikel in z'n handen.</td></tr>
+        <tr><td><strong>Onderbevoorrade winkels beschermen</strong></td><td class="n">aan</td><td>Een winkel die zelf onder z'n ideaalstand zit, hoeft geen weborders te leveren.</td></tr>
+        <tr><td><strong>Overstock eerst versturen</strong></td><td class="n">uit</td><td>Aan: winkels met een flink overschot leveren weborders vóór het magazijn — trage schapvoorraad eerst weg. Met een drempel in stuks.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <span class="label">Effect om te onthouden</span>
+    <p>Deze buffer verlaagt wat de <strong>webshop</strong> mag verkopen. Hij verlaagt níet wat de kassa mag verkopen en blokkeert geen herverdeling — daar wordt met de fysieke stand gerekend.</p>
+  </div>
+</section>
+
+<!-- 23 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel III · Instellingen</span><span class="num"></span></header>
+  <h2>Het steekproefregime</h2>
+  <p class="lede">De knoppen achter slide 11. Alles heeft een veilige standaardwaarde; je hoeft niets in te vullen om te kunnen werken.</p>
+  <div class="scrollx">
+    <table>
+      <thead><tr><th>Knop</th><th>Standaard</th><th>Draai eraan als…</th></tr></thead>
+      <tbody>
+        <tr><td>Acceptatiegrens (AQL)</td><td class="n">2,5%</td><td>…je strenger of soepeler wilt accepteren binnen de steekproef</td></tr>
+        <tr><td>Minimale steekproef</td><td class="n">8 regels</td><td>…kleine steekproeven te weinig zeggen</td></tr>
+        <tr><td>Kleine partij → 100%</td><td class="n">20 stuks</td><td>…kleine zendingen te vaak volledig geteld worden</td></tr>
+        <tr><td>Hoge waarde → 100%</td><td class="n">€ 150</td><td>…de grens tussen "pak" en "accessoire" verschuift</td></tr>
+        <tr><td>Historievenster manco</td><td class="n">180 dagen</td><td>…een leverancier zich verbeterd heeft en dat sneller mag tellen</td></tr>
+        <tr><td>Probleemartikel vanaf</td><td class="n">15% en 2 keer</td><td>…te veel of te weinig artikelen verplicht meegeteld worden</td></tr>
+        <tr><td>Bron streng vanaf</td><td class="n">10% manco</td><td>…een bron te snel of te laat op 100% belandt</td></tr>
+        <tr><td>Bron soepel vanaf</td><td class="n">2% en 10 schone</td><td>…je betrouwbare bronnen eerder wilt belonen</td></tr>
+        <tr><td>Nieuwe bron tot</td><td class="n">3 ontvangsten</td><td>…je nieuwe leveranciers langer wilt volgen</td></tr>
+        <tr><td>Korting op de steekproef</td><td class="n">× 0,6</td><td>…de beloning voor een betrouwbare bron groter of kleiner moet</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 24 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel III · Instellingen</span><span class="num"></span></header>
+  <h2>Ritten en DHL</h2>
+  <p class="lede">Het adviesmodel voor herverdelingen kent alleen wat jullie invullen. Leeg = altijd DHL, en dat kost per zending geld.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Per rit</span>
+      <h3>Naam, winkels, dagen</h3>
+      <p>Bijvoorbeeld "Randstad-rit" langs vier filialen op dinsdag en donderdag. Een winkel mag op meerdere ritten staan; het advies kiest de eerstvolgende.</p>
+    </div>
+    <div class="card">
+      <span class="label">Maximale wachttijd</span>
+      <p class="big">4 dagen</p>
+      <p>Duurt het langer voor de rit vertrekt, dan adviseert het systeem DHL.</p>
+    </div>
+    <div class="card">
+      <span class="label">DHL-kosten</span>
+      <p class="big">€ 7,00</p>
+      <p>Wordt in het advies getoond, zodat de winkel de afweging ziet in plaats van gokt.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 25 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel III · Instellingen</span><span class="num"></span></header>
+  <h2>Het verzendvenster</h2>
+  <p class="lede">Deze knoppen bepalen wat de site aan de klant belooft én welk filiaal een order krijgt. Ze zijn dus even operationeel als commercieel.</p>
+  <div class="scrollx">
+    <table>
+      <thead><tr><th>Knop</th><th>Standaard</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>Cutoff magazijn / winkel</td><td class="n">17:00</td><td>Laatste moment dat een order dezelfde dag nog mee kan met de vervoerder</td></tr>
+        <tr><td>Overdrachtsmarge winkel</td><td class="n">0 min</td><td>Minuten vóór sluiting die je nodig hebt voor inpakken en overdracht</td></tr>
+        <tr><td>Verzenden op zondag</td><td class="n">uit</td><td>Aan zetten belooft verzending op een dag dat er niets vertrekt</td></tr>
+        <tr><td>Winkels verzenden op zaterdag</td><td class="n">aan</td><td>Winkels zijn open en vervoerders bezorgen ma–za</td></tr>
+        <tr><td>Gepauzeerde filialen</td><td class="n">geen</td><td><strong>De noodrem.</strong> Verbouwing, vakantiesluiting, onderbezetting → de allocatie slaat die winkel over. Direct, zonder release.</td></tr>
+        <tr><td>Extra sluitingsdagen</td><td class="n">geen</td><td>Bedrijfssluiting, personeelsdag, inventarisatiedag — geldt voor alle filialen</td></tr>
+        <tr><td>Levertijd standaard</td><td class="n">2–3 werkdagen</td><td>Plus transittijd magazijn en een extra dag bij levering uit de winkel</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note stop">
+    <span class="label">Nog niet zelf te zetten</span>
+    <p>Een <strong>cutoff per filiaal</strong> en een <strong>cutoff per weekdag</strong> bestaan wel in de instellingen (het magazijn staat op vrijdag op 16:00), maar de instellingenpagina slaat ze nog niet op. Wil je die wijzigen, dan is dat nu nog een verzoek aan de ontwikkelaar.</p>
+  </div>
+</section>
+
+<!-- 26 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel III · Instellingen</span><span class="num"></span></header>
+  <h2>Meldingen en klantflows</h2>
+  <p class="lede">Wat er automatisch naar buiten gaat als voorraad iets doet — en naar wie de interne signalen gaan.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Terug op voorraad</span>
+      <h3>Klant aanmelden</h3>
+      <p>Aan/uit, per kanaal (mail, WhatsApp), en of iemand na een wachttijd (standaard 14 dagen) een <strong>alternatief op maat</strong> krijgt. Het portal toont de aanmeldingen — dat is jullie vraagsignaal per maat.</p>
+    </div>
+    <div class="card">
+      <span class="label">Niet leverbaar</span>
+      <h3>Annuleringsbericht</h3>
+      <p>Krijgt de klant bericht bij een terugbetaling, en tonen we daarin alternatieven (1 tot 6)? Uit = stille terugbetaling.</p>
+    </div>
+    <div class="card">
+      <span class="label">Interne bewaking</span>
+      <h3>Wie krijgt de mail</h3>
+      <p>De nachtelijke kassabon-controle mailt alléén als er iets is. Staat hier niemand, dan blijft een gemist bonnetje onopgemerkt. Ook: een notificatie-adres per winkel.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 27 ────────────────────────────────────────────────────────────────── -->
+<section class="slide opener">
+  <span class="eyebrow">Deel IV</span>
+  <p class="roman">IV</p>
+  <h2>Ritme &amp; grenzen</h2>
+  <p class="promise">Wanneer draait wat, wat check je 's ochtends, en waar houdt het systeem vandaag op.</p>
+</section>
+
+<!-- 28 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel IV · Ritme</span><span class="num"></span></header>
+  <h2>Wat draait er wanneer</h2>
+  <p class="lede">Handig om te weten voordat je concludeert dat "het systeem het niet heeft opgepakt".</p>
+  <div class="scrollx">
+    <table>
+      <thead><tr><th>Ritme</th><th>Wat</th><th>Waarom het jou raakt</th></tr></thead>
+      <tbody>
+        <tr><td class="n">meermaals p/d</td><td><strong>SRS-baseline naar de core</strong></td><td>De volledige stand wordt in één keer omgezet; een half doorgekomen levering is nooit zichtbaar en een lege levering wordt geweigerd</td></tr>
+        <tr><td class="n">elke 5 min</td><td><strong>SRS-mutaties (schaduw)</strong></td><td>Loopt mee om te bewijzen dat het klopt; nog niemand leest ervan — dus geen effect op wat je ziet</td></tr>
+        <tr><td class="n">elke 10 min</td><td><strong>Reserveringen opruimen + driftcontrole</strong></td><td>Verlopen webclaims vallen vrij; de teller wordt herijkt</td></tr>
+        <tr><td class="n">elke 4 uur</td><td><strong>Terug-op-voorraad</strong></td><td>Klanten met een melding krijgen bericht zodra hun maat er weer is</td></tr>
+        <tr><td class="n">elke 4 uur</td><td><strong>Catalogussynchronisatie</strong></td><td>Nieuwe of gewijzigde artikelen komen door</td></tr>
+        <tr><td class="n">05:30</td><td><strong>Kassabon-controle</strong></td><td>Vijf controles op de bonnen van gisteren; mailt alleen als er iets mis is</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <span class="label">De regel eronder</span>
+    <p>Jullie mutaties tellen <strong>direct</strong> mee — je wacht nooit op een sync. De sync haalt de mutatie later in, en op dat moment verdwijnt hij uit de bijtelling. Zie je een getal even "twee kanten op bewegen", dan is dat deze wissel, geen fout.</p>
+  </div>
+</section>
+
+<!-- 29 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel IV · Ritme</span><span class="num"></span></header>
+  <h2>De dagstart</h2>
+  <p class="lede">Zes checks in het portal. Samen ongeveer een kwartier, en ze vangen bijna alles af voordat een winkel erover belt.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">01</span>
+      <h3>Open afwijkingen</h3>
+      <p>Ontvangst → alles ouder dan een week: claim indienen of afschrijven. Oude afwijkingen zijn geld dat je niet meer terughaalt.</p>
+    </div>
+    <div class="card">
+      <span class="label">02</span>
+      <h3>Zendingen onderweg</h3>
+      <p>Langer dan twee dagen onderweg? Navragen. Onderweg telt nergens mee, dus dat is voorraad die niemand kan verkopen.</p>
+    </div>
+    <div class="card">
+      <span class="label">03</span>
+      <h3>Niet-leverbaar</h3>
+      <p>Openstaande meldingen afhandelen en de miss-rate per winkel bekijken: één filiaal dat eruit springt, is een telprobleem.</p>
+    </div>
+    <div class="card">
+      <span class="label">04</span>
+      <h3>Tellingen afgerond</h3>
+      <p>Sessies met status "afgesloten" beoordelen en verwerken — anders blijft het verschil in de kop van de winkel zitten en niet in het systeem.</p>
+    </div>
+    <div class="card">
+      <span class="label">05</span>
+      <h3>Driftmonitor</h3>
+      <p>Staat hij op nul? Dan klopt de reserveringsadministratie. Piek gezien? Meld het, dat is een technisch signaal.</p>
+    </div>
+    <div class="card">
+      <span class="label">06</span>
+      <h3>Terug-op-voorraad</h3>
+      <p>De top van de aanmeldingen is je vraagsignaal per maat: bijbestellen of herverdelen.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 30 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel IV · Grenzen</span><span class="num"></span></header>
+  <h2>Wat vandaag nog niet kan</h2>
+  <p class="lede">Eerlijk kaartje, zodat niemand op iets wacht dat er niet is.</p>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Bewust zo</span>
+      <ul class="ticks">
+        <li><strong>Geen weborders terug naar SRS.</strong> SRS is alleen nog WMS; de webverkoop leeft in de core.</li>
+        <li><strong>Catalogus en prijzen zijn nog twee bronnen:</strong> de kassa werkt met SRS-artikeldata, de webshop met de eigen catalogus. De <em>voorraad</em> is wél gedeeld.</li>
+        <li><strong>Instellingen horen in de tool</strong>, niet in de techniek. Alleen wachtwoorden en sleutels staan buiten je bereik.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="label">Nog op de rol</span>
+      <ul class="ticks">
+        <li><strong>Pinnen in de kassa</strong> — wacht op de keuze van terminal en betaalpartij</li>
+        <li><strong>Herverdelingen richting SRS</strong> — het moment waarop SRS de ontvangst zelf boekt, wordt vóór livegang tegen de echte SRS-flow gevalideerd</li>
+        <li><strong>De oude voorraadopslag uitfaseren</strong> — draait nu nog als terugvaloptie naast de core</li>
+        <li><strong>Cutoff per filiaal en per weekdag</strong> in de instellingenpagina</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 31 ────────────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Slot</span><span class="num"></span></header>
+  <h2>Vier zinnen om te onthouden</h2>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Eén</span>
+      <p style="font-size:16px"><strong>SRS levert de basis, de core legt er realtime de winkel- en webmutaties overheen.</strong> Kassa en webshop rekenen met exact hetzelfde getal.</p>
+    </div>
+    <div class="card">
+      <span class="label">Twee</span>
+      <p style="font-size:16px"><strong>Voorraad ontstaat pas bij ontvangst — en alleen wat geteld is.</strong> Onderweg telt nergens mee, dus er is geen fantoomvoorraad.</p>
+    </div>
+    <div class="card">
+      <span class="label">Drie</span>
+      <p style="font-size:16px"><strong>Elke boeking heeft een kenmerk en boekt maar één keer.</strong> Dubbel scannen, opnieuw afsluiten of een offline kassa die synchroniseert kan geen schade aanrichten.</p>
+    </div>
+    <div class="card">
+      <span class="label">Vier</span>
+      <p style="font-size:16px"><strong>De knoppen staan in de tool.</strong> Buffer, steekproef, ritten, cutoffs en pauzestand zijn van jullie — geen release nodig.</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Naslag</span>
+    <p>De logica in deze presentatie komt uit de repo <strong>gentsnext</strong>: ontvangst en steekproef, inventarisatie, de voorraadcore en veiligheidsvoorraad, allocatie en niet-leverbaar, ritadvies en de instellingen. De bediening zelf zit in de kassa en het portal.</p>
+  </div>
+</section>
+
+<nav class="hud" aria-label="Presentatie">
+  <span class="count" id="count">1 / 1</span>
+  <button id="prev" aria-label="Vorige slide">‹</button>
+  <button id="next" aria-label="Volgende slide">›</button>
+</nav>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var total = slides.length;
+  var countEl = document.getElementById("count");
+  var bar = document.getElementById("progress");
+  var current = 0;
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if ("IntersectionObserver" in window) document.documentElement.classList.add("js");
+
+  slides.forEach(function (s, i) {
+    var n = s.querySelector(".num");
+    if (n) n.textContent = String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0");
+  });
+
+  function paint() {
+    countEl.textContent = (current + 1) + " / " + total;
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = (max > 0 ? (window.scrollY / max) * 100 : 0) + "%";
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        e.target.classList.add("in");
+        var i = slides.indexOf(e.target);
+        if (i > -1 && e.intersectionRatio > 0.5) { current = i; paint(); }
+      }
+    });
+  }, { threshold: [0.15, 0.55] });
+  slides.forEach(function (s) { io.observe(s); });
+
+  function go(i) {
+    current = Math.max(0, Math.min(total - 1, i));
+    slides[current].scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    paint();
+  }
+  document.getElementById("next").addEventListener("click", function () { go(current + 1); });
+  document.getElementById("prev").addEventListener("click", function () { go(current - 1); });
+  window.addEventListener("scroll", paint, { passive: true });
+  window.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); go(current + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(current - 1); }
+    else if (e.key === "Home") { e.preventDefault(); go(0); }
+    else if (e.key === "End") { e.preventDefault(); go(total - 1); }
+  });
+  paint();
+})();
+</script>
