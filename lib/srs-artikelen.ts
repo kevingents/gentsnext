@@ -380,17 +380,27 @@ export type NieuwArtikelResultaat = {
   restant: number;
   producten: { handle: string; titel: string; kleur: string; varianten: number }[];
   droogdraaien: boolean;
+  /** true = deze run draaide op de delta-feed (laatste 72u) i.p.v. de volledige export. */
+  delta: boolean;
 };
 
 export async function maakNieuweArtikelen(
-  { droogdraaien = false, max = 200 }: { droogdraaien?: boolean; max?: number } = {},
+  { droogdraaien = false, max = 200, delta = false }: { droogdraaien?: boolean; max?: number; delta?: boolean } = {},
 ): Promise<NieuwArtikelResultaat | { error: string }> {
-  const feed = await haalSrsArtikelen({ delta: false });
+  /* DELTA-MODUS (Kevin, 19 aug: "kan jij dat niet nabouwen [zoals StorePos]"):
+     StorePos leeft ín SRS en ziet nieuwe artikelen meteen; het dichtst daarbij
+     komt overdag de kleine delta-export (laatste 72u) elke paar uur pollen —
+     een vandaag ingeboekt artikel staat dan binnen ~2 uur in het PIM i.p.v.
+     morgenochtend. Zelfde aanmaak-machinerie en dezelfde veiligheden; alleen de
+     noodrem hieronder geldt niet (een delta van een rustige dag is legitiem
+     klein of zelfs leeg). */
+  const feed = await haalSrsArtikelen({ delta });
   if (!feed.ok) return { error: feed.error };
   /* Noodrem, zelfde gedachte als bij de products-cache: een "volledige" feed met
      een handvol rijen is een storing bij SRS, geen catalogus — en zou hier
-     hooguit troep aanmaken. */
-  if (feed.rijen.length < 1000) {
+     hooguit troep aanmaken. Geldt alleen voor de volledige export: een delta is
+     legitiem klein (of leeg op een rustige dag). */
+  if (!delta && feed.rijen.length < 1000) {
     return { error: `SRS-feed bevat maar ${feed.rijen.length} rijen — aanmaken geweigerd (storing?).` };
   }
 
@@ -439,6 +449,7 @@ export async function maakNieuweArtikelen(
     restant: Math.max(0, nieuw.length - teDoen.length),
     producten: [],
     droogdraaien,
+    delta,
   };
 
   for (const { key, rijen } of teDoen) {

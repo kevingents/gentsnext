@@ -54,21 +54,30 @@ export async function GET(req: Request) {
     await legStatusVast({ ok: false, error: "SRS_API_USER/SRS_API_PASSWORD ontbreken." });
     return NextResponse.json({ ok: false, error: "SRS_API_USER/SRS_API_PASSWORD ontbreken." }, { status: 503 });
   }
+  /* DELTA-POLL overdag (?delta=true, elke 2 uur — zie vercel.json): het dichtst
+     bij StorePos' "nieuw artikel = meteen zichtbaar" dat een externe koppeling
+     kan komen. De delta-export (laatste 72u) is klein; een vandaag ingeboekt
+     artikel staat zo binnen ~2 uur in het PIM i.p.v. morgenochtend. */
+  const url = new URL(req.url);
+  const delta = url.searchParams.get("delta") === "true";
   try {
     /* Default 500/nacht (was 200; Kevin 19 aug: "kunnen we de producten niet
        sneller inladen met de export?") — de achterstand loopt zo dagen sneller
        in, en ?max= laat een handmatige inhaalrun tot 2000 doen. De noodremmen
-       (kleine-feed-weigering, nooit naast iets bestaands, alles draft) zitten in
-       maakNieuweArtikelen zelf en gelden onverkort. */
-    const url = new URL(req.url);
+       (kleine-feed-weigering bij de volledige export, nooit naast iets
+       bestaands, alles draft) zitten in maakNieuweArtikelen zelf. */
     const max = Math.min(2000, Math.max(1, Number(url.searchParams.get("max")) || 500));
-    const r = await maakNieuweArtikelen({ max });
+    const r = await maakNieuweArtikelen({ max, delta });
     if ("error" in r) {
-      await legStatusVast({ ok: false, error: r.error });
-      return NextResponse.json({ ok: false, error: r.error }, { status: 502 });
+      /* Delta-fouten overschrijven de status NIET: zolang niet bewezen is dat
+         SRS de export ook overdag serveert, is een falende delta verwacht en
+         mag die het gezonde nachtsignaal (waakhond!) niet vervangen. */
+      if (!delta) await legStatusVast({ ok: false, error: r.error, mode: "volledig" });
+      return NextResponse.json({ ok: false, delta, error: r.error }, { status: 502 });
     }
     await legStatusVast({
       ok: true,
+      mode: delta ? "delta" : "volledig",
       feedRijen: r.feedRijen,
       kandidaten: r.kandidaten,
       aangemaakt: r.aangemaakt,
@@ -77,7 +86,7 @@ export async function GET(req: Request) {
     });
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {
-    await legStatusVast({ ok: false, error: (e as Error).message });
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+    if (!delta) await legStatusVast({ ok: false, error: (e as Error).message, mode: "volledig" });
+    return NextResponse.json({ ok: false, delta, error: (e as Error).message }, { status: 500 });
   }
 }
