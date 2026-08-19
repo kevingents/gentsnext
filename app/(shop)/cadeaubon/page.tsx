@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { getSettings } from "@/lib/settings";
 import { getSessionCustomer } from "@/lib/account";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { GiftcardBuyForm } from "@/components/giftcard/giftcard-buy-form";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Cadeaubon",
-  description: "Geef GENTS cadeau. Een digitale cadeaubon, direct per e-mail bij de ontvanger — te besteden op alles in de collectie.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/cadeaubon");
+}
 
 const USP_KEYS = [
   "giftcard.usp_email",

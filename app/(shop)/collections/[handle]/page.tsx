@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { TrackLijst } from "@/components/analytics/track-lijst";

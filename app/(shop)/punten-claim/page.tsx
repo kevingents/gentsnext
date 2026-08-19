@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useSearchParams } from "next/navigation";
 import { useT } from "@/components/i18n/locale-provider";
 

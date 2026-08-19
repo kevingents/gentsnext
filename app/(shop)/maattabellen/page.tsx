@@ -1,23 +1,17 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { JsonLd } from "@/components/json-ld";
-import { localeAlternates } from "@/lib/seo";
-import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";
 import { getSiteUrl } from "@/lib/site-url";
 import { SIZE_GUIDES, MEASURE_INFO, type Measure } from "@/lib/size-chart-hub";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { pageMetadata , localizedMeasureInfo } from "@/lib/page-meta-i18n";
+import { localizedSizeGuide } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const meta: Metadata = {
-    title: "Maattabellen — vind je maat per categorie",
-    description:
-      "Alle GENTS-maattabellen op één plek: pakken, colberts, overhemden, pantalons, gilets, truien en poloshirts. Lichaamsmaten in centimeters per maat.",
-    alternates: await localeAlternates("/maattabellen"),
-  };
-  return applySeoOverride(meta, await getSeoOverride("/maattabellen"));
+  return pageMetadata("/maattabellen");
 }
 
 const ALL_MEASURES: Measure[] = ["chest", "waist", "collar", "inseam"];
@@ -25,6 +19,8 @@ const ALL_MEASURES: Measure[] = ["chest", "waist", "collar", "inseam"];
 export default async function MaattabellenHubPage() {
   const locale = await getLocale();
   const t = await getT(locale);
+  const maatInfo = await localizedMeasureInfo(locale);
+  const gidsen = await Promise.all(SIZE_GUIDES.map((g) => localizedSizeGuide(g, locale)));
   const siteUrl = getSiteUrl();
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -37,7 +33,7 @@ export default async function MaattabellenHubPage() {
   const itemListJsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    itemListElement: SIZE_GUIDES.map((g, i) => ({
+    itemListElement: gidsen.map((g, i) => ({
       "@type": "ListItem",
       position: i + 1,
       name: g.title,
@@ -67,7 +63,7 @@ export default async function MaattabellenHubPage() {
 
       {/* categorie-kaarten */}
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {SIZE_GUIDES.map((g) => (
+        {gidsen.map((g) => (
           <Link
             key={g.slug}
             href={`/maattabellen/${g.slug}`}
@@ -93,8 +89,8 @@ export default async function MaattabellenHubPage() {
         <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
           {ALL_MEASURES.map((m) => (
             <div key={m}>
-              <p className="font-display text-base text-ink">{MEASURE_INFO[m].label}</p>
-              <p className="mt-1 font-sans text-sm text-ink-soft">{MEASURE_INFO[m].how}</p>
+              <p className="font-display text-base text-ink">{maatInfo[m].label}</p>
+              <p className="mt-1 font-sans text-sm text-ink-soft">{maatInfo[m].how}</p>
             </div>
           ))}
         </div>

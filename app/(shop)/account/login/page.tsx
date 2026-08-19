@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { VISUAL } from "@/lib/visuals";

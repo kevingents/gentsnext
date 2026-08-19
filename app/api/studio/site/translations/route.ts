@@ -5,7 +5,7 @@ import { uiSourceKeys } from "@/lib/messages";
 import { getSiteSettings } from "@/lib/site-settings";
 import { LANDINGS } from "@/lib/landings";
 import {
-  getTranslationStore,
+  getTranslationStoreFresh,
   toTranslationRow,
   saveManualTranslation,
   resetTranslation,
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const pageSize = 50;
 
-  const [sources, store] = await Promise.all([allSources(), getTranslationStore(locale as Locale)]);
+  const [sources, store] = await Promise.all([allSources(), getTranslationStoreFresh(locale as Locale)]);
   let rows: TranslationRow[] = sources.map((s) => toTranslationRow(store, s.ns, s.key, s.source));
   if (ns) rows = rows.filter((r) => r.ns === ns);
   if (q) rows = rows.filter((r) => r.key.toLowerCase().includes(q) || r.source.toLowerCase().includes(q) || r.value.toLowerCase().includes(q));

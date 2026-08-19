@@ -1,21 +1,17 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { JsonLd } from "@/components/json-ld";
 import { getOccasions } from "@/lib/occasions-server";
 import { getSiteUrl } from "@/lib/site-url";
-import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: "Gelegenheden — kleding voor elk moment",
-    description: "Bruiloft, gala, zakelijk of een afscheid — vind bij GENTS de juiste outfit voor elke gelegenheid, met persoonlijk advies.",
-    alternates: await localeAlternates("/gelegenheden"),
-  };
+  return pageMetadata("/gelegenheden");
 }
 
 export default async function GelegenhedenPage() {

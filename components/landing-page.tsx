@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import type { Landing } from "@/lib/landings";
 import { getLocale } from "@/lib/locale-server";
 import { t } from "@/lib/messages";

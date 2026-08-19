@@ -31,6 +31,10 @@ export async function GET(req: Request) {
       kwaliteit: sp.get("kwaliteit") || undefined,
       merk: sp.get("merk") || undefined,
       groep: sp.get("groep") || undefined,
+      subgroep: sp.get("subgroep") || undefined,
+      jaar: sp.get("jaar") || undefined,
+      seizoen: sp.get("seizoen") || undefined,
+      bron: sp.get("bron") || undefined,
     });
     return new Response(csv, {
       headers: {

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import type { ProductCardData } from "@/lib/catalog";
 import { formatEuro } from "@/lib/pricing";
 import { useT } from "@/components/i18n/locale-provider";

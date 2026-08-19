@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { Accordion } from "@/components/pdp/accordion";
 import { ServiceAsk } from "@/components/service/service-ask";
 import { getLocale } from "@/lib/locale-server";

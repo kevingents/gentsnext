@@ -1,19 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import Image from "next/image";
 import { getBlogPosts } from "@/lib/blog";
-import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: "Stijlgids",
-    description: "Adviezen, dresscodes en stylingtips van de stylisten van GENTS — perfect gekleed voor elk formeel moment.",
-    alternates: await localeAlternates("/blog"),
-  };
+  return pageMetadata("/blog");
 }
 
 export default async function BlogIndex() {

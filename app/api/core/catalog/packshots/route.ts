@@ -61,10 +61,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Te veel foto's in één keer (max 2000)." }, { status: 400 });
   }
 
+  /* Eén jsonb-parameter i.p.v. twee array-parameters: drizzle spelt een JS-array
+     uit tot ($1, $2, …) — voor Postgres een record, en `record::text[]` bestaat
+     niet. Elke aanroep faalde daardoor sinds de route live ging. */
+  const paren = urls.map((url, i) => ({ url, pack: flags[i] }));
   const res = await getDb().execute(sql`
     update product_images pi
        set is_packshot = x.pack
-      from (select unnest(${urls}::text[]) url, unnest(${flags}::boolean[]) pack) x
+      from jsonb_to_recordset(${JSON.stringify(paren)}::jsonb) as x(url text, pack boolean)
      where split_part(pi.url, '?', 1) = split_part(x.url, '?', 1)
        and pi.is_packshot is distinct from x.pack`);
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { CLUB_LOGO_DARK, CLUB_LOGO_SIZE, CLUB_NAME, CLUB_PATH } from "@/lib/club";
 import { formatEuro } from "@/lib/format";
 import { getLocale } from "@/lib/locale-server";

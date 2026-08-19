@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { SizeAdvisor } from "@/components/maatadvies/size-advisor";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { bonusPointsFor } from "@/lib/loyalty-bonus";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
-export const metadata: Metadata = {
-  title: "Maatadvies — vind jouw maat",
-  description:
-    "Vind in een paar stappen je colbert-, lengte- en boordmaat. Het maatadvies van GENTS helpt je aan de juiste pasvorm.",
-  alternates: { canonical: "/maatadvies" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/maatadvies");
+}
 
 export default async function MaatadviesPage() {
   const locale = await getLocale();

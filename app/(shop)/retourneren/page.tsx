@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { RetourFlow } from "@/components/returns/retour-flow";
-import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { getSessionCustomer } from "@/lib/account";
@@ -8,19 +7,12 @@ import { getReturnableOrder, getReturnableOrdersForCustomer } from "@/lib/return
 import { getSettings } from "@/lib/settings";
 import { formatEuro } from "@/lib/format";
 import { getStores } from "@/lib/stores";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: "Retourneren — GENTS",
-    // "(gratis retour)" stond hier los achter de keuze en las als een
-    // onvoorwaardelijke belofte — gratis is het alleen bij tegoed of in de winkel.
-    description: "Iets retourneren? Start hier of vanuit je bestelling. Kies een DHL-retourlabel of inleveren in de winkel, en geld terug of GENTS-tegoed — met tegoed of in de winkel is retourneren gratis.",
-    alternates: await localeAlternates("/retourneren"),
-    // Geen expliciete index:true meer — dan volgt de pagina de site-brede
-    // SITE_INDEXABLE-gate (robots.txt) i.p.v. die te forceren tijdens pre-launch.
-  };
+  return pageMetadata("/retourneren");
 }
 
 export default async function RetournerenPage({ searchParams }: { searchParams: Promise<{ order?: string }> }) {

@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { listCollections } from "@/lib/catalog";
 import { CATEGORIES } from "@/lib/categories";
-import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { ArrowRightIcon } from "@/components/icons";
 import { getT } from "@/lib/t-server";
 import { localizeCollectionTitles } from "@/lib/catalog-i18n";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return { title: "Collecties", alternates: await localeAlternates("/collections") };
+  return pageMetadata("/collections");
 }
 
 // Categorie-tegels met merkfotografie — visueel ipv platte lijst.

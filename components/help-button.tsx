@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useT } from "@/components/i18n/locale-provider";

@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { ProductCard } from "@/components/product-card";
 import { CrossIcon } from "@/components/icons";
 import { searchProducts, suggestCorrection } from "@/lib/catalog";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { TrackSearch } from "@/components/analytics/track-search";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Zoeken",
-  alternates: { canonical: "/zoeken" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/zoeken");
+}
 
 type Props = { searchParams: Promise<{ q?: string; cat?: string; size?: string; exact?: string }> };
 

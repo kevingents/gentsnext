@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALE_HEADER, PATH_HEADER, isLocale, type Locale } from "@/lib/i18n";
 import { matchRedirect } from "@/lib/redirects";
+import { translatePath, untranslatePath } from "@/lib/url-i18n";
 
 /**
  * Centrale locale-resolver + legacy-redirects.
@@ -32,9 +33,21 @@ export async function middleware(request: NextRequest) {
     }
     locale = seg;
     const rest = pathname.slice(seg.length + 1);
-    path = rest.startsWith("/") ? rest : `/${rest}`;
-    if (path === "") path = "/";
+    const binnen = (rest.startsWith("/") ? rest : `/${rest}`) || "/";
+    // Fase 3: het pad achter het locale-prefix is vertaald (/en/category/suits).
+    // Terug naar het Nederlandse pad, want dáár staan de routebestanden.
+    path = untranslatePath(binnen, locale) || "/";
     prefixed = true;
+
+    // Binnengekomen op de ONvertaalde vorm (/en/categorie/pakken — de oude
+    // fase-2-URL, een backlink of een handmatige link)? Dat is dubbele content
+    // naast de vertaalde variant; 301 consolideert het.
+    const canoniek = translatePath(path, locale);
+    if (canoniek !== binnen) {
+      const to = url.clone();
+      to.pathname = `/${locale}${canoniek === "/" ? "" : canoniek}`;
+      return NextResponse.redirect(to, 301);
+    }
   } else {
     const cookie = request.cookies.get(LOCALE_COOKIE)?.value || "";
     if (isLocale(cookie)) locale = cookie;
@@ -46,7 +59,8 @@ export async function middleware(request: NextRequest) {
   if (rd) {
     if (/^https?:\/\//i.test(rd.target)) return NextResponse.redirect(rd.target, rd.status);
     const to = url.clone();
-    to.pathname = (prefixed ? `/${locale}` : "") + (rd.target.startsWith("/") ? rd.target : `/${rd.target}`);
+    const doel = rd.target.startsWith("/") ? rd.target : `/${rd.target}`;
+    to.pathname = prefixed ? `/${locale}` + translatePath(doel, locale) : doel;
     to.search = "";
     return NextResponse.redirect(to, rd.status);
   }
@@ -55,7 +69,8 @@ export async function middleware(request: NextRequest) {
   const legacy = path.match(/^\/collections\/[^/]+\/products\/([^/]+)\/?$/);
   if (legacy) {
     const to = url.clone();
-    to.pathname = (prefixed ? `/${locale}` : "") + `/products/${legacy[1]}`;
+    const doelPad = `/products/${legacy[1]}`;
+    to.pathname = prefixed ? `/${locale}` + translatePath(doelPad, locale) : doelPad;
     return NextResponse.redirect(to, 301);
   }
 

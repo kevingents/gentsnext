@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useEffect, useState } from "react";
 import { readConsent, writeConsent, OPEN_CONSENT_EVENT, type Consent } from "@/lib/consent";
 import { useT } from "@/components/i18n/locale-provider";

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useEffect, useRef, useState } from "react";
 import { useCart, type CartLine } from "@/components/cart/cart-context";
 import { useDeliveryEstimate } from "@/components/cart/use-delivery-estimate";

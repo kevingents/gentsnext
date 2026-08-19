@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { ProductCard } from "@/components/product-card";
 import { ContactRequestForm } from "@/components/contact-request-form";
 import type { ProductCardData } from "@/lib/catalog";
