@@ -9,6 +9,10 @@
       "schedule": "20 3 * * *"
     },
     {
+      "path": "/api/cron/srs-nieuwe-artikelen?delta=true",
+      "schedule": "15 7-19/2 * * *"
+    },
+    {
       "path": "/api/cron/sync-reviews",
       "schedule": "0 2 * * *"
     },
