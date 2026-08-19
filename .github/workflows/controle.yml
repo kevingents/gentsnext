@@ -36,6 +36,20 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Het handboek (/handboek) leidt zijn index — modules, endpoints, tabellen —
+      # af uit de code. De build doet dat ook, dus productie is altijd actueel;
+      # deze stap bewaakt dat de INGECHECKTE index meeloopt. Zonder die controle
+      # klopt het handboek in de repo niet meer met de code, en dan zie je in een
+      # review niet dat er iets bij is gekomen.
+      - name: Handboek-index actueel
+        run: |
+          npm run handboek
+          if ! git diff --quiet -- content/handboek-index.json; then
+            echo "::error::content/handboek-index.json is verouderd. Draai 'npm run handboek' en commit het resultaat."
+            git --no-pager diff --stat -- content/handboek-index.json
+            exit 1
+          fi
+
       # De telling vóór de tests is geen franje. `node --test` met een glob die
       # niets oplevert eindigt met exit 0 — een lege testmap zou hier dus stil
       # groen worden en precies de dekking wegnemen waarvoor deze job bestaat.

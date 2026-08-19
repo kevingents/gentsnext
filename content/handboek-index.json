@@ -1,0 +1,3088 @@
+{
+  "modules": [
+    {
+      "pad": "lib/account.ts",
+      "naam": "account",
+      "domein": "Klant en marketing",
+      "samenvatting": "Klant-accountlaag. Auth via magic-link (wachtwoordloos): e-mail → login-token → sessie-cookie. Tokens worden gehasht opgeslagen (nooit plaintext in de DB)."
+    },
+    {
+      "pad": "lib/afspraak-mail.ts",
+      "naam": "afspraak-mail",
+      "domein": "Overig",
+      "samenvatting": "lib/afspraak-mail.ts — de bevestigingsmail bij een afspraak, één keer. Stond eerst alleen in app/api/afspraak/route.ts (de publieke boeking)."
+    },
+    {
+      "pad": "lib/ai-insights.ts",
+      "naam": "ai-insights",
+      "domein": "Overig",
+      "samenvatting": "AI-klantinzichten voor de portal. Verzamelt GEAGGREGEERDE statistieken (geen PII) en laat Claude er een strategisch narratief van maken: kansen, risico's en concrete acties."
+    },
+    {
+      "pad": "lib/alternatives.ts",
+      "naam": "alternatives",
+      "domein": "Overig",
+      "samenvatting": "Alternatieven voor een artikel dat NIET meer leverbaar is. Context: vóór een annulering zijn alle winkels al nagekeken — het artikel is echt weg. De klant kreeg tot nu toe alleen geld terug; hier zoeken we 2-3 vergelijkbare artikelen die hij wél kan krijgen."
+    },
+    {
+      "pad": "lib/analytics.ts",
+      "naam": "analytics",
+      "domein": "Meten",
+      "samenvatting": "Eigen storefront-analytics. Schrijft anonieme events (geen PII) en levert aggregaties voor het dashboard: populairste producten, zoektermen, zoekopdrachten zonder resultaat (afhakers), en de funnel view → cart → checkout → aankoop."
+    },
+    {
+      "pad": "lib/apple-wallet-config.ts",
+      "naam": "apple-wallet-config",
+      "domein": "Klant en marketing",
+      "samenvatting": "Lichte config-/auth-helpers voor de Apple-Wallet memberspas — BEWUST zonder de zware `passkit-generator`/`node:fs`-import (die zit in lib/apple-wallet.ts)."
+    },
+    {
+      "pad": "lib/apple-wallet-push.ts",
+      "naam": "apple-wallet-push",
+      "domein": "Klant en marketing",
+      "samenvatting": "APNs-push voor de Apple-Wallet memberspas. Bij een saldowijziging sturen we een lege push naar elk geregistreerd device; iOS haalt daarna zélf de verse pas op (GET /api/wallet/apple/v1/passes/…)."
+    },
+    {
+      "pad": "lib/apple-wallet.ts",
+      "naam": "apple-wallet",
+      "domein": "Klant en marketing",
+      "samenvatting": "Apple Wallet — de GENTS Memberspas (.pkpass, storeCard) van GENTS MEMBERS. Een geldige pas moet ondertekend worden met een Apple **Pass Type ID-certificaat** uit het GENTS Apple Developer-account. Die secrets staan in Vercel-env (base64), NIET in de code."
+    },
+    {
+      "pad": "lib/appointments.ts",
+      "naam": "appointments",
+      "domein": "Overig",
+      "samenvatting": "Klantafspraken (trouwconsult voorop). De klant vraagt via /afspraak een adviesmoment aan in een winkel; de winkel leest en beheert de aanvragen via de core-API (/api/core/afspraken). Bewust een DAGDEEL i.p.v."
+    },
+    {
+      "pad": "lib/attributie-client.ts",
+      "naam": "attributie-client",
+      "domein": "Meten",
+      "samenvatting": "Attributie-opvang: waar komt deze bezoeker vandaan? Dit ontbrak volledig. `gclid`, `fbclid`, `utm_source` — geen van alle kwam ergens in de code voor, dus élke bestelling was ongeattribueerd en er was geen enkele manier om een server-side conversie aan de juis…"
+    },
+    {
+      "pad": "lib/audience-regels.ts",
+      "naam": "audience-regels",
+      "domein": "Klant en marketing",
+      "samenvatting": "De regelmotor achter doelgroepen. Een doelgroep wordt in de portal geklikt en opgeslagen als DATA — een boom van regels — nooit als SQL-tekst."
+    },
+    {
+      "pad": "lib/audience-standaard.ts",
+      "naam": "audience-standaard",
+      "domein": "Klant en marketing",
+      "samenvatting": "De startset doelgroepen. Bewust géén lijst van alles wat technisch kan. Elke doelgroep hieronder beantwoordt een vraag die iemand daadwerkelijk stelt (\"wie moet ik bellen\", \"waar zet ik mijn advertentiebudget\", \"wie mag ik nooit meer een korting sturen\"), en h…"
+    },
+    {
+      "pad": "lib/audience-sync.ts",
+      "naam": "audience-sync",
+      "domein": "Klant en marketing",
+      "samenvatting": "Uitlevering van doelgroepen naar de kanalen. Wat elk platform verwacht, en waarom het hier zo staat: - META en GOOGLE ADS matchen op een SHA256-hash van een genormaliseerde waarde."
+    },
+    {
+      "pad": "lib/audiences.ts",
+      "naam": "audiences",
+      "domein": "Klant en marketing",
+      "samenvatting": "Doelgroepen: opslaan, tellen, bouwen en uitlezen. Het onderscheid dat er echt toe doet is `aantal` versus `aantalBereikbaar`. Een doelgroep van 4.000 klanten waarvan er 900 marketing-toestemming hebben is geen doelgroep van 4.000."
+    },
+    {
+      "pad": "lib/beeld-status.ts",
+      "naam": "beeld-status",
+      "domein": "Catalogus",
+      "samenvatting": "Beeldstatus van de catalogus — welk product staat met wat voor foto online? Aanleiding (situatie eind juli 2026): honderden actieve producten met voorraad hadden als énige beeld een door AI verzonnen packshot, en daarnaast stonden er honderden helemaal zonder…"
+    },
+    {
+      "pad": "lib/blob.ts",
+      "naam": "blob",
+      "domein": "Platform",
+      "samenvatting": "Schrijft een JSON-blob compatibel met storegents/lib/json-blob-store.js: zelfde pad, public access, allowOverwrite, JSON pretty-printed, korte CDN-TTL. BELANGRIJK: storegents leest uit zijn EIGEN blob-store."
+    },
+    {
+      "pad": "lib/blog-admin.ts",
+      "naam": "blog-admin",
+      "domein": "Site en content",
+      "samenvatting": "Handmatig bijwerken van een stijlgids-artikel. lib/blog.ts kan artikelen genereren, lezen en verwijderen, maar niet redigeren — dat gebeurde tot nu toe nergens."
+    },
+    {
+      "pad": "lib/blog.ts",
+      "naam": "blog",
+      "domein": "Site en content",
+      "samenvatting": "AI-stijlgids (blog): GENTS-adviesartikelen mét echte producten. Een cron genereert ~elke 2 weken een nieuw artikel (roterend onderwerp); Claude schrijft on-brand, citeert UITSLUITEND meegegeven product-handles, en volgt onze stijlregels (warm pak → bruine scho…"
+    },
+    {
+      "pad": "lib/bonnr-counter.ts",
+      "naam": "bonnr-counter",
+      "domein": "Kassa",
+      "samenvatting": "SRS-bonnummer per filiaal — ATOMAIR uit Neon. WAAROM (6 aug 2026, geld-incident Den Bosch): de teller stond in een Vercel- blob."
+    },
+    {
+      "pad": "lib/brand-models.ts",
+      "naam": "brand-models",
+      "domein": "Catalogus",
+      "samenvatting": "De vaste GENTS-merkmodellen (blob-URL's) die als FASHN `face_reference` dienen. Eén bron: stond eerder gedupliceerd in generate-pakken-media en generate-product-media, waardoor het merkgezicht per script uit elkaar kon lopen."
+    },
+    {
+      "pad": "lib/brands.ts",
+      "naam": "brands",
+      "domein": "Catalogus",
+      "samenvatting": "Merken die we als eigen pagina presenteren — slug → catalogus-merknaam + intro."
+    },
+    {
+      "pad": "lib/care.ts",
+      "naam": "care",
+      "domein": "Catalogus",
+      "samenvatting": "Leidt schone Materiaal- + Onderhoud(care)-blokken af uit de SRS-productdata. `samenstelling_materiaal` is netjes parseerbaar; `wasvoorschrift` is rijke, rommelige tekst (emoji's + symbolen) waaruit we via trefwoorden de standaard wasvoorschrift-symbolen halen."
+    },
+    {
+      "pad": "lib/catalog-flags.ts",
+      "naam": "catalog-flags",
+      "domein": "Catalogus",
+      "samenvatting": "De gedenormaliseerde catalogus-vlaggen: has_image, in_stock, stock_qty (product én variant) en de kleurgroep-velden. De hele listing hangt hieraan — PLP-filter, maat-facetten, zoeken, ranking (`OP_WEBSITE_SQL` in lib/catalog)."
+    },
+    {
+      "pad": "lib/catalog-i18n.ts",
+      "naam": "catalog-i18n",
+      "domein": "Catalogus",
+      "samenvatting": "i18n-laag over de COLLECTIES (titel + omschrijving). Producten lopen al via product_translations (ensureCatalogTranslations + lib/catalog); collecties hadden nog niets."
+    },
+    {
+      "pad": "lib/catalog-import.ts",
+      "naam": "catalog-import",
+      "domein": "Catalogus",
+      "samenvatting": "Gedeelde upsert-logica voor de twee importpaden: - scripts/import-from-cache.ts (bootstrap vanuit de storegents-cache, lossy → draait met preserveExisting zodat rijkere bulk-data nooit degradeert) - scripts/import-shopify-bulk.ts (volledige GraphQL Bulk-export…"
+    },
+    {
+      "pad": "lib/catalog.ts",
+      "naam": "catalog",
+      "domein": "Catalogus",
+      "samenvatting": "HET zichtbaarheidscriterium van de winkel, als SQL-fragment op tabel-alias `p`. Rapportages die \"staat dit online?\" naast de catalogus leggen (beeldstatus, eigen-beeld, dubbele-skus) moeten dít gebruiken — een hand-gekopieerde variant gaat stil uit de pas lope…"
+    },
+    {
+      "pad": "lib/categories.ts",
+      "naam": "categories",
+      "domein": "Catalogus",
+      "samenvatting": "Hoofdcategorieën — gebaseerd op hoofdgroep_omschrijving in de catalogus. Deze geven de echte, volledige categorie-listings (i.t.t. de vaak kleine, gecureerde Shopify-collecties). Slug = URL onder /categorie/<slug>."
+    },
+    {
+      "pad": "lib/club-pass.ts",
+      "naam": "club-pass",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/club-pass.ts De memberspas op het SCHERM — dezelfde pas als in Apple/Google Wallet, maar dan in het account, zodat een klant die geen wallet gebruikt 'm alsnog kan laten scannen aan de kassa."
+    },
+    {
+      "pad": "lib/club.ts",
+      "naam": "club",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/club.ts \"GENTS MEMBERS\" — de merknaam van ons spaarprogramma (t/m 13 aug 2026 \"The Club of GENTS\"; de code houdt de oude CLUB_-namen aan, zie onderaan)."
+    },
+    {
+      "pad": "lib/color-siblings.ts",
+      "naam": "color-siblings",
+      "domein": "Catalogus",
+      "samenvatting": "Kleurvarianten van hetzelfde model (\"ook verkrijgbaar in\"). Bron: het SRSERP-metafield group_data — group_data[0].products bevat de gekoppelde producten met hun Shopify-ID en kleurnaam. We resolven die ID's naar onze eigen producten (handle + beeld)."
+    },
+    {
+      "pad": "lib/colors.ts",
+      "naam": "colors",
+      "domein": "Catalogus",
+      "samenvatting": "Kleurnaam → swatch-weergave. De catalogus gebruikt Nederlandse kleurnamen (Blauw, Antraciet, Cognac, …). Voor swatches mappen we die naar een hex of een verloop (voor multikleur/print)."
+    },
+    {
+      "pad": "lib/consent.ts",
+      "naam": "consent",
+      "domein": "Meten",
+      "samenvatting": "Cookie-/tracking-toestemming (AVG + Telecommunicatiewet art. 11.7a). Functionele opslag is altijd toegestaan (noodzakelijk); analytics + marketing vereisen vrije, specifieke opt-in. Geen pre-tick, gelijkwaardige weiger-knop."
+    },
+    {
+      "pad": "lib/content-pages.ts",
+      "naam": "content-pages",
+      "domein": "Site en content",
+      "samenvatting": "Eigen content-pagina's (content:pages) — vervangt Sanity-pages. Body is lichte Markdown (zie components/page-body). Beheerbaar in de GENTS-portal."
+    },
+    {
+      "pad": "lib/content-store.ts",
+      "naam": "content-store",
+      "domein": "Site en content",
+      "samenvatting": "Eigen content-laag (vervangt Sanity). Content-documenten leven in dezelfde app_settings-tabel onder id `content:<key>` (bv. content:footer, content:menu, content:occasions)."
+    },
+    {
+      "pad": "lib/content-version.ts",
+      "naam": "content-version",
+      "domein": "Site en content",
+      "samenvatting": "Versiestempel van een content-document (pagina's, menu, gelegenheden). Waarom: die documenten worden altijd in hun geheel overschreven."
+    },
+    {
+      "pad": "lib/cron-auth.ts",
+      "naam": "cron-auth",
+      "domein": "Platform",
+      "samenvatting": "Toegangscontrole voor de cron-routes (zie vercel.json). Eén plek, omdat het eerder acht identieke kopietjes waren — inclusief acht keer dezelfde bug."
+    },
+    {
+      "pad": "lib/customer-360.ts",
+      "naam": "customer-360",
+      "domein": "Klant en marketing",
+      "samenvatting": "Het 360-klantprofiel: alles wat we van één persoon weten, op één plek. Waarom dit bestand bestaat."
+    },
+    {
+      "pad": "lib/datalayer.ts",
+      "naam": "datalayer",
+      "domein": "Meten",
+      "samenvatting": "Brug van onze eigen events naar de Google-dataLayer (Tag Manager). Uitgangspunt: onze Neon-tabel blijft de bron van waarheid. GTM is een DOORGEEFLUIK naar advertentieplatforms, geen tweede administratie."
+    },
+    {
+      "pad": "lib/dhl.ts",
+      "naam": "dhl",
+      "domein": "Kopen en orders",
+      "samenvatting": "DHL Parcel NL — retourlabel genereren. Env-gated: zonder creds doet dit niets (de retour wordt dan aangemaakt met \"label volgt per e-mail\"). Patroon zoals Mollie/Resend: werkt zodra de keys in Vercel staan."
+    },
+    {
+      "pad": "lib/display.ts",
+      "naam": "display",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Paspop / etalage — niet-blokkerende display-markering. Een stuk \"op de paspop\" blijft gewoon verkoopbaar (we raken availability NIET aan); dit is puur zichtbaarheid + meetellen bij inventarisatie. Eén rij per (winkel, stockKey)."
+    },
+    {
+      "pad": "lib/email-flow-categorieen.ts",
+      "naam": "email-flow-categorieen",
+      "domein": "Klant en marketing",
+      "samenvatting": "Categorieën voor flows — op DOEL, niet op onderwerp. \"Winkelwagen\", \"Retour\", \"Verjaardag\" zijn onderwerpen. Die groeien mee met elk nieuw idee en leveren over een jaar vijftien categorieën met één flow — dan heb je een tweede lijst in plaats van een indeling."
+    },
+    {
+      "pad": "lib/email-flow-meting.ts",
+      "naam": "email-flow-meting",
+      "domein": "Klant en marketing",
+      "samenvatting": "Meten wat een flow oplevert. ── Waarom een conversietelling geen uplift is ──────────────────────────── \"43 van de 1.188 bestelden binnen zeven dagen\" klinkt als een resultaat, maar het is een waarneming: een deel van die 43 had sowieso besteld."
+    },
+    {
+      "pad": "lib/email-flow-sjablonen.ts",
+      "naam": "email-flow-sjablonen",
+      "domein": "Klant en marketing",
+      "samenvatting": "De sjablonen die een flow kan versturen. Bewust een vaste lijst en geen vrije HTML uit de database: een flow-definitie wordt in de portal geklikt, en wie daar willekeurige HTML mag invoeren kan ook een phishingmail versturen op ons afzenderadres."
+    },
+    {
+      "pad": "lib/email-flow-standaard.ts",
+      "naam": "email-flow-standaard",
+      "domein": "Klant en marketing",
+      "samenvatting": "De startflows. Elke flow hieronder heeft een uitstapregel die je bijna gratis krijgt maar die het verschil maakt tussen een journey en een spamkanon: zodra de klant heeft gedaan waar de flow om vraagt, stapt hij eruit."
+    },
+    {
+      "pad": "lib/email-flows.ts",
+      "naam": "email-flows",
+      "domein": "Klant en marketing",
+      "samenvatting": "E-mailflows (journeys): trigger → wachten → mail → vertakken → uitstappen. Wat we hadden waren losse mails: 16 transactionele (orderbevestiging, retour, afspraak) plus één geplande (verjaardag)."
+    },
+    {
+      "pad": "lib/email.ts",
+      "naam": "email",
+      "domein": "Klant en marketing",
+      "samenvatting": "Transactionele mail via Resend (env-gated op RESEND_API_KEY). Bewust zonder extra SDK: directe call naar de Resend API, net als de Mollie-client. Afzender via RESEND_FROM (bv. \"GENTS <bestellingen@gents.nl>\")."
+    },
+    {
+      "pad": "lib/etiquette-hub.ts",
+      "naam": "etiquette-hub",
+      "domein": "Site en content",
+      "samenvatting": "Etiquette-hub: ingang naar de 8 dresscode-pagina's, gegroepeerd op formaliteit. Verwijst naar /pages/<handle>, waar de gemigreerde of Sanity-content staat."
+    },
+    {
+      "pad": "lib/event-catalog.ts",
+      "naam": "event-catalog",
+      "domein": "Meten",
+      "samenvatting": "De event-catalogus: één bron van waarheid voor álles wat we meten. Hier stond eerder een kale `Set` met veertien namen, verstopt in lib/analytics. Dat gaf drie terugkerende problemen: - Events die wél gevuurd werden maar niet in de set stonden verdwenen STIL."
+    },
+    {
+      "pad": "lib/exact-state-core.ts",
+      "naam": "exact-state-core",
+      "domein": "Kassa",
+      "samenvatting": "Exact Online-koppelingsstatus in de Neon-core (vervangt de storegents-blobs exact/*.json)."
+    },
+    {
+      "pad": "lib/experiments.ts",
+      "naam": "experiments",
+      "domein": "Meten",
+      "samenvatting": "A/B-testen, in eigen huis. Een experiment verdeelt bezoekers over varianten (bv. 90/10), optioneel beperkt tot landen en regio's, en elke variant kan onderdelen van de site overschrijven: de aankondigingsbalk, de hero, de USP's, of een complete eigen homepage-…"
+    },
+    {
+      "pad": "lib/facet-i18n.ts",
+      "naam": "facet-i18n",
+      "domein": "Catalogus",
+      "samenvatting": "i18n-laag over de FILTER-WAARDEN op de PLP (kleur, type, materiaal, dessin, seizoen, pasvorm). De filterkoppen liepen al via t(), maar de waarden kwamen rauw uit de catalogus — op /en /de stond dus \"Color: Blauw · Type: 2-delig\"."
+    },
+    {
+      "pad": "lib/facet-taxonomy.ts",
+      "naam": "facet-taxonomy",
+      "domein": "Catalogus",
+      "samenvatting": "Filter-taxonomie: rauwe catalogus-waarden → begrijpelijke filterkeuzes. De bron levert samenstellingen (\"Polyester viscose\", \"Wol polyester viscose lin\") en losse motieven (\"Varens\", \"Pelikaan\", \"Palmblad\") als aparte waarden."
+    },
+    {
+      "pad": "lib/feedback-directive.ts",
+      "naam": "feedback-directive",
+      "domein": "Overig",
+      "samenvatting": "Zet de Nederlandse notitie van een medewerker om in één korte, POSITIEVE Engelse instructie voor een beeldgenerator. Gedeeld door de modellen-studio (lib/model-learnings.ts) en de sfeerbeeld-studio (lib/visual-learnings.ts)."
+    },
+    {
+      "pad": "lib/footer-server.ts",
+      "naam": "footer-server",
+      "domein": "Site en content",
+      "samenvatting": "De footer-inhoud — uit onze eigen content-store (content:footer, beheerbaar in de GENTS-portal) met de onderstaande standaard als seed/fallback wanneer er (nog) geen footer is bewerkt. Vervangt de oude Sanity-bron."
+    },
+    {
+      "pad": "lib/format.ts",
+      "naam": "format",
+      "domein": "Platform",
+      "samenvatting": "Pure formatteer-helpers — bewust ZONDER db/drizzle-imports zodat client components alleen dit kleine bestand bundelen (lib/pricing re-exportte formatEuro maar sleept getDb mee)."
+    },
+    {
+      "pad": "lib/fulfillment-config.ts",
+      "naam": "fulfillment-config",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Fulfilment-classificatie — WELKE filialen mogen leveren en hoe ze geprioriteerd worden."
+    },
+    {
+      "pad": "lib/fulfillment.ts",
+      "naam": "fulfillment",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Order-allocatie (\"welke filialen leveren wat\"). Doelen, in volgorde: 1. Order COMPLEET vanaf één locatie → bespaart verzendkosten. 2. Magazijn eerst (retail-voorraad bewaren we voor de winkelklant). 3. Kan het op meerdere plekken → die met de meeste voorraad."
+    },
+    {
+      "pad": "lib/giftcards.ts",
+      "naam": "giftcards",
+      "domein": "Kopen en orders",
+      "samenvatting": "Cadeaubonnen (giftcards) — SALDO-gebaseerd betaalmiddel (geen korting). Kopen: purchaseGiftcard() maakt een 'pending' bon → na Mollie-betaling activeert applyGiftcardPaymentStatus() 'm (saldo = bedrag) en mailt de code (idempotent t.o.v. dubbele webhooks)."
+    },
+    {
+      "pad": "lib/google-wallet-config.ts",
+      "naam": "google-wallet-config",
+      "domein": "Klant en marketing",
+      "samenvatting": "Google Wallet — configuratie en het ondertekenen van tokens. Bewust een LICHTE module, los van lib/google-wallet: dit bestand kent geen netwerk en geen pas-opbouw, zodat een aanroeper die alleen wil weten óf de feature aanstaat (de accountpagina, de mailfooter…"
+    },
+    {
+      "pad": "lib/google-wallet-push.ts",
+      "naam": "google-wallet-push",
+      "domein": "Klant en marketing",
+      "samenvatting": "Google Wallet-kaart bijwerken voor één klant, met dezelfde vorm als pushPassUpdate(customerId) bij Apple — zodat elk schrijfpad dat de Apple-pas bijwerkt er met één regel de Android-kant naast kan zetten."
+    },
+    {
+      "pad": "lib/google-wallet.ts",
+      "naam": "google-wallet",
+      "domein": "Klant en marketing",
+      "samenvatting": "Google Wallet — de GENTS Memberspas voor Android. De Android-tegenhanger van lib/apple-wallet, maar technisch een heel ander beest: bij Apple bouwen én ondertekenen we een .pkpass-bestand, bij Google beschrijven we de kaart als JSON en ondertekenen we een JWT."
+    },
+    {
+      "pad": "lib/handboek-stijl.ts",
+      "naam": "handboek-stijl",
+      "domein": "Overig",
+      "samenvatting": "De opmaak van het handboek — één stylesheet voor twee afnemers: de pagina /handboek (die de portal opent) en de losse HTML-uitdraai. Anders zou de uitdraai er langzaam anders uit gaan zien dan het scherm."
+    },
+    {
+      "pad": "lib/handboek.ts",
+      "naam": "handboek",
+      "domein": "Overig",
+      "samenvatting": "Het handboek samenstellen: verhaal (content/handboek) + LEVENDE getallen + automatisch afgeleide lijsten (content/handboek-index, gemaakt bij elke build). WAAROM DIT ZO MOET. Een handboek veroudert op twee manieren, en allebei zijn ze stil."
+    },
+    {
+      "pad": "lib/heatmap-client.ts",
+      "naam": "heatmap-client",
+      "domein": "Meten",
+      "samenvatting": "Klik-heatmap: waar klikken bezoekers écht, hoe ver komen ze op de pagina, en waar klikken ze op iets dat niet klikbaar is. EIGEN RAIL, NAAST lib/track-client. Dat is een bewuste afwijking van \"één afvuurpunt\"."
+    },
+    {
+      "pad": "lib/heatmap-paginas.ts",
+      "naam": "heatmap-paginas",
+      "domein": "Meten",
+      "samenvatting": "Getypte schil om lib/heatmap-regels.js — daar staan de regels zelf, hier de types en het enige stuk dat Next-kennis nodig heeft: het locale-prefix."
+    },
+    {
+      "pad": "lib/heatmap.ts",
+      "naam": "heatmap",
+      "domein": "Meten",
+      "samenvatting": "Serverkant van de klik-heatmap: opslaan, samenvatten en uitlezen. DE DAG IS EEN NEDERLANDSE DAG."
+    },
+    {
+      "pad": "lib/helpdesk.ts",
+      "naam": "helpdesk",
+      "domein": "Klant en marketing",
+      "samenvatting": "Helpdesk-koppeling met de GENTS-portal (storegents). De klant ziet z'n eigen klantenservice-tickets in z'n account. We halen ze SERVER-SIDE op met de geverifieerde sessie-e-mail (nooit door de klant op te geven) + een gedeeld portal-secret."
+    },
+    {
+      "pad": "lib/hero-media.ts",
+      "naam": "hero-media",
+      "domein": "Catalogus",
+      "samenvatting": "Hero-/bannerbeelden: de merkbeelden bovenaan de homepage en de landingspagina's. Gemaakt met fal.ai (FLUX) — tekst-naar-beeld, vanaf nul. DRIE WEGEN, en de eerste vraag is \"hangt er een echt artikel in beeld?\": 1."
+    },
+    {
+      "pad": "lib/homepage.ts",
+      "naam": "homepage",
+      "domein": "Site en content",
+      "samenvatting": "Indeling van de homepage: welke blokken er staan, in welke volgorde, en of ze aan staan."
+    },
+    {
+      "pad": "lib/i18n.ts",
+      "naam": "i18n",
+      "domein": "Site en content",
+      "samenvatting": "Meertaligheid — fase 1: locale via cookie (geen route-prefix, dus géén risico voor bestaande routes). Default Nederlands; ontbrekende vertalingen vallen netjes terug op NL. Fase 2 (later) voegt locale-URL's + hreflang toe voor SEO."
+    },
+    {
+      "pad": "lib/identity.ts",
+      "naam": "identity",
+      "domein": "Klant en marketing",
+      "samenvatting": "Identiteitsgrafiek — wie is wie. Het probleem dat dit oplost: dezelfde persoon bestond in vier gedaanten die elkaar niet kenden."
+    },
+    {
+      "pad": "lib/inbound-discrepancies.ts",
+      "naam": "inbound-discrepancies",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Afwijkingen bij goederenontvangst (F3). Bij het afsluiten van een ontvangst loggen we de regels die niet klopten (SHORT/OVER/NOT_ORDERED uit de telling; DAMAGED e.d. via expliciete markering later) → tegenhanger van logMisses (niet-leverbaar)."
+    },
+    {
+      "pad": "lib/inbound-sampling.ts",
+      "naam": "inbound-sampling",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Steekproef voor de goederenontvangst (F2) — manco-gedreven. De steekproef is NIET puur random: artikelen die historisch vaker MANCO komen (en bronnen die vaker manco leveren) worden gericht gecontroleerd, daarbovenop een waarde-gewogen statistische steekproef…"
+    },
+    {
+      "pad": "lib/inbound.ts",
+      "naam": "inbound",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Inbound goederenontvangst (F1 — scan-to-receive). Een zending (replenishment uit het magazijn, leverancier of winkel→winkel) komt binnen als ASN: verwachte regels + status (gepickt → onderweg → ontvangen)."
+    },
+    {
+      "pad": "lib/inflight.ts",
+      "naam": "inflight",
+      "domein": "Platform",
+      "samenvatting": "Mini single-flight: dedupliceert gelijktijdige aanroepen van een trage fetch (bv. een Vercel Blob `list()`-call voor een config). Zolang er één in-flight is, krijgen alle gelijktijdige bellers diezelfde promise — i.p.v."
+    },
+    {
+      "pad": "lib/inventory.ts",
+      "naam": "inventory",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Inventarisatie (telsessie) op de handscanner. Scan artikelen → tel per artikel → zet af tegen de systeemvoorraad (SRS-baseline + kassa-delta) → variantie → optioneel als voorraadcorrectie (core-movement, channel 'correction') geboekt."
+    },
+    {
+      "pad": "lib/invoice.ts",
+      "naam": "invoice",
+      "domein": "Kopen en orders",
+      "samenvatting": "Klantfactuur voor een betaalde weborder. Levert printbare HTML — dezelfde route als de pakbon (lib/packing-slip.ts), zodat er geen PDF-afhankelijkheid bij komt: de browser maakt er met \"Bewaar als PDF\" een keurige PDF van."
+    },
+    {
+      "pad": "lib/judgeme.ts",
+      "naam": "judgeme",
+      "domein": "Klant en marketing",
+      "samenvatting": "Judge.me-review-import → eigen reviews-engine. Haalt de reviews op via de Judge.me Reviews API en zet ze om naar native 'published' reviews (source='judgeme', externalId='judgeme:<id>' voor idempotente her-sync)."
+    },
+    {
+      "pad": "lib/klantbronnen.ts",
+      "naam": "klantbronnen",
+      "domein": "Klant en marketing",
+      "samenvatting": "Ophalen van klantgegevens uit de systemen die storegents beheert. De clients voor SRS (SOAP) en Returnista wonen daar, met hun sleutels."
+    },
+    {
+      "pad": "lib/landings-i18n.ts",
+      "naam": "landings-i18n",
+      "domein": "Site en content",
+      "samenvatting": "i18n-laag over de statische storytelling-landings (lib/landings.ts) — zelfde patroon als de hero (lib/site-settings-i18n): de nachtelijke cron vertaalt de bronteksten (ns \"landing\", delta op bron-hash) en het renderen pakt alleen een vertaling die nog bij de h…"
+    },
+    {
+      "pad": "lib/landings.ts",
+      "naam": "landings",
+      "domein": "Site en content",
+      "samenvatting": "Storytelling-landingspagina's per gelegenheid. De Shopify-varianten waren met theme-secties gebouwd (lege page-body), dus hier opnieuw opgebouwd in de GENTS-tone: warm, deskundig, gericht op de gelegenheid i.p.v. de doelgroep."
+    },
+    {
+      "pad": "lib/lifestyle.ts",
+      "naam": "lifestyle",
+      "domein": "Catalogus",
+      "samenvatting": "Herbruikbare sfeerbeeld-generatie per product (FASHN product-to-model), met de geleerde stijl-regels uit de learnings-store in de prompt."
+    },
+    {
+      "pad": "lib/load-env.ts",
+      "naam": "load-env",
+      "domein": "Platform",
+      "samenvatting": "Env-loader voor losse scripts (npm run import:* / cache:publish). Next.js laadt .env.local zelf; tsx-scripts niet — vandaar deze helper. Volgorde: .env.local wint van .env (zelfde semantiek als Next)."
+    },
+    {
+      "pad": "lib/locale-server.ts",
+      "naam": "locale-server",
+      "domein": "Site en content",
+      "samenvatting": "Huidige locale (server components / route handlers). Fase 2: de middleware zet de locale uit het URL-prefix in een request-header; die is leidend. Valt terug op de cookie (browse-persistentie) en dan op de default (nl)."
+    },
+    {
+      "pad": "lib/looks.ts",
+      "naam": "looks",
+      "domein": "Site en content",
+      "samenvatting": "\"Shop the look\" — gecureerde outfits met klikbare hotspots op een modelfoto (Mr Marvis-stijl, eigen GENTS-twist: gelegenheid-first + dresscode-laag). Bron: de eigen looks-store (portal-beheerd, content:looks) bovenop de statische LOOKS hieronder als basis."
+    },
+    {
+      "pad": "lib/loyalty-backfill.ts",
+      "naam": "loyalty-backfill",
+      "domein": "Klant en marketing",
+      "samenvatting": "Achterstallige spaarpunten bijboeken. Waarom dit bestaat: punten werden maar op twee toevallige momenten geschreven — tijdens het versturen van de bevestigingsmail en bij een magic-link login."
+    },
+    {
+      "pad": "lib/loyalty-bonus.ts",
+      "naam": "loyalty-bonus",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/loyalty-bonus.ts Eenmalige punten-bonussen die RETOUREN moeten terugdringen. Eén keer per klant, direct besteedbaar: account → profiel aangemaakt, online (eerste bevestigde login) of aan de kassa maatadvies → de klant heeft z'n maten bewaard (via /maatadvi…"
+    },
+    {
+      "pad": "lib/loyalty-brug.ts",
+      "naam": "loyalty-brug",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/loyalty-brug.ts Van een KASSA-klantnummer naar een gents.nl-klant, en van daaruit naar het ene spaarpunten-grootboek (`loyalty_events`). HET PROBLEEM DAT DIT OPLOST."
+    },
+    {
+      "pad": "lib/loyalty-claim.ts",
+      "naam": "loyalty-claim",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/loyalty-claim.ts Anonieme-punten-claim-engine. Een kassabon (zonder account) of een gast-weborder levert punten op; die worden bijgeschreven zodra de klant een account heeft."
+    },
+    {
+      "pad": "lib/loyalty-core.ts",
+      "naam": "loyalty-core",
+      "domein": "Klant en marketing",
+      "samenvatting": "De kassareden in klanttaal: dit staat straks in het puntenoverzicht van de klant."
+    },
+    {
+      "pad": "lib/loyalty-report.ts",
+      "naam": "loyalty-report",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/loyalty-report.ts Meten of de spaarpunten-bonussen doen waarvoor ze bedoeld zijn: minder retouren. Drie vragen, in deze volgorde: 1. Adoptie — hoeveel klanten halen elke bonus, en wat kost dat? 2."
+    },
+    {
+      "pad": "lib/maat-analyse.ts",
+      "naam": "maat-analyse",
+      "domein": "Catalogus",
+      "samenvatting": "Wat de maatvoering in de praktijk doet: welke maten verkopen, welke komen terug, en klopt het maatadvies met wat mensen uiteindelijk houden. SERVER-ONLY. Wordt gelezen door /api/studio/site/maten/analyse (Site → Maten)."
+    },
+    {
+      "pad": "lib/maattabel-regels.ts",
+      "naam": "maattabel-regels",
+      "domein": "Catalogus",
+      "samenvatting": "Het lezen en KEUREN van een geüpload maatblad. ALLEEN `import type` in dit bestand, en dat is geen stijlkeuze: de tests draaien met `node --test` op de .ts rechtstreeks, en Node kent de `@/`-alias niet."
+    },
+    {
+      "pad": "lib/maattabel.ts",
+      "naam": "maattabel",
+      "domein": "Catalogus",
+      "samenvatting": "De actieve maattabel lezen en nieuwe versies opslaan. SERVER-ONLY (database). De site draait op `getActieveTabel()`. Is er niets geüpload, of ligt de DB eruit, dan komt de ingebakken tabel uit lib/size-chart terug."
+    },
+    {
+      "pad": "lib/main-menu.ts",
+      "naam": "main-menu",
+      "domein": "Site en content",
+      "samenvatting": "Hoofdmenu — heringedeeld van 14 losse items naar 6 sterke groepen (gelegenheid-first, conform de GENTS-positionering). Elke groep heeft kolommen + een sfeer-tegel met beeld voor het mega-menu. \"#\" = alleen kop."
+    },
+    {
+      "pad": "lib/media-generator.ts",
+      "naam": "media-generator",
+      "domein": "Catalogus",
+      "samenvatting": "De AI-sfeerbeeld-generator, als gedeelde functie zodat zowel het CLI-script (npm run gen:lifestyle) als de cron (/api/cron/beeldgeneratie) exact dezelfde pijplijn draaien. Eén rail — geen tweede kopie die stilletjes afwijkt."
+    },
+    {
+      "pad": "lib/media-themes.ts",
+      "naam": "media-themes",
+      "domein": "Catalogus",
+      "samenvatting": "Beeldthema's voor de AI-media-generatie. Drie lagen, bewust gescheiden: 1. MERKREGELS — code, hieronder in BRAND_RULES. Wit overhemd mét kraag, gilet onderste knoop open, één mannelijk model."
+    },
+    {
+      "pad": "lib/menu-server.ts",
+      "naam": "menu-server",
+      "domein": "Site en content",
+      "samenvatting": "Het hoofdmenu — uit onze eigen content-store (content:menu, beheerbaar in de GENTS-portal) met de statische MAIN_MENU als seed/fallback. Vervangt Sanity."
+    },
+    {
+      "pad": "lib/merchandising-admin.ts",
+      "naam": "merchandising-admin",
+      "domein": "Catalogus",
+      "samenvatting": "Beheerlaag voor \"Uitgelicht\" (merchandising-pins) in de Site-studio. De pins zelf blijven in de settings-store (app_settings.global → merchandisingPins), één bron van waarheid; dit bestand schrijft daar gericht één sleutel in (savePinsForContext) en voegt verd…"
+    },
+    {
+      "pad": "lib/merchandising-regels.ts",
+      "naam": "merchandising-regels",
+      "domein": "Catalogus",
+      "samenvatting": "Merchandising-REGELS — de automatische tegenhanger van de pins. Een pin zet één product bovenaan; een regel verschuift een hele groep (\"alles van jaar 2026 omhoog\", \"NOS omlaag\", \"Herfst/Winter omhoog vanaf 1 september\")."
+    },
+    {
+      "pad": "lib/merchandising.ts",
+      "naam": "merchandising",
+      "domein": "Catalogus",
+      "samenvatting": "Merchandising-pins — handmatig uitgelichte producten die bovenaan de \"Aanbevolen\"-sort van een PLP komen. Config leeft in de settings-store (app_settings.global.merchandisingPins), beheerd vanuit de portal; nooit hardcoded."
+    },
+    {
+      "pad": "lib/messages.ts",
+      "naam": "messages",
+      "domein": "Site en content",
+      "samenvatting": "UI-teksten per taal. Ontbrekende sleutels/talen vallen terug op Nederlands, zodat de site nooit \"leeg\" of stuk is tijdens het uitrollen van vertalingen."
+    },
+    {
+      "pad": "lib/mijn-winkel-insights.ts",
+      "naam": "mijn-winkel-insights",
+      "domein": "Meten",
+      "samenvatting": "Werkt \"Mijn winkel(s)\"? — de meting bij de functie. Drie vragen, in deze volgorde: 1."
+    },
+    {
+      "pad": "lib/model-learnings.ts",
+      "naam": "model-learnings",
+      "domein": "Catalogus",
+      "samenvatting": "Lerende modellen-AI: aparte \"learnings-store\" voor de modelfoto's, los van de sfeerbeeld-learnings. Medewerkers keuren een foto goed/af met een categorie + een eigen notitie; die feedback stuurt de volgende modelfoto-prompt aan."
+    },
+    {
+      "pad": "lib/model-photo.ts",
+      "naam": "model-photo",
+      "domein": "Catalogus",
+      "samenvatting": "Eén modelfoto (her)genereren via FASHN product-to-model, MÉT de geleerde smaak (modelPromptBlocks), kleur-bewuste styling (modelStylePrompt) en native 4:5. Gebruikt door de portal \"Modellen-studio\" (regenerate-knop)."
+    },
+    {
+      "pad": "lib/model-styling.ts",
+      "naam": "model-styling",
+      "domein": "Catalogus",
+      "samenvatting": "Slimme, voorraad- én etiquette-bewuste \"Shop de look\" rond een AI-modelfoto. Per rol (overhemd / pantalon / colbert / schoenen / riem / das) kiezen we automatisch een product dat (1) ruim op voorraad is, (2) qua kleur matcht met het getoonde item en (3) de her…"
+    },
+    {
+      "pad": "lib/mollie.ts",
+      "naam": "mollie",
+      "domein": "Kopen en orders",
+      "samenvatting": "Dunne Mollie-client (Payments API v2 — de Orders API is door Mollie afgeraden). Env-gated: zonder MOLLIE_API_KEY is checkout \"niet geconfigureerd\" en draait de rest van de site gewoon door."
+    },
+    {
+      "pad": "lib/nav-i18n.ts",
+      "naam": "nav-i18n",
+      "domein": "Site en content",
+      "samenvatting": "i18n-laag over de navigatie-CONTENT: hoofdmenu, footer-kolommen en de categorie-labels."
+    },
+    {
+      "pad": "lib/nav-insights.ts",
+      "naam": "nav-insights",
+      "domein": "Site en content",
+      "samenvatting": "Navigatie- en lijst-inzichten: wat DOET de klant met het menu, de filters en de productlijsten — en wat zouden we daaraan moeten veranderen. De site meet dit sinds vandaag (nav_click / product_click / filter / sort / size_click)."
+    },
+    {
+      "pad": "lib/new-collection.ts",
+      "naam": "new-collection",
+      "domein": "Catalogus",
+      "samenvatting": "Bron van waarheid voor \"de nieuwe collectie\": de échte webshop-collectie **New arrivals** (`/collections/nieuwe-collectie-gents`) — niet een heuristiek op een 'new'-attribuut of leeftijd."
+    },
+    {
+      "pad": "lib/newsletter.ts",
+      "naam": "newsletter",
+      "domein": "Klant en marketing",
+      "samenvatting": "Stateless double-opt-in-token voor de nieuwsbrief (geen extra DB-kolom nodig). HMAC over het e-mailadres met een server-secret. Tip: zet NEWSLETTER_SECRET in Vercel; zonder valt 'ie terug op de Resend-key (tokens verlopen bij key-rotatie)."
+    },
+    {
+      "pad": "lib/occasions-server.ts",
+      "naam": "occasions-server",
+      "domein": "Site en content",
+      "samenvatting": "Gelegenheden voor /gelegenheden — uit onze eigen content-store (content:occasions, beheerbaar in de GENTS-portal) met de onderstaande standaard als seed/fallback. Vervangt Sanity. De links sluiten aan op de bestaande collecties/landingen."
+    },
+    {
+      "pad": "lib/order-admin.ts",
+      "naam": "order-admin",
+      "domein": "Kopen en orders",
+      "samenvatting": "BACK-OFFICE-ACTIES OP EEN BESTELLING (portal → Site → Bestellingen). Alles wat een medewerker met een bestaande of nieuwe bestelling moet kunnen doen zónder in Mollie of de database te duiken: handmatig bestellen voor een klant, een nieuwe betaallink sturen al…"
+    },
+    {
+      "pad": "lib/order-media.ts",
+      "naam": "order-media",
+      "domein": "Kopen en orders",
+      "samenvatting": "Productbeeld bij bestelregels — voor het besteloverzicht in het profiel. Twee ingangen, want de twee kanalen bewaren iets anders."
+    },
+    {
+      "pad": "lib/order-notify.ts",
+      "naam": "order-notify",
+      "domein": "Kopen en orders",
+      "samenvatting": "Order-status-updates naar de klant via e-mail én WhatsApp. De orderbevestiging (betaald) heeft een eigen rijke HTML-mail (lib/email); hier zitten de statusovergangen 'verzonden', 'klaar om af te halen', 'bezorgd' (met review-uitnodiging) en 'terugbetaald'."
+    },
+    {
+      "pad": "lib/order-status.ts",
+      "naam": "order-status",
+      "domein": "Kopen en orders",
+      "samenvatting": "Order-status → NL-label, één bron van waarheid (was op 3 plekken gedupliceerd, met net-verschillende sets). Twee maps, BEWUST apart: de klant leest andere woorden dan de back-office (\"In afwachting van betaling\" vs \"Open\")."
+    },
+    {
+      "pad": "lib/orders.ts",
+      "naam": "orders",
+      "domein": "Kopen en orders",
+      "samenvatting": "Order-logica (commerce-core). Prijzen worden ALTIJD server-side uit de DB gehaald — nooit het client-bedrag vertrouwen. Bedragen in centen."
+    },
+    {
+      "pad": "lib/packing-slip.ts",
+      "naam": "packing-slip",
+      "domein": "Kopen en orders",
+      "samenvatting": "Pakbon (delivery note) voor een ship-from-store weborder. Levert printbare HTML die de winkel in een nieuw venster opent en direct afdrukt. Geen prijzen (het is een paklijst, geen factuur). Het GENTS-logo \"GENTS — SUITS YOU\" blijft ongewijzigd."
+    },
+    {
+      "pad": "lib/packshot-weergave.ts",
+      "naam": "packshot-weergave",
+      "domein": "Catalogus",
+      "samenvatting": "Hoe een accessoire-packshot in een tegel hoort te staan. Riemen, dassen, strikken, manchetknopen, pochets en bretels worden niet bijgesneden (object-cover zou de helft van een riem afkappen) maar heel getoond."
+    },
+    {
+      "pad": "lib/packshot.ts",
+      "naam": "packshot",
+      "domein": "Catalogus",
+      "samenvatting": "AI-packshot uit tekst: voor producten ZONDER bronfoto (bv. \"teFotograferen\" uit de Fotostatus-tool). Pijplijn: FLUX flat-lay (product-only) → bg-removal (BiRefNet) → composiet op PUUR WIT, in jullie packshot-stijl."
+    },
+    {
+      "pad": "lib/pakbon-instelling.ts",
+      "naam": "pakbon-instelling",
+      "domein": "Kopen en orders",
+      "samenvatting": "lib/pakbon-instelling.ts — de pakbontekst valideren die uit de portal komt. Kevin, 6 aug: \"wij moeten zelf de pakbon kunnen aanpassen in de portal\"."
+    },
+    {
+      "pad": "lib/payment-methods.ts",
+      "naam": "payment-methods",
+      "domein": "Kopen en orders",
+      "samenvatting": "Betaalkeuze op de afrekenpagina. De klant kreeg alle actieve Mollie-methoden als gelijkwaardig raster te zien — acht knoppen waarvan er in Nederland maar één of twee toe doen."
+    },
+    {
+      "pad": "lib/payments.ts",
+      "naam": "payments",
+      "domein": "Kopen en orders",
+      "samenvatting": "Betaalprovider-schakelaar. Worldline OF Mollie als online betaalmethode, zonder een big-bang: de actieve provider komt uit de env-var PAYMENT_PROVIDER (harde override in Vercel) of anders uit de instelbare settings-store (settings.paymentProvider, in de backen…"
+    },
+    {
+      "pad": "lib/pdp-faq.ts",
+      "naam": "pdp-faq",
+      "domein": "Overig",
+      "samenvatting": "Vaste FAQ-blokken per hoofdgroep — verlaagt twijfel op de PDP. De teksten lopen via de vertaalrail (lib/messages-catalog + de nachtelijke vertaal-cron)."
+    },
+    {
+      "pad": "lib/pim.ts",
+      "naam": "pim",
+      "domein": "Catalogus",
+      "samenvatting": "De PIM-kern: welke productvelden een mens mag zetten, hoe die bewerking de SRS-import overleeft, en hoe compleet een artikel is."
+    },
+    {
+      "pad": "lib/pin-terminal-melding.ts",
+      "naam": "pin-terminal-melding",
+      "domein": "Overig",
+      "samenvatting": "Statusmelding van een Mollie-pinbetaling terug naar de kassa (storegents). Mollie stuurt z'n webhook hierheen — de terminalsleutel zit in dit project. Het pin-log dat de dagafsluiting leest, staat in storegents."
+    },
+    {
+      "pad": "lib/plp-params.ts",
+      "naam": "plp-params",
+      "domein": "Overig",
+      "samenvatting": "Vorm van de PLP-URL-parameters (gedeeld tussen server-parsing en client-UI)."
+    },
+    {
+      "pad": "lib/plp-store.ts",
+      "naam": "plp-store",
+      "domein": "Overig",
+      "samenvatting": "Het winkelfilter op de PLP (\"alleen wat in mijn winkel ligt\") — gedeeld door /categorie en /collections, zodat beide lijsten hetzelfde doen."
+    },
+    {
+      "pad": "lib/portal.ts",
+      "naam": "portal",
+      "domein": "Overig",
+      "samenvatting": "De medewerkers-portal. Sinds het beheer van gents.nl daarheen verhuisd is (de Site-studio op /account/* is opgeheven) verwijst de webshop op twee plekken naar de portal: de redirects in next.config.mjs en de ingang op het klantprofiel."
+    },
+    {
+      "pad": "lib/pos-closings-core.ts",
+      "naam": "pos-closings-core",
+      "domein": "Kassa",
+      "samenvatting": "Kassa-dagafsluitingen in de Neon-core (bron-van-waarheid; vervangt de storegents- blob admin/kassa-closings.json). Atomaire upsert op (store, date) → geen read- modify-write-race meer."
+    },
+    {
+      "pad": "lib/pos-drafts-core.ts",
+      "naam": "pos-drafts-core",
+      "domein": "Kassa",
+      "samenvatting": "Geparkeerde kassa-mandjes (held sales / drafts) in de Neon-core — bron-van-waarheid; vervangt de storegents-blob admin/pos-sales-drafts.json."
+    },
+    {
+      "pad": "lib/pos-kas-mutaties-core.ts",
+      "naam": "pos-kas-mutaties-core",
+      "domein": "Kassa",
+      "samenvatting": "Kasmutaties (in/uit kas, in/uit kluis) in de Neon-core — bron-van-waarheid; vervangt de storegents-blob admin/pos-kas-mutaties.json. Dit is een GELDSPOOR: append-only (fout ingevoerd = tegenmutatie boeken) en zonder blob-cap."
+    },
+    {
+      "pad": "lib/pos-openings-core.ts",
+      "naam": "pos-openings-core",
+      "domein": "Kassa",
+      "samenvatting": "Kas-openingen (beginkas-telling per winkel per dag) in de Neon-core — bron-van-waarheid; vervangt de storegents-blob admin/kassa-openings.json."
+    },
+    {
+      "pad": "lib/pos-sales-core.ts",
+      "naam": "pos-sales-core",
+      "domein": "Kassa",
+      "samenvatting": "Kassa-verkopen in de Neon-core (bron-van-waarheid; vervangt de storegents-blob admin/pos-sales.json)."
+    },
+    {
+      "pad": "lib/pricing.ts",
+      "naam": "pricing",
+      "domein": "Catalogus",
+      "samenvatting": "Prijsweergave volgens de Omnibus-richtlijn (Besluit prijsaanduiding, art. 5a): een doorgestreepte \"van\"-prijs mag alleen de LAAGSTE prijs zijn die in de 30 dagen vóór het ingaan van de huidige (actie)prijs gold."
+    },
+    {
+      "pad": "lib/print-inbox.ts",
+      "naam": "print-inbox",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Print-inbox: de backend kan een winkel-kassa niet direct laten printen (de agent zit op localhost achter NAT), dus print-opdrachten worden per winkel gequeued. De kassa van die winkel pollt de inbox, print elke opdracht via z'n lokale agent en ackt 'm."
+    },
+    {
+      "pad": "lib/product-content.ts",
+      "naam": "product-content",
+      "domein": "Catalogus",
+      "samenvatting": "Portal-beheerbare productomschrijving-override (los van de gesynchroniseerde SRS/Sanity-data, zodat een sync 'm niet overschrijft). Cache-vrij: per product een app_settings-rij `pcontent:<handle>`."
+    },
+    {
+      "pad": "lib/products-cache.ts",
+      "naam": "products-cache",
+      "domein": "Catalogus",
+      "samenvatting": "Bouwt de products-cache in EXACT hetzelfde formaat als storegents/lib/shopify-products-cache.js (blob: shopify-products/cache.json)."
+    },
+    {
+      "pad": "lib/profiel-voorkeuren.ts",
+      "naam": "profiel-voorkeuren",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/profiel-voorkeuren.ts De \"wie ben jij\"-laag van het klantprofiel: geboortedatum, leeftijdsgroep, favoriete kleuren, vaste winkel en waarvoor je bij ons koopt."
+    },
+    {
+      "pad": "lib/punten-acties.ts",
+      "naam": "punten-acties",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/punten-acties.ts Eigen puntenacties: \"koop dit en krijg extra punten\". Regels als DATA, niet als code — je maakt ze in de portal aan en ze werken meteen, zonder release."
+    },
+    {
+      "pad": "lib/punten-service.ts",
+      "naam": "punten-service",
+      "domein": "Klant en marketing",
+      "samenvatting": "lib/punten-service.ts Klantenservice: met de hand punten toekennen als coulance. Een klacht die je met punten oplost kost minder dan een retour, en de klant houdt een reden om terug te komen — dat is precies wat een tegoedbon niet doet."
+    },
+    {
+      "pad": "lib/rate-limit.ts",
+      "naam": "rate-limit",
+      "domein": "Platform",
+      "samenvatting": "Lichte in-memory sliding-window rate-limit (per Vercel-functie-instance). Geen dependency; bedoeld als frictie/backstop tegen brute-force & enumeratie op core-endpoints."
+    },
+    {
+      "pad": "lib/receipt-token.ts",
+      "naam": "receipt-token",
+      "domein": "Kassa",
+      "samenvatting": "lib/receipt-token.ts Spiegelt het bon-token van storegents (lib/receipt-link.js) zodat gents.nl een kassabon-link kan verifiëren zonder een call naar storegents. Token = afgekapte HMAC van de sale-id met een gedeeld server-secret. Stateless."
+    },
+    {
+      "pad": "lib/receiving-config.ts",
+      "naam": "receiving-config",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Steekproef-instellingen voor de goederenontvangst (F2). Instelbaar via de portal (Instellingen → settings-blob `config/receiving-config.json`); gentsnext leest 'm direct (zelfde patroon als reservation-config)."
+    },
+    {
+      "pad": "lib/redirect-warnings.ts",
+      "naam": "redirect-warnings",
+      "domein": "Site en content",
+      "samenvatting": "Waarschuwingen bij redirect-regels — puur rekenwerk, GEEN database-import, zodat zowel de server (Site-studio-pagina) als de browser (het formulier, live tijdens typen) hem kan gebruiken."
+    },
+    {
+      "pad": "lib/redirects-admin.ts",
+      "naam": "redirects-admin",
+      "domein": "Site en content",
+      "samenvatting": "Schrijfkant van de beheerbare redirects, voor de Site-studio (/account/redirects)."
+    },
+    {
+      "pad": "lib/redirects.ts",
+      "naam": "redirects",
+      "domein": "Site en content",
+      "samenvatting": "Portal-beheerbare redirects. EDGE-SAFE leeslaag voor de middleware: gebruikt de Neon HTTP-client direct (géén drizzle) + een 30s module-cache, en is fail-soft (een DB-hapering breekt de routing nooit). De schrijfkant zit in het studio-endpoint (Node)."
+    },
+    {
+      "pad": "lib/refund-breakdown.ts",
+      "naam": "refund-breakdown",
+      "domein": "Kopen en orders",
+      "samenvatting": "Refund-rekenkern — bewust PUUR en zonder afhankelijkheden (geen db, geen fetch), zodat zowel de server (lib/returns.ts, lib/support-orderdata.ts) als de client (components/returns/retour-flow.tsx) exact dezelfde bedragen uitrekent."
+    },
+    {
+      "pad": "lib/reports.ts",
+      "naam": "reports",
+      "domein": "Meten",
+      "samenvatting": "Back-office rapportage-laag. Alle aggregaties server-side (schaal: 35k orders, 46k klanten). Bedragen in centen. Categorie/merk joinen we via sku → product_variants → products, want geïmporteerde Shopify-orderregels hebben wél een sku maar geen product_handle."
+    },
+    {
+      "pad": "lib/reservation-config.ts",
+      "naam": "reservation-config",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Reservering-hold-duur (MINUTEN) — instelbaar via de ReserveringConfig-kaart in de portal (Instellingen), die schrijft naar de storegents-blob `config/reservering-config.json` ({ holdMinuten })."
+    },
+    {
+      "pad": "lib/reservations.ts",
+      "naam": "reservations",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Reserveringen — gents.nl-native (SRS = WMS, klanten in gents.nl). Een reservering houdt voorraad HARD vast in de winkel via het anti-oversell-primitief (lib/store-reserve, ref \"RES-<id>\", 7-daagse TTL) en hangt aan een gents.nl-klant. Géén SRS-push."
+    },
+    {
+      "pad": "lib/reserved-page-slugs.ts",
+      "naam": "reserved-page-slugs",
+      "domein": "Site en content",
+      "samenvatting": "Slugs die /pages/[handle] al VÓÓR de eigen content-pagina's afhandelt (vaste landings + winkelpagina's). Een content-pagina op zo'n slug zou stilletjes onzichtbaar blijven — daarom weigeren we ze bij het opslaan en tonen we ze in de Site-studio als \"bezet\"."
+    },
+    {
+      "pad": "lib/returns.ts",
+      "naam": "returns",
+      "domein": "Overig",
+      "samenvatting": "Retouren — klant start vanuit z'n bestelling. Methode: DHL-retourlabel of in de winkel. Vergoeding: geld terug (Mollie-refund, evt. minus retourkosten) of store credit (cadeaubon, volledige waarde → gratis retour). Store credit / in-winkel = gratis."
+    },
+    {
+      "pad": "lib/review-summary.ts",
+      "naam": "review-summary",
+      "domein": "Klant en marketing",
+      "samenvatting": "AI-reviewsamenvatting per product. Claude leest de gepubliceerde reviews en destilleert een korte blurb + pluspunten/aandachtspunten + pasvorm-notitie."
+    },
+    {
+      "pad": "lib/reviews-db.ts",
+      "naam": "reviews-db",
+      "domein": "Klant en marketing",
+      "samenvatting": "Native productreviews (eigen engine, los van het legacy Judge.me-aggregaat in lib/reviews.ts). Geverifieerde kopers (geldig order-token + product in de order) publiceren direct; overige reviews komen op 'pending' voor moderatie."
+    },
+    {
+      "pad": "lib/reviews.ts",
+      "naam": "reviews",
+      "domein": "Klant en marketing",
+      "samenvatting": "Beoordelingsdata uit Judge.me (rating + review_widget_data metafields)."
+    },
+    {
+      "pad": "lib/safe-image.ts",
+      "naam": "safe-image",
+      "domein": "Platform",
+      "samenvatting": "Beeld-URL's die next/image daadwerkelijk aankan. Waarom dit bestaat: de publieke pagina's renderen een beheerd beeldveld met <Image src={…}>."
+    },
+    {
+      "pad": "lib/safe-redirect.ts",
+      "naam": "safe-redirect",
+      "domein": "Platform",
+      "samenvatting": "Doorstuur-veiligheid voor /api/r: een meetbare link mag nooit een open redirect worden. Alleen een pad op onze eigen site is goed genoeg — wie een hele URL meegeeft, wordt geweigerd."
+    },
+    {
+      "pad": "lib/safety-stock.ts",
+      "naam": "safety-stock",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Veiligheidsvoorraad = een budget PER ARTIKEL, niet per maat per filiaal. Kevin, 12 aug: \"de veiligheidsmarge is 2 stuks totaal over alle maten\". Zo was het bedoeld; zo werkte het niet."
+    },
+    {
+      "pad": "lib/sandbox-anonimiseren.ts",
+      "naam": "sandbox-anonimiseren",
+      "domein": "Platform",
+      "samenvatting": "lib/sandbox-anonimiseren.ts — haalt de persoonsgegevens uit een verse kopie van productie. WAAROM DIT BESTAAT De sandbox wordt 's nachts ververst vanaf productie, zodat je met echte volumes en echte randgevallen test."
+    },
+    {
+      "pad": "lib/sandbox-verversen.ts",
+      "naam": "sandbox-verversen",
+      "domein": "Platform",
+      "samenvatting": "lib/sandbox-verversen.ts — de sandbox-database 's nachts bijwerken vanaf productie. Neon-branches zijn copy-on-write, dus dit is geen kopieeractie maar één API-aanroep: de sandbox-branch wordt teruggezet op de huidige stand van zijn ouder."
+    },
+    {
+      "pad": "lib/search-helpers.ts",
+      "naam": "search-helpers",
+      "domein": "Catalogus",
+      "samenvatting": "Hulpfuncties voor de zoekmachine: maat-token-herkenning en synoniemen. Synoniemen zijn beheerbaar in de instellingen (lib/settings.searchSynonyms): elke regel is een groep van komma-gescheiden woorden die elkaars synoniem zijn."
+    },
+    {
+      "pad": "lib/seo-overrides.ts",
+      "naam": "seo-overrides",
+      "domein": "Site en content",
+      "samenvatting": "Portal-beheerbare SEO-overrides per pad. Overschrijft de automatisch bepaalde meta-titel/omschrijving (en optioneel noindex) van een pagina zónder code/ redeploy. Bron: app_settings-rij `seoOverrides` (map pad → override)."
+    },
+    {
+      "pad": "lib/seo.ts",
+      "naam": "seo",
+      "domein": "Site en content",
+      "samenvatting": "Locale-bewuste canonical + hreflang-alternates voor één (prefix-loos) pad. De pagina geeft haar Nederlandse pad door (bv. \"/products/colbert\"); deze helper maakt er de juiste canonical van voor de huidige taal en somt alle taalvarianten op voor Google."
+    },
+    {
+      "pad": "lib/settings.ts",
+      "naam": "settings",
+      "domein": "Overig",
+      "samenvatting": "Centrale, in de backend instelbare configuratie. Eén bron van waarheid (DB-rij app_settings.global), met defaults als fallback."
+    },
+    {
+      "pad": "lib/shipping-zones.ts",
+      "naam": "shipping-zones",
+      "domein": "Kopen en orders",
+      "samenvatting": "Bezorglanden + DHL-tarieven. De bezorgpagina beloofde al jaren de volledige DHL-staffel (NL/BE € 3,95, DE € 4,95 vanaf € 100 gratis, overig Europa € 12,95), terwijl de checkout één vast tarief rekende en alléén Nederland accepteerde."
+    },
+    {
+      "pad": "lib/shopify-media.ts",
+      "naam": "shopify-media",
+      "domein": "Catalogus",
+      "samenvatting": "Productfoto's uit Shopify bijhalen. ───────────────────────────────────────────────────────────────────────────── WAAROM DIT BESTAAT Gemeld op 14 aug: `pak-3-delig-double-breasted-ecru` staat actief op de site, 240 stuks voorraad, en zonder énige foto — terwij…"
+    },
+    {
+      "pad": "lib/shopify-sync.ts",
+      "naam": "shopify-sync",
+      "domein": "Catalogus",
+      "samenvatting": "Doorlopende Shopify-sync: haal de orders op die er sinds de vorige keer bij kwamen. Waarom dit moet bestaan. Het klantprofiel zag er compleet uit maar stond stil: de orders in Neon houden op in juni 2026 (juli 2, augustus 5)."
+    },
+    {
+      "pad": "lib/site-settings-i18n.ts",
+      "naam": "site-settings-i18n",
+      "domein": "Site en content",
+      "samenvatting": "i18n-laag over de portal-bewerkbare site-content (hero). De hero-teksten komen uit de settings-content-store (app_settings.site) — géén vaste i18n-catalogsleutels, want marketeers wijzigen ze zonder deploy."
+    },
+    {
+      "pad": "lib/site-settings.ts",
+      "naam": "site-settings",
+      "domein": "Site en content",
+      "samenvatting": "Site-instellingen (homepage-content): announcement, hero, USP's. Bron van waarheid = DB-rij app_settings.site (portal-beheerbaar via de \"Nieuwe site\"- CMS → Instellingen), met onderstaande SITE_SETTINGS als fallback/default."
+    },
+    {
+      "pad": "lib/site-url.ts",
+      "naam": "site-url",
+      "domein": "Platform",
+      "samenvatting": "Basis-URL van de site, defensief opgeschoond: Windows-shells kunnen bij het zetten van env-vars een BOM (U+FEFF) of witruimte meegeven, en `new URL()` crasht daar hard op tijdens de build."
+    },
+    {
+      "pad": "lib/size-chart-hub.ts",
+      "naam": "size-chart-hub",
+      "domein": "Catalogus",
+      "samenvatting": "Maattabellen-hub: de SEO/UX-landingspagina's per categorie onder /maattabellen. Bouwt voort op de autoritatieve GENTS-maatdata (lib/size-chart) en rendert die als echte, semantische tabellen — vindbaar in Google (i.t.t."
+    },
+    {
+      "pad": "lib/size-chart.ts",
+      "naam": "size-chart",
+      "domein": "Catalogus",
+      "samenvatting": "GENTS autoritatieve maattabel (bron: Faslet-SizeChart-GENTS, juni 2026). Dit is de ÉCHTE GENTS-maatvoering: lichaamsmaten in cm → GENTS-confectiemaat per categorie."
+    },
+    {
+      "pad": "lib/size-charts.ts",
+      "naam": "size-charts",
+      "domein": "Catalogus",
+      "samenvatting": "Per hoofdgroep een handle van de maattabel-pagina (gemigreerd of generieke fallback)."
+    },
+    {
+      "pad": "lib/size-match.ts",
+      "naam": "size-match",
+      "domein": "Catalogus",
+      "samenvatting": "\"Shop in jouw maat\" — koppelt de in het profiel opgeslagen maten aan een product/categorie."
+    },
+    {
+      "pad": "lib/size-reference.ts",
+      "naam": "size-reference",
+      "domein": "Catalogus",
+      "samenvatting": "\"Ken je je maat al?\" — vertaalt een bekende confectie-/merkmaat naar een indicatief GENTS-advies. We mappen de merkmaat naar een borstomvang (cm) en voeden die in de bestaande, geteste maatlogica (jasje ≈ borst/2, boord, drop 6)."
+    },
+    {
+      "pad": "lib/size-taxonomy.ts",
+      "naam": "size-taxonomy",
+      "domein": "Catalogus",
+      "samenvatting": "Maat-taxonomie — exact overgenomen uit de Shopify-theme (snippets/variant-picker.liquid)."
+    },
+    {
+      "pad": "lib/sizing.ts",
+      "naam": "sizing",
+      "domein": "Catalogus",
+      "samenvatting": "Maatlogica voor GENTS-herenmode. Twee verantwoordelijkheden: 1. Maten herkennen & correct sorteren (de catalogus mengt confectiematen, boordmaten, lengtematen en S–XXL door elkaar). 2. Maatadvies: lichaamsmaten → aanbevolen confectie/boord/pantalonmaat."
+    },
+    {
+      "pad": "lib/smoking-bundles.ts",
+      "naam": "smoking-bundles",
+      "domein": "Kopen en orders",
+      "samenvatting": "Bundel-beheer voor de nieuwe site — bewerkbaar via /site, naast Looks. Hiervóór kwam de samenstelling uit de portal-instellingen van storegents."
+    },
+    {
+      "pad": "lib/smoking-korting.ts",
+      "naam": "smoking-korting",
+      "domein": "Kopen en orders",
+      "samenvatting": "De rekenkant van \"Smoking compleet\" — bewust LOS van lib/smoking-pakket.ts. Dat bestand praat met de database en de portal; dit bestand raakt alleen getallen."
+    },
+    {
+      "pad": "lib/smoking-pakket.ts",
+      "naam": "smoking-pakket",
+      "domein": "Kopen en orders",
+      "samenvatting": "\"Smoking compleet\" — de klant stelt zelf jas, pantalon, overhemd en strik samen, elk in zijn eigen maat, tegen één VASTE pakketprijs per niveau. Twee dingen wijken bewust af van pak-samenstellen (lib/suit-pairing.ts): MEERDERE KEUZES PER ROL."
+    },
+    {
+      "pad": "lib/social-proof.ts",
+      "naam": "social-proof",
+      "domein": "Klant en marketing",
+      "samenvatting": "Eerlijke social-proof op de PDP: échte kijk-statistieken uit onze eigen analytics (events.product_view), GEEN verzonnen \"x mensen kijken nu\"-cijfers. Drempel-gated in de UI zodat een zwak signaal (1-2 views) niets toont."
+    },
+    {
+      "pad": "lib/split-fulfilment.ts",
+      "naam": "split-fulfilment",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Completeness-gate voor split-orders: een order die uit MEERDERE WINKELS geleverd wordt, mag pas een verzendlabel krijgen als élk winkel-deel gepickt/gereed is — anders zou een winkel z'n deel al versturen terwijl een ander filiaal nog moet picken (half-versche…"
+    },
+    {
+      "pad": "lib/srs-artikelen.ts",
+      "naam": "srs-artikelen",
+      "domein": "Keten en voorraad",
+      "samenvatting": "De SRS-koppeling op PRODUCTNIVEAU. ───────────────────────────────────────────────────────────────────────────── WAT ER NIET WAS `products.srs_artikel_nummer` en `srs_kleur_id` bestaan al sinds de blauwdruk (\"een product = artikelnummer + kleur\"), maar op prod…"
+    },
+    {
+      "pad": "lib/srs-messages.ts",
+      "naam": "srs-messages",
+      "domein": "Keten en voorraad",
+      "samenvatting": "SRS Messages-API (SOAP, ws.storeinfo.nl/messages/v1/soap/Customers.php). Geport uit storegents (lib/srs-customers-client.js)."
+    },
+    {
+      "pad": "lib/srs-stock-core.ts",
+      "naam": "srs-stock-core",
+      "domein": "Keten en voorraad",
+      "samenvatting": "SRS-voorraadbaseline in Neon — bron van waarheid voor de bruto fysieke voorraad per SKU per filiaal (vervangt de cross-repo blob srs-voorraad/srs-rows-latest.json die de webshop las via een gedeeld storegents-token)."
+    },
+    {
+      "pad": "lib/srs-store-import.ts",
+      "naam": "srs-store-import",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Omnichannel: importeert de winkelaankopen (offline bonnen) van een klant uit SRS naar store_purchases. Géén e-mails of meldingen — puur DB-insert, idempotent (dedup op receiptId per klant)."
+    },
+    {
+      "pad": "lib/stock-key-alias.ts",
+      "naam": "stock-key-alias",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Voorraad-sleutels komen uit verschillende hoeken in verschillende vormen: de webshop vraagt op SKU (2900…), maar de kassa/scanner (storegents article-search) keyt op `barcode || sku` — voor ~48% van de catalogus is dat de leveranciers-EAN (8721…), níet de sku."
+    },
+    {
+      "pad": "lib/stock-notify.ts",
+      "naam": "stock-notify",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Terug-op-voorraad-notificaties. Klant laat e-mail achter op een uitverkocht product/maat; de voorraad-sync roept processStockNotifications() aan en mailt zodra het er weer is. Env-gated op Resend (zonder mailinfra: alleen opslaan)."
+    },
+    {
+      "pad": "lib/stock-reconcile.ts",
+      "naam": "stock-reconcile",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Voorraad-reservering Fase 0 — reconcile + drift-meting (observability, geen gedragswijziging)."
+    },
+    {
+      "pad": "lib/stock-reservations.ts",
+      "naam": "stock-reservations",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Order-bewuste voorraad. SRS is alleen WMS/voorraadbron en ziet de webverkopen NIET (geen weborder-push). Tussen twee SRS-syncs zou de site daardoor hetzelfde laatste item meerdere keren kunnen verkopen."
+    },
+    {
+      "pad": "lib/stock.ts",
+      "naam": "stock",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Voorraad uit de SRS-data-export (voorkeur van de business boven Shopify-stock). Bron: Neon-tabel `srs_stock` (bron van waarheid; de storegents SRS-import pusht de volledige baseline structureel via /api/core/stock/baseline — uurlijkse cron, en de import-marker…"
+    },
+    {
+      "pad": "lib/store-core-token.ts",
+      "naam": "store-core-token",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Auth voor de omnichannel core-API. De kassa (storegents) authenticeert met een dedicated bearer-token (STORE_CORE_TOKEN); een ingelogde admin of de STUDIO_API_TOKEN mag ook (handig voor testen vanuit de portal)."
+    },
+    {
+      "pad": "lib/store-core.ts",
+      "naam": "store-core",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Omnichannel voorraad-core (Fase A). De zelfgebouwde kassa (storegents) én de webshop schrijven hier hun voorraad-mutaties naartoe — één transactioneel grootboek bovenop de SRS-magazijn-baseline: beschikbaar(locatie, artikel) = SRS-baseline(locatie) + Σ core-de…"
+    },
+    {
+      "pad": "lib/store-preference.ts",
+      "naam": "store-preference",
+      "domein": "Overig",
+      "samenvatting": "\"Mijn winkel\" — de klant kiest één vaste winkel en ziet daarna overal meteen of een artikel dáár ligt (vandaag ophalen / passen)."
+    },
+    {
+      "pad": "lib/store-reserve.ts",
+      "naam": "store-reserve",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Fase D — anti-oversell-reservering (hard slot-lock). SRS is alleen WMS en ziet de webverkopen niet; de afgeleide web-reservering (lib/store-core) telt een order pas mee zodra die betaald + gepland is."
+    },
+    {
+      "pad": "lib/stores.ts",
+      "naam": "stores",
+      "domein": "Overig",
+      "samenvatting": "Coördinaten van het STADSCENTRUM, niet van de deur — nauwkeurig genoeg om winkels op afstand te sorteren (\"welke is het dichtst bij?\"), maar bewust niet bedoeld voor navigatie: daarvoor staat er een echte maps-link op de winkelpagina."
+    },
+    {
+      "pad": "lib/student-acties.ts",
+      "naam": "student-acties",
+      "domein": "Kopen en orders",
+      "samenvatting": "lib/student-acties.ts — verenigingskorting aan de kassa. Kevin/Remy, 6 aug: Remy maakt in de portal een actie (vereniging + winkel(s) + deelnemende producten + percentage)."
+    },
+    {
+      "pad": "lib/student-korting.ts",
+      "naam": "student-korting",
+      "domein": "Kopen en orders",
+      "samenvatting": "lib/student-korting.ts — de rekenkern van de verenigingskorting. Bewust een apart bestand zónder database-imports: dit is het stuk waar geld doorheen loopt, en zo is het los te draaien en te testen (test/student-korting.test.ts)."
+    },
+    {
+      "pad": "lib/studio-token.ts",
+      "naam": "studio-token",
+      "domein": "Platform",
+      "samenvatting": "Auth voor de portal→gentsnext admin-API (\"Nieuwe site\"-CMS): een gentsnext- admin-sessie (customers.isAdmin) OF de gedeelde server-to-server token (STUDIO_API_TOKEN, zelfde als de studio/media-endpoints)."
+    },
+    {
+      "pad": "lib/suit-pairing.ts",
+      "naam": "suit-pairing",
+      "domein": "Overig",
+      "samenvatting": "Pak-samenstellen (mix & match): colbert + pantalon (+ gilet) worden los verkocht in dezelfde maat; prijs = som. De koppeling zit in de SRS-artikel_id: strip de rol-prefix (COL/PAN/GIL) en de rest is de gedeelde stijlcode."
+    },
+    {
+      "pad": "lib/support-orderdata.ts",
+      "naam": "support-orderdata",
+      "domein": "Klant en marketing",
+      "samenvatting": "Order-/retour-/refund-status voor de AI-klantenservice (\"waar is mijn bestelling?\"). Twee toegangspaden: - lookupOrderStatusForEmail: op het GEVERIFIEERDE sessie-e-mailadres (ingelogde klant) — nooit op een vrij ingetikt e-mailadres."
+    },
+    {
+      "pad": "lib/support.ts",
+      "naam": "support",
+      "domein": "Klant en marketing",
+      "samenvatting": "AI-klantenservice. Beantwoordt veelvoorkomende vragen direct op basis van een gecureerde kennisbank; lukt dat niet betrouwbaar, dan escaleert het naar de support-mailbox (CONTACT_EMAIL_SERVICE/GENERAL) en krijgt de klant bericht dat een medewerker reageert."
+    },
+    {
+      "pad": "lib/t-server.ts",
+      "naam": "t-server",
+      "domein": "Overig",
+      "samenvatting": "Server-side vertaal-lookup voor SERVER COMPONENTS (pagina's). Anders dan `t()` (die alleen de statische dicts + NL-fallback kent) leest deze óók de KV-store met de cron-vertalingen (getUiMessages) — dezelfde bron die de client-provider gebruikt."
+    },
+    {
+      "pad": "lib/ticket-follow.ts",
+      "naam": "ticket-follow",
+      "domein": "Klant en marketing",
+      "samenvatting": "Volg-link voor een klantenservice-ticket: de klant volgt z'n vraag ZONDER in te loggen. Zelfde vertrouwensmodel als een magic-link (wie de mail heeft, ziet enkel z'n eigen ticket). De token bindt de ref aan het requester-e-mailadres."
+    },
+    {
+      "pad": "lib/timing-safe.ts",
+      "naam": "timing-safe",
+      "domein": "Platform",
+      "samenvatting": "Constante-tijd string-vergelijking voor tokens/handtekeningen. Eén plek, want dezelfde wrapper stond eerder near-identiek in orders/receipt-token/apple-wallet- config/worldline/ticket-follow/newsletter/studio-token — en een security-vergelijker hoort op één pl…"
+    },
+    {
+      "pad": "lib/track-client.ts",
+      "naam": "track-client",
+      "domein": "Meten",
+      "samenvatting": "Lichtgewicht client-tracker. Genereert een anonieme device-id, batcht events en stuurt ze naar /api/track — met sendBeacon bij het verlaten van de pagina. Drie dingen die hier veranderd zijn ten opzichte van de eerste versie: 1."
+    },
+    {
+      "pad": "lib/transfer-routes.ts",
+      "naam": "transfer-routes",
+      "domein": "Keten en voorraad",
+      "samenvatting": "Verzendadvies voor winkel→winkel-herverdeling (F4+): rit (gratis, vaste dagen) vs DHL (betaald, morgen binnen)."
+    },
+    {
+      "pad": "lib/translate.ts",
+      "naam": "translate",
+      "domein": "Site en content",
+      "samenvatting": "Vertaal-engine (server). Eén bron voor de CLI-scripts én de nachtelijke cron. - UI-teksten + losse content → appSettings-rij `translations:<locale>` (KV, hash-gebaseerde delta zodat we alleen NIEUWE/GEWIJZIGDE teksten vertalen)."
+    },
+    {
+      "pad": "lib/translation-sources.ts",
+      "naam": "translation-sources",
+      "domein": "Site en content",
+      "samenvatting": "Bron-van-waarheid voor de beheerpagina \"Vertalingen\" (/account/vertalingen): álle Nederlandse teksten die de vertaal-cron oppakt, in vier namespaces."
+    },
+    {
+      "pad": "lib/unfulfillable.ts",
+      "naam": "unfulfillable",
+      "domein": "Keten en voorraad",
+      "samenvatting": "\"Niet leverbaar\" — een winkel kan een toegewezen weborder-regel niet leveren. We doen drie dingen: 1. Voorraad corrigeren: het fantoom-stuk eraf op die winkel (SRS schatte te hoog) zodat het niet opnieuw verkocht/gerouteerd wordt. 2."
+    },
+    {
+      "pad": "lib/variant-grouping.ts",
+      "naam": "variant-grouping",
+      "domein": "Catalogus",
+      "samenvatting": "Kleurvarianten afleiden uit de producttitel. Veel artikelen staan in de catalogus als losse producten die alleen in kleur verschillen — het duidelijkst bij stropdassen (\"Stropdas PE rood\", \"Stropdas PE blauw\", …) en sets (\"Set das manchet pochet rood/blauw/…\")."
+    },
+    {
+      "pad": "lib/verify-pos-sales.ts",
+      "naam": "verify-pos-sales",
+      "domein": "Overig",
+      "samenvatting": "De vijf kassabon-controles, als data in plaats van als console-uitvoer. UITSLUITEND LEZEN — hier wordt nergens geschreven."
+    },
+    {
+      "pad": "lib/visual-learnings.ts",
+      "naam": "visual-learnings",
+      "domein": "Catalogus",
+      "samenvatting": "Lerende sfeerbeeld-AI: de \"learnings-store\". Medewerkers keuren sfeerbeelden af met een categorie + eigen notitie, of markeren ze als top; die feedback stuurt de volgende sfeerbeeld-prompt aan."
+    },
+    {
+      "pad": "lib/visuals.ts",
+      "naam": "visuals",
+      "domein": "Catalogus",
+      "samenvatting": "Vaste merk-/banner-beelden — ALTIJD onze eigen producten (FASHN, gemaakt uit echte productfoto's). Geen FAL/AI-verzonnen kleding, geen stock. Vanaf nu de bron voor hero's/sfeerbeelden op content-, landings- en accountpagina's."
+    },
+    {
+      "pad": "lib/vouchers.ts",
+      "naam": "vouchers",
+      "domein": "Kopen en orders",
+      "samenvatting": "Vouchers / kortingscodes — valideren en verzilveren. Korting altijd server-side berekend (nooit het clientbedrag vertrouwen). Een code is percentage (percentOff) of vast bedrag (valueCents), met optionele minimumbesteding en vervaldatum."
+    },
+    {
+      "pad": "lib/web-dagstaat-core.ts",
+      "naam": "web-dagstaat-core",
+      "domein": "Kassa",
+      "samenvatting": "Webshop-dagstaat voor de Exact-boeking (storegents): wat er op één Amsterdamse dag ONLINE is verkocht en hoe dat betaald is. De tegenhanger van de kassa-dagstaat — samen vullen ze de tussenrekeningen die de Mollie- settlements weer leegvegen."
+    },
+    {
+      "pad": "lib/whatsapp.ts",
+      "naam": "whatsapp",
+      "domein": "Overig",
+      "samenvatting": "WhatsApp-berichten via de Meta WhatsApp Cloud API (env-gated). Secrets in Vercel: WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID. Voor proactieve berichten (buiten het 24u-venster) vereist Meta een goedgekeurde TEMPLATE; geef de naam mee via WHATSAPP_TEMPLATE_STOCK."
+    },
+    {
+      "pad": "lib/worldline.ts",
+      "naam": "worldline",
+      "domein": "Kopen en orders",
+      "samenvatting": "Dunne Worldline Direct-client (Hosted Checkout) — het redirect-alternatief voor Mollie ([[lib/mollie.ts]]). Server-2-server met de \"GCS v1HMAC\"-authenticatie (API key-ID + secret)."
+    },
+    {
+      "pad": "lib/xlsx-lezen.ts",
+      "naam": "xlsx-lezen",
+      "domein": "Platform",
+      "samenvatting": "Leest een .xlsx (of .csv) naar een raster van tekstcellen. ALLEEN LEZEN. Waarom zelfgebouwd en niet `xlsx` of `exceljs`: deze repo heeft acht runtime-dependencies en dat is een keuze."
+    }
+  ],
+  "endpoints": [
+    {
+      "pad": "/api/account/addresses",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Adresboek-CRUD voor de ingelogde klant. { action:\"add\"|\"update\", ...velden, isDefault? } { action:\"delete\"|\"default\", id } Alleen eigen adressen (customer_id-check)."
+    },
+    {
+      "pad": "/api/account/claim-receipt",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/account/claim-receipt — verzilver de punten van een anonieme kassabon naar het ingelogde account."
+    },
+    {
+      "pad": "/api/account/delete",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "AVG-verwijdering: anonimiseert het account van de ingelogde klant en logt uit. Vereist een expliciete bevestiging in de body ({ confirm: \"VERWIJDER\" })."
+    },
+    {
+      "pad": "/api/account/demo-login",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Preview-login zonder e-mailinfra. ALLEEN buiten productie én alleen als de env DEMO_LOGIN_EMAIL gezet is (bv. demo@gents.nl). Logt direct in als dat account, zodat de profielpagina te bekijken is."
+    },
+    {
+      "pad": "/api/account/export-me",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "AVG-inzage: de ingelogde klant downloadt al zijn gegevens als JSON."
+    },
+    {
+      "pad": "/api/account/factuur/[orderNumber]",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/account/factuur/[orderNumber] — de factuur van een betaalde order als printbare pagina (browser → \"Bewaar als pdf\")."
+    },
+    {
+      "pad": "/api/account/for-you",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Persoonlijke \"Voor jou\"-strip op de homepage. Sessie-gated zodat de homepage zelf statisch/cachebaar blijft (de strip laadt client-side na)."
+    },
+    {
+      "pad": "/api/account/login",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Vraagt een magic-login-link aan. Stuurt de link per e-mail (Resend) als dat geconfigureerd is; anders (dev) geven we de link in de respons terug zodat de flow testbaar is zonder e-mailinfra."
+    },
+    {
+      "pad": "/api/account/logout",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": ""
+    },
+    {
+      "pad": "/api/account/newsletter",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Huidige nieuwsbrief-voorkeuren van de ingelogde klant."
+    },
+    {
+      "pad": "/api/account/prefill",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Checkout-prefill: gegevens + opgeslagen adressen van de ingelogde klant."
+    },
+    {
+      "pad": "/api/account/profile",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Alleen NIEUW toegekende bonussen melden — anders juicht de UI bij elke opslag."
+    },
+    {
+      "pad": "/api/account/profile-completion",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/account/profile-completion — verzilver de \"rond je profiel af\"-link: het token IS de autorisatie. Werkt het profiel bij en kent éénmalig +50 punten toe (idempotent). Publiek (token-gated)."
+    },
+    {
+      "pad": "/api/account/punten-bonus",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/account/punten-bonus — \"haal mijn punten op\". Voor wie de actie al gedaan hád vóórdat deze bonussen bestonden: z'n maten stonden er al, of de spaarpas stond al op z'n telefoon."
+    },
+    {
+      "pad": "/api/account/redeem-points",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Wissel spaarpunten in voor een GENTS-tegoedbon (Neon-native voucher, geen SRS). Sessie-gated: alleen de ingelogde klant kan z'n eigen punten inwisselen."
+    },
+    {
+      "pad": "/api/account/reorder",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/account/reorder — { orderNumber, token? } → huidige, leverbare regels van die order (sku/prijs/voorraad nu). Viewer-beveiligd (eigenaar of access-token)."
+    },
+    {
+      "pad": "/api/account/tickets",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Tickets van de ingelogde klant (e-mail komt uit de sessie, niet uit de request)."
+    },
+    {
+      "pad": "/api/account/verify",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Verzilvert de magic-link → zet de sessie-cookie → stuurt door naar /account (of naar een veilige interne `next`, bv. terug naar de punten-claim-pagina)."
+    },
+    {
+      "pad": "/api/afspraak",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Boekingsendpoint voor klantafspraken (/afspraak). Valideert server-side (lib/appointments is de autoriteit), schrijft naar Neon, mailt de klant een bevestiging in zijn taal en notificeert de winkel."
+    },
+    {
+      "pad": "/api/cart-suggestions",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Bijverkoop voor de winkelwagen: gegeven de categorieën in de cart, geef complementaire producten (\"maak je outfit af\"). GET ?hg=Colberts,Overhemden"
+    },
+    {
+      "pad": "/api/checkout",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": ""
+    },
+    {
+      "pad": "/api/contact",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Contact-request endpoint. Stuurt de aanvraag door via Resend naar het juiste team-mailadres (per kanaal in CONTACT_EMAIL_<X>)."
+    },
+    {
+      "pad": "/api/core/afspraken",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Core-API klantafspraken — de kassa (storegents) leest hiermee de afspraken van de eigen winkel en werkt de status bij."
+    },
+    {
+      "pad": "/api/core/bonnr",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/bonnr — atomair SRS-bonnummer per filiaal (auth: STORE_CORE_TOKEN)."
+    },
+    {
+      "pad": "/api/core/catalog/dump",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/catalog/dump — compacte catalogus-dump voor de OFFLINE-KASSA. De kassa bewaart dit lokaal (IndexedDB) zodat scannen en zoeken blijven werken als Vercel/Neon of het winkel-internet wegva…"
+    },
+    {
+      "pad": "/api/core/catalog/lookup",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/catalog/lookup — SNELLE catalogus-lookup rechtstreeks uit Neon (geïndexeerd op barcode / sku / srs_artikel_id)."
+    },
+    {
+      "pad": "/api/core/catalog/packshots",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/catalog/packshots — uitslag van de beeld-classificatie opslaan. De classificatie draait in storegents (lib/beeldbank-vision.js): die beoordeelt per product elke foto als packshot of mod…"
+    },
+    {
+      "pad": "/api/core/catalog/search",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/catalog/search — SNELLE fuzzy tekstzoek over de catalogus voor het GETYPTE zoeken in de kassa (tegenhanger van /catalog/lookup voor de barcode-scan)."
+    },
+    {
+      "pad": "/api/core/customer",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/customer — gents.nl-klant vanaf de kassa/scanner. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/customer-create",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/customer-create — maak/vind een klant in het gents.nl-bestand (de omnichannel-bron, waar ook de spaarpunten leven)."
+    },
+    {
+      "pad": "/api/core/customer-incentive",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/customer-incentive — \"druk aan de kassa\": mail de klant een profiel-afrond-link voor +50 punten (de kassier vangt alleen het e-mailadres)."
+    },
+    {
+      "pad": "/api/core/customer-search",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/customer-search — zoek klanten in het gents.nl-bestand (e-mail/naam) voor de kassa. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/display",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/display — paspop/etalage-markering (niet-blokkerend). Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/doelgroepen",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/doelgroepen — alles rond doelgroepen, voor de portal. Eén endpoint met een `actie`-veld in plaats van tien losse routes: dat is het patroon dat de rest van de core-API ook gebruikt, en…"
+    },
+    {
+      "pad": "/api/core/email-flows",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/email-flows — flows beheren vanuit de portal. Acties: opties → sjablonen, doelgroepen, velden + operatoren voor de bouwer lijst → alle flows mét het aantal klanten per stap (de trechter…"
+    },
+    {
+      "pad": "/api/core/exact-state",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/exact-state — Exact Online-koppelingsstatus in de Neon-core (vervangt de storegents-blobs exact/*.json). Action-based, zelfde patroon als pos-closing. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/giftcard",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/giftcard — cadeaubon aan de KASSA, tegen het Neon-saldo. Auth: STORE_CORE_TOKEN (coreAuth)."
+    },
+    {
+      "pad": "/api/core/inbound",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/inbound — inbound goederenontvangst (F1). Action-based. Auth: STORE_CORE_TOKEN. De storegents-BFF scoped op de eigen winkel (callerStoreScope)."
+    },
+    {
+      "pad": "/api/core/inventory",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/inventory — inventarisatie (telsessie) voor de handscanner. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/klant-360",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/klant-360 — het complete klantbeeld voor de portal en de kassa. Body: { customerId, ververs? } → { ok, klant, profiel, orders, kassabonnen, … } Eén endpoint voor beide schermen."
+    },
+    {
+      "pad": "/api/core/loyalty",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/loyalty — spaarpunten in de Neon-core (vervangt de storegents- blob admin/loyalty-core.json). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/order-docs",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/order-docs — pakbon + (DHL-)verzendlabel voor een ship-from-store weborder, zodat de winkel ze meteen kan uitdraaien. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/order-pick",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/order-pick — een winkel meldt zijn deel van een (split-)weborder gereed (gepickt), of maakt dat ongedaan."
+    },
+    {
+      "pad": "/api/core/order-status",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/order-status — zet de status van een (eigen) order vanuit de kassa (bv. afhaalorder \"Markeer opgehaald\" → delivered). Vervangt de oude Shopify-fulfilment."
+    },
+    {
+      "pad": "/api/core/order-unavailable",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/order-unavailable — een winkel meldt dat 'ie een toegewezen weborder(-regel) niet kan leveren."
+    },
+    {
+      "pad": "/api/core/portal-usage",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/portal-usage — registreert dat iemand een portal-pagina opende. De portal heeft 196 pagina's en tot vandaag géén enkele meting; \"dit gebruiken we niet\" was daardoor altijd een gevoel."
+    },
+    {
+      "pad": "/api/core/pos-closing",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/pos-closing — kassa-dagafsluitingen in de Neon-core (vervangt de storegents-blob admin/kassa-closings.json). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/pos-draft",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/pos-draft — geparkeerde kassa-mandjes in de Neon-core (vervangt de storegents-blob admin/pos-sales-drafts.json). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/pos-kas-mutatie",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/pos-kas-mutatie — kasmutaties (in/uit kas, in/uit kluis) in de Neon-core (vervangt de storegents-blob admin/pos-kas-mutaties.json). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/pos-opening",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/pos-opening — kas-openingen (beginkas-telling) in de Neon-core (vervangt de storegents-blob admin/kassa-openings.json). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/pos-pin",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Core-API pinbetaling op een FYSIEKE Mollie-terminal (point-of-sale) — de kassa (storegents) start/pollt/annuleert hiermee een pinbetaling met ECHT geld."
+    },
+    {
+      "pad": "/api/core/pos-sale",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/pos-sale — kassa-verkopen in de Neon-core (vervangt de storegents- blob admin/pos-sales.json). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/print-inbox",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/print-inbox — print-opdracht-wachtrij per winkel (auth: STORE_CORE_TOKEN)."
+    },
+    {
+      "pad": "/api/core/reservation",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/reservation — gents.nl-native reservering (SRS = WMS, klant in gents.nl). Action-based. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/srs-weborders",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Core-API voor de SRS-weborder-koppeling (magazijn blijft tijdens de overgang in SRS picken, de winkels op de nieuwe kassa)."
+    },
+    {
+      "pad": "/api/core/stock/available",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/available — beschikbaar per artikel in één locatie (SRS-baseline + core-delta). De kassa checkt hiermee vóór afrekenen of het laatste stuk er nog is."
+    },
+    {
+      "pad": "/api/core/stock/baseline",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/baseline — de storegents SRS-import pusht hier de volledige voorraadsnapshot naartoe (vervangt de cross-repo blob). Snapshot-swap per gen. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/stock/by-branch",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/by-branch — beschikbaar per artikel, uitgesplitst over ÁLLE filialen (SRS-baseline + core-delta) in één call."
+    },
+    {
+      "pad": "/api/core/stock/live",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/live — de storegents 5-min-SFTP-delta-cron schrijft hier de absolute voorraadstanden (schaduw naast de per-filiaal blob-snapshot; fase 1 van \"alles naar Neon\")."
+    },
+    {
+      "pad": "/api/core/stock/movement",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/movement — boek voorraad-mutaties in het core-grootboek. De kassa (storegents) roept dit aan bij afrekenen (sign -1) en annuleren (sign +1)."
+    },
+    {
+      "pad": "/api/core/stock/movement-synced",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/movement-synced — markeer de kassa-mutaties van een verkoop als 'in SRS geboekt'."
+    },
+    {
+      "pad": "/api/core/stock/web-reserved",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/stock/web-reserved — web-reserveringen (lopende web-orders) per stockKey voor één locatie."
+    },
+    {
+      "pad": "/api/core/store-orders",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/store-orders — orders die een winkel moet afhandelen, uit ONZE eigen site (gentsnext) — niet meer uit Shopify/SRS. Auth: STORE_CORE_TOKEN of admin/STUDIO_API_TOKEN."
+    },
+    {
+      "pad": "/api/core/student-acties",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/student-acties — KASSA-kant van de Students-acties (auth: STORE_CORE_TOKEN; de winkel-scope handhaaft de storegents-proxy)."
+    },
+    {
+      "pad": "/api/core/voucher",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/voucher — tegoedbonnen/kortingscodes aan de kassa. Auth: STORE_CORE_TOKEN. list { customerId?, email? } → { ok, vouchers:[…] } Wat heeft deze klant openstaan."
+    },
+    {
+      "pad": "/api/core/web-dagstaat",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/web-dagstaat — de webshop-dagstaat voor de Exact-boeking in storegents. Action-based, zelfde patroon als pos-closing. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/winkel-info",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/winkel-info — winkelgegevens + servicevoorwaarden voor documenten die bij de KLANT terechtkomen (auth: STORE_CORE_TOKEN)."
+    },
+    {
+      "pad": "/api/cron/beeldgeneratie",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Vult automatisch de ontbrekende sfeerbeelden aan (zie vercel.json). Vercel stuurt `Authorization: Bearer <CRON_SECRET>`; een ingelogde beheerder mag 'm ook handmatig openen om een batch te forceren."
+    },
+    {
+      "pad": "/api/cron/blog",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Tweewekelijkse AI-stijlgids-cron (zie vercel.json: 1e + 15e van de maand). Vercel-cron stuurt `Authorization: Bearer <CRON_SECRET>`. Een ingelogde admin mag 'm ook handmatig starten."
+    },
+    {
+      "pad": "/api/cron/email-flows",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "De loper van de e-mailflows. Elk kwartier. Twee dingen per ronde: nieuwe klanten laten instappen (voor flows met een doelgroep-trigger), en de stappen uitvoeren die aan de beurt zijn."
+    },
+    {
+      "pad": "/api/cron/heatmap-rollup",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Nachtelijke heatmap-rollup (zie vercel.json). Vat de laatste drie hele dagen samen in dagtotalen en ruimt daarna het ruwe materiaal op dat ouder is dan de ingestelde bewaartermijn (Instellingen → heat…"
+    },
+    {
+      "pad": "/api/cron/klantbronnen",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Externe klantbronnen ophalen: SRS-klantnummers en Returnista-retouren. Beide gaan via storegents, waar de clients en sleutels wonen."
+    },
+    {
+      "pad": "/api/cron/klantprofielen",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Nachtelijke herbouw van de klantprofielen en de doelgroepen. Volgorde is dwingend: eerst de PROFIELEN, dan de DOELGROEPEN."
+    },
+    {
+      "pad": "/api/cron/media-sync",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Haalt productfoto's uit Shopify die er sinds de vorige run bij kwamen. Waarom deze cron bestaat: op 14 aug stond `pak-3-delig-double-breasted-ecru` actief op de site met 240 stuks voorraad en zonder f…"
+    },
+    {
+      "pad": "/api/cron/publish-products-cache",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Dagelijkse cron (zie vercel.json): bouwt de products-cache uit de eigen catalogus-DB en schrijft hem naar de blob-store waar de ~44 storegents- modules hem lezen."
+    },
+    {
+      "pad": "/api/cron/punten-bijboeken",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Zelfherstel voor het spaarpunten-grootboek: boekt elk uur een batch betaalde orders bij die om wat voor reden dan ook geen puntenregel kregen."
+    },
+    {
+      "pad": "/api/cron/sandbox-verversen",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "/api/cron/sandbox-verversen — zet de sandbox-database 's nachts terug op een verse, geanonimiseerde kopie van productie."
+    },
+    {
+      "pad": "/api/cron/shopify-sync",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Haalt de Shopify-bestellingen op die er sinds de vorige run bij kwamen. Zolang gents.nl op Shopify draait is dit de enige aanvoer van verse orders."
+    },
+    {
+      "pad": "/api/cron/stock-check",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Terug-op-voorraad-cron (zie vercel.json). Vercel stuurt automatisch `Authorization: Bearer <CRON_SECRET>`; een ingelogde beheerder mag 'm ook handmatig openen. Twee stappen: 1."
+    },
+    {
+      "pad": "/api/cron/sweep-holds",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Ruimt verlopen web-voorraad-holds op (anti-oversell). Een verlaten checkout houdt via een korte TTL (30 min) voorraad vast; die hold valt normaal vrij bij de vólgende checkout (sweepExpiredHolds draai…"
+    },
+    {
+      "pad": "/api/cron/sync-catalog",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Catalogus-vlaggen verversen (zie vercel.json). Vercel stuurt automatisch `Authorization: Bearer <CRON_SECRET>`; een ingelogde beheerder mag 'm ook handmatig openen."
+    },
+    {
+      "pad": "/api/cron/sync-reviews",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Nachtelijke Judge.me-review-sync (zie vercel.json). Vercel-cron stuurt automatisch `Authorization: Bearer <CRON_SECRET>`. Een ingelogde beheerder mag 'm ook handmatig starten (door deze URL te openen)."
+    },
+    {
+      "pad": "/api/cron/translate",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Nachtelijke vertaal-cron (zie vercel.json). Zoekt elke avond nieuwe/gewijzigde content en vertaalt die naar alle doeltalen (en/de/fr/es): - UI-microcopy (delta op de NL-bronsleutels) → KV-store - prod…"
+    },
+    {
+      "pad": "/api/cron/verify-possales",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Nachtelijke kassabon-verificatie (zie vercel.json) — dezelfde vijf controles als `npm run verify:possales`, uit dezelfde lib. UITSLUITEND LEZEN."
+    },
+    {
+      "pad": "/api/cron/verjaardagen",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Verjaardagsmail — dagelijks. Het voorkeurenscherm op /account belooft dit letterlijk (\"Voor een attentie rond je verjaardag\") en er stond niets tegenover: geen cron, geen template."
+    },
+    {
+      "pad": "/api/cron/wallet-vesting-push",
+      "poort": "Cron-geheim",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Houdt de Apple-Wallet-spaarpas gelijk aan het echte saldo. Twee manieren waarop een pas stil kan gaan achterlopen: 1."
+    },
+    {
+      "pad": "/api/delivery-estimate",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Levertijd-schatting voor een setje SKU's (cart/PDP) — vóór de checkout. Body: { items: [{ sku, qty }], country? }."
+    },
+    {
+      "pad": "/api/giftcard/purchase",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Koopt een cadeaubon: maakt een 'pending' bon + start de Mollie-betaling."
+    },
+    {
+      "pad": "/api/giftcard/validate",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Checkout: cadeaubon-code valideren tegen het te dekken orderbedrag."
+    },
+    {
+      "pad": "/api/health",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": ""
+    },
+    {
+      "pad": "/api/heatmap",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Ontvangt de klik-/scrollbatch van één paginaweergave (lib/heatmap-client). Anoniem: een sessie-id, posities en elementpaden — geen klant, geen tekst uit formulieren, geen muisspoor."
+    },
+    {
+      "pad": "/api/maatadvies/log",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Legt vast wélk maatadvies we hebben gegeven, zodat we later kunnen meten of het klopte (Site → Maten → Advieskwaliteit). Publiek endpoint — het maatadvies werkt ook zonder in te loggen."
+    },
+    {
+      "pad": "/api/mijn-winkel",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "\"Mijn winkels\" kiezen of wissen. Werkt óók zonder account: de keuze gaat in een cookie (server kent 'm dan bij de eerste render)."
+    },
+    {
+      "pad": "/api/newsletter",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Nieuwsbrief-aanmelding met kanaalkeuze: e-mail óf WhatsApp. Alles wordt in de eigen store (newsletter_subscribers) bewaard — de bron van waarheid."
+    },
+    {
+      "pad": "/api/newsletter/confirm",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Double-opt-in-bevestiging: maakt de inschrijving definitief en gaat naar Resend."
+    },
+    {
+      "pad": "/api/order-status",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Publieke (token-beveiligde) order-status — voor de auto-poll op de bedanktpagina, zodat 'in afwachting' vanzelf naar 'bevestigd' springt zodra de Mollie-webhook binnen is."
+    },
+    {
+      "pad": "/api/payment-methods",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "De betaalkeuze voor de afrekenpagina: de actieve Mollie-methoden plus de kopgroep die bovenaan hoort te staan."
+    },
+    {
+      "pad": "/api/payments/worldline/return",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Terugkeer-route na Worldline Hosted Checkout. De klant landt hier (Worldline hangt hostedCheckoutId + RETURNMAC aan de URL); we passen de status meteen toe zodat de klant direct 'betaald' ziet — de we…"
+    },
+    {
+      "pad": "/api/pickup-availability",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Voorraad per winkel voor de afhaal-keuze in de checkout. Geeft per winkel terug of álle artikelen in de winkelwagen daar op voorraad liggen, zodat de klant een winkel kan kiezen waar alles klaar ligt."
+    },
+    {
+      "pad": "/api/postcode",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Adres-autofill: postcode + huisnummer → straat + plaats via de gratis PDOK Locatieserver (geen key nodig). Voorkomt typefouten en mislukte bezorgingen."
+    },
+    {
+      "pad": "/api/products-by-handles",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Bulk-resolver voor productkaarten uit een lijst handles (favorieten/recent)."
+    },
+    {
+      "pad": "/api/promo",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Publieke promo-config voor de client (staffelkorting + verzend-drempels) — voor de cart/afrekenen-weergave, zodat de getoonde verzendkosten meelopen met de instelbare settings i.p.v."
+    },
+    {
+      "pad": "/api/r",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/r?to=/products/foo&ev=alt_click&src=mail — meetbare doorklik. Voor links die buiten de site ontstaan (mail) en waar client-side tracking dus niet bestaat: we tellen de klik server-side en stu…"
+    },
+    {
+      "pad": "/api/redeem-code",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Eén-veld-inwisselen: de klant vult bij het afrekenen één code in en wij bepalen of het een cadeaubon of een kortingscode is. Eerst cadeaubon (specifiek GIFT-formaat), dan voucher."
+    },
+    {
+      "pad": "/api/reserveren",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Reserveer-om-te-passen vanaf de PDP: klant kiest maat + winkel → we houden het stuk HARD vast via de bestaande reserverings-rail (reservations + web_stock_holds, TTL instelbaar via de ReserveringConfi…"
+    },
+    {
+      "pad": "/api/reservering/afrekenen",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/reservering/afrekenen — start een Mollie-betaling voor een reservering. Publiek, token-gated (de pay-token uit de mail)."
+    },
+    {
+      "pad": "/api/returns",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Publieke retour-API. Gate = bestelnummer + e-mailadres (moeten matchen). POST { action:\"lookup\", orderNumber, email } → { ok, orderNumber, withinWindow, lines:[…], policy:{ windowDays, dhlReturnCostCe…"
+    },
+    {
+      "pad": "/api/reviews",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": ""
+    },
+    {
+      "pad": "/api/sandbox",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "/api/sandbox — leesvenster op de nep-wereld van de WEBSITE. De schrijfkant (regie omzetten, resetten) zit bewust alleen in de portal: één knop op één plek."
+    },
+    {
+      "pad": "/api/search-suggest",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Snel-suggesties voor instant-search in de header."
+    },
+    {
+      "pad": "/api/stock-notify",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Klant aanmelden voor een terug-op-voorraad-melding."
+    },
+    {
+      "pad": "/api/stores",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Winkels voor de afhaal-keuze in de checkout en voor de winkelkiezer. name = winkelnaam (\"GENTS Groningen\"), zoals de voorraadrijen 'm dragen."
+    },
+    {
+      "pad": "/api/studio/dubbele-skus",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/dubbele-skus — varianten die dezelfde sku delen. De sku is de sleutel waarop srs_stock matcht: één sku hoort bij precies één fysieke variant."
+    },
+    {
+      "pad": "/api/studio/eigen-beeld",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/eigen-beeld — fotografeer-werklijst voor de Shopify-exit. ANDERE LIJST DAN \"Producten zonder foto\"."
+    },
+    {
+      "pad": "/api/studio/handboek",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/handboek — het platformhandboek als data, voor de portal. De portal kan twee dingen doen: linken naar /handboek (het volledige scherm, inclusief zoeken), of deze inhoud zelf tonen in z…"
+    },
+    {
+      "pad": "/api/studio/heroes",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "DELETE",
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Hero-/bannerbeeldbank voor de portal (\"Site → Instellingen → Hero\" en de beeldbank-tab \"Hero-banners\")."
+    },
+    {
+      "pad": "/api/studio/lifestyle/approve",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/lifestyle/approve { handle, slot:1|2|3, url } Zet een eerder gegenereerde KANDIDAAT live op het slot (DB). Auth: admin OF token."
+    },
+    {
+      "pad": "/api/studio/lifestyle/discard",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/lifestyle/discard { url } Verwerpt een niet-goedgekeurde KANDIDAAT (verwijdert alleen de kandidaat-blob; het live-beeld blijft ongemoeid). Auth: admin OF STUDIO_API_TOKEN."
+    },
+    {
+      "pad": "/api/studio/lifestyle/gallery",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/lifestyle/gallery?q&page — alle sfeerbeelden (lifestyle) van de nieuwe site, plat per slot, + de afkeur-categorieën en de huidige learnings. Voor de portal \"Lerende sfeerbeeld-studio\"."
+    },
+    {
+      "pad": "/api/studio/lifestyle/like",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/lifestyle/like { handle, slot:1|2|3, url?, reason? } Markeert een sfeerbeeld als TOP/geweldig → positieve learning (de AI versterkt deze stijl in volgende generaties)."
+    },
+    {
+      "pad": "/api/studio/lifestyle/regenerate",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/lifestyle/regenerate { handle, slot:1|2|3 } Genereert een KANDIDAAT-sfeerbeeld (mét de geleerde stijl-regels), nog NIET live — pas na /approve wordt het slot bijgewerkt."
+    },
+    {
+      "pad": "/api/studio/lifestyle/reject",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/lifestyle/reject { handle, slot:1|2|3, topic?, category, reason, url? } Keurt een sfeerbeeld af: legt de reden vast in de learnings-store (de AI leert ervan) én wist het slot (db-veld…"
+    },
+    {
+      "pad": "/api/studio/media",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/media — \"GENTS-studio\" beeldbank-bron. Geeft álle AI-gegenereerde media terug die de generators maken (modelfoto's, sfeerbeelden, detailcrops en video's), per product gegroepeerd."
+    },
+    {
+      "pad": "/api/studio/packshot",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/packshot — genereert een AI-packshot uit tekst voor een product zonder bronfoto (gebruikt door de portal-Fotostatus-tool)."
+    },
+    {
+      "pad": "/api/studio/portal-gebruik",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/portal-gebruik — leest de portal-gebruiksmeting terug. Beantwoordt de vraag waar het om begonnen was: welke portal-pagina's worden echt gebruikt, door wie, en welke al weken niet meer."
+    },
+    {
+      "pad": "/api/studio/pos/order",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/pos/order — KASSA-bestelling (endless aisle): item niet in de winkel → bestel uit een ander filiaal/magazijn → bezorgen bij klant. Maakt een normale order (incl."
+    },
+    {
+      "pad": "/api/studio/site/allocate-preview",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/site/allocate-preview — laat zien waar een order heen zou gaan: welke filialen of het magazijn, hoe hij splitst, welke levertijd en welke tekorten."
+    },
+    {
+      "pad": "/api/studio/site/analytics",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/analytics?from&to — omzet & analyse voor de portal- \"Nieuwe site\"-CMS: omzet-per-dag (staafdiagram), omzet-per-categorie, retentie-cohorten en de conversie-funnel (laatste 30 dage…"
+    },
+    {
+      "pad": "/api/studio/site/artikel-zoek",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/artikel-zoek?q=…&limit=20 — artikelzoeker op MAAT-niveau (sku, titel, kleur, barcode) mét prijs en online voorraad, voor de orderbouwer in de portal."
+    },
+    {
+      "pad": "/api/studio/site/beeld-keuzes",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/beeld-keuzes?handle= Waar je uit kunt kiezen als je vanaf het productscherm een modelfoto of een sfeerbeeld laat maken: de merkmodellen, de beeldthema's en de camerastijlen."
+    },
+    {
+      "pad": "/api/studio/site/beeldthemas",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal /site → Beeldthema's. Bepaalt hoe de AI-sfeerbeelden eruitzien: een THEMA (het waar) × een CAMERASTIJL (het hoe), plus de instellingen van de nachtelijke generatie-cron."
+    },
+    {
+      "pad": "/api/studio/site/behaviour",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/behaviour?days=30 — gedrag op de site: funnel per stap, meest bekeken producten, zoekopdrachten (mét de nul-resultaten), en de navigatie-inzichten (welke menu-items, filters en so…"
+    },
+    {
+      "pad": "/api/studio/site/blog",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "AI-stijlgids beheer (portal). Auth: gentsnext-admin OF STUDIO_API_TOKEN. GET → alle artikelen + onderwerpen POST { topicKey? } → genereer een artikel (gegeven of volgend onderwerp) POST { action:\"dele…"
+    },
+    {
+      "pad": "/api/studio/site/bundles",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Bundel-beheer voor het portal (\"Nieuwe site\" → Bundels), naast Looks. GET → alle bundels + de rollen waaruit een bundel bestaat, plus per bundel of hij bruikbaar is (elke rol gevuld én een prijs)."
+    },
+    {
+      "pad": "/api/studio/site/customers",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/customers?search&page&pageSize&sort Gepagineerde klantenlijst van de nieuwe site (met #orders + besteed). Auth: admin OF STUDIO_API_TOKEN."
+    },
+    {
+      "pad": "/api/studio/site/experiments",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "A/B-experimenten voor de portal. GET → { ok, experimenten, version } POST { experimenten, version } → opgeslagen (gesaneerd) + teruggegeven Zelfde botsingsafspraak als de andere content-documenten (40…"
+    },
+    {
+      "pad": "/api/studio/site/experiments/promote",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/site/experiments/promote — de winnaar doorvoeren. body { id, variant, version? } Wat de variant overschreef wordt de echte site: balk/hero/USP's gaan als patch de site-instellingen in…"
+    },
+    {
+      "pad": "/api/studio/site/experiments/results",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/experiments/results?id=<experiment> — de uitslag. Per variant: bezoekers (DISTINCT sessies met een exposure binnen het meetvenster), de funnel (winkelwagen → checkout → aankoop),…"
+    },
+    {
+      "pad": "/api/studio/site/giftcards",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/giftcards?status&page — gepagineerde lijst cadeaubonnen voor het portal-\"Nieuwe site\"-CMS. Recent eerst. Bedragen in centen. Auth: gentsnext-admin OF STUDIO_API_TOKEN."
+    },
+    {
+      "pad": "/api/studio/site/heatmap",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/heatmap?dagen=30 → overzicht: per gemeten pagina het aantal kliks, dode kliks, woede-kliks, paginaweergaven en het mediane scrollbereik."
+    },
+    {
+      "pad": "/api/studio/site/homepage",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Indeling van de homepage voor de portal: welke blokken, in welke volgorde, aan of uit, met hun teksten en beelden."
+    },
+    {
+      "pad": "/api/studio/site/insights",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "AI-klantinzichten (portal). Auth: gentsnext-admin OF STUDIO_API_TOKEN. GET → live stats + gecachet AI-narratief POST { regenerate:true }→ narratief opnieuw genereren (kost AI-credits)"
+    },
+    {
+      "pad": "/api/studio/site/looks",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Looks-beheer voor het portal (\"Nieuwe site\" → Looks). GET → alle looks (statisch/Sanity als basis + eigen store eroverheen), incl. status (published/draft) en de gekoppelde producten (hotspots)."
+    },
+    {
+      "pad": "/api/studio/site/looks/generate",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/site/looks/generate — stelt automatisch een CONCEPT-look samen uit de eigen catalogus en zet 'm als 'draft' in de looks-store (ter goedkeuring)."
+    },
+    {
+      "pad": "/api/studio/site/maten",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Een maatblad is kilobytes. 5 MB is al absurd ruim en houdt onzin buiten."
+    },
+    {
+      "pad": "/api/studio/site/maten/analyse",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Maat-analyse voor de portal (Site → Maten). ?van & ?tot (ISO) — standaard de laatste 180 dagen."
+    },
+    {
+      "pad": "/api/studio/site/menu",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Hoofdmenu-beheer voor het portal (\"Nieuwe site\" → Menu). GET → het huidige menu (eigen store of MAIN_MENU-seed). POST { items } → opslaan in content:menu (gesaneerd). Vervangt Sanity."
+    },
+    {
+      "pad": "/api/studio/site/merchandising",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\" → Merchandising. Beheert de merchandising-pins: per PLP-context (categorie/collectie) een geordende lijst producten die bovenaan de \"Aanbevolen\"-sort komen."
+    },
+    {
+      "pad": "/api/studio/site/merchandising/regels",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\" → Merchandising → Regels. GET → { regels, velden, contexten, vandaag } `velden` = de échte waarden die in de catalogus voorkomen, mét telling."
+    },
+    {
+      "pad": "/api/studio/site/models/gallery",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Modellen-studio gallery: alle producten met een AI-modelfoto, voor de portal \"Modellen-studio\" (goed/afkeuren → AI leert de model-smaak). Auth: admin OF token."
+    },
+    {
+      "pad": "/api/studio/site/models/regenerate",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Modellen-studio: genereer de modelfoto opnieuw MÉT de geleerde model-smaak (modelLearningsBlock) + kleur-regels + native 4:5. Kost FASHN-credits. Auth: admin OF token."
+    },
+    {
+      "pad": "/api/studio/site/models/reject",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Modellen-studio: een foto goed-/afkeuren met reden → de AI leert de smaak (geen FASHN-credits; gratis). kind:\"negative\" = afkeuren, \"positive\" = top."
+    },
+    {
+      "pad": "/api/studio/site/occasions",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Gelegenheden-beheer voor het portal (\"Nieuwe site\" → Gelegenheden). GET → de huidige gelegenheden (eigen store of de seed). POST { items } → opslaan in content:occasions (gesaneerd). Vervangt Sanity."
+    },
+    {
+      "pad": "/api/studio/site/order",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/order?order=G2A3B4C — orderdetail van de nieuwe site: order + regels + het volledige allocatieplan (order-route) zit in order.fulfillmentPlan."
+    },
+    {
+      "pad": "/api/studio/site/order-action",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/site/order-action — order-acties voor het portal-back-office (Site → Bestellingen). Body: { orderNumber, action, … }."
+    },
+    {
+      "pad": "/api/studio/site/order-create",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/site/order-create — handmatig een bestelling aanmaken voor een klant (telefonisch, per mail, of een nabestelling na een klacht) mét betaallink."
+    },
+    {
+      "pad": "/api/studio/site/order-duplicaat",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/order-duplicaat?order=G2A3B4C — zet een bestaande bestelling klaar als voorstel voor een nieuwe: klantgegevens + de regels die vandaag nog te bestellen zijn, tegen de HUIDIGE cata…"
+    },
+    {
+      "pad": "/api/studio/site/orders",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/orders?search&status&channel&betaling&from&to&page&pageSize Gepagineerde orderlijst van de nieuwe site."
+    },
+    {
+      "pad": "/api/studio/site/orders-export",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/orders-export?search&status&channel&betaling&from&to De orderlijst als CSV, mét dezelfde filters als het overzicht (dus ook \"betaling mislukt\")."
+    },
+    {
+      "pad": "/api/studio/site/overview",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/overview?from&to — dashboard van de nieuwe site voor de portal-\"Nieuwe site\"-CMS: KPI's, omzet-per-dag, top-producten, status-verdeling en de laatste orders."
+    },
+    {
+      "pad": "/api/studio/site/pages",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Content-pagina-beheer voor het portal (\"Nieuwe site\" → Pagina's). GET → de huidige content-pagina's (content:pages). POST { items } → opslaan (gesaneerd, lichte Markdown-body). Vervangt Sanity-pages."
+    },
+    {
+      "pad": "/api/studio/site/pim-kwaliteit",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Het kwaliteitsoverzicht van de catalogus: hoe compleet zijn de productgegevens, en waar zit het gat. Dit is de reden dat een PIM meer is dan een bewerkscherm."
+    },
+    {
+      "pad": "/api/studio/site/product-bulk",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Dezelfde bewerking op meerdere artikelen, vanuit de selectie in de productenlijst."
+    },
+    {
+      "pad": "/api/studio/site/product-copy",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "AI-productcontent (portal). Auth: gentsnext-admin OF STUDIO_API_TOKEN. GET ?handle → huidige basis + override + SEO POST { handle, action:\"generate\" } → AI-concept (slaat niets op) POST { handle, acti…"
+    },
+    {
+      "pad": "/api/studio/site/product-detail",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/product-detail?handle= — ALLES van één artikel, voor het productscherm in de portal (/site/producten/<handle>)."
+    },
+    {
+      "pad": "/api/studio/site/product-save",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Bewerken van één artikel vanuit het PIM (portal → /site/producten/<handle>). GET → de velddefinities: welke velden bestaan, wat mag erin, wat meet de compleetheidsscore."
+    },
+    {
+      "pad": "/api/studio/site/products",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/products?search&status&kwaliteit&merk&groep&sort&page&pageSize De productenlijst van het PIM."
+    },
+    {
+      "pad": "/api/studio/site/products-export",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/products-export?search&status&kwaliteit&merk&groep De productenlijst als CSV, mét dezelfde filters als het scherm — hetzelfde filter zelfs, letterlijk: pimWhereSql() in lib/pim.ts."
+    },
+    {
+      "pad": "/api/studio/site/punten",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/punten?from&to — meet de spaarpunten-bonussen. Adoptie (wie haalt ze, wat kost het), trechter (gezien → geklikt → gehaald) en effect (retour% en orderwaarde van klanten mét versus…"
+    },
+    {
+      "pad": "/api/studio/site/punten-acties",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Eigen puntenacties: \"koop dit, krijg extra punten\". GET → { ok, acties } POST { acties: [...] } → de HELE lijst vervangen, gesaneerd teruggegeven Vervangen en niet patchen: de portal toont de volledig…"
+    },
+    {
+      "pad": "/api/studio/site/punten-toekennen",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Klantenservice: punten toekennen als coulance (na een klacht). GET ?customerId=… → { ok, grants } het logboek van die klant POST { customerId, punten, reden, actor, ticketId?, sleutel? } → { ok, punte…"
+    },
+    {
+      "pad": "/api/studio/site/receiving",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "GET /api/studio/site/receiving — voor de portal (supply chain): open ontvangst- afwijkingen die afgehandeld moeten worden + de meetpunten (ontvangst-nauwkeurigheid per bron/winkel, code-verdeling, doc…"
+    },
+    {
+      "pad": "/api/studio/site/redirects",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-beheerbare redirects (301/302). Auth: gentsnext-admin OF STUDIO_API_TOKEN. GET → lijst POST { source, target, status?, active? } → toevoegen/bijwerken (op source) POST { action:\"delete\", source…"
+    },
+    {
+      "pad": "/api/studio/site/reports",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/reports?from&to&customers=1 — de cijfers die de portal- rapportagepagina toont: KPI's, top-producten, omzet per categorie, statusverdeling, voucher-/cadeaubon-impact, nieuwsbrief,…"
+    },
+    {
+      "pad": "/api/studio/site/returns",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Retour-beheer voor het portal (\"Nieuwe site\" → Retouren). GET → recente retouren + regels. POST { action:\"received\", id } → retour ontvangen → vergoeden (Mollie-refund of tegoed)."
+    },
+    {
+      "pad": "/api/studio/site/review-summary",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "AI-reviewsamenvattingen (portal-gestuurd). Auth: gentsnext-admin OF token. GET ?handle=… → cache lezen POST { handle, force? } → één product (her)genereren POST { all:true, force? }→ batch: alle produ…"
+    },
+    {
+      "pad": "/api/studio/site/reviews",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "GET /api/studio/site/reviews?status&page — gepagineerde productreviews voor de portal-\"Nieuwe site\"-CMS (lijst + moderatie)."
+    },
+    {
+      "pad": "/api/studio/site/seo",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-beheerbare SEO-overrides. Auth: gentsnext-admin OF STUDIO_API_TOKEN. GET → alle overrides POST { path, title?, description?, noindex? } → upsert POST { action:\"delete\", path } → verwijderen"
+    },
+    {
+      "pad": "/api/studio/site/settings",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\"-CMS → Instellingen. Beheert de VEILIGE, operationele knoppen (verzending, levertijd, cutoffs, cadeaubon, retouren) uit app_settings.global én de homepage-content (announcement, he…"
+    },
+    {
+      "pad": "/api/studio/site/size-media",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Productmedia voor de portal: per product een reguliere modelfoto (die de galerij leidt) en een grote-maat-foto die getoond wordt zodra de klant een maat vanaf de drempel kiest."
+    },
+    {
+      "pad": "/api/studio/site/srs-koppeling",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "De SRS-koppeling op productniveau, vanuit de portal. GET → de stand: hoeveel producten hebben een artikelnummer, een kleur-id, en zijn daadwerkelijk in de SRS-feed gezien."
+    },
+    {
+      "pad": "/api/studio/site/stock-drift",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\" → voorraad-reservering drift-monitor (Fase 0). Geeft de rollende historie van de reconcile-cron: hoe vaak/hoeveel de anti-oversell-teller wegliep van de werkelijke holds."
+    },
+    {
+      "pad": "/api/studio/site/stock-notifications",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\" → Terug op voorraad. Toont de aanmeldingen + statistieken en beheert de flow-config (aan/uit, kanalen, wachttijd voor het alternatief)."
+    },
+    {
+      "pad": "/api/studio/site/translations",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\"-CMS → Vertalingen. Beheer van de automatische vertalingen (UI-microcopy, hero, landings) uit de KV-store `translations:<locale>`: GET ?locale=en&ns=ui&q=zoek&page=1 → { ok, rows,…"
+    },
+    {
+      "pad": "/api/studio/site/unfulfillable",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "Portal-\"Nieuwe site\" → Niet leverbaar. GET → open meldingen (make-whole), miss-rate per winkel, de flow-config en de opbrengst van de alternatieven (aangeboden vs. doorgeklikt)."
+    },
+    {
+      "pad": "/api/studio/site/vouchers",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET",
+        "POST"
+      ],
+      "samenvatting": "GET /api/studio/site/vouchers?status&page — gepagineerde lijst kortingscodes (vouchers) voor het portal-\"Nieuwe site\"-CMS. Recent eerst. Bedragen in centen. Auth: gentsnext-admin OF STUDIO_API_TOKEN."
+    },
+    {
+      "pad": "/api/studio/site/wallet-stats",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/studio/site/wallet-stats — hoeveel klanten hebben de spaarpas echt in Apple Wallet staan. Auth: gentsnext-admin OF STUDIO_API_TOKEN."
+    },
+    {
+      "pad": "/api/studio/students",
+      "poort": "Studio-token (portal en beheerder)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/studio/students — PORTAL-kant van de Students-acties (Remy). Auth: admin of STUDIO_API_TOKEN (de portal proxyt met de token)."
+    },
+    {
+      "pad": "/api/support",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "AI-klantenservice: beantwoordt of escaleert een vraag. Voor een INGELOGDE klant wordt het sessie-e-mailadres server-side meegegeven zodat orderstatus-vragen met echte (geverifieerde) data beantwoord w…"
+    },
+    {
+      "pad": "/api/support/order-status",
+      "poort": "Klantsessie",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/support/order-status — orderstatus voor de support-widget. Twee paden: - Gast: { orderNr, postcode } → één order, ALLEEN als de (genormaliseerde) postcode bij die order hoort."
+    },
+    {
+      "pad": "/api/track",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Ontvangt een batch storefront-events. De klant wordt hier SERVER-side bepaald, uit de identiteitsgrafiek op basis van de device-id — nooit uit wat de client meestuurt."
+    },
+    {
+      "pad": "/api/verzendlanden",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "De bezorglanden zoals ze nu ingesteld staan, voor de afrekenpagina. Waarom een endpoint en niet gewoon de tabel importeren: welke landen aanstaan en wat ze kosten is een knop in de tool, en de checkou…"
+    },
+    {
+      "pad": "/api/voucher/validate",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Valideert een kortingscode tegen het subtotaal (centen)."
+    },
+    {
+      "pad": "/api/vraag/reply",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Publieke reply op een ticket via de volg-link (geen login). De klant bewijst eigenaarschap met de ondertekende token (HMAC over ref|e-mail) uit de URL — exact dezelfde verificatie als de volg-pagina."
+    },
+    {
+      "pad": "/api/wallet/apple",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/wallet/apple — levert de GENTS-spaarpas (.pkpass) voor de ingelogde klant. iPhone/Safari (of Mac) opent 'm direct in Apple Wallet."
+    },
+    {
+      "pad": "/api/wallet/apple/v1/devices/[deviceLibraryIdentifier]/registrations/[passTypeIdentifier]",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "\"Gewijzigd op\" van een pas = het moment waarop het BESTEEDBARE saldo laatst veranderde."
+    },
+    {
+      "pad": "/api/wallet/apple/v1/devices/[deviceLibraryIdentifier]/registrations/[passTypeIdentifier]/[serialNumber]",
+      "poort": "Publiek",
+      "methoden": [
+        "DELETE",
+        "POST"
+      ],
+      "samenvatting": "PassKit web service — device (de)registratie voor de GENTS-spaarpas. POST …/registrations/{passTypeId}/{serialNumber} body { pushToken } DELETE …/registrations/{passTypeId}/{serialNumber} Auth = `Auth…"
+    },
+    {
+      "pad": "/api/wallet/apple/v1/log",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "PassKit web service — logboek. iOS post hier fouten naartoe (bv. push-issues). We loggen ze beknopt server-side en bevestigen met 200; nooit falen."
+    },
+    {
+      "pad": "/api/wallet/apple/v1/passes/[passTypeIdentifier]/[serialNumber]",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "PassKit web service — de laatste versie van de pas. iOS haalt dit op na een push of periodieke poll. Auth = `Authorization: ApplePass <token>`."
+    },
+    {
+      "pad": "/api/wallet/google",
+      "poort": "Klantsessie",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/wallet/google — stuurt de ingelogde klant door naar Google om de GENTS-spaarpas toe te voegen (Android-tegenhanger van /api/wallet/apple)."
+    },
+    {
+      "pad": "/api/webhooks/mollie",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Mollie-betaalwebhook. Mollie POST't alleen een payment-id (form-encoded); de status haal je zelf op met de API-key (bron van waarheid). Idempotent — Mollie kan dezelfde webhook meermaals sturen."
+    },
+    {
+      "pad": "/api/webhooks/mollie-pos",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Mollie-webhook voor PINBETALINGEN AAN DE KASSA (point-of-sale). Bewust een EIGEN route, los van /api/webhooks/mollie: die verwerkt webshop- orders, cadeaubonnen en reserveringen."
+    },
+    {
+      "pad": "/api/webhooks/resend",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/webhooks/resend — wat er met onze eigen mails gebeurt. Hiermee weten we eindelijk of een flowmail geopend en aangeklikt wordt."
+    },
+    {
+      "pad": "/api/webhooks/worldline",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Worldline-betaalwebhook (Hosted Checkout) — het Mollie-webhook-equivalent. Worldline POST't een event met een X-GCS-Signature over de RAUWE body; die verifiëren we met het webhook-secret."
+    },
+    {
+      "pad": "/api/welcome-discount",
+      "poort": "Publiek",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "Mailt de welkomstcode na. De code stond alleen in de popup, en die komt door de localStorage-vlag nooit meer terug — sloot de bezoeker 'm, dan was de code weg."
+    }
+  ],
+  "tabellen": [
+    "app_settings",
+    "appointments",
+    "audience_members",
+    "audience_syncs",
+    "audiences",
+    "collections",
+    "customer_addresses",
+    "customer_identities",
+    "customer_profiles",
+    "customer_sessions",
+    "customers",
+    "display_items",
+    "email_flow_leden",
+    "email_flow_stappen",
+    "email_flows",
+    "events",
+    "exact_state",
+    "externe_orders",
+    "externe_retouren",
+    "fulfillment_misses",
+    "giftcard_transactions",
+    "giftcards",
+    "heatmap_cellen",
+    "heatmap_elementen",
+    "heatmap_klikken",
+    "heatmap_scroll",
+    "heatmap_scroll_dag",
+    "inbound_receipt_counts",
+    "inbound_shipments",
+    "inventory_counts",
+    "inventory_sessions",
+    "loyalty_accounts",
+    "loyalty_events",
+    "loyalty_mutations",
+    "loyalty_service_grants",
+    "maatadvies_log",
+    "maattabel_rijen",
+    "maattabel_versies",
+    "mail_engagement",
+    "mail_gebeurtenissen",
+    "newsletter_subscribers",
+    "order_lines",
+    "order_logboek",
+    "order_shipment_picks",
+    "orders",
+    "portal_usage",
+    "pos_closings",
+    "pos_drafts",
+    "pos_kas_mutaties",
+    "pos_openings",
+    "pos_sales",
+    "price_history",
+    "product_collections",
+    "product_images",
+    "product_size_media",
+    "product_translations",
+    "product_variants",
+    "product_wijzigingen",
+    "products",
+    "receiving_discrepancies",
+    "reservations",
+    "return_lines",
+    "returns",
+    "reviews",
+    "srs_stock",
+    "srs_stock_live",
+    "srs_stock_meta",
+    "stock_levels",
+    "stock_notifications",
+    "store_print_jobs",
+    "store_purchases",
+    "store_stock_movements",
+    "student_actie_verkopen",
+    "student_acties",
+    "student_leden",
+    "support_tickets",
+    "visitor_attribution",
+    "vouchers",
+    "wallet_apple_registrations",
+    "web_stock_holds",
+    "web_stock_reservation_counter"
+  ]
+}
