@@ -289,6 +289,54 @@ td small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margi
   .slide{min-height:auto;page-break-after:always;border-bottom:0}
   .hud,.progress{display:none}
 }
+
+/* Schematische schermen (kassa, portal, handscanner) */
+.screens{display:grid;gap:clamp(10px,1.2vw,16px);grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:880px){.screens{grid-template-columns:minmax(0,1fr)}}
+.device{display:flex;flex-direction:column;gap:8px}
+.frame{border:1px solid var(--line);border-radius:6px;background:var(--surface);overflow:hidden}
+.chrome{
+  display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--surface-2);
+  border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+}
+.chrome .dot{width:6px;height:6px;border-radius:50%;background:var(--line);flex:none}
+.viewport{padding:11px 12px;display:flex;flex-direction:column;gap:7px}
+.vp-title{font-weight:600;font-size:13px;line-height:1.25}
+.vp-sub{font-size:11.5px;color:var(--muted)}
+.line{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;
+  padding-bottom:5px;border-bottom:1px dashed var(--line-soft);
+}
+.line:last-of-type{border-bottom:0;padding-bottom:0}
+.line .v{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.line .v.good{color:var(--pos)} .line .v.bad{color:var(--neg)}
+.sum{
+  background:var(--surface-2);border:1px solid var(--line-soft);border-radius:4px;padding:8px 10px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
+  display:flex;flex-wrap:wrap;gap:3px 10px;font-variant-numeric:tabular-nums;
+}
+.sum b{color:var(--text);font-weight:600}
+.chip{
+  display:inline-block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:9.5px;
+  letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:3px;
+  padding:1px 5px;color:var(--muted);
+}
+.chip.open{color:var(--neg);border-color:color-mix(in srgb,var(--neg) 45%,var(--line))}
+.chip.busy{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.chip.done{color:var(--pos);border-color:color-mix(in srgb,var(--pos) 45%,var(--line))}
+.scanner{max-width:216px;margin-inline:auto;width:100%}
+.scanner .frame{border-radius:12px}
+.scanner .grip{
+  height:22px;width:58%;margin:0 auto;border:1px solid var(--line);border-top:0;
+  border-radius:0 0 9px 9px;background:var(--surface-2);
+}
+.keys{display:flex;gap:5px;margin-top:2px}
+.keys span{
+  flex:1;text-align:center;border:1px solid var(--line);border-radius:3px;padding:4px 0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;color:var(--muted);
+}
+.cap{font-size:11.5px;color:var(--muted);text-align:center}
 </style>
 
 <div class="progress" id="progress"></div>
@@ -463,12 +511,114 @@ td small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margi
   </div>
 </section>
 
+
+<!-- schermen ────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel 1 · De basis</span><span class="num"></span></header>
+  <h2>Zo ziet het eruit op de vloer</h2>
+  <p class="lede">Drie schermen waar je het meeste in doet. Hieronder staan ze nagetekend, zodat je ziet welk getal waar staat.</p>
+  <div class="screens">
+    <div class="device">
+      <div class="frame">
+        <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Kassa · Amersfoort</div>
+        <div class="viewport">
+          <p class="vp-title">Overhemd slim fit, wit</p>
+          <p class="vp-sub">Voorraad per maat</p>
+          <p class="line"><span>Maat 39</span><span class="v good">hier 2 · magazijn 5</span></p>
+          <p class="line"><span>Maat 40</span><span class="v bad">hier 0 · magazijn 3</span></p>
+          <p class="line"><span>Maat 41</span><span class="v good">hier 1 · magazijn 7</span></p>
+          <div class="sum">
+            <span>SRS <b>4</b></span><span>winkel <b>−1</b></span><span>online <b>−1</b></span>
+            <span>buffer <b>−1</b></span><span>te koop <b>1</b></span>
+          </div>
+        </div>
+      </div>
+      <p class="cap">Kassa — voorraad opzoeken, met de opbouw eronder</p>
+    </div>
+
+    <div class="device">
+      <div class="frame">
+        <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Portal · Ontvangst</div>
+        <div class="viewport">
+          <p class="vp-title">Openstaande verschillen</p>
+          <p class="vp-sub">Laatste 90 dagen · 6 open</p>
+          <p class="line"><span>Overhemd wit, 40<br><span class="vp-sub">magazijn · zending 0412</span></span><span class="v">te weinig 2 <span class="chip open">open</span></span></p>
+          <p class="line"><span>Das navy<br><span class="vp-sub">leverancier · zending 0417</span></span><span class="v">beschadigd 1 <span class="chip busy">claim</span></span></p>
+          <p class="line"><span>Pantalon zand, 52<br><span class="vp-sub">Den Bosch · zending 0419</span></span><span class="v">te veel 1 <span class="chip done">klaar</span></span></p>
+          <div class="sum"><span>op tijd <b>96%</b></span><span>doos tot schap <b>19 u</b></span></div>
+        </div>
+      </div>
+      <p class="cap">Portal — jullie werkvoorraad en de cijfers per afzender</p>
+    </div>
+
+    <div class="device scanner">
+      <div class="frame">
+        <div class="chrome"><span class="dot"></span> Handscanner</div>
+        <div class="viewport">
+          <p class="vp-title">Zending 0412</p>
+          <p class="vp-sub">Magazijn → Amersfoort</p>
+          <p class="line"><span>Gescand</span><span class="v">128 / 140</span></p>
+          <p class="line"><span>Laatst gescand</span><span class="v good">+1 · nu 3</span></p>
+          <p class="vp-sub">Pantalon zand, maat 52</p>
+          <div class="keys"><span>+1</span><span>aantal</span><span>schade</span></div>
+        </div>
+      </div>
+      <div class="grip"></div>
+      <p class="cap">Handscanner — scannen bij ontvangst en tellen</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Let op</span>
+    <p>Dit zijn <strong>schetsen</strong>, geen echte schermafbeeldingen: ze laten zien waar welk getal staat. Zodra we echte beelden uit de kassa en het portal hebben, zetten we die hier neer.</p>
+  </div>
+</section>
+
 <!-- 8 ─────────────────────────────────────────────────────────────────── -->
 <section class="slide opener">
   <span class="eyebrow">Deel 2</span>
   <p class="roman">2</p>
   <h2>Hoe het werkt in de praktijk</h2>
   <p class="promise">Vijf stromen die allemaal in datzelfde logboek terechtkomen.</p>
+</section>
+
+
+<!-- handscanner ─────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel 2 · Gereedschap</span><span class="num"></span></header>
+  <h2>Wat de winkel met de handscanner kan</h2>
+  <p class="lede">Eén apparaat voor bijna al het voorraadwerk. Scannen mag met <strong>de streepjescode, ons artikelnummer of het SRS-nummer</strong> — alle drie komen op dezelfde regel uit.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Binnenkomst</span>
+      <h3>Zending scannen</h3>
+      <p>Artikel voor artikel scannen, of in één keer een aantal invoeren. Schade melden, en een regel die je per ongeluk scande weer weghalen. Met z'n tweeën op dezelfde zending werken mag: de aantallen worden bij elkaar opgeteld, niet overschreven.</p>
+    </div>
+    <div class="card">
+      <span class="label">Tellen</span>
+      <h3>Inventarisatie</h3>
+      <p>Scannen wat er ligt. Per artikel zie je meteen wat het systeem verwachtte en wat het verschil is. Halverwege stoppen en later verdergaan kan.</p>
+    </div>
+    <div class="card">
+      <span class="label">Opzoeken</span>
+      <h3>Waar ligt het?</h3>
+      <p>Scan een artikel en zie wat er in deze winkel, in het magazijn en in de andere winkels ligt — inclusief wat er al voor webklanten opzij staat.</p>
+    </div>
+    <div class="card">
+      <span class="label">Versturen</span>
+      <h3>Pickbon scannen</h3>
+      <p>De bon van een uitwisseling scannen zet de zending op "onderweg". Geen scherm zoeken: de bon is de knop.</p>
+    </div>
+    <div class="card">
+      <span class="label">Voor een klant</span>
+      <h3>Apart leggen</h3>
+      <p>Een stuk vastzetten voor een klant, zodat niemand anders het verkoopt. En weer vrijgeven als de klant niet komt.</p>
+    </div>
+    <div class="card">
+      <span class="label">In de etalage</span>
+      <h3>Paspop markeren</h3>
+      <p>Aangeven dat een stuk op de paspop hangt. Het blijft te koop, maar bij het tellen weet iedereen dat het er is.</p>
+    </div>
+  </div>
 </section>
 
 <!-- 9 ─────────────────────────────────────────────────────────────────── -->
@@ -632,6 +782,35 @@ td small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margi
   </div>
 </section>
 
+
+<!-- bonnen ──────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel 2 · Bonnen</span><span class="num"></span></header>
+  <h2>Wat er uit de printer rolt</h2>
+  <p class="lede">Het systeem kan de printer in de winkel niet rechtstreeks aansturen. Daarom staat er <strong>per winkel een stapeltje opdrachten klaar</strong>; de kassa haalt die op en print ze, en meldt daarna dat het gelukt is.</p>
+  <div class="cols c3">
+    <div class="card">
+      <span class="label">Bij elke bestelling</span>
+      <h3>Bon uit de printer</h3>
+      <p>Elke betaalde web- of afhaalbestelling waar deze winkel iets voor moet doen, rolt <strong>één keer</strong> uit de printer: klant, artikelen met maat, en wanneer het klaar moet zijn. Blijft de bestelling openstaan, dan komt de bon niet telkens opnieuw.</p>
+    </div>
+    <div class="card">
+      <span class="label">Bij een uitwisseling</span>
+      <h3>Pickbon met barcode</h3>
+      <p>De winkel die verstuurt krijgt een bon met een <strong>barcode</strong> erop. Zoekt ze de spullen bij elkaar en scant ze die bon, dan springt de zending meteen op "onderweg". De bon is dus de knop — niemand hoeft een scherm te zoeken.</p>
+    </div>
+    <div class="card">
+      <span class="label">Als er iets misgaat</span>
+      <h3>Opnieuw printen</h3>
+      <p>Bon vastgelopen, per ongeluk weggegooid of vlekkerig? Zet hem terug in de wachtrij en precies dezelfde bon komt er nog eens uit — ook bij al verwerkte bestellingen, inclusief pakbon en verzendlabel.</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">Drie regels die je merkt</span>
+    <p><strong>Oudste eerst</strong>, zodat een stapel in de goede volgorde uitkomt. <strong>Twee keer aanvragen geeft één bon</strong>, niet twee. En <strong>een bon die 24 uur blijft liggen vervalt</strong>: gaat een winkel na een storing weer aan, dan krijgt ze geen stapel van gisteren uit de printer — dat werk staat gewoon in het scherm.</p>
+  </div>
+</section>
+
 <!-- 15 ────────────────────────────────────────────────────────────────── -->
 <section class="slide">
   <header class="rail"><span class="eyebrow">Deel 2 · Tussen winkels</span><span class="num"></span></header>
@@ -683,6 +862,40 @@ td small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margi
   </div>
 </section>
 
+
+<!-- telling uitzetten ───────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel 2 · Tellen</span><span class="num"></span></header>
+  <h2>Een winkel laten tellen</h2>
+  <p class="lede">Jullie bepalen wát er geteld wordt en wanneer. De winkel ziet de telling klaarstaan en kan beginnen — zonder overleg vooraf.</p>
+  <div class="cols c4">
+    <div class="card">
+      <span class="label">Keuze 1</span>
+      <h3>De hele winkel</h3>
+      <p>De jaarlijkse telling. Doe dit buiten openingstijden en zet die dag ook bij de gesloten dagen, dan krijgt de winkel er geen webbestellingen bij.</p>
+    </div>
+    <div class="card">
+      <span class="label">Keuze 2</span>
+      <h3>Eén productgroep</h3>
+      <p>Bijvoorbeeld alleen de overhemden of alleen de schoenen. Kort werk, en precies genoeg na een grote levering.</p>
+    </div>
+    <div class="card">
+      <span class="label">Keuze 3</span>
+      <h3>Een lijstje artikelen</h3>
+      <p>Handig voor wat er uit de meldingen komt: artikelen die vaak "niet gevonden" worden of steeds als verschil terugkomen.</p>
+    </div>
+    <div class="card">
+      <span class="label">Keuze 4</span>
+      <h3>Eén sectie</h3>
+      <p>De etalage, de kelder, het rek bij de kassa. Je geeft zelf de naam mee, zodat je later terugziet wat er geteld is.</p>
+    </div>
+  </div>
+  <div class="note stop">
+    <span class="label">Kies de omvang niet groter dan je telt</span>
+    <p>Wat je klaarzet en <strong>niet</strong> geteld wordt, gaat bij het afsluiten op nul — dat is precies de bedoeling, want zo zie je wat er ontbreekt. Maar zet je "de hele winkel" klaar terwijl er alleen overhemden geteld worden, dan lijkt de rest ineens weg. Apart gelegde stuks en de paspop blijven wel staan.</p>
+  </div>
+</section>
+
 <!-- 17 ────────────────────────────────────────────────────────────────── -->
 <section class="slide">
   <header class="rail"><span class="eyebrow">Deel 2 · Webbestellingen</span><span class="num"></span></header>
@@ -723,6 +936,40 @@ td small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margi
   <div class="note stop">
     <span class="label">Lukt opnieuw toewijzen niet?</span>
     <p>Dan komt de melding bij jullie: de klant moet netjes geholpen worden. Annuleren en terugbetalen, of — als een deel al weg is — een retour voor dat deel. Of de klant daarbij bericht met alternatieven krijgt, zetten jullie zelf aan of uit (zie deel 3).</p>
+  </div>
+</section>
+
+
+<!-- niet gevonden ───────────────────────────────────────────────────── -->
+<section class="slide">
+  <header class="rail"><span class="eyebrow">Deel 2 · Als het niet klopt</span><span class="num"></span></header>
+  <h2>En als het er niet ligt?</h2>
+  <p class="lede">Dat gebeurt, en het systeem is erop gebouwd. In alle gevallen geldt hetzelfde: <strong>meld wat je ziet, boek nooit bij wat je niet in handen hebt.</strong></p>
+  <div class="cols c2">
+    <div class="card">
+      <span class="label">Een klant wacht op een webbestelling</span>
+      <h3>Meld "niet gevonden"</h3>
+      <p>Het stuk gaat er in jouw winkel meteen af, zodat het niet nóg eens verkocht wordt. De bestelling gaat automatisch naar het magazijn of een andere winkel. Lukt dat nergens, dan pakt supply chain het op: annuleren en terugbetalen, met een alternatief als dat aanstaat.</p>
+    </div>
+    <div class="card">
+      <span class="label">Je wilt iets naar een andere winkel sturen</span>
+      <h3>De controle houdt het tegen</h3>
+      <p>Je ziet per artikel en maat wat er tekort is. Stuur dan minder mee, of laat de andere winkel het ergens anders vandaan halen. Klopt het volgens jou wél? Tel dat ene artikel even na — dan staat het systeem daarna meteen goed.</p>
+    </div>
+    <div class="card">
+      <span class="label">Er zit te weinig in de doos</span>
+      <h3>Scan alleen wat er ligt</h3>
+      <p>Wat ontbreekt, boek je niet bij. Bij het afronden komt het verschil vanzelf als "te weinig" bij supply chain terecht, mét de afzender en het zendingnummer erbij — dat is precies wat je nodig hebt om het terug te halen bij de leverancier.</p>
+    </div>
+    <div class="card">
+      <span class="label">Bij het tellen</span>
+      <h3>Tel wat je ziet</h3>
+      <p>Ook als het systeem iets anders zegt. Het verschil wordt pas verwerkt als supply chain het goedkeurt, dus je kunt niets stukmaken. Wat apart ligt voor een klant of op de paspop hangt, telt gewoon mee.</p>
+    </div>
+  </div>
+  <div class="note">
+    <span class="label">De rode draad</span>
+    <p>Een verschil is geen fout van jou — het is het <strong>signaal</strong>. Het systeem rekent met wat er geteld is, nooit met wat er zou moeten liggen. Hoe eerder je meldt, hoe minder klanten iets bestellen wat er niet is.</p>
   </div>
 </section>
 
