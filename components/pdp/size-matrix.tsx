@@ -42,14 +42,23 @@ export function SizeMatrix({
   hoofdgroep,
   selected,
   onSelect,
+  restockNotify = true,
 }: {
   sizes: BuySize[];
   hoofdgroep: string;
   selected: string | null;
   onSelect: (size: string) => void;
+  /**
+   * Uitverkochte maten zijn alleen klikbaar omdat er een terug-op-voorraad-
+   * melder achter zit (de PDP). Waar die flow niet bestaat — de pak-
+   * samensteller — zet je 'm uit: geen envelopje dat iets belooft wat er niet
+   * is, en geen klik die de configuratie alleen maar onbestelbaar maakt.
+   */
+  restockNotify?: boolean;
 }) {
   const t = useT();
-  const soldOutHint = t("pdp.size.soldoutHint");
+  // Zonder melder is "uitverkocht" een mededeling, geen uitnodiging.
+  const soldOutHint = restockNotify ? t("pdp.size.soldoutHint") : t("pdp.size.soldout");
   // Uitverkochte maten WÉL tonen (doorgestreept + klikbaar): zo kan de klant zich
   // per maat aanmelden voor een terug-op-voorraad-tip. Alleen als er geen énkele
   // maat bekend is, is er niets te tonen.
@@ -74,8 +83,9 @@ export function SizeMatrix({
     );
     // Rustig, uniform grid. Een uitverkochte maat moet zichzelf uitleggen — er
     // staat geen hintregel meer onder de kiezer: grijze vulling, gestippelde rand,
-    // diagonale streep én doorgestreepte maat, met een envelopje dat zegt dat je
-    // je kunt laten mailen. Rood puntje = bijna op.
+    // diagonale streep én doorgestreepte maat, met — alleen waar de melder
+    // bestaat — een envelopje dat zegt dat je je kunt laten mailen. Rood puntje
+    // = bijna op.
     return (
       <ul
         className="mt-2 grid gap-2 [grid-template-columns:repeat(var(--maat-kolommen-m),minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--maat-kolommen),minmax(0,1fr))]"
@@ -95,6 +105,7 @@ export function SizeMatrix({
               <button
                 type="button"
                 onClick={() => onSelect(s.size)}
+                disabled={out && !restockNotify}
                 aria-pressed={on}
                 aria-label={out ? `${display(s.size)} — ${soldOutHint}` : undefined}
                 title={out ? soldOutHint : low ? `Nog ${s.qty} op voorraad` : undefined}
@@ -104,7 +115,9 @@ export function SizeMatrix({
                       ? "border-dashed border-ink bg-surface text-ink ring-1 ring-ink"
                       : "border-ink bg-ink text-canvas"
                     : out
-                      ? "border-dashed border-line bg-surface text-muted hover:border-ink hover:text-ink"
+                      ? restockNotify
+                        ? "border-dashed border-line bg-surface text-muted hover:border-ink hover:text-ink"
+                        : "cursor-not-allowed border-dashed border-line bg-surface text-muted"
                       : "border-line text-ink hover:border-ink"
                 }`}
               >
@@ -120,7 +133,7 @@ export function SizeMatrix({
                   </svg>
                 ) : null}
                 <span className={out ? "relative line-through decoration-muted" : undefined}>{display(s.size)}</span>
-                {out ? (
+                {out && restockNotify ? (
                   <MailIcon className="absolute bottom-0.5 right-0.5 h-3 w-3 text-ink-soft" />
                 ) : low ? (
                   <span aria-hidden className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" />
