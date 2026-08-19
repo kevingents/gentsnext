@@ -2670,3 +2670,31 @@ export const maatadviesLog = pgTable(
     tijdIdx: index("maatadvies_log_tijd_idx").on(t.createdAt),
   })
 );
+
+/**
+ * Spiegel van het SRS-personeelsbestand voor de KASSACODE-CHECK (login +
+ * kassacode-bevestiging van geld-acties in storegents). Elke check deed een
+ * live SOAP-call naar SRS GetPersonnel (1-4s); deze spiegel maakt dat ~50ms.
+ *
+ * De kassacode staat hier NOOIT plaintext: alleen sha256(personnelId:code).
+ * Gevuld door de storegents-sync-cron (2×/dag volledig) + write-through bij
+ * kassacode-reset/actief-zetten via de tool, en self-healing bij een geslaagde
+ * SRS-fallback. Alleen een VOLLEDIG positieve match (actief + hash + filialen)
+ * mag de live SRS-check overslaan — al het andere valt terug op SRS, dus een
+ * verouderde spiegel kan niemand buitensluiten (zie storegents
+ * lib/srs-personnel-client.js).
+ */
+export const personnelMirror = pgTable("personnel_mirror", {
+  personnelId: text("personnel_id").primaryKey(),
+  name: text("name").notNull().default(""),
+  internalName: text("internal_name").notNull().default(""),
+  externalName: text("external_name").notNull().default(""),
+  personnelGroupId: text("personnel_group_id").notNull().default(""),
+  active: boolean("active").notNull().default(false),
+  /** Komma-gescheiden SRS BranchIds; stores worden aan de storegents-kant afgeleid. */
+  branches: text("branches").notNull().default(""),
+  fingerprintRequired: boolean("fingerprint_required").notNull().default(false),
+  /** sha256(personnelId + ":" + kassacode) hex; leeg = geen code bekend. */
+  codeHash: text("code_hash").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

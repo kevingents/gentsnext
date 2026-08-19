@@ -177,6 +177,20 @@ export const ANONIMISEER_STAPPEN: Stap[] = [
     naam: "Dagafsluitingen anonimiseren",
     sql: `UPDATE pos_closings SET note = '', actor = sandbox_schoon_json(actor);`,
   },
+  /* personnel_mirror: namen maskeren én de kassacode-hashes WISSEN. Een
+     4-cijferige code is uit z'n hash offline te brute-forcen (10.000 opties),
+     dus een gekopieerde hash zou in de sandbox alle echte kassacodes prijsgeven.
+     Zonder hash matcht het snelpad daar simpelweg nooit (lege hash = geen match). */
+  {
+    naam: "Personeels-spiegel anonimiseren",
+    sql: `
+      UPDATE personnel_mirror SET
+        name = 'Medewerker ' || personnel_id,
+        internal_name = 'Medewerker ' || personnel_id,
+        external_name = 'Medewerker ' || personnel_id,
+        code_hash = '';
+    `,
+  },
   {
     naam: "Winkelaankopen anonimiseren",
     sql: `
