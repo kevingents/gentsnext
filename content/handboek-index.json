@@ -1786,6 +1786,14 @@
       "samenvatting": "POST /api/core/reservation — gents.nl-native reservering (SRS = WMS, klant in gents.nl). Action-based. Auth: STORE_CORE_TOKEN."
     },
     {
+      "pad": "/api/core/srs-import-status",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/core/srs-import-status — laatste uitslag van de nachtelijke SRS-artikelen-import (app_settings rij 'srs-import-status', gezet door /api/cron/srs-nieuwe-artikelen bij élke run, geslaagd of nie…"
+    },
+    {
       "pad": "/api/core/srs-weborders",
       "poort": "Core-token (kassa en scanner)",
       "methoden": [
