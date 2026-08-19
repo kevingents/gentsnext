@@ -5,7 +5,7 @@ import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { COLOR_FAMILIES } from "@/lib/colors";
 import { ensureEntries, getTranslationStore, pickFreshTranslation, type TransEntry, type Store } from "@/lib/translate";
 import type { Facets } from "@/lib/catalog";
-import { typeLabel } from "@/lib/catalog";
+import { hoofdgroepLabel } from "@/lib/categories";
 import { MATERIAL_BUCKETS, PATTERN_BUCKETS, normalizeType } from "@/lib/facet-taxonomy";
 
 /**
@@ -26,22 +26,34 @@ const NS = "fc";
 /** Alle facet-bronteksten in de catalogus (bounded set, ~150 waarden). */
 async function facetSourceTexts(): Promise<string[]> {
   const db = getDb();
-  const rows = (await db.execute<{ v: string | null }>(sql`
+  // Per facet apart uitlezen: subgroep gaat door dezelfde normalisatie als het
+  // filter zelf (anders vertalen we "Turtleneck" terwijl de klant "Coltrui"
+  // ziet), hoofdgroep door hoofdgroepLabel, de rest rauw. Eerst liep álles door
+  // normalizeType — die kent nu materiaalwoorden en zou "Zijde katoen" uit de
+  // vertaalbron gooien.
+  const rows = (await db.execute<{ facet: string; v: string | null; g: string | null }>(sql`
     with ctx as materialized (
       select attributes from products where status = 'active' and has_image = true
     )
-    select distinct attributes->>'subgroep' v from ctx where coalesce(attributes->>'subgroep','') <> ''
-    union select distinct attributes->>'materiaal' from ctx where coalesce(attributes->>'materiaal','') <> ''
-    union select distinct attributes->>'print_design' from ctx where coalesce(attributes->>'print_design','') <> ''
-    union select distinct attributes->>'seizoen' from ctx where coalesce(attributes->>'seizoen','') <> ''
-    union select distinct attributes->>'pasvorm' from ctx where coalesce(attributes->>'pasvorm','') <> ''
+    select distinct 'subgroep'::text facet, attributes->>'subgroep' v, coalesce(attributes->>'hoofdgroep_omschrijving','') g from ctx where coalesce(attributes->>'subgroep','') <> ''
+    union select distinct 'hoofdgroep'::text, attributes->>'hoofdgroep_omschrijving', ''::text from ctx where coalesce(attributes->>'hoofdgroep_omschrijving','') <> ''
+    union select distinct 'los'::text, attributes->>'materiaal', ''::text from ctx where coalesce(attributes->>'materiaal','') <> ''
+    union select distinct 'los'::text, attributes->>'print_design', ''::text from ctx where coalesce(attributes->>'print_design','') <> ''
+    union select distinct 'los'::text, attributes->>'seizoen', ''::text from ctx where coalesce(attributes->>'seizoen','') <> ''
+    union select distinct 'los'::text, attributes->>'pasvorm', ''::text from ctx where coalesce(attributes->>'pasvorm','') <> ''
   `)).rows;
   const out = new Set<string>();
   for (const r of rows) {
     const v = (r.v || "").trim();
     if (!v) continue;
-    const norm = normalizeType(v); // interne codes eruit, varianten samengevoegd
-    if (norm) out.add(typeLabel(norm));
+    if (r.facet === "subgroep") {
+      const norm = normalizeType(v, r.g || "");
+      if (norm) out.add(norm);
+    } else if (r.facet === "hoofdgroep") {
+      out.add(hoofdgroepLabel(v));
+    } else {
+      out.add(v);
+    }
   }
   for (const c of COLOR_FAMILIES) out.add(c.label);
   // Gebucket materiaal/dessin: de bucket-naam is de zichtbare tekst, niet de
@@ -67,6 +79,9 @@ export async function localizeFacets(locale: Locale, facets: Facets): Promise<Fa
   const store = await getTranslationStore(locale);
   return {
     ...facets,
+    // Soort: het label is het winkelwoord (Pantalons, Pochets), niet de rauwe
+    // hoofdgroep — dus vertalen we op label, met de bronwaarde in de URL.
+    categories: facets.categories.map((c) => ({ ...c, label: pick(store, c.label) })),
     types: facets.types.map((t) => ({ ...t, label: pick(store, t.label) })),
     colors: facets.colors.map((c) => ({ ...c, label: pick(store, c.label) })),
     materials: facets.materials.map((m) => ({ ...m, label: pick(store, m.value) })),

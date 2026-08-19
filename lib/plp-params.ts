@@ -2,6 +2,8 @@ import type { ProductFilters, ProductSort } from "@/lib/catalog";
 
 /** Vorm van de PLP-URL-parameters (gedeeld tussen server-parsing en client-UI). */
 export type PlpSelection = {
+  /** Soort = hoofdgroep (overhemd, stropdas, schoen) — staat vóór `types`. */
+  categories: string[];
   types: string[];
   materials: string[];
   patterns: string[];
@@ -50,6 +52,7 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
     .split(/[-,]/)
     .map((s) => Number(s.trim()));
   return {
+    categories: csv(get("soort")),
     types: csv(get("type")),
     materials: csv(get("materiaal")),
     patterns: csv(get("dessin")),
@@ -70,6 +73,7 @@ export function parsePlpParams(sp: Record<string, string | string[] | undefined>
 /** Bouwt een query-string uit een selectie (lege waarden weggelaten). */
 export function buildPlpQuery(sel: Partial<PlpSelection>): string {
   const p = new URLSearchParams();
+  if (sel.categories?.length) p.set("soort", sel.categories.join(","));
   if (sel.types?.length) p.set("type", sel.types.join(","));
   if (sel.materials?.length) p.set("materiaal", sel.materials.join(","));
   if (sel.patterns?.length) p.set("dessin", sel.patterns.join(","));
@@ -98,6 +102,7 @@ export function selectionToFilters(
 ): ProductFilters {
   return {
     ...base,
+    categories: sel.categories,
     types: sel.types,
     materials: sel.materials,
     patterns: sel.patterns,

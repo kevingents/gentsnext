@@ -49,6 +49,9 @@ const nl: Dict = {
   // Subkopjes in het maatfilter: lettermaten, boordmaten, schoen- en riemmaten
   // door elkaar in één rij was onleesbaar — en "41" betekent per matensysteem
   // iets heel anders. Zie lib/size-taxonomy.
+  // Soort = hoofdgroep. Alleen zichtbaar op een listing die soorten mengt;
+  // daar is "welk soort artikel" de eerste vraag, niet "welk type".
+  "plp.filters.category": "Soort",
   "plp.filters.sizeSystem.kleding": "Kleding",
   "plp.filters.sizeSystem.boord": "Boordmaat",
   "plp.filters.sizeSystem.confectie": "Confectie",
