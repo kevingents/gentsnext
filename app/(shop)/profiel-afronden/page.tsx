@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { ProfileCompletionForm } from "./ProfileCompletionForm";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
-  title: "Profiel afronden — GENTS",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/profiel-afronden");
+}
 
 /**
  * /profiel-afronden?token=…&email=… — landingspagina van de "+50 punten"-mail.

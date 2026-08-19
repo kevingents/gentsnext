@@ -13,6 +13,7 @@ import { ensureNavContent } from "@/lib/nav-i18n";
 import { ensureCollectionsContent } from "@/lib/catalog-i18n";
 import { ensureFacetContent } from "@/lib/facet-i18n";
 import { cronSecretOk } from "@/lib/cron-auth";
+import { ensurePageMetaContent } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -55,6 +56,7 @@ export async function GET(req: Request) {
     const site = await ensureSiteContent(loc).catch((e) => ({ error: String((e as Error).message) }));
     const landings = await ensureLandingsContent(loc).catch((e) => ({ error: String((e as Error).message) }));
     const nav = await ensureNavContent(loc).catch((e) => ({ error: String((e as Error).message) }));
+    const meta = await ensurePageMetaContent(loc).catch((e) => ({ error: String((e as Error).message) }));
     const catalog = skipProducts
       ? { translated: 0, skipped: true }
       : await ensureCatalogTranslations(loc, { descriptions, limit }).catch((e) => ({
@@ -70,7 +72,7 @@ export async function GET(req: Request) {
         }));
     const collections = await ensureCollectionsContent(loc).catch((e) => ({ error: String((e as Error).message) }));
     const facets = await ensureFacetContent(loc).catch((e) => ({ error: String((e as Error).message) }));
-    result[loc] = { ui, site, landings, nav, catalog, catalogDesc, collections, facets };
+    result[loc] = { ui, site, landings, nav, meta, catalog, catalogDesc, collections, facets };
   }
 
   return NextResponse.json({ ok: true, descriptions, result });

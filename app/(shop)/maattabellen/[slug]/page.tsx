@@ -11,6 +11,7 @@ import { SIZE_GUIDES, guideBySlug, MEASURE_INFO } from "@/lib/size-chart-hub";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { getActieveTabel } from "@/lib/maattabel";
+import { localizedSizeGuide , localizedMeasureInfo } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,11 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const guide = guideBySlug(slug);
-  if (!guide) return {};
+  const bron = guideBySlug(slug);
+  if (!bron) return {};
+  // seoTitle/seoDescription staan als Nederlandse tekst in lib/size-chart-hub;
+  // zonder dit heet /en/size-guide/suits nog steeds 'Maattabel pakken'.
+  const guide = await localizedSizeGuide(bron, await getLocale());
   const meta: Metadata = {
     title: guide.seoTitle,
     description: guide.seoDescription,
@@ -34,11 +38,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function MaattabelPage({ params }: Props) {
   const { slug } = await params;
-  const guide = guideBySlug(slug);
-  if (!guide) notFound();
+  const guideBron = guideBySlug(slug);
+  if (!guideBron) notFound();
 
   const locale = await getLocale();
+  const guide = await localizedSizeGuide(guideBron, locale);
   const t = await getT(locale);
+  const maatInfo = await localizedMeasureInfo(locale);
   // De actieve, geüploade maattabel (Site → Maten); valt terug op de tabel in code.
   const chart = await getActieveTabel();
 
@@ -105,8 +111,8 @@ export default async function MaattabelPage({ params }: Props) {
         <div className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2">
           {guide.measures.map((m) => (
             <div key={m}>
-              <p className="font-display text-base text-ink">{MEASURE_INFO[m].label}</p>
-              <p className="mt-1 font-sans text-sm text-ink-soft">{MEASURE_INFO[m].how}</p>
+              <p className="font-display text-base text-ink">{maatInfo[m].label}</p>
+              <p className="mt-1 font-sans text-sm text-ink-soft">{maatInfo[m].how}</p>
             </div>
           ))}
         </div>

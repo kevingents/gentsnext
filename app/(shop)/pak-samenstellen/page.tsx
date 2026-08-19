@@ -3,15 +3,13 @@ import { listSuits } from "@/lib/suit-pairing";
 import { SuitFilters } from "@/components/pak/suit-filters";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Pak samenstellen",
-  description:
-    "Stel je eigen pak samen: kies colbert en pantalon in de maat die jou past, met of zonder gilet. Prijs is de som van de onderdelen.",
-  alternates: { canonical: "/pak-samenstellen" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/pak-samenstellen");
+}
 
 export default async function PakSamenstellenPage() {
   const locale = await getLocale();

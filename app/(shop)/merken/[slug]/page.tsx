@@ -10,6 +10,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { localizedBrand } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,11 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const brand = brandBySlug(slug);
-  if (!brand) return {};
+  const bron = brandBySlug(slug);
+  if (!bron) return {};
+  // De merknaam blijft staan (eigennaam); de intro is onze eigen tekst en
+  // stond in het Engels/Duits gewoon in het Nederlands in de meta-omschrijving.
+  const brand = await localizedBrand(bron, await getLocale());
   return {
     title: brand.name,
     description: brand.intro,
@@ -30,7 +34,7 @@ export default async function BrandPage({ params }: Props) {
   const locale = await getLocale();
   const t = await getT(locale);
   const { slug } = await params;
-  const brand = brandBySlug(slug);
+  const brand = await localizedBrand(brandBySlug(slug)!, await getLocale());
   if (!brand) notFound();
   const products = await getProductsByBrand(brand.vendor, 48);
 

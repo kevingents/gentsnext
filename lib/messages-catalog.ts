@@ -1074,6 +1074,8 @@ export const SITE_CATALOG: Record<string, string> = {
   "search.size": "Maat",
   "search.try_again": "Probeer een andere zoekterm of ontdek onze populaire categorieën.",
   "seo.category.description": "{category} bij GENTS — betaalbare luxe voor elk formeel moment.",
+  "seo.store.title": "GENTS {city} — herenmode & pakken",
+  "seo.suitbuilder.title": "Pak samenstellen — {colbert}",
   "sizeAdvisor.adviceJacket": "Colbert / pak",
   "sizeAdvisor.adviceShirt": "Overhemd (boordmaat)",
   "sizeAdvisor.adviceTrouserLength": "Lengtemaat (lang)",

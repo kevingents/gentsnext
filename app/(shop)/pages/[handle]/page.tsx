@@ -23,6 +23,8 @@ import { getLocalizedLanding } from "@/lib/landings-i18n";
 import { getLocale } from "@/lib/locale-server";
 import { localeAlternates } from "@/lib/seo";
 import { getHighlights, getCollectionByHandle, getCollectionProducts } from "@/lib/catalog";
+import { localizedPageMeta } from "@/lib/page-meta-i18n";
+import { getT } from "@/lib/t-server";
 
 export const dynamic = "force-dynamic";
 
@@ -95,28 +97,30 @@ function storeJsonLd(store: Store): Record<string, unknown> {
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;
-  if (handle === "klantenservice" || handle === "service")
-    return {
-      title: "Klantenservice — we staan voor je klaar",
-      description: "Vragen over je bestelling, maat of retour? De GENTS-klantenservice helpt je snel en persoonlijk — via de assistent, per mail of in één van onze 19 winkels.",
-      alternates: await localeAlternates(`/pages/${handle}`),
-    };
-  if (handle === "herroepingsformulier")
-    return {
-      title: "Modelformulier voor herroeping",
-      description: "Het wettelijke modelformulier voor herroeping van je GENTS-bestelling — 14 dagen bedenktijd.",
-      alternates: await localeAlternates(`/pages/${handle}`),
-    };
+  const locale = await getLocale();
+  if (handle === "klantenservice" || handle === "service") {
+    const m = await localizedPageMeta("/pages/klantenservice", locale);
+    return { title: m.title, description: m.description, alternates: await localeAlternates(`/pages/${handle}`) };
+  }
+  if (handle === "herroepingsformulier") {
+    const m = await localizedPageMeta("/pages/herroepingsformulier", locale);
+    return { title: m.title, description: m.description, alternates: await localeAlternates(`/pages/${handle}`) };
+  }
   const store = getStoreByPageHandle(handle);
-  if (store) return { title: `GENTS ${store.city} — herenmode & pakken`, alternates: await localeAlternates(`/pages/${handle}`) };
+  if (store) {
+    const t = await getT(locale);
+    return { title: t("seo.store.title", { city: store.city }), alternates: await localeAlternates(`/pages/${handle}`) };
+  }
 
   const storePage = await getStorePage(handle);
   if (storePage)
     return { title: storePage.title, description: storePage.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
 
   const landing = getLanding(handle);
-  if (landing)
-    return { title: landing.title, description: landing.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
+  if (landing) {
+    const vertaald = await getLocalizedLanding(landing, locale);
+    return { title: vertaald.title, description: vertaald.seoDescription, alternates: await localeAlternates(`/pages/${handle}`) };
+  }
 
   const mp = getMigratedPage(handle);
   if (mp) return { title: mp.title, alternates: await localeAlternates(`/pages/${handle}`) };
