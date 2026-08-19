@@ -751,6 +751,12 @@
       "samenvatting": "Vaste FAQ-blokken per hoofdgroep — verlaagt twijfel op de PDP. De teksten lopen via de vertaalrail (lib/messages-catalog + de nachtelijke vertaal-cron)."
     },
     {
+      "pad": "lib/personnel-mirror-core.ts",
+      "naam": "personnel-mirror-core",
+      "domein": "Overig",
+      "samenvatting": "Personeels-spiegel voor de snelle kassacode-check (zie db/schema.ts). Schrijvers: de storegents-sync-cron (action \"sync\": volledige set, verwijdert verdwenen nummers), write-through bij kassacode-reset/actief-zetten en de self-heal na een geslaagde SRS-fallbac…"
+    },
+    {
       "pad": "lib/pim.ts",
       "naam": "pim",
       "domein": "Catalogus",
@@ -1696,6 +1702,14 @@
         "POST"
       ],
       "samenvatting": "POST /api/core/order-unavailable — een winkel meldt dat 'ie een toegewezen weborder(-regel) niet kan leveren."
+    },
+    {
+      "pad": "/api/core/personnel-mirror",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/personnel-mirror — personeels-spiegel voor de snelle kassacode-check (storegents). Kassacodes reizen en liggen hier alléén als sha256(personnelId:code)-hash. Auth: STORE_CORE_TOKEN."
     },
     {
       "pad": "/api/core/portal-usage",
@@ -3076,6 +3090,7 @@
     "order_logboek",
     "order_shipment_picks",
     "orders",
+    "personnel_mirror",
     "portal_usage",
     "pos_closings",
     "pos_drafts",
