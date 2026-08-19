@@ -721,6 +721,12 @@
       "samenvatting": "AI-packshot uit tekst: voor producten ZONDER bronfoto (bv. \"teFotograferen\" uit de Fotostatus-tool). Pijplijn: FLUX flat-lay (product-only) → bg-removal (BiRefNet) → composiet op PUUR WIT, in jullie packshot-stijl."
     },
     {
+      "pad": "lib/page-meta-i18n.ts",
+      "naam": "page-meta-i18n",
+      "domein": "Site en content",
+      "samenvatting": "i18n over de PAGINA-METADATA en de statische contentteksten die erin landen. WAAROM DIT BESTAAT: elke generateMetadata stond hardgecodeerd in het Nederlands."
+    },
+    {
       "pad": "lib/pakbon-instelling.ts",
       "naam": "pakbon-instelling",
       "domein": "Kopen en orders",
@@ -1265,6 +1271,12 @@
       "naam": "unfulfillable",
       "domein": "Keten en voorraad",
       "samenvatting": "\"Niet leverbaar\" — een winkel kan een toegewezen weborder-regel niet leveren. We doen drie dingen: 1. Voorraad corrigeren: het fantoom-stuk eraf op die winkel (SRS schatte te hoog) zodat het niet opnieuw verkocht/gerouteerd wordt. 2."
+    },
+    {
+      "pad": "lib/url-i18n.ts",
+      "naam": "url-i18n",
+      "domein": "Overig",
+      "samenvatting": "Getypeerde schil om lib/url-i18n-regels.js. De regels staan in plain JS zodat `node --test` ze zonder bouwstap kan draaien (test/url-i18n.test.js); hier staat alleen de typing en de koppeling aan het Locale-type."
     },
     {
       "pad": "lib/variant-grouping.ts",
@@ -1817,6 +1829,14 @@
       "samenvatting": "POST /api/core/stock/movement-synced — markeer de kassa-mutaties van een verkoop als 'in SRS geboekt'."
     },
     {
+      "pad": "/api/core/stock/unsynced",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "GET /api/core/stock/unsynced — SRS-sync-achterstand in het mutatie-grootboek, voor de drift-monitor (storegents cron srs-sync-monitor). Read-only."
+    },
+    {
       "pad": "/api/core/stock/web-reserved",
       "poort": "Core-token (kassa en scanner)",
       "methoden": [
@@ -1951,6 +1971,14 @@
         "GET"
       ],
       "samenvatting": "Haalt de Shopify-bestellingen op die er sinds de vorige run bij kwamen. Zolang gents.nl op Shopify draait is dit de enige aanvoer van verse orders."
+    },
+    {
+      "pad": "/api/cron/srs-nieuwe-artikelen",
+      "poort": "Publiek",
+      "methoden": [
+        "GET"
+      ],
+      "samenvatting": "Nachtelijke cron (zie vercel.json): nieuwe SRS-artikelen als CONCEPT-product het PIM in."
     },
     {
       "pad": "/api/cron/stock-check",
