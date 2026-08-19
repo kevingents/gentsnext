@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run handboek && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
@@ -33,7 +33,9 @@
     "db:migratie": "tsx scripts/migratie-uitvoeren.ts",
     "profielen:herbouw": "tsx scripts/herbouw-profielen.ts",
     "import:spotler": "tsx scripts/import-spotler-export.ts",
-    "flows:maak": "tsx scripts/maak-email-flows.ts"
+    "flows:maak": "tsx scripts/maak-email-flows.ts",
+    "handboek": "tsx scripts/handboek-index.ts",
+    "handboek:html": "tsx scripts/handboek-html.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
