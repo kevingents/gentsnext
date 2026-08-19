@@ -79,7 +79,10 @@ export type SrsArtikel = {
 };
 
 export function srsBeschikbaar(): boolean {
-  return Boolean((process.env.SRS_API_USER || process.env.SRS_API_USERNAME) && process.env.SRS_API_PASSWORD);
+  return Boolean(
+    (process.env.SRS_PRODUCTINFO_USER || process.env.SRS_API_USER || process.env.SRS_API_USERNAME) &&
+    (process.env.SRS_PRODUCTINFO_PASSWORD || process.env.SRS_API_PASSWORD),
+  );
 }
 
 /** SRS levert cp1252, niet UTF-8 — anders wordt "café" een blokje. */
@@ -99,8 +102,14 @@ function decodeCp1252(buf: Buffer): string {
 export async function haalSrsArtikelen(
   { delta = false, timeoutMs = 90_000 }: { delta?: boolean; timeoutMs?: number } = {},
 ): Promise<{ ok: true; rijen: SrsArtikel[]; delta: boolean } | { ok: false; error: string }> {
-  const user = process.env.SRS_API_USER || process.env.SRS_API_USERNAME || "";
-  const password = process.env.SRS_API_PASSWORD || "";
+  /* SRS_PRODUCTINFO_* gaat vóór (19 aug): de bestaande SRS_API_USER in deze
+     Vercel-omgeving kreeg een 403 op get_product_info — dat account heeft geen
+     si_webshop-productinfo-rechten. De variabelen zijn sensitive (niet terug te
+     lezen), dus overschrijven zou de huidige waarden onherstelbaar wissen en kan
+     ánder SRS-verkeer breken. Daarom een eigen naam voor precies deze feed, met
+     dezelfde inlog die storegents 's nachts al met succes gebruikt. */
+  const user = process.env.SRS_PRODUCTINFO_USER || process.env.SRS_API_USER || process.env.SRS_API_USERNAME || "";
+  const password = process.env.SRS_PRODUCTINFO_PASSWORD || process.env.SRS_API_PASSWORD || "";
   if (!user || !password) {
     return { ok: false, error: "SRS_API_USER en/of SRS_API_PASSWORD ontbreken (si_webshop)." };
   }
@@ -109,6 +118,7 @@ export async function haalSrsArtikelen(
      wisselgeld — een koppeling die stilvalt omdat de variabele net anders heet
      is een uur zoeken naar niets. */
   const base = (
+    process.env.SRS_PRODUCTINFO_BASE_URL ||
     process.env.SRS_API_BASE_URL ||
     process.env.SRS_WEBSERVICES_BASE_URL ||
     process.env.SRS_BASE_URL ||
