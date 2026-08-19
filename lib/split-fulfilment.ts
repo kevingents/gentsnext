@@ -23,8 +23,9 @@ type PlanShip = {
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
 /** De winkel-delen (niet-magazijn) van een order-plan — de delen die fysiek in een
- *  winkel gepickt moeten worden vóór verzending. */
-export function storeShipments(plan: unknown): { store: string; key: string; units: number }[] {
+ *  winkel gepickt moeten worden vóór verzending. `lines` gaat mee zodat het
+ *  gereedmelden (order-pick) precies déze regels als voorraad-movement kan boeken. */
+export function storeShipments(plan: unknown): { store: string; key: string; units: number; lines: { sku: string; qty: number; title?: string }[] }[] {
   const ships = (plan as { shipments?: PlanShip[] } | null)?.shipments || [];
   return ships
     .filter((s) => !s.isWarehouse && norm(s.store))
@@ -32,6 +33,9 @@ export function storeShipments(plan: unknown): { store: string; key: string; uni
       store: String(s.store),
       key: norm(s.store),
       units: Number(s.units) || (s.lines?.reduce((n, l) => n + (Number(l.qty) || 0), 0) ?? 0),
+      lines: (s.lines || [])
+        .map((l) => ({ sku: String(l.sku || "").trim(), qty: Math.abs(Math.round(Number(l.qty) || 0)), title: l.title }))
+        .filter((l) => l.sku && l.qty > 0),
     }));
 }
 

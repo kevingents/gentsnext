@@ -5,6 +5,7 @@ import { stockForSkus, stockSyncedAt } from "@/lib/stock";
 import { type StockChannel } from "@/lib/fulfillment-config";
 import { safetyAllocationFor, safetyKey } from "@/lib/safety-stock";
 import { resolveStockAliases, type ResolvedStockKey } from "@/lib/stock-key-alias";
+import { orderPickRefBase, orderPickBeslissing } from "@/lib/order-pick-regels.js";
 
 /**
  * Omnichannel voorraad-core (Fase A). De zelfgebouwde kassa (storegents) én de
@@ -128,6 +129,62 @@ export async function markMovementsSrsPosted(ref: string, channel: "pos" | "inbo
   `);
 }
 
+/**
+ * Voorraad-afboeking van een WINKELDEEL van een (split-)bezorgweborder op het moment
+ * van gereedmelden (/api/core/order-pick). Dit dicht het gat waarbij het stuk na
+ * 'shipped' weer beschikbaar telde: de web-reservering hield het vast tot de order
+ * verzonden was, maar er kwam nooit een échte −1 — niet hier en niet in SRS.
+ *
+ * KEUZE dubbeltelling (gedocumenteerd, zie ook webReservedAllLocations): de movement
+ * wordt bij de PICK geboekt (−1, channel 'transfer'), en de web-reservering slaat
+ * gepickte winkeldelen vanaf dat moment OVER (join op order_shipment_picks). Zo telt
+ * het stuk tussen pick en shipped precies één keer mee (via de movement) en na
+ * shipped blijft de −1 staan tot SRS de transferbon heeft geaccepteerd én de
+ * baseline-sync 'm heeft overgenomen (srs_posted_at-mechaniek, zoals bij de
+ * winkel-transfers). Alternatief was boeken bij het vrijvallen van de reservering
+ * (shipped), maar dat moment is order-breed i.p.v. per winkeldeel en mist de
+ * koppeling met de SRS-spiegel die storegents bij het gereedmelden boekt.
+ *
+ * Idempotent én undo-baar via het ref-tellertje in lib/order-pick-regels.js
+ * (ORDERPICK-<order>-<winkel>[-n|-UNDO-n]). Retourneert de geboekte (of staande)
+ * ref + of er daadwerkelijk NIEUW geboekt is — storegents spiegelt alleen een
+ * nieuwe boeking naar SRS (transferbon 'naar' filiaal 90) en markeert de ref
+ * daarna synced (coreMovementSynced).
+ */
+export async function recordOrderPickMovement(input: {
+  orderNumber: string;
+  /** Locatie zoals in het fulfillment-plan ("GENTS Groningen") — moet byte-gelijk
+   *  zijn aan de locatie waarmee de kassa/web beschikbaarheid opvraagt. */
+  store: string;
+  /** Genormaliseerde winkelsleutel (plan-key, lowercase). */
+  storeKey: string;
+  lines: MovementLine[];
+  done: boolean;
+}): Promise<{ ref: string | null; booked: boolean }> {
+  const base = orderPickRefBase(input.orderNumber, input.storeKey);
+  if (!base || !Array.isArray(input.lines) || !input.lines.length) return { ref: null, booked: false };
+  const db = getDb();
+  const existing = await db.execute<{ ref: string }>(sql`
+    select distinct ref from store_stock_movements
+    where channel = 'transfer' and (ref = ${base} or ref like ${base + "-%"})
+  `);
+  const besluit = orderPickBeslissing(existing.rows.map((r) => String(r.ref)), base, input.done);
+  if (!besluit.boek) return { ref: besluit.ref, booked: false };
+  const { applied } = await recordMovements({
+    location: input.store,
+    channel: "transfer",
+    reason: input.done ? "weborder-pick" : "weborder-pick-undo",
+    ref: besluit.ref,
+    sign: besluit.sign === 1 ? 1 : -1,
+    lines: input.lines,
+  });
+  // applied is alleen leeg als geen enkele regel een voorraad-sleutel opleverde
+  // (dienst-/custom-regels) — dan valt er ook niets naar SRS te spiegelen.
+  // Een parallelle dubbelboeking op dezelfde ref vangt de unieke index af
+  // (onConflictDoNothing in recordMovements): er landt hoe dan ook precies één rij.
+  return { ref: besluit.ref, booked: applied.length > 0 };
+}
+
 /** Netto core-delta per stockKey voor één locatie. */
 export async function coreDeltaForKeys(location: string, keys: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
@@ -153,9 +210,16 @@ export async function coreDeltaForKeys(location: string, keys: string[]): Promis
  * lopende web-orders meeneemt en het laatste stuk niet dubbel verkoopt.
  *
  * Telt mee zolang een web-order betaald-maar-niet-verzonden is, óf verzonden ná
- * de laatste SRS-sync (model A: magazijn/winkel boekt de pick in SRS uit; daarna
- * laat de sync 'm zakken → reservering valt vrij). Géén permanente boeking →
- * geen dubbeltelling met de SRS-baseline.
+ * de laatste SRS-sync (model A voor het MAGAZIJN-deel: het magazijn pickt in SRS,
+ * de eerstvolgende baseline-sync laat 'm zakken → reservering valt vrij).
+ *
+ * WINKEL-delen zijn hiervan uitgezonderd zodra ze GEREED gemeld zijn: het
+ * gereedmelden (/api/core/order-pick) boekt sindsdien een échte −1-movement
+ * (recordOrderPickMovement, channel 'transfer') die het stuk permanent afboekt —
+ * de winkel boekt níét zelf in SRS uit, dus het model-A-mechanisme werkte daar
+ * nooit en het stuk kwam na 'shipped' weer beschikbaar. Een gepickt deel hier
+ * óók blijven meetellen zou dubbel aftrekken (movement + reservering); vandaar
+ * de join op order_shipment_picks: gepickt deel → overslaan, de movement telt.
  */
 export async function webReservedAllLocations(): Promise<Map<string, Map<string, number>>> {
   // locatie(lower) → (stockKey(lower) → gereserveerd aantal)
@@ -164,17 +228,30 @@ export async function webReservedAllLocations(): Promise<Map<string, Map<string,
   try {
     const db = getDb();
     // Alléén web-orders met een fulfillment_plan (geïmporteerde historie heeft er geen → uitgesloten).
-    const rows = await db.execute<{ fulfillment_plan: unknown }>(sql`
-      select fulfillment_plan from orders
+    const rows = await db.execute<{ order_number: string; fulfillment_plan: unknown }>(sql`
+      select order_number, fulfillment_plan from orders
       where (status in ('paid','ready_pickup')
              or (status in ('shipped','delivered') and updated_at > ${syncedAt.toISOString()}))
         and fulfillment_plan is not null
     `);
+    // Gereed gemelde winkeldelen (order → set winkelsleutels): die zijn al als
+    // movement afgeboekt en mogen niet óók als reservering meetellen.
+    const picked = new Set<string>();
+    const nums = [...new Set(rows.rows.map((r) => String(r.order_number || "")).filter(Boolean))];
+    if (nums.length) {
+      const p = await db.execute<{ order_number: string; shipment_key: string }>(sql`
+        select order_number, shipment_key from order_shipment_picks
+        where order_number in (${sql.join(nums.map((n) => sql`${n}`), sql`, `)})
+      `);
+      for (const r of p.rows) picked.add(`${r.order_number}|${lower(r.shipment_key)}`);
+    }
     for (const r of rows.rows) {
       const plan = r.fulfillment_plan as { shipments?: { store?: string; lines?: { sku?: string; qty?: number }[] }[] } | null;
       for (const s of plan?.shipments || []) {
         const loc = lower(s.store);
         if (!loc) continue;
+        // shipment_key = genormaliseerde winkelnaam (zelfde norm als loc).
+        if (picked.has(`${String(r.order_number)}|${loc}`)) continue;
         let m = out.get(loc);
         if (!m) { m = new Map(); out.set(loc, m); }
         for (const l of s.lines || []) {
