@@ -77,12 +77,14 @@ export async function POST(req: Request) {
       end as score
     from product_variants v
     join products p on p.id = v.product_id
-    /* 'draft' telt MEE: de nachtelijke SRS-import zet winkel-only artikelen als
-       concept in het PIM (srs-artikelen.ts) — aan de kassa moeten die gewoon
-       vindbaar en verkoopbaar zijn, ook al toont de site ze nog niet. Alleen
-       'archived' blijft eruit. Deze route wordt uitsluitend door de kassa
-       gebruikt; de site zoekt via searchProducts. */
-    where p.status in ('active', 'draft') and (
+    /* Alles behalve 'archived' telt mee. Aan de kassa moet je élk bestaand
+       artikel kunnen vinden: 'draft' (SRS-concepten uit de nachtimport) én
+       'unlisted' — daar bleek ruim de HELFT van de catalogus onder te vallen
+       (1.613 producten op 19 aug, o.a. Lucas' Blumfontain uni structuur wit),
+       allemaal onvindbaar op naam zolang hier op 'active' gefilterd werd.
+       Deze route wordt uitsluitend door de kassa gebruikt; de site zoekt via
+       searchProducts met z'n eigen zichtbaarheidsregels. */
+    where p.status <> 'archived' and (
       coalesce(v.sku, '') like ${qLower + "%"}
       or nullif(ltrim(coalesce(v.srs_artikel_id, ''), '0'), '') = nullif(ltrim(${qLower}, '0'), '')
       or coalesce(v.barcode, '') = ${qLower}
@@ -104,8 +106,8 @@ export async function POST(req: Request) {
         word_similarity(${qLower}, lower(title)) ws,
         (lower(title) like ${like}) tl
       from products
-      /* 'draft' mee — zie de code-tak hierboven: SRS-concepten horen aan de kassa vindbaar te zijn. */
-      where status in ('active', 'draft')
+      /* Alles behalve 'archived' — zie de code-tak hierboven (unlisted = helft vd catalogus). */
+      where status <> 'archived'
     )
     select ${kolommen},
       greatest(
