@@ -45,6 +45,7 @@ export async function GET(req: Request) {
   const subgroep = (sp.get("subgroep") || "").trim();
   const jaar = (sp.get("jaar") || "").trim();
   const seizoen = (sp.get("seizoen") || "").trim();
+  const bron = (sp.get("bron") || "").trim();
   const sort = sp.get("sort") || "nieuw";
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const pageSize = Math.min(200, Math.max(5, Number(sp.get("pageSize")) || 30));
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
   /* Het filter staat in lib/pim.ts zodat de CSV-export exact hetzelfde selecteert
      als dit scherm. 'mist:<check>' is de werklijst achter een tegel op het
      kwaliteitsoverzicht. */
-  const filters = { search, status, kwaliteit, merk, groep, subgroep, jaar, seizoen };
+  const filters = { search, status, kwaliteit, merk, groep, subgroep, jaar, seizoen, bron };
   let where: SQL;
   try {
     where = pimWhereSql(filters);

@@ -42,6 +42,10 @@
 
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
+import { products, productVariants, productImages } from "@/db/schema";
+import { slugify } from "@/lib/catalog-import";
+import { colorFamily } from "@/lib/colors";
+import { sizeRowLabel } from "@/lib/size-taxonomy";
 import { leesArtikelen, meestVoorkomend, normaliseerArtikelNummer } from "@/lib/srs-artikelen-regels";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -329,4 +333,199 @@ export async function koppelStand(): Promise<{
     gezienInSrs: r?.gezien ?? 0,
     laatstGezien: r?.laatst ?? null,
   };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. Nieuwe artikelen AANMAKEN
+   ══════════════════════════════════════════════════════════════════════════
+
+   Koppelen (hierboven) verbindt wat er al is. Maar nieuwe collectie ligt soms
+   eerder fysiek in de winkel dan in het PIM (Den Bosch, 19 aug: drager
+   T000001298 met twee overhemden die nergens bestonden — niet te zien op het
+   ontvangstscherm, niet te scannen, niet te verkopen). SRS kent ze dan al wél,
+   compleet met omschrijving, kleur, maten, barcodes, prijs en leveranciersfoto's.
+
+   Deze functie haalt precies die artikelen binnen als CONCEPT-product:
+
+   - Eén product per (artikelnummer, kleur-id) — dezelfde korrel als de rest van
+     de catalogus, en de unieke index op die twee kolommen bewaakt het.
+   - status 'draft': de site toont niets totdat content het artikel afmaakt. De
+     compleetheidsscore is laag (geen tekst, geen SEO) — zo verschijnt het
+     vanzelf in de PIM-werklijsten.
+   - attributes.bron = 'SRS' → daar filtert de productenlijst op ("Herkomst"),
+     zodat content de verse instroom als werklijst kan pakken.
+   - sku = de SRS-barcode (29…): dat is de join-sleutel naar voorraad, kassa en
+     goederenontvangst. `barcode` (leveranciers-EAN) kennen we hier niet → leeg.
+
+   NOOIT aanmaken als er al iets van het artikel bestaat: een groep waarvan ook
+   maar één barcode als variant-sku voorkomt is een KOPPEL-kwestie, geen
+   aanmaak-kwestie — anders ontstaan duplicaten naast het bestaande product. */
+
+export type NieuwArtikelResultaat = {
+  feedRijen: number;
+  kandidaten: number;
+  aangemaakt: number;
+  varianten: number;
+  /** Kandidaten die deze run niet meegingen (max bereikt) — volgende run pakt ze. */
+  restant: number;
+  producten: { handle: string; titel: string; kleur: string; varianten: number }[];
+  droogdraaien: boolean;
+};
+
+export async function maakNieuweArtikelen(
+  { droogdraaien = false, max = 200 }: { droogdraaien?: boolean; max?: number } = {},
+): Promise<NieuwArtikelResultaat | { error: string }> {
+  const feed = await haalSrsArtikelen({ delta: false });
+  if (!feed.ok) return { error: feed.error };
+  /* Noodrem, zelfde gedachte als bij de products-cache: een "volledige" feed met
+     een handvol rijen is een storing bij SRS, geen catalogus — en zou hier
+     hooguit troep aanmaken. */
+  if (feed.rijen.length < 1000) {
+    return { error: `SRS-feed bevat maar ${feed.rijen.length} rijen — aanmaken geweigerd (storing?).` };
+  }
+
+  const db = getDb();
+  /* Wat we al kennen. Sku's als Set in het geheugen: ~23k strings, en dan is de
+     controle per groep een lookup i.p.v. een query per artikel. */
+  const bekendeSkus = new Set(
+    (await db.execute<{ sku: string }>(sql`select sku from product_variants where coalesce(sku, '') <> ''`)).rows.map((r) => r.sku),
+  );
+  const bekendeParen = new Set(
+    (
+      await db.execute<{ nr: string; kleur: string }>(sql`
+        select srs_artikel_nummer nr, coalesce(srs_kleur_id, '') kleur
+        from products where coalesce(srs_artikel_nummer, '') <> ''`)
+    ).rows.map((r) => `${r.nr}|${r.kleur}`),
+  );
+  const bestaandeHandles = new Set(
+    (await db.execute<{ handle: string }>(sql`select handle from products`)).rows.map((r) => r.handle),
+  );
+
+  /* Groepeer de feed op (artikelnummer, kleur-id); binnen een groep wint per
+     barcode de laatste rij (zelfde afspraak als bij het koppelen). */
+  const groepen = new Map<string, Map<string, SrsArtikel>>();
+  for (const r of feed.rijen) {
+    if (!r.barcode || !r.artikelNummer) continue;
+    const key = `${normaliseerArtikelNummer(r.artikelNummer)}|${r.kleurId || ""}`;
+    const g = groepen.get(key) ?? new Map<string, SrsArtikel>();
+    g.set(r.barcode, r);
+    groepen.set(key, g);
+  }
+
+  const nieuw: { key: string; rijen: SrsArtikel[] }[] = [];
+  for (const [key, g] of groepen) {
+    if (bekendeParen.has(key)) continue;
+    const rijen = [...g.values()];
+    if (rijen.some((r) => bekendeSkus.has(r.barcode))) continue;
+    nieuw.push({ key, rijen });
+  }
+
+  const teDoen = nieuw.slice(0, Math.max(1, max));
+  const resultaat: NieuwArtikelResultaat = {
+    feedRijen: feed.rijen.length,
+    kandidaten: nieuw.length,
+    aangemaakt: 0,
+    varianten: 0,
+    restant: Math.max(0, nieuw.length - teDoen.length),
+    producten: [],
+    droogdraaien,
+  };
+
+  for (const { key, rijen } of teDoen) {
+    const [nr, kleurId] = key.split("|");
+    /* De meest voorkomende waarde over de groep, niet de eerste: staat één maat
+       verkeerd in SRS, dan wint de rest (zelfde regel als bij het koppelen). */
+    const vaakst = (kies: (r: SrsArtikel) => string): string => {
+      const telling = new Map<string, number>();
+      for (const r of rijen) {
+        const v = (kies(r) || "").trim();
+        if (v) telling.set(v, (telling.get(v) || 0) + 1);
+      }
+      let beste = "";
+      let hoogste = 0;
+      for (const [v, n] of telling) {
+        if (n > hoogste) {
+          beste = v;
+          hoogste = n;
+        }
+      }
+      return beste;
+    };
+
+    const omschrijving = vaakst((r) => r.omschrijving);
+    const kleur = vaakst((r) => r.kleur);
+    const hoofdgroep = vaakst((r) => r.hoofdgroep);
+    const titel = omschrijving || `Artikel ${nr}`;
+
+    /* Handle: leesbaar waar het kan, gegarandeerd uniek waar het moet. */
+    const basis = slugify(titel) || `artikel-${nr}`;
+    let handle = basis;
+    if (bestaandeHandles.has(handle) && kleur) handle = `${basis}-${slugify(kleur)}`;
+    if (bestaandeHandles.has(handle)) handle = `${basis}-${nr.replace(/^0+/, "") || nr}`;
+    if (bestaandeHandles.has(handle)) continue; // dan is er écht iets vreemds — overslaan, volgende run kijkt opnieuw
+    bestaandeHandles.add(handle);
+
+    /* Alleen gevulde attributen: de facetten tonen '(leeg)' voor wat ontbreekt,
+       en een lege sleutel erin schrijven maakt dat niet beter. */
+    const attributes: Record<string, string> = { bron: "SRS" };
+    const zet = (k: string, v: string) => {
+      if ((v || "").trim()) attributes[k] = v.trim();
+    };
+    zet("artikel_nummer", nr);
+    zet("artikel_id", vaakst((r) => r.artikelId));
+    zet("hoofdgroep_id", vaakst((r) => r.hoofdgroepId));
+    zet("hoofdgroep_omschrijving", hoofdgroep);
+    zet("merk", vaakst((r) => r.merk));
+    zet("jaar", vaakst((r) => r.jaar));
+    zet("seizoen", vaakst((r) => r.seizoen));
+    zet("materiaal", vaakst((r) => r.materiaal));
+    zet("samenstelling", vaakst((r) => r.samenstelling));
+    zet("pasvorm", vaakst((r) => r.pasvorm));
+
+    const fotos = [...new Set(rijen.flatMap((r) => r.fotos || []))].slice(0, 6);
+
+    resultaat.aangemaakt += 1;
+    resultaat.varianten += rijen.length;
+    resultaat.producten.push({ handle, titel, kleur, varianten: rijen.length });
+    if (droogdraaien) continue;
+
+    const [product] = await db
+      .insert(products)
+      .values({
+        handle,
+        title: titel,
+        vendor: vaakst((r) => r.merk) || vaakst((r) => r.leverancier),
+        status: "draft",
+        attributes,
+        srsArtikelNummer: nr,
+        srsKleurId: kleurId,
+        srsGezienOp: new Date(),
+        variantColorLabel: kleur,
+        hasImage: fotos.length > 0,
+      })
+      .returning({ id: products.id });
+
+    await db.insert(productVariants).values(
+      rijen.map((r, i) => ({
+        productId: product.id,
+        sku: r.barcode, // de SRS-barcode is de sku — zie de kolomdocumentatie
+        barcode: "", // leveranciers-EAN onbekend; NOOIT de sku hierin zetten
+        position: i,
+        size: r.maat || "",
+        sizeLabel: r.maat ? sizeRowLabel(r.maat, hoofdgroep) : "",
+        color: r.kleur || kleur,
+        colorFamily: r.kleur || kleur ? colorFamily(r.kleur || kleur) : "",
+        priceCents: r.verkoopprijsCents || 0,
+        srsArtikelId: r.artikelId || "",
+      })),
+    );
+
+    if (fotos.length) {
+      await db.insert(productImages).values(
+        fotos.map((url, i) => ({ productId: product.id, url, alt: titel, position: i })),
+      );
+    }
+  }
+
+  return resultaat;
 }

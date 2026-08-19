@@ -115,12 +115,14 @@ export async function recordMovements(input: RecordInput): Promise<{ applied: { 
  * Markeer de kassa-mutaties van een verkoop (ref = sale-id) als 'in SRS geboekt'.
  * De delta blijft nog meetellen tot een SRS-sync ná dit moment de baseline
  * bijwerkt; daarna valt 'ie uit de posDelta-som (geen dubbeltelling). Aangeroepen
- * door storegents zodra een POS-verkoop succesvol naar SRS is gepost.
+ * door storegents zodra een POS-verkoop succesvol naar SRS is gepost — en bij
+ * 'correction'-mutaties (kassa-correctie/inventarisatie) zodra supply chain de
+ * correctie handmatig in SRS heeft doorgevoerd.
  */
-export async function markMovementsSrsPosted(ref: string, channel: "pos" | "inbound" | "transfer" = "pos"): Promise<void> {
+export async function markMovementsSrsPosted(ref: string, channel: "pos" | "correction" | "inbound" | "transfer" = "pos"): Promise<void> {
   const r = String(ref || "").trim();
   if (!r) return;
-  const ch = (["inbound", "transfer"] as const).includes(channel as "inbound" | "transfer") ? channel : "pos";
+  const ch = (["correction", "inbound", "transfer"] as const).includes(channel as "correction" | "inbound" | "transfer") ? channel : "pos";
   const db = getDb();
   await db.execute(sql`
     update store_stock_movements
@@ -183,6 +185,129 @@ export async function recordOrderPickMovement(input: {
   // Een parallelle dubbelboeking op dezelfde ref vangt de unieke index af
   // (onConflictDoNothing in recordMovements): er landt hoe dan ook precies één rij.
   return { ref: besluit.ref, booked: applied.length > 0 };
+}
+
+export type UnsyncedChannelStat = {
+  channel: string;
+  count: number;
+  sumAbsDelta: number;
+  oldestCreatedAt: string | null;
+};
+
+export type UnsyncedStaleGroup = {
+  location: string;
+  channel: string;
+  ref: string | null;
+  lines: number;
+  sumAbsDelta: number;
+  oldestCreatedAt: string;
+};
+
+/**
+ * SRS-sync-achterstand in het mutatie-grootboek — voor de drift-monitor (storegents
+ * cron srs-sync-monitor). Twee blikken op srs_posted_at IS NULL:
+ *
+ *  1. channels — aggregaat per kanaal (aantal, som |delta|, oudste). 'correction'
+ *     is hier per definitie altijd unsynced (SRS heeft geen voorraad-write): dat is
+ *     de werklijst "nog handmatig in SRS door te voeren", geen fout.
+ *  2. stale — pos/inbound/transfer-movements ouder dan de drempel, gegroepeerd op
+ *     (location, channel, ref). Die kanalen horen kort na de actie via
+ *     markMovementsSrsPosted gemarkeerd te worden; blijft een groep hangen, dan is
+ *     de SRS-boeking gemist (boekbon faalde stil / vlag stond uit) → stille drift
+ *     tussen Neon en SRS die anders pas bij een telling opvalt.
+ */
+export async function unsyncedMovementStats(
+  olderThanHours = 24,
+  limit = 200,
+): Promise<{ channels: UnsyncedChannelStat[]; stale: UnsyncedStaleGroup[] }> {
+  const hours = Math.min(Math.max(Math.round(Number(olderThanHours) || 24), 1), 24 * 90);
+  const max = Math.min(Math.max(Math.round(Number(limit) || 200), 1), 500);
+  const db = getDb();
+  const [perChannel, staleRows] = await Promise.all([
+    db.execute<{ channel: string; cnt: number; som: number; oudste: string | null }>(sql`
+      select channel, count(*)::int as cnt, coalesce(sum(abs(delta)), 0)::int as som, min(created_at) as oudste
+      from store_stock_movements
+      where srs_posted_at is null
+      group by channel
+      order by channel
+    `),
+    db.execute<{ location: string; channel: string; ref: string | null; lines: number; som: number; oudste: string }>(sql`
+      select location, channel, ref, count(*)::int as lines,
+             coalesce(sum(abs(delta)), 0)::int as som, min(created_at) as oudste
+      from store_stock_movements
+      where srs_posted_at is null
+        and channel in ('pos', 'inbound', 'transfer')
+        and created_at < now() - make_interval(hours => ${hours})
+      group by location, channel, ref
+      order by oudste asc
+      limit ${max}
+    `),
+  ]);
+  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
+  return {
+    channels: perChannel.rows.map((r) => ({
+      channel: String(r.channel),
+      count: Number(r.cnt) || 0,
+      sumAbsDelta: Number(r.som) || 0,
+      oldestCreatedAt: iso(r.oudste),
+    })),
+    stale: staleRows.rows.map((r) => ({
+      location: String(r.location),
+      channel: String(r.channel),
+      ref: r.ref == null ? null : String(r.ref),
+      lines: Number(r.lines) || 0,
+      sumAbsDelta: Number(r.som) || 0,
+      oldestCreatedAt: iso(r.oudste) || "",
+    })),
+  };
+}
+
+export type UnsyncedCorrectionRow = {
+  location: string;
+  stockKey: string;
+  delta: number;
+  reason: string;
+  ref: string | null;
+  meta: Record<string, string> | null;
+  createdAt: string;
+};
+
+/**
+ * Alle nog niet als 'in SRS geboekt' gemarkeerde correction-movements, regel
+ * voor regel (oudste eerst) — voor de eenmalige opschoonactie in storegents.
+ *
+ * WAAROM een aparte lijst naast unsyncedMovementStats: die geeft voor
+ * 'correction' alleen een aggregaat (en de stale-lijst slaat het kanaal bewust
+ * over). Voor historische correcties van vóór de werklijst-koppeling
+ * (storegents #475) moet een MENS per ref beslissen of de correctie destijds
+ * óók handmatig in SRS is doorgevoerd (→ markeren, anders telt 'ie dubbel) of
+ * niet (→ delta is nog nodig). Daarvoor zijn de regels zelf nodig: ref,
+ * locatie, artikel (meta), delta en datum. Read-only; het markeren loopt via
+ * /api/core/stock/movement-synced met channel 'correction'.
+ */
+export async function unsyncedCorrectionRows(limit = 2000): Promise<UnsyncedCorrectionRow[]> {
+  const max = Math.min(Math.max(Math.round(Number(limit) || 2000), 1), 5000);
+  const db = getDb();
+  const r = await db.execute<{
+    location: string; stock_key: string; delta: number; reason: string;
+    ref: string | null; meta: Record<string, string> | null; created_at: string;
+  }>(sql`
+    select location, stock_key, delta, reason, ref, meta, created_at
+    from store_stock_movements
+    where srs_posted_at is null and channel = 'correction'
+    order by created_at asc
+    limit ${max}
+  `);
+  return r.rows.map((row) => ({
+    location: String(row.location),
+    stockKey: String(row.stock_key),
+    delta: Number(row.delta) || 0,
+    reason: String(row.reason || ""),
+    ref: row.ref == null ? null : String(row.ref),
+    meta: row.meta && typeof row.meta === "object" ? (row.meta as Record<string, string>) : null,
+    createdAt: row.created_at ? new Date(row.created_at as string).toISOString() : "",
+  }));
+
 }
 
 /** Netto core-delta per stockKey voor één locatie. */

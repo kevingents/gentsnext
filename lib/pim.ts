@@ -194,6 +194,8 @@ export type PimLijstFilters = {
   /** Collectiejaar uit SRS. Let op: dit is het échte signaal voor "nieuw", niet created_at. */
   jaar?: string;
   seizoen?: string;
+  /** Waar het productrecord vandaan komt — 'SRS' = automatisch aangemaakt uit het SRS-artikelbestand. */
+  bron?: string;
 };
 
 /**
@@ -217,6 +219,10 @@ export const PIM_FACETTEN = [
   { sleutel: "subgroep", label: "Subsoort", attribuut: "subgroep" },
   { sleutel: "jaar", label: "Jaar", attribuut: "jaar" },
   { sleutel: "seizoen", label: "Seizoen", attribuut: "seizoen" },
+  /* Herkomst: 'SRS' = automatisch aangemaakt uit het SRS-artikelbestand (nieuwe
+     collectie, nog af te maken door content). Dit is de werklijst "verse
+     instroom" — de reden dat het een filter is en niet alleen een attribuut. */
+  { sleutel: "bron", label: "Herkomst", attribuut: "bron" },
 ] as const;
 
 /**

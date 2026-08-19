@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminOrToken } from "@/lib/studio-token";
-import { koppelStand, koppelUitAttributen, koppelUitSrs, srsBeschikbaar } from "@/lib/srs-artikelen";
+import { koppelStand, koppelUitAttributen, koppelUitSrs, maakNieuweArtikelen, srsBeschikbaar } from "@/lib/srs-artikelen";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   if (!(await adminOrToken(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
-  let body: { bron?: unknown; delta?: unknown; droogdraaien?: unknown };
+  let body: { actie?: unknown; bron?: unknown; delta?: unknown; droogdraaien?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -45,6 +45,19 @@ export async function POST(req: Request) {
   const droogdraaien = body.droogdraaien === true;
   const delta = body.delta === true;
   const bron = String(body.bron || "") || (srsBeschikbaar() ? "srs" : "attributen");
+
+  /* actie 'aanmaken': nieuwe SRS-artikelen als concept-product het PIM in
+     (attributes.bron = 'SRS', status draft). Koppelen raakt bestaande producten,
+     aanmaken alleen wat nog nergens bestaat — bewust twee losse werkwoorden. */
+  if (String(body.actie || "") === "aanmaken") {
+    try {
+      const r = await maakNieuweArtikelen({ droogdraaien });
+      if ("error" in r) return NextResponse.json({ ok: false, error: r.error }, { status: 422 });
+      return NextResponse.json({ ok: true, resultaat: r, stand: await koppelStand() });
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+    }
+  }
 
   try {
     const r =
