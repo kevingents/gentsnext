@@ -319,12 +319,15 @@ export async function ensureCatalogTranslations(
   const db = getDb();
   const wantDesc = Boolean(opts.descriptions);
   const limit = Math.max(1, Math.min(5000, opts.limit ?? 2000));
-  // Zichtbare producten zonder (volledige) vertaling in deze taal.
+  // Zichtbare producten zonder (volledige) vertaling in deze taal. Óók de
+  // niet-primaire kleurgroep-leden: hun PDP is gewoon bereikbaar (kleurenbalk,
+  // directe URL) — het oude is_group_primary-filter liet 176 zichtbare PDP's
+  // op /fr en /es permanent op Nederlands staan.
   const rows = await db.execute<{ id: string; title: string; description_html: string }>(sql`
     select p.id, p.title, p.description_html
     from products p
     left join product_translations t on t.product_id = p.id and t.locale = ${locale}
-    where p.status='active' and p.has_image=true and p.in_stock=true and p.is_group_primary=true
+    where p.status='active' and p.has_image=true and p.in_stock=true
       and (t.product_id is null ${wantDesc ? sql`or coalesce(t.description_html,'') = ''` : sql``})
     order by p.stock_qty desc
     limit ${limit}
