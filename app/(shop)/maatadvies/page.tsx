@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { SizeAdvisor } from "@/components/maatadvies/size-advisor";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";

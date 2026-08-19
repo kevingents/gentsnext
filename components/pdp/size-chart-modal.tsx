@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useModalA11y } from "@/components/hooks/use-modal-a11y";

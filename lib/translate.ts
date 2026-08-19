@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings, productTranslations } from "@/db/schema";
@@ -115,7 +117,10 @@ export type Store = Record<string, StoreVal>; // sleutel = "<ns>:<key>"
 
 const storeId = (locale: Locale) => `translations:${locale}`;
 
-export async function getTranslationStore(locale: Locale): Promise<Store> {
+const transTag = (locale: Locale) => `translations:${locale}`;
+
+/** Rauwe lezer — ALTIJD vers. Voor lees-wijzig-schrijf-paden (zie hieronder). */
+async function readTranslationStore(locale: Locale): Promise<Store> {
   try {
     const db = getDb();
     const rows = await db.select().from(appSettings).where(eq(appSettings.id, storeId(locale))).limit(1);
@@ -125,12 +130,46 @@ export async function getTranslationStore(locale: Locale): Promise<Store> {
   }
 }
 
+/**
+ * Vertaalstore voor het RENDEREN. Deze rij werd tien keer per request gelezen
+ * (nav, facetten, catalogus, landings, site-settings, ui-messages — elk met een
+ * eigen db.select naar dezelfde rij). Gemeten op de productiebuild kostte dat
+ * een anderstalige categoriepagina 406 ms tegen 136 ms voor de Nederlandse.
+ *
+ * Twee lagen, zelfde patroon als lib/content-store.ts: React-cache dedupt
+ * binnen één request, unstable_cache over requests heen. revalidate=300 als
+ * backstop; saveTranslationStore invalideert de tag direct, zodat een
+ * portal-wijziging of een cron-run meteen zichtbaar is.
+ *
+ * LET OP: lees-wijzig-schrijf gebruikt readTranslationStore, NIET deze. Een
+ * gecachte kopie bewerken en terugschrijven overschrijft wat er intussen
+ * gebeurd is — de store heeft geen CAS.
+ */
+export const getTranslationStore = cache(async (locale: Locale): Promise<Store> => {
+  const cached = unstable_cache(() => readTranslationStore(locale), ["translation-store", locale], {
+    revalidate: 300,
+    tags: [transTag(locale)],
+  });
+  return cached();
+});
+
+/** Verse store voor de beheer-UI: na opslaan moet de lijst direct kloppen. */
+export function getTranslationStoreFresh(locale: Locale): Promise<Store> {
+  return readTranslationStore(locale);
+}
+
 async function saveTranslationStore(locale: Locale, data: Store): Promise<void> {
   const db = getDb();
   await db
     .insert(appSettings)
     .values({ id: storeId(locale), data, updatedAt: sql`now()` })
     .onConflictDoUpdate({ target: appSettings.id, set: { data, updatedAt: sql`now()` } });
+  // Direct zichtbaar maken. De CLI-scripts (scripts/translate-catalog.ts) draaien
+  // buiten een request-context, waar revalidateTag niet mag — daar is de
+  // revalidate=300-backstop genoeg, dus falen mag hier geen run slopen.
+  try {
+    revalidateTag(transTag(locale));
+  } catch {}
 }
 
 export type TransEntry = { ns: string; key: string; source: string };
@@ -142,7 +181,7 @@ export async function ensureEntries(
   kind: "ui" | "title" | "description" = "ui",
 ): Promise<{ translated: number; total: number; failed?: number }> {
   if (locale === DEFAULT_LOCALE || !entries.length) return { translated: 0, total: entries.length };
-  const store = await getTranslationStore(locale);
+  const store = await readTranslationStore(locale);
   const todo = entries.filter((e) => {
     const cur = store[`${e.ns}:${e.key}`];
     if (cur?.m) return false; // handmatig bewerkt in de beheer-UI → cron blijft eraf
@@ -251,14 +290,14 @@ export function toTranslationRow(store: Store, ns: string, key: string, source: 
 
 /** Handmatige vertaling opslaan (beheer-UI). m:true → de cron overschrijft 'm nooit meer. */
 export async function saveManualTranslation(locale: Locale, ns: string, key: string, source: string, value: string): Promise<void> {
-  const store = await getTranslationStore(locale);
+  const store = await readTranslationStore(locale);
   store[`${ns}:${key}`] = { h: hash(source), v: value, m: true };
   await saveTranslationStore(locale, store);
 }
 
 /** Override terugzetten naar automatisch: entry weg → de eerstvolgende cron vertaalt opnieuw. */
 export async function resetTranslation(locale: Locale, ns: string, key: string): Promise<void> {
-  const store = await getTranslationStore(locale);
+  const store = await readTranslationStore(locale);
   if (store[`${ns}:${key}`]) {
     delete store[`${ns}:${key}`];
     await saveTranslationStore(locale, store);

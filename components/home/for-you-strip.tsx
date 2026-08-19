@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { ProductCard } from "@/components/product-card";
 import type { ProductCardData } from "@/lib/catalog";
 

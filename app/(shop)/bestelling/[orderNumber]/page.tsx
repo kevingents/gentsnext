@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { notFound } from "next/navigation";
 import { getOrderForViewer, getPostPurchase } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";

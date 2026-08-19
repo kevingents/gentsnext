@@ -1073,6 +1073,7 @@ export const SITE_CATALOG: Record<string, string> = {
   "search.search_exact": "Toch zoeken op",
   "search.size": "Maat",
   "search.try_again": "Probeer een andere zoekterm of ontdek onze populaire categorieën.",
+  "seo.category.description": "{category} bij GENTS — betaalbare luxe voor elk formeel moment.",
   "sizeAdvisor.adviceJacket": "Colbert / pak",
   "sizeAdvisor.adviceShirt": "Overhemd (boordmaat)",
   "sizeAdvisor.adviceTrouserLength": "Lengtemaat (lang)",

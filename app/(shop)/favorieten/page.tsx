@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useEffect, useState } from "react";
 import { ProductCard } from "@/components/product-card";
 import { useWishlist } from "@/components/wishlist/wishlist-context";

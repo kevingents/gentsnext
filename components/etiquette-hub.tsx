@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { ETIQUETTE } from "@/lib/etiquette-hub";
 import { VISUAL } from "@/lib/visuals";
 import { getLocale } from "@/lib/locale-server";

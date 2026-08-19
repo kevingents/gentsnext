@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import Image from "next/image";
 import { getBlogPosts } from "@/lib/blog";
 import { localeAlternates } from "@/lib/seo";
