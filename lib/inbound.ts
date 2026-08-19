@@ -394,8 +394,24 @@ export async function scanReceipt(input: { shipmentId: string; code: string; qty
   const s = await getShipment(input.shipmentId);
   if (!s) return { ok: false, error: "Zending niet gevonden." };
   if (!["picked", "in_transit", "receiving"].includes(s.status)) return { ok: false, error: "Zending is al ontvangen/afgesloten." };
-  const meta = await resolveCode(input.code);
-  if (!meta || !meta.stockKey) return { ok: false, error: `Onbekend artikel: "${input.code}".` };
+  const nrm = (v?: string) => String(v || "").trim().toLowerCase();
+  const asn = (s.expectedLines as ExpectedLine[]) || [];
+  let meta = await resolveCode(input.code);
+  if (!meta || !meta.stockKey) {
+    /* VANGNET (19 aug, Den Bosch drager T000001298): nieuwe collectie ligt soms eerder
+       in de winkel dan in de catalogus (Shopify loopt achter) — zo'n artikel stond wél
+       verwacht op de pakbon maar was onscanbaar ("Onbekend artikel") en dus niet binnen
+       te melden. De pakbon zelf is dan het bewijs: matcht de gescande code een ASN-regel
+       (barcode/sku/stockKey), tel dan gewoon op die regel met de (soms kale) ASN-meta.
+       Echt onbekend én niet verwacht blijft een fout. */
+    const c = nrm(input.code);
+    const hit = c ? asn.find((l) => nrm(l.stockKey) === c || nrm(l.barcode) === c || nrm(l.sku) === c) : undefined;
+    if (!hit || !hit.stockKey) return { ok: false, error: `Onbekend artikel: "${input.code}".` };
+    meta = {
+      stockKey: String(hit.stockKey), sku: hit.sku || "", barcode: hit.barcode || "",
+      title: hit.title || "", size: hit.size || "", color: hit.color || "", imageUrl: hit.imageUrl || "",
+    };
+  }
 
   const setMode = input.mode === "set";
   const qty = setMode ? Math.max(0, Number(input.qty) || 0) : Math.max(1, Number(input.qty) || 1);
@@ -404,8 +420,6 @@ export async function scanReceipt(input: { shipmentId: string; code: string; qty
   // sleutel is opgevoerd (barcode-vs-sku, of een niet-opgeloste ASN-regel) tóch op z'n
   // eigen regel telt i.p.v. als "niet besteld / teveel" te verschijnen. Deelt het niets
   // met de ASN → écht onverwacht → 0 (wordt in F3 een afwijking).
-  const nrm = (v?: string) => String(v || "").trim().toLowerCase();
-  const asn = (s.expectedLines as ExpectedLine[]) || [];
   const asnLine =
     asn.find((l) => nrm(l.stockKey) === nrm(meta.stockKey)) ||
     (meta.barcode ? asn.find((l) => l.barcode && nrm(l.barcode) === nrm(meta.barcode)) : undefined) ||
