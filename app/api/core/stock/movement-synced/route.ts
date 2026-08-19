@@ -26,11 +26,12 @@ export async function POST(req: Request) {
   }
   const ref = String(body?.ref || "").trim();
   if (!ref) return NextResponse.json({ ok: false, error: "ref vereist." }, { status: 400 });
-  // Het kanaal moet meekomen: transfers/ontvangsten boeken op 'transfer'/'inbound',
-  // en een markering op het verkeerde kanaal is een stille no-op — met dubbeltelling
-  // bij de eerstvolgende baseline-sync als gevolg. Default 'pos' (verkopen).
-  const channel = (["pos", "inbound", "transfer"] as const).includes(body?.channel as "pos")
-    ? (body!.channel as "pos" | "inbound" | "transfer")
+  // Het kanaal moet meekomen: transfers/ontvangsten boeken op 'transfer'/'inbound'
+  // en kassa-correcties/inventarisatie op 'correction' — een markering op het
+  // verkeerde kanaal is een stille no-op, met dubbeltelling bij de eerstvolgende
+  // baseline-sync als gevolg. Default 'pos' (verkopen).
+  const channel = (["pos", "correction", "inbound", "transfer"] as const).includes(body?.channel as "pos")
+    ? (body!.channel as "pos" | "correction" | "inbound" | "transfer")
     : "pos";
   try {
     await markMovementsSrsPosted(ref, channel);
