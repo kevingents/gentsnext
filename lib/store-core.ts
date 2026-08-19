@@ -128,6 +128,81 @@ export async function markMovementsSrsPosted(ref: string, channel: "pos" | "inbo
   `);
 }
 
+export type UnsyncedChannelStat = {
+  channel: string;
+  count: number;
+  sumAbsDelta: number;
+  oldestCreatedAt: string | null;
+};
+
+export type UnsyncedStaleGroup = {
+  location: string;
+  channel: string;
+  ref: string | null;
+  lines: number;
+  sumAbsDelta: number;
+  oldestCreatedAt: string;
+};
+
+/**
+ * SRS-sync-achterstand in het mutatie-grootboek — voor de drift-monitor (storegents
+ * cron srs-sync-monitor). Twee blikken op srs_posted_at IS NULL:
+ *
+ *  1. channels — aggregaat per kanaal (aantal, som |delta|, oudste). 'correction'
+ *     is hier per definitie altijd unsynced (SRS heeft geen voorraad-write): dat is
+ *     de werklijst "nog handmatig in SRS door te voeren", geen fout.
+ *  2. stale — pos/inbound/transfer-movements ouder dan de drempel, gegroepeerd op
+ *     (location, channel, ref). Die kanalen horen kort na de actie via
+ *     markMovementsSrsPosted gemarkeerd te worden; blijft een groep hangen, dan is
+ *     de SRS-boeking gemist (boekbon faalde stil / vlag stond uit) → stille drift
+ *     tussen Neon en SRS die anders pas bij een telling opvalt.
+ */
+export async function unsyncedMovementStats(
+  olderThanHours = 24,
+  limit = 200,
+): Promise<{ channels: UnsyncedChannelStat[]; stale: UnsyncedStaleGroup[] }> {
+  const hours = Math.min(Math.max(Math.round(Number(olderThanHours) || 24), 1), 24 * 90);
+  const max = Math.min(Math.max(Math.round(Number(limit) || 200), 1), 500);
+  const db = getDb();
+  const [perChannel, staleRows] = await Promise.all([
+    db.execute<{ channel: string; cnt: number; som: number; oudste: string | null }>(sql`
+      select channel, count(*)::int as cnt, coalesce(sum(abs(delta)), 0)::int as som, min(created_at) as oudste
+      from store_stock_movements
+      where srs_posted_at is null
+      group by channel
+      order by channel
+    `),
+    db.execute<{ location: string; channel: string; ref: string | null; lines: number; som: number; oudste: string }>(sql`
+      select location, channel, ref, count(*)::int as lines,
+             coalesce(sum(abs(delta)), 0)::int as som, min(created_at) as oudste
+      from store_stock_movements
+      where srs_posted_at is null
+        and channel in ('pos', 'inbound', 'transfer')
+        and created_at < now() - make_interval(hours => ${hours})
+      group by location, channel, ref
+      order by oudste asc
+      limit ${max}
+    `),
+  ]);
+  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
+  return {
+    channels: perChannel.rows.map((r) => ({
+      channel: String(r.channel),
+      count: Number(r.cnt) || 0,
+      sumAbsDelta: Number(r.som) || 0,
+      oldestCreatedAt: iso(r.oudste),
+    })),
+    stale: staleRows.rows.map((r) => ({
+      location: String(r.location),
+      channel: String(r.channel),
+      ref: r.ref == null ? null : String(r.ref),
+      lines: Number(r.lines) || 0,
+      sumAbsDelta: Number(r.som) || 0,
+      oldestCreatedAt: iso(r.oudste) || "",
+    })),
+  };
+}
+
 /** Netto core-delta per stockKey voor één locatie. */
 export async function coreDeltaForKeys(location: string, keys: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
