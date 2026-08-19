@@ -35,7 +35,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "SRS_API_USER/SRS_API_PASSWORD ontbreken." }, { status: 503 });
   }
   try {
-    const r = await maakNieuweArtikelen();
+    /* Default 500/nacht (was 200; Kevin 19 aug: "kunnen we de producten niet
+       sneller inladen met de export?") — de achterstand loopt zo dagen sneller
+       in, en ?max= laat een handmatige inhaalrun tot 2000 doen. De noodremmen
+       (kleine-feed-weigering, nooit naast iets bestaands, alles draft) zitten in
+       maakNieuweArtikelen zelf en gelden onverkort. */
+    const url = new URL(req.url);
+    const max = Math.min(2000, Math.max(1, Number(url.searchParams.get("max")) || 500));
+    const r = await maakNieuweArtikelen({ max });
     if ("error" in r) return NextResponse.json({ ok: false, error: r.error }, { status: 502 });
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {

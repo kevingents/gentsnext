@@ -30,6 +30,12 @@ export async function POST(req: Request) {
   }
   const code = String(body?.code || "").trim().toLowerCase();
   if (!code) return NextResponse.json({ ok: true, results: [] });
+  /* Voorloopnul-tolerant: SRS/StorePos schrijft artikel-ids vaak gepad ("00004483")
+     terwijl het metafield "4483" bevat — en andersom. De zoek-route deed dit al
+     (nullif/ltrim), de lookup nog niet; daardoor was een gescande gepadde code
+     aan de kassa onvindbaar terwijl het artikel gewoon bestaat. Lege string na
+     strip ("0000") NIET laten matchen op lege velden. */
+  const stripped = code.replace(/^0+(?=\d)/, "");
 
   const db = getDb();
   const rows = await db.execute<{
@@ -47,6 +53,9 @@ export async function POST(req: Request) {
       coalesce((select pi.url from product_images pi where pi.product_id = v.product_id order by pi.is_packshot desc, pi.position asc limit 1), nullif(v.image_url, '')) img
     from product_variants v join products p on p.id = v.product_id
     where lower(v.barcode) = ${code} or lower(v.sku) = ${code} or lower(v.srs_artikel_id) = ${code}
+       or nullif(ltrim(lower(v.barcode), '0'), '') = ${stripped}
+       or nullif(ltrim(lower(v.sku), '0'), '') = ${stripped}
+       or nullif(ltrim(lower(v.srs_artikel_id), '0'), '') = ${stripped}
     order by (case when lower(v.barcode) = ${code} then 0 when lower(v.sku) = ${code} then 1 else 2 end), v.id
     limit 1`);
 
