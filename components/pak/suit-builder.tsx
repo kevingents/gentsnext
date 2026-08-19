@@ -93,10 +93,12 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote }: Props) {
     });
   }
 
-  // Gilet erbij → vul 'm met de colbert-maat als die bestaat.
+  // Gilet erbij → vul 'm met de colbert-maat als die bestaat én leverbaar is.
+  // Zonder die tweede voorwaarde zette dit stilzwijgend een uitverkochte maat
+  // klaar en was het pak niet te bestellen zonder dat je zag waarom.
   useEffect(() => {
     if (!withGilet || !gilet || sizes.gilet || !sizes.colbert) return;
-    if (gilet.sizes.some((s) => s.size === sizes.colbert)) {
+    if (gilet.sizes.some((s) => s.size === sizes.colbert && !(s.known && s.qty <= 0))) {
       setSizes((prev) => ({ ...prev, gilet: sizes.colbert }));
     }
   }, [withGilet, gilet, sizes.colbert, sizes.gilet]);
@@ -118,6 +120,10 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote }: Props) {
 
   // Niet toevoegbaar als een gekozen onderdeel uitverkocht is.
   const canAdd = allChosen && selection.every((s) => s.variant && !(s.variant.known && (s.variant.qty ?? 0) <= 0));
+  // Wat houdt de bestelknop tegen? Die vraag beantwoordt de knop zelf — beter
+  // dan een uitgegrijsd "Kies de maten" terwijl er nog één onderdeel open staat.
+  const missing = activePieces.filter((p) => !sizes[p.role]);
+  const blocked = selection.find((s) => s.variant?.known && (s.variant?.qty ?? 0) <= 0) ?? null;
 
   // Materiaal / onderhoud / pasvorm-details van het pak (uit het colbert).
   const attrs = (suit.attributes ?? {}) as Record<string, unknown>;
@@ -257,6 +263,9 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote }: Props) {
                     hoofdgroep={ROLE_HG[piece.role]}
                     selected={sizes[piece.role] ?? null}
                     onSelect={(size) => pickSize(piece.role, size)}
+                    // Hier zit geen terug-op-voorraad-melder achter: een
+                    // envelopje zou een mail beloven die nooit komt.
+                    restockNotify={false}
                   />
                 ) : (
                   <p className="mt-1 font-sans text-sm text-muted">{t("pak.builder.noSizesAvailable")}</p>
@@ -306,11 +315,28 @@ export function SuitBuilder({ suit, deliveryPromise, deliveryNote }: Props) {
           <span className="font-sans text-sm text-muted">{t("pak.builder.totalPrice")}</span>
           <span className="font-display text-2xl">{allChosen ? formatEuro(totalCents) : "—"}</span>
         </div>
-        <button type="button" onClick={addPak} disabled={!canAdd} className="btn-primary mt-4 w-full">
-          {allChosen ? t("pak.builder.addToCart") : t("pak.builder.chooseSizes")}
+        {/* Nog niet compleet? Dan geen half-doorzichtige zwarte balk (die leest als
+            kapot), maar een rustige omlijnde knop die zegt wát er nog mist. */}
+        <button
+          type="button"
+          onClick={addPak}
+          disabled={!canAdd}
+          className={
+            canAdd
+              ? "btn-primary mt-4 w-full"
+              : "mt-4 inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-control border border-line bg-surface px-6 py-3 font-sans text-sm font-medium text-muted"
+          }
+        >
+          {canAdd
+            ? t("pak.builder.addToCart")
+            : blocked
+              ? t("pak.builder.partSoldOut", { part: ROLE_LABEL[blocked.piece.role] })
+              : missing.length === 1
+                ? t("pak.builder.chooseSizeFor", { part: ROLE_LABEL[missing[0].role] })
+                : t("pak.builder.chooseSizes")}
         </button>
         <p className="mt-3 font-sans text-xs text-muted">
-          Elk onderdeel mag een eigen maat hebben — ze worden als één compleet pak toegevoegd.{" "}
+          {t("pak.builder.mixSizes")}{" "}
           {/* Niet meer onvoorwaardelijk "gratis retour": dat is het alleen bij tegoed of in de winkel. */}
           {t("pdp.fineprint")}
         </p>
