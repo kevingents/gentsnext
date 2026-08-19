@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { unsyncedMovementStats } from "@/lib/store-core";
+import { unsyncedMovementStats, unsyncedCorrectionRows } from "@/lib/store-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +19,10 @@ export const runtime = "nodejs";
  *     werklijst "nog handmatig in SRS door te voeren".
  *
  * Query: ?olderThanHours=24 (default 24) — drempel voor de stale-lijst.
+ *        ?list=correction (&limit=2000) — géén aggregaat maar de losse
+ *        correction-regels zelf (oudste eerst): voor de eenmalige opschoonactie
+ *        van historische correctie-delta's in storegents, waar een mens per ref
+ *        beslist of de correctie destijds al handmatig in SRS is doorgevoerd.
  * Auth: STORE_CORE_TOKEN of admin/STUDIO_API_TOKEN (zelfde als de andere core-routes).
  *
  * → { ok, olderThanHours,
@@ -26,12 +30,24 @@ export const runtime = "nodejs";
  *      stale:    [{ location, channel, ref, lines, sumAbsDelta, oldestCreatedAt }],
  *                                                  // pos/inbound/transfer > drempel, max 200
  *      correction: { count, sumAbsDelta, oldestCreatedAt } }           // verwacht-unsynced
+ *
+ * → met ?list=correction:
+ *    { ok, list: "correction",
+ *      rows: [{ location, stockKey, delta, reason, ref, meta, createdAt }] }
  */
 export async function GET(req: Request) {
   if (!(await coreAuth(req))) {
     return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
   }
   const url = new URL(req.url);
+  if ((url.searchParams.get("list") || "").trim().toLowerCase() === "correction") {
+    try {
+      const rows = await unsyncedCorrectionRows(Number(url.searchParams.get("limit")) || 2000);
+      return NextResponse.json({ ok: true, list: "correction", rows });
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
+    }
+  }
   const raw = Number(url.searchParams.get("olderThanHours"));
   const olderThanHours = Number.isFinite(raw) && raw > 0 ? Math.min(Math.round(raw), 24 * 90) : 24;
   try {
