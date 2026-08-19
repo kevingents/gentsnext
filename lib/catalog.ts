@@ -42,7 +42,8 @@ import {
   CLOTHING_ROW_PAIRS,
   type SizeSystem,
 } from "@/lib/size-taxonomy";
-import { MATERIAL_BUCKETS, PATTERN_BUCKETS, bucketsFor, sqlPatternFor, normalizeType, expandType, LOOSE_MIN_COUNT, type FacetBucket } from "@/lib/facet-taxonomy";
+import { MATERIAL_BUCKETS, PATTERN_BUCKETS, bucketsFor, sqlPatternFor, normalizeType, expandType, LOOSE_MIN_COUNT, TYPE_MIN_COUNT, type FacetBucket } from "@/lib/facet-taxonomy";
+import { hoofdgroepLabel } from "@/lib/categories";
 import { isSizeToken, expandSynonyms, parseSynonyms } from "@/lib/search-helpers";
 import { getSettings } from "@/lib/settings";
 
@@ -490,7 +491,8 @@ export async function getCustomerTasteCats(customerId: string, limit = 4): Promi
 
 export type ProductFilters = {
   collectionId?: string;
-  category?: string; // hoofdgroep_omschrijving
+  category?: string; // hoofdgroep_omschrijving als CONTEXT (categoriepagina)
+  categories?: string[]; // hoofdgroep_omschrijving als KLANTKEUZE (soort-filter)
   types?: string[]; // subgroep (chino/pantalon/lange mouw/…)
   materials?: string[]; // materiaal
   patterns?: string[]; // print_design (dessin)
@@ -506,7 +508,14 @@ export type ProductFilters = {
 };
 
 export type Facets = {
-  types: { value: string; label: string; count: number }[];
+  /**
+   * Soort = hoofdgroep. Op een listing die soorten mengt (collectie, "Alle
+   * producten", "Grote maten") is dít het filter dat een klant snapt; het
+   * type-filter hangt eronder en verschijnt pas ná een soort-keuze.
+   */
+  categories: { value: string; label: string; count: number }[];
+  /** `group` = de hoofdgroep waaronder dit type valt ("" = onbekend). */
+  types: { value: string; label: string; count: number; group: string }[];
   // label = zichtbare (vertaalde) tekst; value blijft de NL-bronwaarde die in
   // de URL/filterlogica staat — zie lib/facet-i18n.
   materials: { value: string; label?: string; count: number }[];
@@ -526,12 +535,6 @@ export type Facets = {
 };
 
 const REAL_SEASONS = new Set(["Lente/Zomer", "Herfst/Winter", "Voorjaar", "Najaar", "Zomer", "Winter", "Lente", "Herfst"]);
-
-/** "MM" = mix & match — nettere weergave in het type-filter. */
-export function typeLabel(v: string): string {
-  if (v === "MM" || v === "Gilet MM") return v === "MM" ? "Mix & match" : "Gilet (mix & match)";
-  return v;
-}
 
 /** Product-niveau condities (collectie/categorie) — bepalen de facet-context. */
 function contextConditions(f: ProductFilters): SQL[] {
@@ -812,6 +815,9 @@ function allConditions(f: ProductFilters): SQL[] {
   if (f.fits?.length) {
     conds.push(inList(sql`${products.attributes} ->> 'pasvorm'`, f.fits));
   }
+  if (f.categories?.length) {
+    conds.push(inList(sql`${products.attributes} ->> 'hoofdgroep_omschrijving'`, f.categories));
+  }
   if (f.types?.length) {
     // Samengevoegde types meenemen: "Pakken" moet ook "Pakken Modern Fit" vinden.
     const expanded = [...new Set(f.types.flatMap((v) => expandType(v)))];
@@ -1072,19 +1078,23 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   // kleur/maat/prijs (variant-join) in de tweede. Scheelt 8 Neon-round-trips + 8
   // her-scans van dezelfde context.
   const [prodAgg, varAgg] = await Promise.all([
-    db.execute<{ facet: string; v: string | null; n: number }>(sql`
+    // `g` = de hoofdgroep waaronder een subgroep valt. Zonder die kolom is het
+    // type-facet niet te scheiden: "Smoking" bestaat als overhemd, colbert,
+    // broek én sjaal, en "Polo" zowel bij truien als bij polo-shirts.
+    db.execute<{ facet: string; v: string | null; g: string | null; n: number }>(sql`
       with ctxp as materialized (
         select ${products.id} as id, ${products.attributes} as attributes
         from ${products}
         where ${ctx}
       )
-      select 'subgroep' as facet, attributes->>'subgroep' as v, count(*)::int as n from ctxp where coalesce(attributes->>'subgroep','') <> '' group by attributes->>'subgroep'
-      union all select 'materiaal', attributes->>'materiaal', count(*)::int from ctxp where coalesce(attributes->>'materiaal','') <> '' group by attributes->>'materiaal'
-      union all select 'print_design', attributes->>'print_design', count(*)::int from ctxp where coalesce(attributes->>'print_design','') <> '' group by attributes->>'print_design'
-      union all select 'seizoen', attributes->>'seizoen', count(*)::int from ctxp where coalesce(attributes->>'seizoen','') <> '' group by attributes->>'seizoen'
-      union all select 'pasvorm', attributes->>'pasvorm', count(*)::int from ctxp where coalesce(attributes->>'pasvorm','') <> '' group by attributes->>'pasvorm'
-      union all select 'strijkvrij', ''::text, count(*)::int from ctxp where attributes->>'strijkvrij' = 'Ja'
-      union all select 'effen', ''::text, count(*)::int from ctxp where coalesce(trim(attributes->>'print_design'),'') = ''
+      select 'subgroep' as facet, attributes->>'subgroep' as v, coalesce(attributes->>'hoofdgroep_omschrijving','') as g, count(*)::int as n from ctxp where coalesce(attributes->>'subgroep','') <> '' group by 2, 3
+      union all select 'hoofdgroep', attributes->>'hoofdgroep_omschrijving', ''::text, count(*)::int from ctxp where coalesce(attributes->>'hoofdgroep_omschrijving','') <> '' group by 2
+      union all select 'materiaal', attributes->>'materiaal', ''::text, count(*)::int from ctxp where coalesce(attributes->>'materiaal','') <> '' group by 2
+      union all select 'print_design', attributes->>'print_design', ''::text, count(*)::int from ctxp where coalesce(attributes->>'print_design','') <> '' group by 2
+      union all select 'seizoen', attributes->>'seizoen', ''::text, count(*)::int from ctxp where coalesce(attributes->>'seizoen','') <> '' group by 2
+      union all select 'pasvorm', attributes->>'pasvorm', ''::text, count(*)::int from ctxp where coalesce(attributes->>'pasvorm','') <> '' group by 2
+      union all select 'strijkvrij', ''::text, ''::text, count(*)::int from ctxp where attributes->>'strijkvrij' = 'Ja'
+      union all select 'effen', ''::text, ''::text, count(*)::int from ctxp where coalesce(trim(attributes->>'print_design'),'') = ''
     `),
     // `fam` = de productfamilie die het matensysteem bepaalt; `tok` = de rauwe
     // maat (eerste woord). Bewust NIET op het opgeslagen size_label groeperen:
@@ -1109,8 +1119,10 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   ]);
 
   const pRows = prodAgg.rows, vRows = varAgg.rows;
-  const of = (rows: typeof pRows, facet: string) => rows.filter((r) => r.facet === facet);
-  const scalar = (rows: typeof pRows, facet: string) => Number(of(rows, facet)[0]?.n ?? 0);
+  // Generiek over de rij-vorm: de product-aggregatie draagt `g` (soort), de
+  // variant-aggregatie `fam` (matensysteem), en beide gaan door dezelfde filter.
+  const of = <T extends { facet: string }>(rows: T[], facet: string) => rows.filter((r) => r.facet === facet);
+  const scalar = (rows: { facet: string; n: number }[], facet: string) => Number(of(rows, facet)[0]?.n ?? 0);
 
   const colorCount = new Map(of(vRows, "color").map((r) => [r.v ?? "", r.n]));
   const colors = COLOR_FAMILIES.filter((c) => colorCount.has(c.key)).map((c) => ({ ...c, count: colorCount.get(c.key) ?? 0 }));
@@ -1139,14 +1151,31 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
 
   const fits = of(pRows, "pasvorm").map((r) => ({ value: r.v ?? "", count: r.n })).sort((a, b) => b.count - a.count);
 
-  // Type: interne codes eruit, pasvorm-varianten samengevoegd (Pakken Modern
-  // Fit → Pakken); tellingen van samengevoegde waarden optellen.
-  const typeCount = new Map<string, number>();
+  // Soort (hoofdgroep): op een gemengde listing hét filter dat de klant snapt.
+  // Op een categoriepagina blijft er één waarde over — de UI verbergt 'm dan.
+  const categories = of(pRows, "hoofdgroep")
+    .map((r) => ({ value: r.v ?? "", label: hoofdgroepLabel(r.v ?? ""), count: r.n }))
+    .sort((a, b) => b.count - a.count);
+
+  // Type (subgroep) per SOORT geteld: dezelfde bronwaarde betekent per soort
+  // iets anders ("Zijde" = stropdas-stof, "Casual" = colbert of gilet), dus
+  // tellen we per (soort, type) en laat de UI alleen de gekozen soort zien.
+  // normalizeType poetst de waarden (materialen eruit, synonymen samen) — zie
+  // lib/facet-taxonomy.
+  const typeAcc = new Map<string, { value: string; group: string; count: number }>();
   for (const r of of(pRows, "subgroep")) {
-    const norm = normalizeType(r.v ?? "");
-    if (norm) typeCount.set(norm, (typeCount.get(norm) ?? 0) + r.n);
+    const group = r.g ?? "";
+    const norm = normalizeType(r.v ?? "", group);
+    if (!norm) continue;
+    const key = `${group}\u0000${norm}`;
+    const cur = typeAcc.get(key);
+    if (cur) cur.count += r.n;
+    else typeAcc.set(key, { value: norm, group, count: r.n });
   }
-  const types = [...typeCount].map(([value, count]) => ({ value, label: typeLabel(value), count })).sort((a, b) => b.count - a.count);
+  const types = [...typeAcc.values()]
+    .filter((x) => x.count >= TYPE_MIN_COUNT)
+    .sort((a, b) => b.count - a.count)
+    .map((x) => ({ value: x.value, label: x.value, group: x.group, count: x.count }));
 
   // Materiaal + dessin op HOOFDCOMPONENT (lib/facet-taxonomy): "Polyester
   // viscose" viel eerst als eigen filter naast "Katoen"; wie op wol zocht miste
@@ -1177,7 +1206,7 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
   ];
 
   return {
-    types, materials, patterns, seasons,
+    categories, types, materials, patterns, seasons,
     ironFreeCount: scalar(pRows, "strijkvrij"),
     colors, sizes, fits,
     priceMinCents: scalar(vRows, "price_lo"),
@@ -1193,8 +1222,9 @@ export async function getFacetsUncached(f: ProductFilters): Promise<Facets> {
  */
 const _facetsCached = unstable_cache(
   (collectionId: string, category: string) => getFacetsUncached({ collectionId: collectionId || undefined, category: category || undefined }),
+  // v5: soort-facet (hoofdgroep) erbij + types dragen hun soort mee.
   // v4: boordmaten lezen nu uit de boordreeks (44 = hals XL, niet pakmaat XS).
-  ["plp-facets-v4"],
+  ["plp-facets-v5"],
   { revalidate: 180 },
 );
 export function getFacets(f: ProductFilters): Promise<Facets> {

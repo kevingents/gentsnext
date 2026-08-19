@@ -68,17 +68,70 @@ export function sqlPatternFor(key: string, buckets: FacetBucket[]): string | nul
   return buckets.find((b) => b.key === key)?.sql ?? null;
 }
 
-/**
- * Interne/technische typewaarden die geen klantfilter horen te zijn, plus
- * normalisaties (pasvorm hoort in het pasvorm-filter, niet in het type).
+/* ─────────────────────────────── Type (subgroep) ─────────────────────────
+ *
+ * `subgroep` uit de bron zegt alleen iets BINNEN zijn hoofdgroep: bij
+ * stropdassen is het de stof (Zijde/Poly), bij overhemden de mouwlengte, bij
+ * pakken het aantal delen. Alles in één "Type"-lijst gooien gaf op een listing
+ * die soorten mengt (Nieuwe collectie, Alle producten, Grote maten) een rij
+ * waar een klant niets mee kan: "Zijde 55 · 2-delig 11 · Casual 10 · Lange
+ * mouw 10 · Riva 2".
+ *
+ * Daarom kiest de klant eerst SOORT (hoofdgroep) en toont het type-filter
+ * alleen de subgroepen van die soort. Daarbovenop poetsen we de bronwaarden:
+ *  - materialen eruit: Zijde/Poly/Katoen/Leer/Suede staan al in het
+ *    materiaal-filter, en vinden daar óók de mixen ("Zijde katoen linnen");
+ *  - synonymen samengevoegd (Turtleneck + Coltrui, Halfzip + Halfzip knopen);
+ *  - Engels naar Nederlands (V-neck → V-hals, Full-zip → Met rits);
+ *  - modelnamen die buiten de winkel niemand kent eruit (Riva);
+ *  - waarden die letterlijk de hoofdgroep herhalen eruit (Sokken → Sokken).
+ *
+ * De genormaliseerde naam staat in de URL; expandType() zet 'm terug naar alle
+ * rauwe bronwaarden, zodat oude en gedeelde filterlinks blijven werken.
  */
 const TYPE_NORMALISATIE: Record<string, string> = {
   "Pakken Modern Fit": "Pakken",
   "Pakken Slim Fit": "Pakken",
-  "Gilet MM": "Gilet (mix & match)",
   MM: "Mix & match",
+  "Gilet MM": "Mix & match",
+  // Turtleneck en coltrui zijn hetzelfde kledingstuk; ze stonden als twee
+  // losse keuzes van 19 en 17 naast elkaar in dezelfde lijst.
+  Turtleneck: "Coltrui",
+  "V-neck": "V-hals",
+  Rond: "Ronde hals",
+  "Halfzip knopen": "Halfzip",
+  // Sluiting in gewone taal, en in beide categorieën hetzelfde woord: "Rits"
+  // stond bij polo's, "Full-zip" bij vesten.
+  "Full-zip": "Met rits",
+  Rits: "Met rits",
+  Knopen: "Met knopen",
 };
-const TYPE_VERBERG = new Set(["Knopen", "Verpakking", "Verpakkingsmateriaal", "Onbekend", "Overig", "Diversen"]);
+
+/** Interne/technische waarden en modelnamen: geen klantfilter. */
+const TYPE_VERBERG = new Set([
+  "Verpakking",
+  "Verpakkingsmateriaal",
+  "Onbekend",
+  "Overig",
+  "Diversen",
+  // Interne stof-/modelnaam ("Polo riva katoen") — zegt de klant niets.
+  "Riva",
+]);
+
+/** Materiaalwoorden die tóch een echt type zijn: een jeans is geen stofkeuze. */
+const TYPE_MATERIAAL_UITZONDERING = new Set(["Jeans", "Denim"]);
+
+/** Onder deze telling is een type-keuze meer ruis dan hulp. */
+export const TYPE_MIN_COUNT = 2;
+
+/** Alleen letters, zodat "T-Shirts" en "t shirts" hetzelfde zijn. */
+const kaal = (v: string) => v.toLowerCase().replace(/[^a-z]/g, "");
+
+/** Staat deze typewaarde eigenlijk voor een materiaal? Dan hoort 'ie daar. */
+function isMateriaalWaarde(v: string): boolean {
+  if (TYPE_MATERIAAL_UITZONDERING.has(v)) return false;
+  return MATERIAL_BUCKETS.some((b) => b.match.test(v));
+}
 
 /** Genormaliseerde typenaam → alle rauwe bronwaarden die eronder vallen. */
 export function expandType(normalized: string): string[] {
@@ -89,8 +142,15 @@ export function expandType(normalized: string): string[] {
   return uit;
 }
 
-export function normalizeType(raw: string): string | null {
+/**
+ * Rauwe subgroep → zichtbare typenaam, of null als het geen filterkeuze hoort
+ * te zijn. `hoofdgroep` is optioneel: zonder soort kunnen we de "herhaalt de
+ * kop"-regel niet toepassen, de rest wél.
+ */
+export function normalizeType(raw: string, hoofdgroep = ""): string | null {
   const v = (raw || "").trim();
   if (!v || TYPE_VERBERG.has(v)) return null;
+  if (isMateriaalWaarde(v)) return null;
+  if (hoofdgroep && kaal(v) === kaal(hoofdgroep)) return null;
   return TYPE_NORMALISATIE[v] ?? v;
 }

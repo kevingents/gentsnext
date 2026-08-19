@@ -31,6 +31,23 @@ export function categoryByHoofdgroep(hg: string): Category | null {
   return BY_HG.get(hg) ?? null;
 }
 
+/**
+ * Hoofdgroepen zonder eigen categoriepagina hebben geen label in CATEGORIES,
+ * maar staan wél in het soort-filter op de PLP. Alleen de gevallen waar de
+ * rauwe bronwaarde niet als winkeltaal leest.
+ */
+const SOORT_LABEL: Record<string, string> = {
+  Pochet: "Pochets",
+  Sjaal: "Sjaals",
+  "T-Shirts": "T-shirts",
+  "Polo-shirts": "Polo's",
+};
+
+/** Zichtbare naam van een hoofdgroep — het nav-label waar dat bestaat. */
+export function hoofdgroepLabel(hg: string): string {
+  return BY_HG.get(hg)?.label ?? SOORT_LABEL[hg] ?? hg;
+}
+
 /** De hoofd-navigatie (subset, in volgorde). */
 export const NAV_CATEGORIES = ["pakken", "colberts", "pantalons", "overhemden", "gilets", "stropdassen"]
   .map((s) => BY_SLUG.get(s))

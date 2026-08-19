@@ -104,6 +104,34 @@ export function PlpFilters({ facets, selection, total, mySize, sort, positie = "
     .filter((g) => g.items.length > 0);
   const showSizeHeadings = sizeGroups.length > 1;
 
+  // Soort (hoofdgroep) alleen als deze listing soorten mengt — op een
+  // categoriepagina is er één soort en zou het filter één vinkje zijn.
+  const showSoort = facets.categories.length > 1;
+
+  // Type (subgroep) is alleen leesbaar BINNEN één soort: "Zijde" (stropdas),
+  // "2-delig" (pak) en "Lange mouw" (overhemd) in één lijst zeggen niemand iets.
+  // Mengt de listing soorten? Dan verschijnt het type-filter pas ná een
+  // soort-keuze, en tellen we gelijknamige types op (Smoking bestaat als
+  // overhemd én als colbert — het filter zoekt op de subgroep, dus dat is één
+  // keuze met de som als telling).
+  const typeGroups = new Set(facets.types.map((tp) => tp.group));
+  const typeScope =
+    typeGroups.size <= 1
+      ? facets.types
+      : selection.categories.length
+        ? facets.types.filter((tp) => selection.categories.includes(tp.group))
+        : [];
+  const typeItems = [
+    ...typeScope
+      .reduce((m, tp) => {
+        const cur = m.get(tp.value);
+        if (cur) cur.count += tp.count;
+        else m.set(tp.value, { value: tp.value, label: tp.label, count: tp.count });
+        return m;
+      }, new Map<string, { value: string; label: string; count: number }>())
+      .values(),
+  ].sort((a, b) => b.count - a.count);
+
   function apply(next: Partial<PlpSelection>) {
     const merged: PlpSelection = { ...selection, ...next, page: 1 };
     const qs = buildPlpQuery(merged);
@@ -114,8 +142,20 @@ export function PlpFilters({ facets, selection, total, mySize, sort, positie = "
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
 
+  /**
+   * Soort aan/uit. Een type hoort bij een soort: verdwijnt de soort, dan mag
+   * "Lange mouw" niet als onzichtbaar filter in de URL blijven staan terwijl
+   * het vinkje niet meer te zien is — dan lijkt de listing zomaar half leeg.
+   */
+  function applySoort(value: string) {
+    const next = toggle(selection.categories, value);
+    const inScope = new Set(facets.types.filter((tp) => next.includes(tp.group)).map((tp) => tp.value));
+    apply({ categories: next, types: next.length ? selection.types.filter((v) => inScope.has(v)) : [] });
+  }
+
   const maxEuro = Math.ceil(facets.priceMaxCents / 100);
   const activeCount =
+    selection.categories.length +
     selection.types.length +
     selection.materials.length +
     selection.patterns.length +
@@ -139,6 +179,21 @@ export function PlpFilters({ facets, selection, total, mySize, sort, positie = "
           linkerkant"). Alles wat met winkels te maken heeft staat bij de
           resultaten: de winkels als pil, en de kiezer als pil ervoor zolang er
           nog geen winkel gekozen is. Zie components/plp/active-chips. */}
+
+      {/* Soort staat vóór maat zodra de listing soorten mengt: of iets in jouw
+          maat is, is pas een vraag als duidelijk is of je naar een overhemd of
+          naar een stropdas kijkt. Binnen één soort valt deze groep weg en staat
+          maat weer bovenaan. */}
+      {showSoort ? (
+        <FilterGroup title={t("plp.filters.category")} defaultOpen>
+          <CheckList
+            items={facets.categories.map((c) => ({ value: c.value, label: c.label, count: c.count }))}
+            selected={selection.categories}
+            onToggle={(v) => { trackFilter("soort", v, !selection.categories.includes(v)); applySoort(v); }}
+          />
+        </FilterGroup>
+      ) : null}
+
       {/* Maat staat bewust bovenaan en open: is het er niet in jouw maat, dan
           doet de rest er niet toe. Binnen de groep staan de maten per
           matensysteem (kleding · boordmaat · schoen · riem · …), want die
@@ -180,11 +235,12 @@ export function PlpFilters({ facets, selection, total, mySize, sort, positie = "
         </FilterGroup>
       ) : null}
 
-      {/* Type (subgroep) — bv. Chino/Pantalon/Lange mouw/2-delig */}
-      {facets.types.length > 1 ? (
+      {/* Type (subgroep) binnen de gekozen soort — bv. Chino/Pantalon bij
+          broeken, Lange mouw/Korte mouw bij overhemden. */}
+      {typeItems.length > 1 ? (
         <FilterGroup title={t("plp.filters.type")} defaultOpen>
           <CheckList
-            items={facets.types.map((tp) => ({ value: tp.value, label: tp.label, count: tp.count }))}
+            items={typeItems}
             selected={selection.types}
             onToggle={(v) => { trackFilter("type", v, !selection.types.includes(v)); apply({ types: toggle(selection.types, v) }); }}
           />
@@ -322,7 +378,7 @@ export function PlpFilters({ facets, selection, total, mySize, sort, positie = "
           type="button"
           // Wist het winkel-FILTER, niet je winkelkeuze zelf: die blijft in de
           // keuzelijst staan (en in de cookie) zodat één klik 'm terugzet.
-          onClick={() => apply({ types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined, stores: [] })}
+          onClick={() => apply({ categories: [], types: [], materials: [], patterns: [], seasons: [], ironFree: false, colors: [], sizes: [], fits: [], priceMin: undefined, priceMax: undefined, stores: [] })}
           className="mt-2 font-sans text-sm text-ink underline underline-offset-4"
         >
           {t("plp.filters.clearAllPrefix")} ({activeCount})
