@@ -1171,6 +1171,39 @@ export const HANDBOEK: Deel[] = [
   <li><strong>Split-orders</strong> krijgen pas een verzendlabel als élk winkeldeel gereed is gemeld; anders vertrekt een halve bestelling.</li>
 </ul>`,
       },
+      {
+        nr: "7.13",
+        titel: "Wat de kassa terugboekt naar SRS",
+        html: `
+<p>Zolang niet elke winkel op de nieuwe kassa draait, leven twee kasboeken naast elkaar: de eigen kern (realtime) en SRS (het magazijnsysteem, dat ook de aanvulling en de StorePos-winkels voedt). De kassa boekt daarom elke mutatie ook in SRS terug — als kassabon, want dat is de enige taal die SRS begrijpt.</p>
+<div class="tabel-wrap">
+  <table>
+    <thead><tr><th scope="col">Gebeurtenis op de kassa</th><th scope="col">Wat SRS ontvangt</th></tr></thead>
+    <tbody>
+      <tr><td>Verkoop / retour / annulering</td><td>Een verkoopbon (of negatieve bon) op het filiaal, met de kassier als verkoper.</td></tr>
+      <tr><td>Levering binnenmelden (drager of uitwisseling)</td><td>Een <code>drager_ontvangen</code>-bon: +1 per gescand stuk — hetzelfde bericht dat StorePos zelf stuurt.</td></tr>
+      <tr><td>Herverdeling versturen of aanvragen</td><td>Een transferbon naar het doelfiliaal: &minus;1 bij de verzendende winkel.</td></tr>
+      <tr><td>Klacht-retour (beschadigd)</td><td>Een transferbon naar 707 (herstel) of 708 (afkeur): het stuk komt niet terug op verkoopbare voorraad.</td></tr>
+      <tr><td>Klantbestelling / voorverkoop</td><td>Niets bij het bestellen — pas bij de <em>uitlevering</em> een gewone verkoopbon. SRS kent geen bruikbare bestelregel: een "klantbestelling"-regel telt daar nergens in mee.</td></tr>
+      <tr><td>Voorraadcorrectie of inventarisatieverschil</td><td>Niets — SRS heeft geen correctie-API. Deze mutaties landen op de werklijst van supply chain om handmatig in SRS door te voeren.</td></tr>
+    </tbody>
+  </table>
+</div>
+<h4>Wanneer SRS voorraad verplaatst bij een uitwisseling</h4>
+<div class="stroom">
+  <div class="stap"><b>Versturen</b><span>bron: &minus;1, direct</span></div>
+  <span class="pijl" aria-hidden="true">&rarr;</span>
+  <div class="stap koel"><b>Onderweg</b><span>telt bij géén filiaal mee</span></div>
+  <span class="pijl" aria-hidden="true">&rarr;</span>
+  <div class="stap goed"><b>Ontvangst-scan</b><span>doel: +1, pas nu</span></div>
+</div>
+<p>Empirisch gevalideerd (19-8-2026, steekproef over open uitwisselingen): het doelfiliaal stond meermaals op <em>&minus;1</em> doordat het stuk al verkocht was vóór de scan. Daarom is snel binnenmelden geen administratie-hygiëne maar voorraadwaarheid: een niet-gescande uitwisseling bestaat nergens — de aanvulling ziet 'm niet en de webshop kan 'm niet toewijzen.</p>
+<h4>Wie krijgt de omzet bij winkel-overstijgende verkoop</h4>
+<p>Bestelt winkel A iets voor een klant dat bij winkel B ligt, dan levert B alleen het stuk (transferbon, &minus;1) en boekt <strong>A de omzet</strong> op het moment van uitlevering — zoals het in de StorePos-tijd ook werkte. B krijgt geen omzetregel.</p>
+<div class="let waarschuwing">
+  <p><strong>Wat een StorePos-winkel niet ziet.</strong> Klantbestellingen uit de nieuwe kassa bestaan alleen in de eigen kern (portal: Afhalen &amp; orders, Voorverkopen). In StorePos verschijnen alleen de gevolgen: een uitwisseling die binnenkomt en later een verkoopregel — zonder klant of context. Correcties die alleen in de kassa zijn geboekt staan in SRS nergens tot supply chain ze daar handmatig doorvoert.</p>
+</div>`,
+      },
     ],
   },
 
