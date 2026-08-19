@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useLocale, useT } from "@/components/i18n/locale-provider";
 import { useState } from "react";
 import { createPortal } from "react-dom";

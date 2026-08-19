@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { getLocale } from "@/lib/locale-server";
 import { t } from "@/lib/messages";
 

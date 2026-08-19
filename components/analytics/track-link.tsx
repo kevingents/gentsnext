@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import type { ComponentProps, MouseEvent } from "react";
 import { track } from "@/lib/track-client";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useMemo, useState } from "react";
 import { Dot } from "@/components/icons";
 import { useT } from "@/components/i18n/locale-provider";

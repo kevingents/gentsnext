@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { getBlogPost } from "@/lib/blog";
 import { getProductsByHandles } from "@/lib/catalog";
 import { ProductCard } from "@/components/product-card";

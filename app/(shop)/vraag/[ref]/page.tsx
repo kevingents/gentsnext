@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { fetchTicketForFollow } from "@/lib/helpdesk";
 import { verifyFollowToken } from "@/lib/ticket-follow";
 import { VraagVolgen } from "@/components/support/vraag-volgen";

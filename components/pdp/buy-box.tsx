@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { colorSwatch } from "@/lib/colors";
 import { formatEuro, isRealDiscount } from "@/lib/pricing";

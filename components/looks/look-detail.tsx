@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEuro } from "@/lib/pricing";
 import type { ResolvedLook, LookBuyData, LookGalleryImage, LookColorOption } from "@/lib/looks";

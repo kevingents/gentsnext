@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 import { listCollections, listProductHandles } from "@/lib/catalog";
 import { getSiteUrl } from "@/lib/site-url";
-import { LOCALES, HREFLANG, localePrefix, DEFAULT_LOCALE } from "@/lib/i18n";
+import { LOCALES, HREFLANG, DEFAULT_LOCALE } from "@/lib/i18n";
+import { localizedUrlPath } from "@/lib/url-i18n";
 import { SIZE_GUIDES } from "@/lib/size-chart-hub";
 import { CATEGORIES } from "@/lib/categories";
 import { BRANDS } from "@/lib/brands";
@@ -26,7 +27,7 @@ function withLanguages(siteUrl: string, path: string) {
   const languages: Record<string, string> = {};
   for (const l of LOCALES) {
     if (l === DEFAULT_LOCALE) continue;
-    languages[HREFLANG[l]] = `${siteUrl}${localePrefix(l)}${path === "/" ? "" : path}`;
+    languages[HREFLANG[l]] = `${siteUrl}${localizedUrlPath(path, l)}`;
   }
   return { alternates: { languages } };
 }

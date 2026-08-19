@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { MegaMenuBar, MegaMenuMobile } from "@/components/mega-menu";
 import { HideOnCheckout } from "@/components/hide-on-checkout";
 import { CartButton } from "@/components/cart/cart-button";

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useEffect, useState } from "react";
 import { useT } from "@/components/i18n/locale-provider";
 import { formatEuro } from "@/lib/pricing";

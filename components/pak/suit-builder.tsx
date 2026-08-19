@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { useEffect, useMemo, useState } from "react";
 import { Dot } from "@/components/icons";
 import type { SuitDetail, SuitRole } from "@/lib/suit-pairing";

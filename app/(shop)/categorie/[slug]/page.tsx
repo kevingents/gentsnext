@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { TrackLijst } from "@/components/analytics/track-lijst";
@@ -39,9 +39,15 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const sel = parsePlpParams(await searchParams);
   const cat = categoryBySlug(slug);
   if (!cat) return {};
+  // De <title> is het zwaarste on-page signaal dat er is — die stond hier op
+  // cat.label (Nederlands), terwijl de H1 vlak eronder wél vertaald werd. Elke
+  // anderstalige categoriepagina heette daardoor "Pakken | GENTS".
+  const locale = await getLocale();
+  const catLabel = (await getCategoryLabels(locale)).get(cat.slug) ?? cat.label;
+  const t = await getT(locale);
   const meta: Metadata = {
-    title: cat.label,
-    description: `${cat.label} bij GENTS — betaalbare luxe voor elk formeel moment.`,
+    title: catLabel,
+    description: t("seo.category.description", { category: catLabel }),
     alternates: await localeAlternates(sel.page > 1 ? `/categorie/${slug}?page=${sel.page}` : `/categorie/${slug}`),
   };
   return applySeoOverride(meta, await getSeoOverride(`/categorie/${slug}`));

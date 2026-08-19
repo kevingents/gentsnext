@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { notFound } from "next/navigation";
 import { SuitBuilder } from "@/components/pak/suit-builder";
 import { getSuitByColbertHandle, type SuitPieceDetail } from "@/lib/suit-pairing";

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { JsonLd } from "@/components/json-ld";
 import { localeAlternates } from "@/lib/seo";
 import { getSeoOverride, applySeoOverride } from "@/lib/seo-overrides";

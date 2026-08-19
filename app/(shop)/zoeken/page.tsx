@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { ProductCard } from "@/components/product-card";
 import { CrossIcon } from "@/components/icons";
 import { searchProducts, suggestCorrection } from "@/lib/catalog";

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { FooterPayments } from "@/components/footer-payments";
 import { CookieSettingsLink } from "@/components/cookie-settings-link";

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, splitLocale, localizedPath, type Locale } from "@/lib/i18n";
+import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, splitLocale, type Locale } from "@/lib/i18n";
+import { switchLocalePath } from "@/lib/url-i18n";
 
 /** Taalkeuze — zet de cookie en navigeert naar de gelokaliseerde URL (fase 2).
  *  `variant="inline"` (mobiele menu-drawer): één rij taalcodes i.p.v. dropdown. */
@@ -14,7 +15,9 @@ export function LanguageSwitcher({ current, variant = "dropdown" }: { current: L
     if (loc === current) return;
     // Strip het huidige prefix en navigeer naar de gekozen taal-URL.
     const { path } = splitLocale(window.location.pathname);
-    window.location.href = localizedPath(path, loc) + window.location.search + window.location.hash;
+    // Eerst terug naar het Nederlandse pad, dan naar de doeltaal: anders zou
+    // /en/category/suits in het Duits /de/category/suits worden (fase 3).
+    window.location.href = switchLocalePath(path, current, loc) + window.location.search + window.location.hash;
   }
 
   if (variant === "inline") {

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import { JsonLd } from "@/components/json-ld";
 import { getOccasions } from "@/lib/occasions-server";
 import { getSiteUrl } from "@/lib/site-url";

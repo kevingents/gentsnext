@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/components/i18n/link";
 import type { SuitCard } from "@/lib/suit-pairing";
 import { formatEuro } from "@/lib/pricing";
 
