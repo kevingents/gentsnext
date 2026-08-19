@@ -7,6 +7,7 @@ import { estimateDelivery } from "@/lib/fulfillment";
 import { getSettings } from "@/lib/settings";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { localeAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const suit = await getSuitByColbertHandle(handle);
   const colbert = suit?.pieces.find((p) => p.role === "colbert");
   if (!colbert) return {};
+  const t = await getT(await getLocale());
   return {
-    title: `Pak samenstellen — ${colbert.title}`,
-    alternates: { canonical: `/pak-samenstellen/${handle}` },
+    // Sjabloon stond hardgecodeerd in het Nederlands, en `canonical` zonder
+    // localeAlternates betekende dat deze pagina géén hreflang had.
+    title: t("seo.suitbuilder.title", { colbert: colbert.title }),
+    alternates: await localeAlternates(`/pak-samenstellen/${handle}`),
   };
 }
 

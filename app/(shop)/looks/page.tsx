@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import { getAllLooks, getLooksHeroes } from "@/lib/looks";
-import { localeAlternates } from "@/lib/seo";
 import { LooksGrid } from "@/components/looks/looks-grid";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: "Shop the look",
-    description: "Complete outfits voor elk moment — klik en shop de hele look.",
-    alternates: await localeAlternates("/looks"),
-  };
+  return pageMetadata("/looks");
 }
 
 export default async function LooksPage() {

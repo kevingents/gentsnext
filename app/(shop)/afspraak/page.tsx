@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { AfspraakForm } from "@/components/appointments/afspraak-form";
-import { localeAlternates } from "@/lib/seo";
 import { getLocale } from "@/lib/locale-server";
 import { getT } from "@/lib/t-server";
 import { getStores } from "@/lib/stores";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +14,7 @@ export const dynamic = "force-dynamic";
  */
 
 export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: "Afspraak maken — trouwconsult, pasafspraak of personal shopping",
-    description:
-      "Plan een persoonlijk adviesmoment in één van onze 19 winkels. Trouwconsult voor je trouwpak, een pasafspraak of personal shopping — kies je winkel, dag en dagdeel.",
-    alternates: await localeAlternates("/afspraak"),
-  };
+  return pageMetadata("/afspraak");
 }
 
 export default async function AfspraakPage({ searchParams }: { searchParams: Promise<{ winkel?: string }> }) {

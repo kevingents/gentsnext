@@ -21,6 +21,7 @@ function landingEntries(l: Landing): TransEntry[] {
   add("title", l.title);
   add("intro", l.intro);
   add("cta.label", l.cta?.label);
+  add("seoDescription", l.seoDescription);
   l.sections.forEach((s, i) => {
     add(`sections.${i}.title`, s.title);
     add(`sections.${i}.body`, s.body);
@@ -55,5 +56,6 @@ export async function getLocalizedLanding(landing: Landing, locale: Locale): Pro
       body: pick(`sections.${i}.body`, s.body),
     })),
     shop: landing.shop.map((s, i) => ({ ...s, label: pick(`shop.${i}.label`, s.label) })),
+    seoDescription: pick("seoDescription", landing.seoDescription),
   };
 }

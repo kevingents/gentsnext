@@ -17,6 +17,7 @@ import { ProfileClient } from "@/components/account/profile-client";
 // code er al staan bij de eerste render, niet pas als de browser klaar is met
 // JavaScript laden.
 import { clubPassData } from "@/lib/club-pass";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 /** Staat de memberspas op minstens één toestel? serialNumber = het klant-id. */
 async function walletInstalled(customerId: string): Promise<boolean> {
@@ -34,10 +35,9 @@ async function walletInstalled(customerId: string): Promise<boolean> {
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Mijn GENTS",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/account");
+}
 
 export default async function AccountPage() {
   const customer = await getSessionCustomer();

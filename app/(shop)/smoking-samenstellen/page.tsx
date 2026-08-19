@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { SmokingBuilder } from "@/components/smoking/smoking-builder";
 import { SmokingLook } from "@/components/smoking/smoking-look";
 import { getSmokingPakket } from "@/lib/smoking-pakket";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 /**
  * "Smoking compleet" — de klant stelt zelf jas, pantalon, overhemd en strik
@@ -16,12 +17,9 @@ import { getSmokingPakket } from "@/lib/smoking-pakket";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Smoking compleet samenstellen",
-  description:
-    "Stel je eigen smoking samen: kies je stof, je revers, je overhemd en je strik — elk in je eigen maat, voor één vaste prijs.",
-  alternates: { canonical: "/smoking-samenstellen" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/smoking-samenstellen");
+}
 
 export default async function SmokingSamenstellenPage() {
   const pakket = await getSmokingPakket();

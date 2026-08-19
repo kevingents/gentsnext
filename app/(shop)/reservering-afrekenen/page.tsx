@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import { formatEuro } from "@/lib/format";
 import { getReservationByPayToken, reservationAmountCents, type ReservationLine } from "@/lib/reservations";
 import { AfrekenenButton } from "./AfrekenenButton";
+import { pageMetadata } from "@/lib/page-meta-i18n";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
-  title: "Reservering afrekenen — GENTS",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("/reservering-afrekenen");
+}
 
 const euro = (c: number) => formatEuro(c || 0);
 
