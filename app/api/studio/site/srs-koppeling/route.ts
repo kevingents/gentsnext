@@ -51,7 +51,10 @@ export async function POST(req: Request) {
      aanmaken alleen wat nog nergens bestaat — bewust twee losse werkwoorden. */
   if (String(body.actie || "") === "aanmaken") {
     try {
-      const r = await maakNieuweArtikelen({ droogdraaien });
+      /* max instelbaar (cap 2000): voor een inhaalrun die de hele SRS-export in
+         een paar runs het PIM in zet i.p.v. 200 per keer. */
+      const max = Math.min(2000, Math.max(1, Number((body as { max?: unknown }).max) || 200));
+      const r = await maakNieuweArtikelen({ droogdraaien, max });
       if ("error" in r) return NextResponse.json({ ok: false, error: r.error }, { status: 422 });
       return NextResponse.json({ ok: true, resultaat: r, stand: await koppelStand() });
     } catch (e) {
