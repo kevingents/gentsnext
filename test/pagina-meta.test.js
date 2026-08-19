@@ -127,3 +127,25 @@ test("elke vaste pagina levert canonical + hreflang, niet alleen canonical", () 
       `localeAlternates() of pageMetadata():\n  ${zondaars.join("\n  ")}`
   );
 });
+
+test("geen titelbron eindigt op de merknaam — de layout plakt die er zelf achter", () => {
+  // app/layout.tsx heeft `title: { template: "%s | GENTS" }`. Een bron die zelf al
+  // op "| GENTS" of "— GENTS" eindigt levert dus "… | GENTS | GENTS" in de
+  // zoekresultaten. Dat stond op alle zeven maattabellen en op drie vaste pagina's.
+  const bronnen = [
+    ["lib/page-meta-i18n.ts", /title:\s*"([^"]+)"/g],
+    ["lib/size-chart-hub.ts", /seoTitle:\s*"([^"]+)"/g],
+  ];
+  const zondaars = [];
+  for (const [bestand, patroon] of bronnen) {
+    const tekst = readFileSync(bestand, "utf8");
+    for (const m of tekst.matchAll(patroon)) {
+      if (/[|—-]\s*GENTS\s*$/.test(m[1])) zondaars.push(`${bestand}: "${m[1]}"`);
+    }
+  }
+  assert.equal(
+    zondaars.length,
+    0,
+    `Deze titels eindigen op de merknaam terwijl de layout die al toevoegt:\n  ${zondaars.join("\n  ")}`
+  );
+});
