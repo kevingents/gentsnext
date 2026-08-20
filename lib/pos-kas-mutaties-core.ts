@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { posKasMutaties } from "@/db/schema";
 
@@ -57,6 +57,55 @@ export async function listKasMutatiesCore(store: string, date: string): Promise<
     .orderBy(desc(posKasMutaties.createdAt))
     .limit(1000);
   return rows.map(rowToMutatie);
+}
+
+/**
+ * Hang een factuur/bon-bijlage aan een bestaande uitkas-mutatie. De kassa belooft
+ * bij het boeken "mag ook later" — dit is dat later. GEEN geldwijziging (bedrag,
+ * type, datum en actor blijven onaantastbaar; het spoor blijft append-only voor
+ * geld), alleen het `bon`-blok in de jsonb plus wie/wanneer 'm naleverde.
+ * Eén keer: zit er al een bon aan, dan weigeren — een boekstuk-bijlage stilletjes
+ * vervangen is bewijs vervangen; fout bestand = melden bij kantoor.
+ */
+export async function attachKasBonCore(
+  id: string,
+  bon: { url?: string; naam?: string; type?: string; grootte?: number | null },
+  door: { name?: string; userId?: string },
+): Promise<{ ok: boolean; mutatie?: Mutatie; error?: string }> {
+  const mid = String(id || "").trim();
+  const url = String(bon?.url || "").trim();
+  if (!mid) return { ok: false, error: "Geen mutatie-id." };
+  if (!url) return { ok: false, error: "Geen bon-URL." };
+  const db = getDb();
+  const [row] = await db.select().from(posKasMutaties).where(eq(posKasMutaties.id, mid)).limit(1);
+  if (!row) return { ok: false, error: "Mutatie niet gevonden." };
+  const data = rowToMutatie(row);
+  if (String(data.type || row.type) !== "uitkas") return { ok: false, error: "Alleen een uit-kas-boeking draagt een factuur." };
+  const bestaand = (data as { bon?: { url?: string } }).bon;
+  if (bestaand && String(bestaand.url || "").trim()) return { ok: false, error: "Deze boeking heeft al een factuur." };
+
+  const nieuw: Mutatie = {
+    ...data,
+    bon: {
+      url,
+      naam: String(bon?.naam || "").slice(0, 200),
+      type: String(bon?.type || ""),
+      grootte: Number.isFinite(Number(bon?.grootte)) ? Number(bon?.grootte) : null,
+    },
+    bonToegevoegd: {
+      door: { name: String(door?.name || ""), userId: String(door?.userId || "") },
+      op: new Date().toISOString(),
+    },
+  };
+  /* Guard in de WHERE herhaald: twee gelijktijdige naleveringen mogen elkaar niet
+     overschrijven — alleen de eerste vindt nog een rij zonder bon-url. */
+  const [upd] = await db
+    .update(posKasMutaties)
+    .set({ data: nieuw })
+    .where(and(eq(posKasMutaties.id, mid), sql`coalesce(${posKasMutaties.data}->'bon'->>'url', '') = ''`))
+    .returning();
+  if (!upd) return { ok: false, error: "Deze boeking heeft al een factuur." };
+  return { ok: true, mutatie: rowToMutatie(upd) };
 }
 
 /** Eenmalige blob→Neon-backfill: alles invoegen dat er nog niet staat (idempotent op id). */
