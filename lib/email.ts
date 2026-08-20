@@ -88,6 +88,10 @@ type OrderInfo = {
   totalCents: number;
   discountCents?: number;
   giftcardCents?: number;
+  /** Bepaalt het slotblok: 'pickup' → afhaal-tekst mét winkel, anders bezorgadres.
+   *  Optioneel: oudere aanroepers zonder deze velden krijgen het bezorgadres. */
+  deliveryMethod?: string;
+  pickupStore?: string;
 };
 
 type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
@@ -181,7 +185,14 @@ function orderHtml(
         }
         <tr><td style="padding:16px 28px 28px">
           <p style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin:0">
-            <strong>${t("checkout.delivery_address")}</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}
+            ${
+              order.deliveryMethod === "pickup"
+                ? /* Afhaalorder: geen (leeg) bezorgadres maar de afhaalwinkel. Een
+                     BEZORGorder (ook die van de kassa, deliveryMethod 'standard')
+                     houdt altijd het bezorgadres — nooit een afhaaltekst. */
+                  `<strong>${t("checkout.receive_pickup")}</strong><br>${t("checkout.pickup_summary", { store: order.pickupStore || "" })}`
+                : `<strong>${t("checkout.delivery_address")}</strong><br>${order.street} ${order.houseNumber}<br>${order.postalCode} ${order.city}`
+            }
           </p>
           <p style="font:12px Arial,sans-serif;color:#8B8B8B;line-height:1.6;margin-top:16px">
             ${t("mail.order.returnNote", { days: retour.days, amount: retour.amount })}

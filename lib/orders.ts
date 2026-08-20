@@ -22,7 +22,7 @@ import { getSmokingSamenstelling } from "@/lib/smoking-pakket";
 import { validateGiftcard, redeemGiftcard, releaseGiftcard } from "@/lib/giftcards";
 import { availableForSkus } from "@/lib/stock-reservations";
 import { availableInStore } from "@/lib/store-core";
-import type { StockChannel } from "@/lib/fulfillment-config";
+import { branchIdForStoreName, isWarehouse, type StockChannel } from "@/lib/fulfillment-config";
 import { reserveOrderStock, releaseOrderHolds, renewOrderHolds, WEB_POOL, type ReserveRequest } from "@/lib/store-reserve";
 
 /**
@@ -129,6 +129,11 @@ const orderMailColumns = {
   status: orders.status,
   paidAt: orders.paidAt,
   createdAt: orders.createdAt,
+  // Afhalen of bezorgen bepaalt het slotblok van de mail: afhaal-tekst mét
+  // winkel, of het bezorgadres. Een kassa-BEZORGorder kreeg anders een mail
+  // zonder duidelijke bezorgbelofte (en een afhaalorder een leeg adresblok).
+  deliveryMethod: orders.deliveryMethod,
+  pickupStore: orders.pickupStore,
 } as const;
 
 /** Alles wat het allocatieplan nodig heeft — niet meer. */
@@ -137,6 +142,7 @@ const orderFulfillmentColumns = {
   orderNumber: orders.orderNumber,
   deliveryMethod: orders.deliveryMethod,
   pickupStore: orders.pickupStore,
+  shipFromStore: orders.shipFromStore,
   country: orders.country,
   postalCode: orders.postalCode,
 } as const;
@@ -294,6 +300,12 @@ export async function createOrder(
        Als gezet: order-brede autokorting (staffel/smoking) wordt overgeslagen — de
        snapshot is al de definitieve prijs. */
     fixedPricesBySku?: Record<string, number>;
+    /* Kassa-bestelling met VASTE leverwinkel ("komt uit winkel X", kassa #544):
+       de kassier koos wélke winkel het artikel heeft en verzendt; de uitwisseling
+       naar de verkopende winkel loopt al bij die winkel. De fulfilment-planning
+       pint het plan dan op deze winkel i.p.v. zelf te alloceren. Alleen zinvol
+       bij bezorgen; bij afhalen wint pickupStore. */
+    shipFromStore?: string;
   } = {}
 ): Promise<CreatedOrder> {
   const db = getDb();
@@ -490,6 +502,7 @@ export async function createOrder(
       deliveryMethod: method,
       pickupStore: isPickup ? pickupStore.trim() : "",
       soldByStore: String(soldByStore || "").trim(),
+      shipFromStore: isPickup ? "" : String(opts.shipFromStore || "").trim(),
       voucherCode: appliedCode,
       discountCents,
       giftcardCode: appliedGiftcard,
@@ -987,6 +1000,43 @@ export async function planAndPushFulfillmentOnce(molliePaymentId: string): Promi
       await db
         .update(orders)
         .set({ fulfillmentPlan: pickupPlan, fulfillmentStatus: "planned", updatedAt: sql`now()` })
+        .where(eq(orders.id, orderId));
+      await releaseOrderHolds(orderId); // plan staat → afgeleide reservering neemt over
+      return;
+    }
+
+    // Kassa-bestelling met VASTE leverwinkel ("komt uit winkel X"): de kassier
+    // koos welke winkel het artikel heeft en verzendt, en de uitwisseling naar de
+    // verkopende winkel loopt al bij díé winkel. De allocator mag dan niet zelf
+    // een derde filiaal kiezen (deed 'ie: Kevin's testorder "komt uit Den Bosch"
+    // landde bij Leiden). Pin het plan op de gekozen winkel; delivery_method
+    // blijft 'standard' → de klant houdt bezorg-teksten en de winkel ziet 'm in
+    // de weborders-lijst als TE VERZENDEN (core/store-orders + verzendlabel).
+    const shipFrom = String(order.shipFromStore || "").trim();
+    if (shipFrom) {
+      const branchId = branchIdForStoreName(shipFrom) || "";
+      const vasteWinkelPlan = {
+        shipments: [
+          {
+            branchId,
+            store: shipFrom,
+            isWarehouse: isWarehouse(branchId),
+            canDispatchToday: true,
+            dispatchLabel: "vandaag",
+            dispatchInDays: 0,
+            lines: lines.map((l) => ({ sku: l.sku, qty: l.quantity, title: l.title })),
+            units: lines.reduce((n, l) => n + l.quantity, 0),
+          },
+        ],
+        splitCount: 1,
+        fullyAllocated: true,
+        shortages: [] as { sku: string; qtyShort: number; title?: string }[],
+        strategy: "single-source" as const,
+        computedAt: new Date().toISOString(),
+      };
+      await db
+        .update(orders)
+        .set({ fulfillmentPlan: vasteWinkelPlan, fulfillmentStatus: "planned", updatedAt: sql`now()` })
         .where(eq(orders.id, orderId));
       await releaseOrderHolds(orderId); // plan staat → afgeleide reservering neemt over
       return;
