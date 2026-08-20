@@ -3,6 +3,7 @@ import { and, eq, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { vouchers } from "@/db/schema";
 import { formatEuro } from "@/lib/format";
+import { neonKlantVoorKassa, onthoudKassaNummer } from "@/lib/loyalty-brug";
 
 /**
  * Vouchers / kortingscodes — valideren en verzilveren. Korting altijd
@@ -157,13 +158,48 @@ export async function releaseVoucher(code: string): Promise<void> {
  * Matcht ook op e-mail, zodat een welkomst-/gastcode die op adres is uitgegeven
  * meekomt. Alleen actief en niet verlopen.
  */
-export async function activeVouchersForCustomer(input: { customerId?: string; email?: string }) {
-  const cid = String(input.customerId || "").trim();
+const UUID_VORM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Kassa-klant → gents.nl-identiteit. De kassa stuurt twee soorten klant-id's:
+ * het gents.nl-account (uuid) of een SRS-klantnummer (numeriek) — de klantzoek
+ * merge't beide bestanden en het SRS-record wint bij dubbele e-mail. Een
+ * numeriek id rechtstreeks vergelijken met een uuid-kolom laat Postgres de
+ * query afbreken, waardoor tegoed/punten voor zo'n klant stil op "niets"
+ * uitkwamen (Kevin 20 aug: "ik heb wél vouchers").
+ *
+ * De zware kluif (identiteiten, bon-e-mail) doet de bestaande loyalty-brug;
+ * hier komt alleen de directe e-mail bij die de kassa al meestuurt — sterker
+ * dan de bon-afleiding, want dit is het adres op het gekozen klantrecord. Een
+ * niet-oplosbaar id geeft { uuid: "" } terug in plaats van een databasefout.
+ */
+export async function resolveKlantIdentiteit(input: { customerId?: string; email?: string }): Promise<{ uuid: string; email: string }> {
+  const raw = String(input.customerId || "").trim();
   const mail = String(input.email || "").trim().toLowerCase();
-  if (!cid && !mail) return [];
+  if (UUID_VORM.test(raw)) return { uuid: raw.toLowerCase(), email: mail };
+  if (raw) {
+    const brug = await neonKlantVoorKassa(raw);
+    if (brug.customerId) return { uuid: brug.customerId, email: mail };
+  }
+  if (mail) {
+    const db = getDb();
+    const r = await db.execute<{ id: string }>(sql`select id from customers where lower(email) = ${mail} limit 1`);
+    if (r.rows[0]) {
+      const uuid = String(r.rows[0].id);
+      // Vastleggen zodat de volgende bon van dit kassanummer direct raak is.
+      if (raw) await onthoudKassaNummer(uuid, raw);
+      return { uuid, email: mail };
+    }
+  }
+  return { uuid: "", email: mail };
+}
+
+export async function activeVouchersForCustomer(input: { customerId?: string; email?: string }) {
+  const { uuid, email: mail } = await resolveKlantIdentiteit(input);
+  if (!uuid && !mail) return [];
   const db = getDb();
   const ors = [];
-  if (cid) ors.push(eq(vouchers.customerId, cid));
+  if (uuid) ors.push(eq(vouchers.customerId, uuid));
   if (mail) ors.push(sql`lower(${vouchers.email}) = ${mail}`);
   const rows = await db
     .select()

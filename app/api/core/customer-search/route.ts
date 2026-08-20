@@ -60,10 +60,35 @@ export async function POST(req: Request) {
     : ref?.prefix8
       ? sql`c.id::text like ${ref.prefix8 + "%"}`
       : sql`c.email ilike ${term} or (c.first_name || ' ' || c.last_name) ilike ${term}`;
-  const rows = await db.execute<{ id: string; first_name: string; last_name: string; email: string; phone: string; city: string | null }>(sql`
+  /* Tegoed en punten meteen mee in de trefferlijst: de kassier moet aan de
+     zoekresultaten al kunnen zien dat een klant iets heeft openstaan, zonder
+     eerst de klantkaart te openen (Kevin 20 aug). Twee laterals per rij op een
+     lijst van max 10 — verwaarloosbaar naast de SOAP-call die parallel loopt.
+     Punten: besteedbaar saldo uit HET grootboek (loyalty_events, gevest) — de
+     loyalty_accounts-kopie is een oude kassa-pot met verouderde saldi. */
+  const rows = await db.execute<{
+    id: string; first_name: string; last_name: string; email: string; phone: string; city: string | null;
+    tegoed_aantal: number; tegoed_cents: number; punten: number;
+  }>(sql`
     select c.id, c.first_name, c.last_name, c.email, c.phone,
-           (select a.city from customer_addresses a where a.customer_id = c.id order by a.is_default desc limit 1) city
+           (select a.city from customer_addresses a where a.customer_id = c.id order by a.is_default desc limit 1) city,
+           coalesce(t.aantal, 0) tegoed_aantal,
+           coalesce(t.cents, 0) tegoed_cents,
+           coalesce(le.punten, 0) punten
     from customers c
+    left join lateral (
+      select count(*)::int aantal, coalesce(sum(v.value_cents), 0)::int cents
+      from vouchers v
+      where v.status = 'active'
+        and (v.expires_at is null or v.expires_at > now())
+        and (v.customer_id = c.id or (v.email <> '' and lower(v.email) = lower(c.email)))
+    ) t on true
+    left join lateral (
+      select coalesce(sum(le.points), 0)::int punten
+      from loyalty_events le
+      where le.customer_id = c.id
+        and (le.vests_at is null or le.vests_at <= now())
+    ) le on true
     where ${where}
     order by c.last_login_at desc nulls last
     limit 10`);
@@ -80,6 +105,8 @@ export async function POST(req: Request) {
     email: r.email,
     phone: r.phone || "",
     city: r.city || "",
+    tegoed: { aantal: Number(r.tegoed_aantal) || 0, valueCents: Number(r.tegoed_cents) || 0 },
+    punten: Number(r.punten) || 0,
   }));
   // Audit-spoor: vingerafdruk + querylengte + aantal treffers — NOOIT de ruwe
   // zoekterm of de PII-resultaten. Bulk-enumeratie valt zo op in de logs.

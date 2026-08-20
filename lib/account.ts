@@ -20,6 +20,7 @@ import {
 import { getGiftcardsForCustomer, scrubGiftcardEmails } from "@/lib/giftcards";
 import { koppelDevice, synchroniseerKlantIdentiteiten } from "@/lib/identity";
 import { creditOrderLoyalty, reverseOrderLoyalty, redeemableBalance, pendingBalance } from "@/lib/loyalty-claim";
+import { resolveKlantIdentiteit } from "@/lib/vouchers";
 import { listStoreBuysForProfileCore } from "@/lib/pos-sales-core";
 import { mediaByHandle, mediaByArticleCode } from "@/lib/order-media";
 import { pickedKeysByOrder } from "@/lib/split-fulfilment";
@@ -101,7 +102,7 @@ export async function createPosCustomer(input: { email: string; firstName?: stri
  *  van de kassier). Alleen meegegeven velden wijzigen; e-mail moet geldig zijn
  *  en mag niet botsen met een andere klant. Retourneert previous + updated
  *  zodat de aanroeper het verschil kan loggen. */
-export async function updatePosCustomer(customerId: string, input: { firstName?: string; lastName?: string; email?: string; phone?: string }) {
+export async function updatePosCustomer(customerId: string, input: { firstName?: string; lastName?: string; email?: string; phone?: string; street?: string; houseNumber?: string; postalCode?: string; city?: string }) {
   const db = getDb();
   const id = String(customerId || "").trim();
   if (!id) throw new Error("customerId vereist.");
@@ -122,11 +123,85 @@ export async function updatePosCustomer(customerId: string, input: { firstName?:
     }
   }
 
-  const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter((k) => patch[k] !== (existing as Record<string, unknown>)[k as string]);
+  const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter((k) => patch[k] !== (existing as Record<string, unknown>)[k as string]) as string[];
+
+  /* Adres hoort bij het 360-klantbeeld aan de kassa (Kevin 20 aug). Het leeft in
+     customer_addresses, niet op de klantrij: we werken de default-rij bij (of
+     maken 'm aan) en rapporteren per veld oud → nieuw voor het winkel-logboek.
+     Alleen als er ook echt een adresveld is meegegeven — een correctie van
+     alleen de naam mag nooit een adres aanmaken of aanraken. */
+  const adresInput: Record<string, string> = {};
+  for (const [veld, kolom] of [["street", "street"], ["houseNumber", "houseNumber"], ["postalCode", "postalCode"], ["city", "city"]] as const) {
+    const v = (input as Record<string, string | undefined>)[veld];
+    if (v !== undefined) adresInput[kolom] = String(v).trim();
+  }
+  const previousExtra: Record<string, string> = {};
+  const updatedExtra: Record<string, string> = {};
+  if (Object.keys(adresInput).length) {
+    const [adres] = await db
+      .select()
+      .from(customerAddresses)
+      .where(eq(customerAddresses.customerId, id))
+      .orderBy(desc(customerAddresses.isDefault), desc(customerAddresses.createdAt))
+      .limit(1);
+    const adresChanged = (Object.keys(adresInput) as (keyof typeof adresInput)[]).filter(
+      (k) => adresInput[k] !== String((adres as Record<string, unknown> | undefined)?.[k] ?? "")
+    );
+    if (adresChanged.length) {
+      for (const k of adresChanged) {
+        previousExtra[k] = String((adres as Record<string, unknown> | undefined)?.[k] ?? "");
+        updatedExtra[k] = adresInput[k];
+      }
+      if (adres) {
+        await db.update(customerAddresses).set(adresInput).where(eq(customerAddresses.id, adres.id));
+      } else {
+        await db.insert(customerAddresses).values({
+          customerId: id,
+          firstName: String(input.firstName ?? existing.firstName ?? ""),
+          lastName: String(input.lastName ?? existing.lastName ?? ""),
+          street: adresInput.street || "",
+          houseNumber: adresInput.houseNumber || "",
+          postalCode: adresInput.postalCode || "",
+          city: adresInput.city || "",
+          isDefault: true,
+        });
+      }
+      changed.push(...adresChanged);
+    }
+  }
+
   if (!changed.length) return { previous: existing, updated: existing, changed: [] as string[] };
-  patch.updatedAt = new Date();
-  const [updated] = await db.update(customers).set(patch).where(eq(customers.id, id)).returning();
-  return { previous: existing, updated, changed: changed as string[] };
+  let updated = existing;
+  if ((Object.keys(patch) as (keyof typeof patch)[]).some((k) => changed.includes(k as string))) {
+    patch.updatedAt = new Date();
+    [updated] = await db.update(customers).set(patch).where(eq(customers.id, id)).returning();
+  }
+  return {
+    previous: { ...existing, ...previousExtra },
+    updated: { ...updated, ...updatedExtra },
+    changed,
+  };
+}
+
+/** Default-adres voor het kassa-klantpaneel. De kassa kan een SRS-nummer of
+ *  alleen een e-mailadres hebben — zelfde id-resolutie als de tegoedbonnen. */
+export async function defaultAddressForCustomer(input: { customerId?: string; email?: string }): Promise<{ street: string; houseNumber: string; postalCode: string; city: string } | null> {
+  const { uuid } = await resolveKlantIdentiteit(input);
+  if (!uuid) return null;
+  const db = getDb();
+  const [adres] = await db
+    .select()
+    .from(customerAddresses)
+    .where(eq(customerAddresses.customerId, uuid))
+    .orderBy(desc(customerAddresses.isDefault), desc(customerAddresses.createdAt))
+    .limit(1);
+  if (!adres) return null;
+  return {
+    street: String(adres.street || ""),
+    houseNumber: String(adres.houseNumber || ""),
+    postalCode: String(adres.postalCode || ""),
+    city: String(adres.city || ""),
+  };
 }
 
 /* ── "Rond je profiel af voor +50 punten" ── */
