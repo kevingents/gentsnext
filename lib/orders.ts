@@ -1237,7 +1237,7 @@ export async function getPostPurchase(
  * e-mailadres (gast-checkout heeft geen account maar wél het e-mail = de cross-channel-brug).
  * Alleen 'echte' orders (niet open/mislukt/verlopen/geannuleerd), nieuwste eerst.
  */
-export async function listOrdersByCustomerCore(input: { customerId?: string; email?: string; limit?: number }): Promise<{ orderNumber: string; status: string; totalCents: number; createdAt: string; paidAt: string | null }[]> {
+export async function listOrdersByCustomerCore(input: { customerId?: string; email?: string; limit?: number }): Promise<{ orderNumber: string; status: string; totalCents: number; createdAt: string; paidAt: string | null; lines: { title: string; size: string; color: string; qty: number; unitPriceCents: number; sku: string }[] }[]> {
   const cid = String(input.customerId || "").trim();
   const email = String(input.email || "").trim().toLowerCase();
   if (!cid && !email) return [];
@@ -1246,11 +1246,22 @@ export async function listOrdersByCustomerCore(input: { customerId?: string; ema
   const ors = [];
   if (cid) ors.push(sql`customer_id::text = ${cid}`);
   if (email) ors.push(sql`lower(email) = ${email}`);
-  const rows = await db.execute<{ order_number: string; status: string; total_cents: number; created_at: string; paid_at: string | null }>(sql`
-    select order_number, status, total_cents, created_at, paid_at
-    from orders
-    where (${sql.join(ors, sql` or `)}) and status not in ('open','failed','expired','canceled')
-    order by created_at desc
+  /* Regels mee (klant-paneel kassa, 20 aug): de kassier moet op een aankoop
+     kunnen tikken en zien WAT er gekocht is — zonder regels is de historie een
+     lijst bedragen waar je niets mee kunt in een retour- of adviesgesprek. */
+  const rows = await db.execute<{ order_number: string; status: string; total_cents: number; created_at: string; paid_at: string | null; lines: unknown }>(sql`
+    select o.order_number, o.status, o.total_cents, o.created_at, o.paid_at,
+           coalesce(l.lines, '[]'::jsonb) lines
+    from orders o
+    left join lateral (
+      select jsonb_agg(jsonb_build_object(
+        'title', ol.title, 'size', ol.size, 'color', ol.color,
+        'qty', ol.quantity, 'unitPriceCents', ol.unit_price_cents, 'sku', ol.sku
+      )) lines
+      from order_lines ol where ol.order_id = o.id
+    ) l on true
+    where (${sql.join(ors, sql` or `)}) and o.status not in ('open','failed','expired','canceled')
+    order by o.created_at desc
     limit ${lim}
   `);
   return rows.rows.map((r) => ({
@@ -1259,5 +1270,12 @@ export async function listOrdersByCustomerCore(input: { customerId?: string; ema
     totalCents: Number(r.total_cents) || 0,
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : "",
     paidAt: r.paid_at ? new Date(r.paid_at).toISOString() : null,
+    lines: (Array.isArray(r.lines) ? r.lines : []).map((l) => {
+      const x = l as Record<string, unknown>;
+      return {
+        title: String(x.title || ""), size: String(x.size || ""), color: String(x.color || ""),
+        qty: Number(x.qty) || 1, unitPriceCents: Number(x.unitPriceCents) || 0, sku: String(x.sku || ""),
+      };
+    }),
   }));
 }

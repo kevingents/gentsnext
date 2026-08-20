@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
 import { rateLimit, fingerprint } from "@/lib/rate-limit";
-import { validateVoucher, redeemVoucherForRef, releaseVoucherForRef, activeVouchersForCustomer } from "@/lib/vouchers";
+import { validateVoucher, redeemVoucherForRef, releaseVoucherForRef, activeVouchersForCustomer, resolveKlantIdentiteit } from "@/lib/vouchers";
 import { redeemableBalance, pendingBalance, redeemPointsForVoucher } from "@/lib/loyalty-claim";
 import { getDb } from "@/db";
 import { loyaltyEvents } from "@/db/schema";
@@ -78,12 +78,23 @@ export async function POST(req: Request) {
         return NextResponse.json(r, { status: r.ok ? 200 : 409 });
       }
       case "punten-opties": {
-        const klant = String(b.customerId || "");
-        if (!klant) return NextResponse.json({ ok: false, error: "customerId vereist." }, { status: 400 });
+        /* De kassa kan een SRS-klantnummer sturen — eerst oplossen naar het
+           gents.nl-uuid, anders breekt de loyalty_events-query (uuid-kolom) af.
+           Geen gents.nl-account te vinden → nette nullen, geen fout: de kassier
+           ziet dan "geen punten om in te wisselen" in plaats van een storing. */
+        const klant0 = String(b.customerId || "");
+        if (!klant0) return NextResponse.json({ ok: false, error: "customerId vereist." }, { status: 400 });
+        const { uuid: klant } = await resolveKlantIdentiteit({ customerId: klant0, email: b.email });
         const lc = (await getSettings()).loyaltyConfig;
         const centsPerPoint = Number(lc?.redeemCentsPerPoint) > 0 ? Number(lc.redeemCentsPerPoint) : 5;
         const minPoints = Number(lc?.redeemMinPoints) > 0 ? Number(lc.redeemMinPoints) : 500;
         const stepPoints = lc?.redeemStepPoints == null ? 500 : Math.max(0, Number(lc.redeemStepPoints));
+        if (!klant) {
+          return NextResponse.json({
+            ok: true, besteedbaar: 0, inBehandeling: 0, besteedbaarVanaf: null,
+            minPoints, stepPoints, centsPerPoint, opties: [], geenGentsAccount: true,
+          });
+        }
         /* Besteedbaar EN in behandeling. Zonder dat tweede getal ziet de kassier
            "507 spaarpunten" (het totaal, uit api/store/loyalty) maar verschijnt er
            geen inwissel-knop, omdat er maar 303 gevest zijn — en dan lijkt het kapot.
@@ -119,8 +130,12 @@ export async function POST(req: Request) {
         });
       }
       case "punten-inwisselen": {
-        const klant = String(b.customerId || "");
-        if (!klant) return NextResponse.json({ ok: false, error: "customerId vereist." }, { status: 400 });
+        const klant0 = String(b.customerId || "");
+        if (!klant0) return NextResponse.json({ ok: false, error: "customerId vereist." }, { status: 400 });
+        // Zelfde id-resolutie als punten-opties: een SRS-nummer wisselt in op het
+        // gekoppelde gents.nl-account; zonder account is er geen gevest saldo.
+        const { uuid: klant } = await resolveKlantIdentiteit({ customerId: klant0, email: b.email });
+        if (!klant) return NextResponse.json({ ok: false, error: "Deze klant heeft nog geen gents.nl-account — punten inwisselen kan alleen op een gekoppeld account." }, { status: 400 });
         /* redeemPointsForVoucher is de ENIGE plek waar punten in een bon veranderen
            (ook voor de webshop): atomaire afboeking op het geveste saldo, en bij een
            fout draait 'ie de afboeking én het grootboek-event terug. Niet nabouwen. */
@@ -133,6 +148,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: `Onbekende actie "${action}".` }, { status: 400 });
     }
   } catch (e) {
+    /* NIET stil: deze 400 werd door storegents als "geen tegoedbonnen" getoond,
+       waardoor een databasefout wekenlang onzichtbaar bleef (Kevin 20 aug:
+       "ik heb wél vouchers"). De boodschap gaat al terug in de body; hier ook
+       naar de logs zodat een storing in de keten meteen te vinden is. */
+    console.error(`[core/voucher] actie=${action} fout:`, (e as Error).message);
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
   }
 }

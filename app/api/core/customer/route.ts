@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { createPosCustomer, updatePosCustomer } from "@/lib/account";
+import { createPosCustomer, updatePosCustomer, defaultAddressForCustomer } from "@/lib/account";
 import { listOrdersByCustomerCore } from "@/lib/orders";
 import { listPosSalesByCustomerCore } from "@/lib/pos-sales-core";
 
@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; email?: string; firstName?: string; lastName?: string; phone?: string; customerId?: string; limit?: number };
+  let b: { action?: string; email?: string; firstName?: string; lastName?: string; phone?: string; customerId?: string; limit?: number; street?: string; houseNumber?: string; postalCode?: string; city?: string };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -39,8 +39,9 @@ export async function POST(req: Request) {
     if (action === "update") {
       const r = await updatePosCustomer(String(b.customerId || ""), {
         firstName: b.firstName, lastName: b.lastName, email: b.email, phone: b.phone,
+        street: b.street, houseNumber: b.houseNumber, postalCode: b.postalCode, city: b.city,
       });
-      const c = r.updated;
+      const c = r.updated as Record<string, unknown> & typeof r.updated;
       const name = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
       return NextResponse.json({
         ok: true,
@@ -48,15 +49,19 @@ export async function POST(req: Request) {
         /* previous alléén van de gewijzigde velden: genoeg voor een audit-regel
            "van X naar Y", zonder het hele klantrecord terug te sturen. */
         previous: Object.fromEntries(r.changed.map((k) => [k, (r.previous as unknown as Record<string, unknown>)[k] ?? ""])),
-        customer: { customerId: c.id, email: c.email, name, firstName: c.firstName || "", lastName: c.lastName || "", phone: c.phone || "" },
+        customer: {
+          customerId: c.id, email: c.email, name, firstName: c.firstName || "", lastName: c.lastName || "", phone: c.phone || "",
+          street: String(c.street || ""), houseNumber: String(c.houseNumber || ""), postalCode: String(c.postalCode || ""), city: String(c.city || ""),
+        },
       });
     }
     if (action === "overview") {
-      const [orders, sales] = await Promise.all([
+      const [orders, sales, adres] = await Promise.all([
         listOrdersByCustomerCore({ customerId: b.customerId, email: b.email, limit: b.limit }),
         listPosSalesByCustomerCore({ customerId: b.customerId, email: b.email, limit: b.limit }),
+        defaultAddressForCustomer({ customerId: b.customerId, email: b.email }),
       ]);
-      return NextResponse.json({ ok: true, orders, sales });
+      return NextResponse.json({ ok: true, orders, sales, adres });
     }
     return NextResponse.json({ ok: false, error: "Onbekende actie." }, { status: 400 });
   } catch (e) {
