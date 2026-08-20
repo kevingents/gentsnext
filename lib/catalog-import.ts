@@ -106,6 +106,8 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
     images: 0,
     priceHistoryRows: 0,
     archivedStaleHandles: 0,
+    staleVariantsRemoved: 0,
+    staleVariantsDryRun: 0,
   };
 
   /* ── 1. Collecties ───────────────────────────────────────────────────── */
@@ -396,6 +398,93 @@ export async function upsertCatalog(items: ImportProduct[], options: UpsertOptio
   for (const batch of chunked(historyRows, 500)) {
     await db.insert(priceHistory).values(batch);
     stats.priceHistoryRows += batch.length;
+  }
+
+  /* ── 5. Stale varianten opruimen ─────────────────────────────────────── */
+  // Varianten die niet meer in de bronfeed zitten — zoals de "Default Title"-
+  // placeholders (size='default', sku='', € 0,00) uit de allereerste import —
+  // gaan per geïmporteerd product weg. Een rij blijft staan zodra haar
+  // shopify_variant_id óf (niet-lege) sku nog in de binnenkomende lijst
+  // voorkomt. price_history ruimt zichzelf op (cascade-FK op variant_id);
+  // orderregels koppelen op sku, dus verwijderen breekt geen orders.
+  //
+  // In het lossy bootstrap-pad (preserveExisting) alleen dry-run-loggen: de
+  // cache-union mist varianten zonder sku/barcode/SRS-nummer, dus daar zou
+  // verwijderen echte varianten raken.
+  const keepByProduct = new Map<string, { ids: Set<string>; skus: Set<string> }>();
+  for (const item of items) {
+    const productId = productIdByShopifyId.get(item.shopifyProductId);
+    // Vangrail: producten zonder binnenkomende varianten niet opschonen —
+    // een lege feed-lijst mag nooit een heel product leegvegen.
+    if (!productId || item.variants.length === 0) continue;
+    const ids = new Set<string>();
+    const skus = new Set<string>();
+    for (const v of item.variants) {
+      if (v.shopifyVariantId) ids.add(v.shopifyVariantId);
+      if (v.sku) skus.add(v.sku);
+    }
+    keepByProduct.set(productId, { ids, skus });
+  }
+
+  type StaleRow = { id: string; productId: string; shopifyVariantId: string | null; sku: string; size: string };
+  const staleByProduct = new Map<string, StaleRow[]>();
+  const totalByProduct = new Map<string, number>();
+  for (const batch of chunked([...keepByProduct.keys()], 500)) {
+    const rows = await db
+      .select({
+        id: productVariants.id,
+        productId: productVariants.productId,
+        shopifyVariantId: productVariants.shopifyVariantId,
+        sku: productVariants.sku,
+        size: productVariants.size,
+      })
+      .from(productVariants)
+      .where(inArray(productVariants.productId, batch));
+    for (const row of rows) {
+      totalByProduct.set(row.productId, (totalByProduct.get(row.productId) || 0) + 1);
+      const keep = keepByProduct.get(row.productId);
+      if (!keep) continue;
+      const matchesId = row.shopifyVariantId ? keep.ids.has(row.shopifyVariantId) : false;
+      const matchesSku = row.sku ? keep.skus.has(row.sku) : false;
+      if (matchesId || matchesSku) continue;
+      const list = staleByProduct.get(row.productId) || [];
+      list.push(row);
+      staleByProduct.set(row.productId, list);
+    }
+  }
+
+  const staleRows: StaleRow[] = [];
+  for (const [productId, rows] of staleByProduct) {
+    // Vangrail: nooit álle varianten van een product wegvagen. Kan alleen als
+    // de upsert hierboven niets opleverde (defecte feed) — overslaan + melden.
+    if (rows.length >= (totalByProduct.get(productId) || 0)) {
+      console.warn(
+        `[catalog-import] opruimen overgeslagen voor product ${productId}: ` +
+          `alle ${rows.length} varianten zouden verdwijnen (defecte feed?)`
+      );
+      continue;
+    }
+    staleRows.push(...rows);
+  }
+
+  if (staleRows.length) {
+    const label = preserve ? "dry-run (preserveExisting), NIET verwijderd" : "wordt verwijderd";
+    console.log(`[catalog-import] ${staleRows.length} stale variant(en) — ${label}:`);
+    for (const row of staleRows.slice(0, 25)) {
+      console.log(
+        `  - product ${row.productId} sku='${row.sku}' size='${row.size}' gid=${row.shopifyVariantId || "(leeg)"}`
+      );
+    }
+    if (staleRows.length > 25) console.log(`  … en ${staleRows.length - 25} meer`);
+
+    if (preserve) {
+      stats.staleVariantsDryRun += staleRows.length;
+    } else {
+      for (const batch of chunked(staleRows.map((r) => r.id), 500)) {
+        await db.delete(productVariants).where(inArray(productVariants.id, batch));
+        stats.staleVariantsRemoved += batch.length;
+      }
+    }
   }
 
   return stats;
