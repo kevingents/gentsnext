@@ -33,10 +33,18 @@ export async function POST(req: Request) {
     contact?: Record<string, string>;
     items?: CheckoutItem[];
     storeName?: string;
-    /** `staff` mag de kassa nog meesturen maar wordt niet meer vastgelegd
-     *  (de blob-sidecar pos/orders.json is opgeruimd; attributie = sold_by_store). */
+    /** `staff`/`staffId` mag de kassa meesturen maar wordt hier niet vastgelegd
+     *  (de blob-sidecar pos/orders.json is opgeruimd; attributie = sold_by_store).
+     *  De medewerker op de SRS-uitwisselings-bon regelt storegents (transfer-request). */
+    staff?: string;
+    staffId?: string;
     deliveryMethod?: string;
     pickupStore?: string;
+    /** Bij BEZORGEN: de winkel die het artikel heeft en verzendt ("komt uit
+     *  winkel X", kassa #544). De fulfilment-planning pint het plan op deze
+     *  winkel zodat order + verzendlabel dáár landen — niet bij een filiaal dat
+     *  de allocator zelf kiest, want de uitwisseling loopt al bij deze winkel. */
+    shipFromStore?: string;
     paymentMode?: string;
     conceptMail?: boolean;
     voorverkoop?: boolean;
@@ -83,6 +91,9 @@ export async function POST(req: Request) {
          eerder stil weggegooid, waardoor voorverkoop altijd op "Niet meer op
          voorraad" stuk liep. */
       voorverkoop: body?.voorverkoop === true,
+      // Alleen bij bezorgen: bij afhalen pint pickupStore het plan al (en komt het
+      // artikel via de uitwisseling naar de afhaalwinkel toe).
+      shipFromStore: isPickup ? "" : String(body?.shipFromStore || "").trim(),
     });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Bestelling mislukt." }, { status: 400 });

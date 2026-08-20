@@ -525,6 +525,10 @@ export const orders = pgTable(
     /** Verkopende winkel bij een kassa-bestelling (endless aisle): de order wordt uit een ander
      *  filiaal/magazijn geleverd, maar de OMZET hoort bij de winkel die 'm verkocht. '' = webshop. */
     soldByStore: text("sold_by_store").notNull().default(""),
+    /** Kassa-bestelling met VASTE leverwinkel (de kassier koos "komt uit winkel X"):
+     *  de allocatie mag dan niet zelf een filiaal kiezen — de uitwisseling naar de
+     *  verkopende winkel loopt al bij déze winkel. Alleen bij bezorgen; '' = vrij. */
+    shipFromStore: text("ship_from_store").notNull().default(""),
     voucherCode: text("voucher_code").notNull().default(""),
     discountCents: integer("discount_cents").notNull().default(0),
     /** Cadeaubon als betaalmiddel: ingezette code + afgeboekt bedrag (centen). */
