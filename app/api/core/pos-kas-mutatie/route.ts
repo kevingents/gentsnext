@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreAuth } from "@/lib/store-core-token";
-import { recordKasMutatieCore, listKasMutatiesCore, backfillKasMutatiesCore } from "@/lib/pos-kas-mutaties-core";
+import { recordKasMutatieCore, listKasMutatiesCore, attachKasBonCore, backfillKasMutatiesCore } from "@/lib/pos-kas-mutaties-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,14 +10,25 @@ export const runtime = "nodejs";
  * Neon-core (vervangt de storegents-blob admin/pos-kas-mutaties.json). Action-based.
  * Auth: STORE_CORE_TOKEN.
  *
- *   record   { mutatie }        → { ok, mutatie, deduped? }  (idempotent op id)
- *   list     { store, date }    → { ok, mutaties }
- *   backfill { mutaties }       → { ok, inserted }           (eenmalige blob-migratie)
+ *   record     { mutatie }         → { ok, mutatie, deduped? }  (idempotent op id)
+ *   list       { store, date }     → { ok, mutaties }
+ *   attach-bon { id, bon, door }   → { ok, mutatie }  (factuur naleveren op een uitkas-mutatie;
+ *                                    géén geldwijziging — bedrag/type/actor blijven onaantastbaar)
+ *   backfill   { mutaties }        → { ok, inserted }           (eenmalige blob-migratie)
  */
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; mutatie?: Record<string, unknown>; mutaties?: Record<string, unknown>[]; store?: string; date?: string };
+  let b: {
+    action?: string;
+    mutatie?: Record<string, unknown>;
+    mutaties?: Record<string, unknown>[];
+    store?: string;
+    date?: string;
+    id?: string;
+    bon?: { url?: string; naam?: string; type?: string; grootte?: number | null };
+    door?: { name?: string; userId?: string };
+  };
   try { b = (await req.json()) as typeof b; } catch { return NextResponse.json({ ok: false, error: "Ongeldige body." }, { status: 400 }); }
   const action = String(b?.action || "");
 
@@ -27,6 +38,8 @@ export async function POST(req: Request) {
         return NextResponse.json(await recordKasMutatieCore(b.mutatie || {}));
       case "list":
         return NextResponse.json({ ok: true, mutaties: await listKasMutatiesCore(String(b.store || ""), String(b.date || "")) });
+      case "attach-bon":
+        return NextResponse.json(await attachKasBonCore(String(b.id || ""), b.bon || {}, b.door || {}));
       case "backfill":
         return NextResponse.json(await backfillKasMutatiesCore(b.mutaties || []));
       default:
