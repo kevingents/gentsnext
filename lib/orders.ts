@@ -771,7 +771,14 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
   // administratie, geen tracking-cookie — dus consent-vrij, net als de
   // afspraak-boeking. De statusovergang is al idempotent (whereClause), dus
   // een dubbele webhook levert geen dubbel event op.
-  if (orderStatus === "paid" && updated.length) {
+  /* AAN DE KASSA AFGEREKEND (synthetische ref `register-…`): géén purchase-event.
+     Het geld zit in de kassa-verkoop van de winkel; dit event voedt de site-omzet
+     en de funnel, en zou de bestelling daar als webaankoop dubbel laten tellen
+     (zelfde dedup als GEEN_KASSA_OMZET in lib/reports). Het spaarpunten-blok
+     verderop blijft gewoon draaien; de profiel-verversing in dit blok was voor
+     kassa-orders toch al een no-op (customerId is daar leeg). */
+  const kassaAfgerekend = molliePaymentId.startsWith("register-");
+  if (orderStatus === "paid" && updated.length && !kassaAfgerekend) {
     for (const o of updated) {
       recordEvents([
         {
