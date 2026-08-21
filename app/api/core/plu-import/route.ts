@@ -42,7 +42,7 @@ async function schrijfSetting(id: string, data: unknown): Promise<void> {
 export async function POST(req: Request) {
   if (!(await coreAuth(req))) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let b: { action?: string; host?: string; rows?: Rij[]; rijen?: number; max?: number; echt?: boolean };
+  let b: { action?: string; host?: string; rows?: Rij[]; rijen?: number; max?: number; echt?: boolean; fout?: string };
   try {
     b = (await req.json()) as typeof b;
   } catch {
@@ -119,6 +119,15 @@ export async function POST(req: Request) {
         preview: "error" in preview ? { error: preview.error } : { kandidaten: preview.kandidaten, voorbeeld: preview.producten.slice(0, 10) },
       });
       return NextResponse.json({ ok: true, totaal, preview });
+    }
+
+    if (action === "fout") {
+      /* Kassa meldt waarom de upload afbrak (agent-fout, te kleine dump) — de
+         stille variant kostte op 21-8 vijf uur zoeken. Alleen registreren; de
+         claim blijft staan en verloopt vanzelf zodat een ander het overneemt. */
+      await schrijfSetting("plu-upload-fout", { at: new Date().toISOString(), host: clean(b.host), fout: clean(b.fout).slice(0, 300) });
+      console.warn(`[core/plu-import] upload-fout ${clean(b.host)}: ${clean(b.fout).slice(0, 200)}`);
+      return NextResponse.json({ ok: true });
     }
 
     if (action === "status") {
