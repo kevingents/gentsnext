@@ -13,7 +13,12 @@ import { posKasMutaties } from "@/db/schema";
 
 type Mutatie = Record<string, unknown> & { id?: string; store?: string; date?: string; type?: string };
 
-const TYPES = ["inkas", "uitkas", "kluis-in", "kluis-uit"];
+/* Moet elk type kennen dat storegents boekt — een type dat hier ontbreekt wordt
+   geweigerd en belandt dan alleen in de blob-spiegel (coreSyncFailed), waarna de
+   kassa-lijst 'm niet meer toont: die leest Neon-first. Zo verdween de eerste
+   sealbag-uit van Den Bosch (21 aug, € 2.950) uit beeld terwijl 'ie wel geboekt
+   was. kluis-sealbag = kluis → waardetransport (lade ongemoeid, kluis −). */
+const TYPES = ["inkas", "uitkas", "kluis-in", "kluis-uit", "kluis-sealbag"];
 
 function rowToMutatie(r: { data: unknown }): Mutatie {
   return (r?.data ?? {}) as Mutatie;
