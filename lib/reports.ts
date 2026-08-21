@@ -19,6 +19,15 @@ export function parseRange(sp: { from?: string; to?: string }): Range {
 
 const PAID = sql`status in ('paid','shipped','ready_pickup','delivered')`;
 
+/* AAN DE KASSA AFGEREKENDE winkel-orders (kassa-klantbestelling, synthetische
+   betaalref `register-…`) horen NIET in de site-omzet: het geld zit al in de
+   kassa-dagstaat van de winkel, dus hier meetellen = dubbel zodra site- en
+   winkelomzet worden opgeteld. De ref bestond precies hiervoor (lib/orders.ts,
+   markRegisterPaid) maar werd nergens gebruikt. Winkel-orders via BETAALLINK
+   (sold_by_store gevuld, echte Mollie-ref) tellen hier bewust WEL mee — daar is
+   dit de enige plek waar die omzet bestaat. */
+const GEEN_KASSA_OMZET = sql`(mollie_payment_id is null or mollie_payment_id not like 'register-%')`;
+
 /* ── Statistieken / KPI's ── */
 
 export type Kpis = {
@@ -42,13 +51,13 @@ export async function getKpis(r: Range): Promise<Kpis> {
       select coalesce(sum(total_cents),0) rev, count(*) n,
              coalesce(sum(discount_cents),0) disc, coalesce(sum(giftcard_cents),0) gift,
              (select coalesce(sum(quantity),0) from order_lines ol join orders o2 on o2.id=ol.order_id
-               where ${PAID} and o2.created_at between ${r.from} and ${r.to}) items
-      from orders where ${PAID} and created_at between ${r.from} and ${r.to}`)
+               where ${PAID} and ${GEEN_KASSA_OMZET} and o2.created_at between ${r.from} and ${r.to}) items
+      from orders where ${PAID} and ${GEEN_KASSA_OMZET} and created_at between ${r.from} and ${r.to}`)
   ).rows;
   const [ref] = (
     await db.execute<{ rev: string; n: string }>(sql`
       select coalesce(sum(total_cents),0) rev, count(*) n from orders
-      where status='refunded' and created_at between ${r.from} and ${r.to}`)
+      where status='refunded' and ${GEEN_KASSA_OMZET} and created_at between ${r.from} and ${r.to}`)
   ).rows;
   const [nc] = (
     await db.execute<{ n: string }>(sql`select count(*) n from customers where created_at between ${r.from} and ${r.to}`)
@@ -80,7 +89,7 @@ export async function revenueByDay(r: Range): Promise<{ day: string; revenueCent
   const rows = await db.execute<{ dag: string; rev: string; n: string }>(sql`
     select to_char(date_trunc('day', created_at),'YYYY-MM-DD') as dag,
            coalesce(sum(total_cents),0) rev, count(*) n
-    from orders where ${PAID} and created_at between ${r.from} and ${r.to}
+    from orders where ${PAID} and ${GEEN_KASSA_OMZET} and created_at between ${r.from} and ${r.to}
     group by 1 order by 1`);
   return rows.rows.map((x) => ({ day: x.dag, revenueCents: Number(x.rev) || 0, orders: Number(x.n) || 0 }));
 }
@@ -91,7 +100,7 @@ export async function topProducts(r: Range, limit = 20): Promise<{ title: string
     select coalesce(nullif(ol.title,''), ol.sku) title, ol.sku,
            sum(ol.quantity) qty, sum(ol.unit_price_cents*ol.quantity) rev
     from order_lines ol join orders o on o.id=ol.order_id
-    where ${PAID} and o.created_at between ${r.from} and ${r.to}
+    where ${PAID} and ${GEEN_KASSA_OMZET} and o.created_at between ${r.from} and ${r.to}
     group by 1, ol.sku order by rev desc limit ${limit}`);
   return rows.rows.map((x) => ({ title: x.title, sku: x.sku, qty: Number(x.qty) || 0, revenueCents: Number(x.rev) || 0 }));
 }
@@ -106,7 +115,7 @@ export async function revenueByCategory(r: Range): Promise<{ category: string; q
     join orders o on o.id=ol.order_id
     left join product_variants v on v.sku=ol.sku
     left join products p on p.id=v.product_id
-    where o.status in ('paid','shipped','ready_pickup','delivered') and o.created_at between ${r.from} and ${r.to}
+    where o.status in ('paid','shipped','ready_pickup','delivered') and ${GEEN_KASSA_OMZET} and o.created_at between ${r.from} and ${r.to}
     group by 1 order by rev desc`);
   return rows.rows.map((x) => ({ category: x.cat, qty: Number(x.qty) || 0, revenueCents: Number(x.rev) || 0 }));
 }
@@ -313,10 +322,10 @@ export async function returnsReport(r: Range): Promise<ReturnsReport> {
   const [agg] = (
     await db.execute<{ n: string; val: string }>(sql`
       select count(*) n, coalesce(sum(total_cents),0) val from orders
-      where status='refunded' and created_at between ${r.from} and ${r.to}`)
+      where status='refunded' and ${GEEN_KASSA_OMZET} and created_at between ${r.from} and ${r.to}`)
   ).rows;
   const [paid] = (
-    await db.execute<{ n: string }>(sql`select count(*) n from orders where ${PAID} and created_at between ${r.from} and ${r.to}`)
+    await db.execute<{ n: string }>(sql`select count(*) n from orders where ${PAID} and ${GEEN_KASSA_OMZET} and created_at between ${r.from} and ${r.to}`)
   ).rows;
   const cats = (
     await db.execute<{ cat: string; qty: string; orders: string }>(sql`
