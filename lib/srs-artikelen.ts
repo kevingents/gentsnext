@@ -404,6 +404,25 @@ export async function maakNieuweArtikelen(
     return { error: `SRS-feed bevat maar ${feed.rijen.length} rijen — aanmaken geweigerd (storing?).` };
   }
 
+  const kern = await maakUitRijen(feed.rijen, { droogdraaien, max });
+  return { feedRijen: feed.rijen.length, delta, ...kern };
+}
+
+/** Resultaat van de aanmaak-kern, zonder de feed-specifieke velden. */
+export type UitRijenResultaat = Omit<NieuwArtikelResultaat, "feedRijen" | "delta">;
+
+/**
+ * De AANMAAK-KERN, losgetrokken uit maakNieuweArtikelen (21 aug) zodat 'ie ook
+ * op andere bronnen kan draaien — concreet de StorePos-PLU-catalogus
+ * (lib/plu-artikelen.ts), de reserveroute nu SRS' eigen export stuk is. Alle
+ * veiligheden zitten HIER: nooit aanmaken als één barcode al als variant-sku
+ * bestaat, één product per (artikelnummer, kleur-id), status draft, en
+ * attributes.bron vertelt waar het vandaan kwam.
+ */
+export async function maakUitRijen(
+  bronRijen: SrsArtikel[],
+  { droogdraaien = false, max = 200, bron = "SRS" }: { droogdraaien?: boolean; max?: number; bron?: string } = {},
+): Promise<UitRijenResultaat> {
   const db = getDb();
   /* Wat we al kennen. Sku's als Set in het geheugen: ~23k strings, en dan is de
      controle per groep een lookup i.p.v. een query per artikel. */
@@ -421,10 +440,10 @@ export async function maakNieuweArtikelen(
     (await db.execute<{ handle: string }>(sql`select handle from products`)).rows.map((r) => r.handle),
   );
 
-  /* Groepeer de feed op (artikelnummer, kleur-id); binnen een groep wint per
+  /* Groepeer de bron op (artikelnummer, kleur-id); binnen een groep wint per
      barcode de laatste rij (zelfde afspraak als bij het koppelen). */
   const groepen = new Map<string, Map<string, SrsArtikel>>();
-  for (const r of feed.rijen) {
+  for (const r of bronRijen) {
     if (!r.barcode || !r.artikelNummer) continue;
     const key = `${normaliseerArtikelNummer(r.artikelNummer)}|${r.kleurId || ""}`;
     const g = groepen.get(key) ?? new Map<string, SrsArtikel>();
@@ -441,15 +460,13 @@ export async function maakNieuweArtikelen(
   }
 
   const teDoen = nieuw.slice(0, Math.max(1, max));
-  const resultaat: NieuwArtikelResultaat = {
-    feedRijen: feed.rijen.length,
+  const resultaat: UitRijenResultaat = {
     kandidaten: nieuw.length,
     aangemaakt: 0,
     varianten: 0,
     restant: Math.max(0, nieuw.length - teDoen.length),
     producten: [],
     droogdraaien,
-    delta,
   };
 
   for (const { key, rijen } of teDoen) {
@@ -488,7 +505,7 @@ export async function maakNieuweArtikelen(
 
     /* Alleen gevulde attributen: de facetten tonen '(leeg)' voor wat ontbreekt,
        en een lege sleutel erin schrijven maakt dat niet beter. */
-    const attributes: Record<string, string> = { bron: "SRS" };
+    const attributes: Record<string, string> = { bron };
     const zet = (k: string, v: string) => {
       if ((v || "").trim()) attributes[k] = v.trim();
     };
