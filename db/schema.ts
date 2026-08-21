@@ -1404,7 +1404,7 @@ export const posKasMutaties = pgTable(
     id: text("id").primaryKey(), // km-<...> id van de kassa
     store: text("store").notNull(),
     date: text("date").notNull(), // YYYY-MM-DD (Europa/Amsterdam)
-    type: text("type").notNull(), // inkas | uitkas | kluis-in | kluis-uit
+    type: text("type").notNull(), // inkas | uitkas | kluis-in | kluis-uit | kluis-sealbag
     amountCents: integer("amount_cents").notNull().default(0),
     data: jsonb("data").notNull(), // de volledige mutatie (incl. reason + actor)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
