@@ -553,6 +553,10 @@ export const orders = pgTable(
     fulfillmentPlan: jsonb("fulfillment_plan"),
     /** 'pending' | 'planned' | 'pushed' | 'partial' | 'failed'. */
     fulfillmentStatus: text("fulfillment_status").notNull().default("pending"),
+    /** DHL-trackingcode van het verzendlabel (order-docs schrijft 'm bij aanmaak;
+     *  herprint overschrijft — de laatste code zit op de doos). Voor de
+     *  kassa-klantkaart ("waar is deze bestelling?") en klantcontact. */
+    dhlTracking: text("dhl_tracking").notNull().default(""),
     /** Orderbevestigingsmail verstuurd (idempotent — webhook kan dubbel komen). */
     confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
     /** De aanraking die déze order opleverde, vastgevroren bij het bestellen:

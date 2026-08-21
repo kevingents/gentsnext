@@ -529,10 +529,13 @@ export async function getProfileData(customerId: string, email = "") {
         pointsEarned: s.pointsEarned,
         kind: (s.totalCents < 0 ? "retour" : "sale") as "sale" | "retour",
         receiptRef: s.receiptId || "",
+        /* Bron mee: alleen op een eigen kassabon (bron 'kassa') kan de kassa
+           acties doen — bon opnieuw mailen, retour starten op sale-id. */
+        bron: "srs" as const,
         lines: ((s.lines ?? []) as { title: string; size: string; color: string; qty: number; unitPriceCents: number }[])
           .map((l) => ({ ...l, sku: "", barcode: "" })),
       })),
-    ...posBuys,
+    ...posBuys.map((b) => ({ ...b, bron: "kassa" as const })),
   ]
     .sort((a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime())
     .slice(0, 50);
