@@ -93,16 +93,30 @@ export async function POST(req: Request) {
         orders: profiel.onlineOrders
           .filter((o) => !KASSA_ORDER_WEG.includes(String(o.status)))
           .slice(0, lim)
-          .map((o) => ({
-            orderNumber: o.orderNumber, status: o.status, totalCents: o.totalCents,
-            createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : "",
-            lines: o.lines.map(regel),
-          })),
+          .map((o) => {
+            /* "Waar is deze bestelling?" — de herkomst per zending. Bij een
+               multi-winkel-split zit de gereed-status al in o.shipments
+               (deelzendingen); bij één zending lezen we de herkomst uit het
+               kale plan, zonder gereed-uitspraak. */
+            const plan = o.fulfillmentPlan as { shipments?: { store?: string; isWarehouse?: boolean }[] } | null;
+            const zendingen = o.shipments && o.shipments.length
+              ? o.shipments.map((s) => ({ store: s.store, magazijn: s.isWarehouse, gereed: s.gereed }))
+              : (plan?.shipments || []).map((s) => ({ store: String(s.store || ""), magazijn: !!s.isWarehouse, gereed: null as boolean | null }));
+            return {
+              orderNumber: o.orderNumber, status: o.status, totalCents: o.totalCents,
+              createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : "",
+              deliveryMethod: o.deliveryMethod || "standard",
+              pickupStore: o.pickupStore || "",
+              dhlTracking: o.dhlTracking || "",
+              zendingen,
+              lines: o.lines.map(regel),
+            };
+          }),
         sales,
         /* Winkelaankopen = eigen kassabonnen + SRS-import, ontdubbeld op bonnummer
            (de kassa boekt naar SRS; de import haalt dezelfde bon later op). */
         winkelaankopen: profiel.storeBuys.slice(0, lim).map((s) => ({
-          id: s.id, storeName: s.storeName, kind: s.kind, receiptRef: s.receiptRef,
+          id: s.id, storeName: s.storeName, kind: s.kind, receiptRef: s.receiptRef, bron: s.bron,
           purchasedAt: s.purchasedAt ? new Date(s.purchasedAt).toISOString() : "",
           totalCents: s.totalCents,
           lines: s.lines.map(regel),

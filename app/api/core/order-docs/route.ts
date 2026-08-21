@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { coreAuth } from "@/lib/store-core-token";
+import { getDb } from "@/db";
+import { orders as ordersTable } from "@/db/schema";
 import { getOrderByNumber } from "@/lib/orders";
 import { renderPackingSlip } from "@/lib/packing-slip";
 import { dhlConfigured, createShipmentLabel } from "@/lib/dhl";
@@ -71,6 +74,17 @@ export async function POST(req: Request) {
       email: order.email || undefined,
     });
     label = { configured: true, ok: l.ok, base64: l.labelBase64, url: l.labelUrl, tracking: l.tracking, error: l.error };
+    /* Trackingcode op de order vastleggen — tot nu toe ging die alleen terug
+       naar de winkel-UI en was 'm daarna kwijt, waardoor de klantkaart nooit
+       "volg dit pakket" kon tonen. Fail-soft: het label is er al, een gemiste
+       schrijf mag het printen niet blokkeren. Herprint overschrijft bewust. */
+    if (l.ok && l.tracking) {
+      try {
+        await getDb().update(ordersTable).set({ dhlTracking: l.tracking, updatedAt: new Date() }).where(eq(ordersTable.id, order.id));
+      } catch (e) {
+        console.warn(`[order-docs] tracking niet opgeslagen voor ${orderNumber}:`, (e as Error).message);
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, packingSlipHtml, label, pickStatus });
