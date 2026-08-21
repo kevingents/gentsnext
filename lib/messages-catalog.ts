@@ -1531,6 +1531,7 @@ export const SITE_CATALOG: Record<string, string> = {
   "mail.order.headingNoName": "Bedankt voor je bestelling",
   "mail.order.intro": "We hebben je betaling ontvangen en gaan voor je aan de slag. Hieronder vind je je bestelling.",
   "mail.order.remaining": "Nog te betalen",
+  "mail.order.registerPaid": "Je hebt deze bestelling in de winkel afgerekend — het bedrag staat op je kassabon.",
   "mail.order.points": "Je spaart {points} punten met deze bestelling",
   "mail.order.pointsBody":
     "Bekijk en verzilver ze in je {link}. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.",

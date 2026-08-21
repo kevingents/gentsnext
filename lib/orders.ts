@@ -818,7 +818,11 @@ export async function applyPaymentStatus(molliePaymentId: string, paymentStatus:
      een retry nooit meer langskwamen. Punten hingen zo aan e-mail-infrastructuur.
      creditOrderLoyalty is idempotent op (refType, refId) → dubbel boeken kan niet.
      Non-fataal: een webhook mag hier nooit op stuklopen. */
-  if (orderStatus === "paid" && updated.length) {
+  /* NIET bij een kassa-order (register-…): de kassabon kent de punten al toe over
+     het bedrag dat de klant ÉCHT betaalde. De order draagt catalogusprijzen +
+     verzendkosten — punten hierover zijn dubbel én te hoog (Rick, 21 aug: "je
+     spaart 13 punten" bij een 100%-korting-verkoop van € 0). */
+  if (orderStatus === "paid" && updated.length && !kassaAfgerekend) {
     for (const o of updated) {
       if (!o.customerId) continue; // gast — punten volgen bij account-koppeling (claimGuestData)
       try {
@@ -918,7 +922,14 @@ export async function sendOrderConfirmationOnce(molliePaymentId: string): Promis
     const locale: Locale = isLocale(String(order.locale || "")) ? (order.locale as Locale) : DEFAULT_LOCALE;
 
     nietsVerstuurd = false; // vanaf hier is verzending onzeker
-    const ok = await sendOrderConfirmation(order, lines, recs, locale);
+    /* Kassa-order (register-…): de order draagt catalogusprijzen + verzendkosten,
+       maar de klant rekende aan de kassa af — mogelijk met korting. De mail moet
+       dan geen bedragen/punten tonen (Rick, 21 aug: € 13,90 in de mail bij een
+       € 0-verkoop). */
+    const ok = await sendOrderConfirmation(
+      { ...order, kassaAfgerekend: molliePaymentId.startsWith("register-") },
+      lines, recs, locale,
+    );
     if (!ok) {
       // De mailer zegt zelf: niet verstuurd. Claim mag terug, en we gooien door
       // zodat de betaalprovider het straks opnieuw aanbiedt.

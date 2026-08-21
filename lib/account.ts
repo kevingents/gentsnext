@@ -435,10 +435,13 @@ export async function claimGuestData(customerId: string, email: string): Promise
   // dus opnieuw inloggen schrijft nooit dubbel bij. Non-fataal.
   try {
     const linked = await db
-      .select({ id: orders.id, totalCents: orders.totalCents, status: orders.status, paidAt: orders.paidAt, createdAt: orders.createdAt })
+      .select({ id: orders.id, totalCents: orders.totalCents, status: orders.status, paidAt: orders.paidAt, createdAt: orders.createdAt, molliePaymentId: orders.molliePaymentId })
       .from(orders)
       .where(eq(orders.customerId, customerId));
     for (const o of linked) {
+      /* Kassa-orders (register-…) niet: de kassabon kent de punten al toe over het
+         bedrag dat de klant écht betaalde — de order draagt catalogusprijzen. */
+      if (String(o.molliePaymentId || "").startsWith("register-")) continue;
       await creditOrderLoyalty(customerId, { id: o.id, totalCents: o.totalCents, status: String(o.status), paidAt: o.paidAt, createdAt: o.createdAt });
       // Was dit (gast-)order al (deels) geretourneerd vóór het koppelen? Draai die
       // punten alsnog terug — anders krijgt de klant punten voor teruggestuurde waar.

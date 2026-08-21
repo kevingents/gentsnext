@@ -96,6 +96,10 @@ type OrderInfo = {
    *  een expliciete "Account aanmaken"-knop — de tekst-uitnodiging alleen bleek te
    *  passief. Met account: alleen de bestaande account-link. */
   customerId?: string | null;
+  /** Aan de kassa afgerekend ("Bestel voor klant"): de order-bedragen zijn dan
+   *  catalogusprijzen, niet wat de klant betaalde (korting!) — de mail toont
+   *  geen prijzen/punten maar "afgerekend in de winkel". */
+  kassaAfgerekend?: boolean;
 };
 
 type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
@@ -127,7 +131,14 @@ function orderHtml(
   const site = getSiteUrl();
   // Links met locale-prefix: de mail wordt ook geopend zonder onze taal-cookie.
   const url = (path: string) => `${site}${localizedPath(path, locale)}`;
-  const points = Math.max(0, Math.floor(order.totalCents / 100)); // 1 punt per euro
+  /* AAN DE KASSA AFGEREKEND (Rick, 21 aug): de order draagt catalogusprijzen +
+     verzendkosten, maar de klant betaalde aan de kassa — mogelijk met korting
+     (100%-korting-test: mail toonde € 13,90 terwijl er € 0 was betaald). De
+     bedragen van de order zijn hier dus niet wat de klant betaalde → géén
+     prijzen en géén puntenblok (de kassabon kent de punten al toe over het
+     échte bedrag); in plaats daarvan één regel "afgerekend in de winkel". */
+  const kassa = order.kassaAfgerekend === true;
+  const points = kassa ? 0 : Math.max(0, Math.floor(order.totalCents / 100)); // 1 punt per euro
   const rows = lines
     .map(
       (l) => `<tr>
@@ -135,7 +146,7 @@ function orderHtml(
           ${l.roleLabel ? `<span style="color:#8B8B8B">${l.roleLabel}: </span>` : ""}${l.title}
           <div style="color:#8B8B8B;font-size:12px">${[l.color, l.size && t("mail.line.size", { size: l.size }), `${l.quantity}×`].filter(Boolean).join(" · ")}</div>
         </td>
-        <td align="right" style="padding:8px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${euro(l.unitPriceCents * l.quantity)}</td>
+        ${kassa ? "" : `<td align="right" style="padding:8px 0;border-bottom:1px solid #E6E4DF;font:14px Arial,sans-serif;color:#0A0A0A">${euro(l.unitPriceCents * l.quantity)}</td>`}
       </tr>`
     )
     .join("");
@@ -153,11 +164,13 @@ function orderHtml(
         </td></tr>
         <tr><td style="padding:8px 28px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}
-            <tr><td style="padding:10px 0 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("cart.subtotal")}</td><td align="right" style="padding:10px 0 0;font:14px Arial,sans-serif;color:#0A0A0A">${euro(order.subtotalCents)}</td></tr>
+            ${kassa
+              ? `<tr><td style="padding:10px 0 0;font:14px Arial,sans-serif;color:#0A0A0A">${t("mail.order.registerPaid")}</td></tr>`
+              : `<tr><td style="padding:10px 0 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("cart.subtotal")}</td><td align="right" style="padding:10px 0 0;font:14px Arial,sans-serif;color:#0A0A0A">${euro(order.subtotalCents)}</td></tr>
             ${order.discountCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("checkout.discount")}</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.discountCents)}</td></tr>` : ""}
             <tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("checkout.shipping")}</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">${order.shippingCents === 0 ? t("checkout.free") : euro(order.shippingCents)}</td></tr>
             ${order.giftcardCents ? `<tr><td style="padding:4px 0;font:14px Arial,sans-serif;color:#8B8B8B">${t("checkout.giftcard_label")}</td><td align="right" style="padding:4px 0;font:14px Arial,sans-serif;color:#0A0A0A">− ${euro(order.giftcardCents)}</td></tr>` : ""}
-            <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${order.giftcardCents ? t("mail.order.remaining") : t("checkout.total")}</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>
+            <tr><td style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${order.giftcardCents ? t("mail.order.remaining") : t("checkout.total")}</td><td align="right" style="padding:8px 0;border-top:1px solid #E6E4DF;font:600 15px Arial,sans-serif;color:#0A0A0A">${euro(order.totalCents)}</td></tr>`}
           </table>
         </td></tr>
         ${
