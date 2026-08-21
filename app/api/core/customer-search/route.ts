@@ -55,11 +55,34 @@ export async function POST(req: Request) {
      code eronder is "GENTS 1A2B3C4D"; allebei matchten hiervoor nergens op, want
      deze zoek doet ILIKE op e-mail/naam. Een scan gaf dus stil "geen klant". */
   const ref = klantReferentie(q);
-  const where = ref?.uuid
-    ? sql`c.id = ${ref.uuid}::uuid`
-    : ref?.prefix8
-      ? sql`c.id::text like ${ref.prefix8 + "%"}`
-      : sql`c.email ilike ${term} or (c.first_name || ' ' || c.last_name) ilike ${term}`;
+  /* POSTCODE(+HUISNUMMER) EN TELEFOON (Den Bosch, 21 aug: klant schrijft zich in
+     aan de kassa en is 10 minuten later onvindbaar op postcode). De kassa zoekt
+     bewust niet op naam (privacy) maar op postcode/telefoon — en die matchten
+     hier nergens, dus een verse inschrijving (nog zonder SRS-nummer, de sync
+     loopt per half uur) bestond voor de zoek gewoon niet. */
+  const pc = /^([1-9][0-9]{3})\s*([a-zA-Z]{2})\s*([0-9]+[a-zA-Z0-9\-/]*)?$/.exec(q);
+  const telKaal = q.replace(/[\s\-().+]/g, "");
+  const isTel = /^[0-9\s\-().+]+$/.test(q) && /^(31|0)?[0-9]{9,10}$/.test(telKaal);
+  let where;
+  if (ref?.uuid) {
+    where = sql`c.id = ${ref.uuid}::uuid`;
+  } else if (ref?.prefix8) {
+    where = sql`c.id::text like ${ref.prefix8 + "%"}`;
+  } else if (pc) {
+    const postcode = (pc[1] + pc[2]).toUpperCase();
+    const huisnr = String(pc[3] || "").toUpperCase();
+    where = huisnr
+      ? sql`exists (select 1 from customer_addresses a where a.customer_id = c.id and replace(upper(a.postal_code), ' ', '') = ${postcode} and upper(a.house_number) = ${huisnr})`
+      : sql`exists (select 1 from customer_addresses a where a.customer_id = c.id and replace(upper(a.postal_code), ' ', '') = ${postcode})`;
+  } else if (isTel) {
+    /* Vergelijk op de laatste 9 cijfers: dan matchen 06…, +316… en 00316…
+       elkaar, hoe het nummer ook is opgeslagen. */
+    const kern = telKaal.slice(-9);
+    where = sql`length(regexp_replace(coalesce(c.phone, ''), '[^0-9]', '', 'g')) >= 9
+      and right(regexp_replace(coalesce(c.phone, ''), '[^0-9]', '', 'g'), 9) = ${kern}`;
+  } else {
+    where = sql`c.email ilike ${term} or (c.first_name || ' ' || c.last_name) ilike ${term}`;
+  }
   /* Tegoed en punten meteen mee in de trefferlijst: de kassier moet aan de
      zoekresultaten al kunnen zien dat een klant iets heeft openstaan, zonder
      eerst de klantkaart te openen (Kevin 20 aug). Twee laterals per rij op een
