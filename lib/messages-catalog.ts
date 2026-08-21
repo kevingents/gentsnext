@@ -1535,6 +1535,7 @@ export const SITE_CATALOG: Record<string, string> = {
   "mail.order.pointsBody":
     "Bekijk en verzilver ze in je {link}. Nog geen account? Maak er een aan met dit e-mailadres en je punten staan klaar.",
   "mail.order.accountLink": "GENTS-account",
+  "mail.order.createAccountCta": "Account aanmaken",
   // {days}/{amount} uit returnConfig (Instellingen); lib/email geeft ze mee aan t().
   "mail.order.returnNote":
     "Niet helemaal tevreden? Je hebt {days} dagen bedenktijd. Retourneren is gratis met een GENTS-tegoed of als je het in de winkel inlevert; wil je het bedrag terug op je rekening, dan rekenen we {amount} retourkosten.",

@@ -92,6 +92,10 @@ type OrderInfo = {
    *  Optioneel: oudere aanroepers zonder deze velden krijgen het bezorgadres. */
   deliveryMethod?: string;
   pickupStore?: string;
+  /** Leeg/null = gast (o.a. elke kassa-klantbestelling): het punten-blok krijgt dan
+   *  een expliciete "Account aanmaken"-knop — de tekst-uitnodiging alleen bleek te
+   *  passief. Met account: alleen de bestaande account-link. */
+  customerId?: string | null;
 };
 
 type CrossSellItem = { handle: string; title: string; imageUrl: string; minPriceCents: number; hasPriceRange?: boolean };
@@ -179,6 +183,11 @@ function orderHtml(
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#F6F5F2;border:1px solid #E6E4DF;padding:16px">
             <div style="font:600 14px Arial,sans-serif;color:#0A0A0A">${t("mail.order.points", { points })}</div>
             <div style="font:13px Arial,sans-serif;color:#2C2C2C;line-height:1.6;margin-top:4px">${t("mail.order.pointsBody", { link: `<a href="${url("/account")}" style="color:#0A0A0A">${t("mail.order.accountLink")}</a>` })}</div>
+            ${
+              order.customerId
+                ? ""
+                : `<a href="${url("/account")}" style="display:inline-block;background:#0A0A0A;color:#fff;font:13px Arial,sans-serif;padding:10px 18px;text-decoration:none;margin-top:12px">${t("mail.order.createAccountCta")}</a>`
+            }
           </td></tr></table>
         </td></tr>`
             : ""
