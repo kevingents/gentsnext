@@ -781,6 +781,12 @@
       "samenvatting": "Het winkelfilter op de PLP (\"alleen wat in mijn winkel ligt\") — gedeeld door /categorie en /collections, zodat beide lijsten hetzelfde doen."
     },
     {
+      "pad": "lib/plu-artikelen.ts",
+      "naam": "plu-artikelen",
+      "domein": "Overig",
+      "samenvatting": "StorePos-PLU → PIM: de RESERVE-ROUTE voor nieuwe artikelen (21 aug 2026). WAAROM. SRS' product-export (get_product_info) geeft sinds 19-8 HTTP 500, waardoor de nachtelijke artikelen-import stilstaat."
+    },
+    {
       "pad": "lib/portal.ts",
       "naam": "portal",
       "domein": "Overig",
@@ -1710,6 +1716,14 @@
         "POST"
       ],
       "samenvatting": "POST /api/core/personnel-mirror — personeels-spiegel voor de snelle kassacode-check (storegents). Kassacodes reizen en liggen hier alléén als sha256(personnelId:code)-hash. Auth: STORE_CORE_TOKEN."
+    },
+    {
+      "pad": "/api/core/plu-import",
+      "poort": "Core-token (kassa en scanner)",
+      "methoden": [
+        "POST"
+      ],
+      "samenvatting": "POST /api/core/plu-import — StorePos-PLU-catalogus binnenhalen (auth: STORE_CORE_TOKEN)."
     },
     {
       "pad": "/api/core/portal-usage",
